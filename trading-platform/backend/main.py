@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.api.market_data_routes import router as market_data_router
 from backend.config.settings import get_settings
 from backend.utils.logger import get_logger
 
@@ -36,6 +37,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(market_data_router)
 
 
 @app.exception_handler(Exception)

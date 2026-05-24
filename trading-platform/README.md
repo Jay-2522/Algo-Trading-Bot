@@ -11,6 +11,7 @@ This repository currently contains only the architectural foundation. It does no
 - `backend/ai_engine`: future AI-assisted analytics and decision support.
 - `backend/risk_engine`: future position, exposure, drawdown, and rule checks.
 - `backend/news_engine`: future macro, market, and sentiment ingestion.
+- `backend/market_data`: read-only MT5 market data collection, validation, candles, and snapshots.
 - `backend/analytics`: future performance reporting and research analytics.
 - `backend/broker_integrations`: broker adapters, including MT5 and Indian broker foundations.
 - `backend/websocket`: future real-time dashboard transport.
@@ -46,6 +47,13 @@ Expected health endpoints:
 - `GET http://127.0.0.1:8000/health`
 - `GET http://127.0.0.1:8000/status`
 
+Market Data API examples:
+
+- `GET http://127.0.0.1:8000/market-data/timeframes`
+- `GET http://127.0.0.1:8000/market-data/tick/XAUUSD`
+- `GET http://127.0.0.1:8000/market-data/candles/XAUUSD?timeframe=M15&count=100`
+- `GET http://127.0.0.1:8000/market-data/snapshot/XAUUSD`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -54,7 +62,14 @@ python tests/day1_verification.py
 
 The verifier prints readable `PASS` or `FAIL` results for folders, imports, settings, logger, MT5 module presence, database models, docs, and environment template.
 
+## Run Day 2 Verification
+
+```powershell
+python tests/day2_verification.py
+```
+
+The Day 2 verifier checks the market data package, API router registration, supported timeframes, validators, and Candle model without requiring a live MT5 terminal.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.
-

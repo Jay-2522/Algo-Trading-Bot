@@ -1,2 +1,1 @@
-"""Risk engine foundation package."""
-
+"""Risk management engine package."""

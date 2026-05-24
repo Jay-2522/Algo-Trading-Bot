@@ -9,7 +9,7 @@ This repository currently contains only the architectural foundation. It does no
 - `backend/strategy_engine`: future strategy orchestration and signal lifecycle.
 - `backend/execution_engine`: future order execution workflows with broker and risk controls.
 - `backend/ai_engine`: future AI-assisted analytics and decision support.
-- `backend/risk_engine`: future position, exposure, drawdown, and rule checks.
+- `backend/risk_engine`: risk limits, sizing calculations, guardrails, and emergency permission controls.
 - `backend/news_engine`: future macro, market, and sentiment ingestion.
 - `backend/market_data`: read-only MT5 market data collection, validation, candles, and snapshots.
 - `backend/analytics`: future performance reporting and research analytics.
@@ -62,6 +62,15 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
+Risk Management API examples:
+
+- `GET http://127.0.0.1:8000/risk/status`
+- `GET http://127.0.0.1:8000/risk/config`
+- `POST http://127.0.0.1:8000/risk/calculate-position-size`
+- `POST http://127.0.0.1:8000/risk/check-trade`
+- `POST http://127.0.0.1:8000/risk/kill-switch/activate`
+- `POST http://127.0.0.1:8000/risk/kill-switch/deactivate`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -85,6 +94,14 @@ python tests/day3_verification.py
 ```
 
 The Day 3 verifier checks strategy modules, router registration, session handling, analyzer imports, and the StrategySnapshot model without requiring a live MT5 terminal.
+
+## Run Day 4 Verification
+
+```powershell
+python tests/day4_verification.py
+```
+
+The Day 4 verifier checks centralized risk modules, router registration, risk guard behavior, position sizing, kill-switch state, and risk status without requiring MT5.
 
 ## MT5 Safety Boundary
 

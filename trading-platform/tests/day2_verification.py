@@ -56,6 +56,23 @@ def verify_router_registered() -> bool:
         return False
 
 
+def verify_timeframes_endpoint_response() -> bool:
+    try:
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+
+        response = TestClient(app).get("/market-data/timeframes")
+        payload = response.json()
+        expected = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
+        passed = response.status_code == 200 and payload == {"supported_timeframes": expected}
+        print_result("timeframes endpoint response is correct", passed, str(payload) if not passed else "")
+        return passed
+    except Exception as exc:
+        print_result("timeframes endpoint response is correct", False, str(exc))
+        return False
+
+
 def verify_supported_timeframes() -> bool:
     try:
         from backend.market_data.timeframe import SUPPORTED_TIMEFRAMES, get_mt5_timeframe
@@ -135,6 +152,7 @@ def main() -> int:
         verify_path("backend/api/market_data_routes.py", "api/market_data_routes.py exists"),
         verify_import("backend.main", "FastAPI app imports correctly"),
         verify_router_registered(),
+        verify_timeframes_endpoint_response(),
         verify_supported_timeframes(),
         verify_validation_functions(),
         verify_candle_model(),
@@ -148,4 +166,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

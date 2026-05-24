@@ -10,7 +10,7 @@ from backend.market_data.validators import (
 )
 
 
-router = APIRouter(prefix="/market-data", tags=["market-data"])
+router = APIRouter(prefix="/market-data", tags=["Market Data"])
 
 
 def _service_unavailable(exc: Exception) -> HTTPException:
@@ -19,7 +19,7 @@ def _service_unavailable(exc: Exception) -> HTTPException:
 
 @router.get("/timeframes")
 async def get_supported_timeframes() -> dict:
-    return {"timeframes": supported_timeframes()}
+    return {"supported_timeframes": supported_timeframes()}
 
 
 @router.get("/tick/{symbol}")
@@ -79,4 +79,3 @@ async def get_market_snapshot(symbol: str) -> dict:
         raise _service_unavailable(exc) from exc
     finally:
         service.close()
-

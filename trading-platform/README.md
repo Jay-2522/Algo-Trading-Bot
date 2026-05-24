@@ -54,6 +54,14 @@ Market Data API examples:
 - `GET http://127.0.0.1:8000/market-data/candles/XAUUSD?timeframe=M15&count=100`
 - `GET http://127.0.0.1:8000/market-data/snapshot/XAUUSD`
 
+Strategy API examples:
+
+- `GET http://127.0.0.1:8000/strategy/trend/XAUUSD`
+- `GET http://127.0.0.1:8000/strategy/liquidity/XAUUSD`
+- `GET http://127.0.0.1:8000/strategy/structure/XAUUSD`
+- `GET http://127.0.0.1:8000/strategy/session`
+- `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -69,6 +77,14 @@ python tests/day2_verification.py
 ```
 
 The Day 2 verifier checks the market data package, API router registration, supported timeframes, validators, and Candle model without requiring a live MT5 terminal.
+
+## Run Day 3 Verification
+
+```powershell
+python tests/day3_verification.py
+```
+
+The Day 3 verifier checks strategy modules, router registration, session handling, analyzer imports, and the StrategySnapshot model without requiring a live MT5 terminal.
 
 ## MT5 Safety Boundary
 

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.market_data_routes import router as market_data_router
+from backend.api.strategy_routes import router as strategy_router
 from backend.config.settings import get_settings
 from backend.utils.logger import get_logger
 
@@ -23,22 +24,53 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down %s", settings.app_name)
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version="1.0.0",
-    description="Day 1 foundation for an AI-assisted algorithmic trading platform.",
-    lifespan=lifespan,
-)
+def register_middleware(fastapi_app: FastAPI) -> None:
+    """Register application middleware in one place."""
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-app.include_router(market_data_router)
+
+def register_routes(fastapi_app: FastAPI) -> None:
+    """Register all API routers and core routes on the same app instance."""
+
+    fastapi_app.include_router(market_data_router)
+    fastapi_app.include_router(strategy_router)
+
+    @fastapi_app.get("/health")
+    async def health() -> Dict[str, str]:
+        return {"status": "healthy", "service": settings.app_name}
+
+    @fastapi_app.get("/status")
+    async def status() -> Dict[str, str]:
+        return {
+            "status": "running",
+            "environment": settings.environment,
+            "service": settings.app_name,
+            "version": fastapi_app.version,
+        }
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+
+    fastapi_app = FastAPI(
+        title=settings.app_name,
+        version="1.0.0",
+        description="Foundation for an AI-assisted algorithmic trading platform.",
+        lifespan=lifespan,
+    )
+    register_middleware(fastapi_app)
+    register_routes(fastapi_app)
+    return fastapi_app
+
+
+app = create_app()
 
 
 @app.exception_handler(Exception)
@@ -55,17 +87,3 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         },
     )
 
-
-@app.get("/health")
-async def health() -> Dict[str, str]:
-    return {"status": "healthy", "service": settings.app_name}
-
-
-@app.get("/status")
-async def status() -> Dict[str, str]:
-    return {
-        "status": "running",
-        "environment": settings.environment,
-        "service": settings.app_name,
-        "version": app.version,
-    }

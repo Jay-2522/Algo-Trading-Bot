@@ -1,0 +1,2 @@
+"""Strategy engine foundation package."""
+

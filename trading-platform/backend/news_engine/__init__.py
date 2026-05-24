@@ -1,0 +1,2 @@
+"""News engine foundation package."""
+

@@ -1,2 +1,2 @@
-"""News engine foundation package."""
+"""Macro-risk news intelligence engine package."""
 

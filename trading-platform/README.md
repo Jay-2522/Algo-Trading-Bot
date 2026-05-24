@@ -10,7 +10,7 @@ This repository currently contains only the architectural foundation. It does no
 - `backend/execution_engine`: simulation-only order validation, risk-gated fills, and execution event logging.
 - `backend/ai_engine`: rule-based advisory scoring, regime classification, confidence, and persisted trade-quality decisions.
 - `backend/risk_engine`: risk limits, sizing calculations, guardrails, and emergency permission controls.
-- `backend/news_engine`: future macro, market, and sentiment ingestion.
+- `backend/news_engine`: macro-event risk filtering, blackout windows, and auditable news-risk decisions.
 - `backend/market_data`: read-only MT5 market data collection, validation, candles, and snapshots.
 - `backend/analytics`: future performance reporting and research analytics.
 - `backend/broker_integrations`: broker adapters, including MT5 and Indian broker foundations.
@@ -114,6 +114,16 @@ AI Decision Engine API examples:
 - `GET http://127.0.0.1:8000/ai/full-analysis/XAUUSD`
 - `GET http://127.0.0.1:8000/ai/confidence/XAUUSD`
 
+News Intelligence API examples:
+
+- `GET http://127.0.0.1:8000/news/status`
+- `GET http://127.0.0.1:8000/news/upcoming`
+- `GET http://127.0.0.1:8000/news/high-impact`
+- `GET http://127.0.0.1:8000/news/risk-status/XAUUSD`
+- `GET http://127.0.0.1:8000/news/allow-trading/XAUUSD`
+- `GET http://127.0.0.1:8000/news/blackout-windows`
+- `GET http://127.0.0.1:8000/news/macro-score/XAUUSD`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -181,6 +191,15 @@ python tests/day8_verification.py
 ```
 
 The Day 8 AI layer is rule-based and advisory only. It scores trade quality, classifies regime, records generated decisions for audit and later research, and never enables live trade execution.
+
+## Run Day 9 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day9_verification.py
+```
+
+The Day 9 news engine uses dynamic mock economic-calendar events to calculate macro risk and no-trade blackout windows. It filters trading permission only and never submits orders.
 
 ## MT5 Safety Boundary
 

@@ -10,6 +10,7 @@ from backend.api.database_routes import router as database_router
 from backend.api.execution_routes import router as execution_router
 from backend.api.market_data_routes import router as market_data_router
 from backend.api.mt5_routes import router as mt5_router
+from backend.api.news_routes import router as news_router
 from backend.api.risk_routes import router as risk_router
 from backend.api.strategy_routes import router as strategy_router
 from backend.config.settings import get_settings
@@ -67,6 +68,7 @@ app.include_router(execution_router)
 app.include_router(mt5_router)
 app.include_router(database_router)
 app.include_router(ai_router)
+app.include_router(news_router)
 
 
 @app.exception_handler(Exception)

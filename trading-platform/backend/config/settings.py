@@ -9,8 +9,8 @@ class Settings(BaseSettings):
 
     app_name: str = "AI Algorithmic Trading Platform"
     environment: str = "development"
-    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/trading_platform"
-    redis_url: str = "redis://localhost:6379/0"
+    database_url: str = "sqlite:///./trading_platform.db"
+    redis_url: str = "redis://127.0.0.1:6379/0"
     mt5_login: Optional[int] = None
     mt5_server: Optional[str] = None
     mt5_password: Optional[str] = None
@@ -28,4 +28,3 @@ def get_settings() -> Settings:
     """Return cached settings for reuse across the backend."""
 
     return Settings()
-

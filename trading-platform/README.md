@@ -15,7 +15,7 @@ This repository currently contains only the architectural foundation. It does no
 - `backend/analytics`: future performance reporting and research analytics.
 - `backend/broker_integrations`: broker adapters, including MT5 and Indian broker foundations.
 - `backend/websocket`: future real-time dashboard transport.
-- `backend/database`: SQLAlchemy engine, sessions, and initial schema models.
+- `backend/database`: SQLAlchemy persistence, repositories, SQLite fallback, and PostgreSQL-ready records.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Update `.env` with local PostgreSQL, Redis, and optional MT5 credentials.
+The application uses local SQLite persistence by default. Update `.env` to use PostgreSQL, Redis, and optional MT5 credentials where appropriate.
 
 ## Run Backend
 
@@ -92,6 +92,19 @@ MT5 Broker Data Layer API examples:
 - `GET http://127.0.0.1:8000/mt5/positions/XAUUSD`
 - `GET http://127.0.0.1:8000/mt5/health`
 
+Database Persistence API examples:
+
+- `GET http://127.0.0.1:8000/database/status`
+- `POST http://127.0.0.1:8000/database/init`
+- `GET http://127.0.0.1:8000/database/trades/recent`
+- `GET http://127.0.0.1:8000/database/execution-logs/recent`
+- `GET http://127.0.0.1:8000/database/risk-events/recent`
+- `GET http://127.0.0.1:8000/database/strategy-snapshots/recent`
+- `GET http://127.0.0.1:8000/database/market-snapshots/recent`
+- `GET http://127.0.0.1:8000/database/audit-logs/recent`
+- `POST http://127.0.0.1:8000/database/audit-logs/test`
+- `POST http://127.0.0.1:8000/database/market-snapshots/test`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -141,6 +154,15 @@ python tests/day6_verification.py
 ```
 
 The Day 6 MT5 broker layer is read-only. It provides safe connection, account, symbol, tick, position, and health inspection while returning structured unavailable states when the terminal cannot be reached.
+
+## Run Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day7_verification.py
+```
+
+The Day 7 persistence layer uses a local SQLite database when `DATABASE_URL` is not configured and remains ready for PostgreSQL through environment configuration.
 
 ## MT5 Safety Boundary
 

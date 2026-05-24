@@ -1,17 +1,18 @@
 # Database Schema Plan
 
-This Day 1 schema establishes the persistence boundaries for future trading, risk, market data, and observability systems.
+This schema establishes persistence boundaries for simulated trades, risk, strategy analysis, broker snapshots, market data, and observability.
 
 ## Tables
 
-- `trades`: completed or lifecycle-tracked trade records, including symbol, side, size, prices, PnL, broker, and strategy attribution.
-- `positions`: open exposure view by symbol and asset class, including average price, current price, unrealized PnL, and status.
-- `strategy_logs`: strategy decision audit trail for future signal generation and AI-assisted analysis.
-- `risk_events`: risk alerts and controls, including severity, thresholds, exposure, and action taken.
-- `market_snapshots`: normalized market data snapshots from MT5, forex feeds, gold feeds, and Indian market data providers.
-- `system_logs`: application-level observability records for services, trace IDs, and structured context.
+- `trade_records`: simulated or future lifecycle-tracked trade records.
+- `execution_log_records`: execution workflow event history.
+- `risk_event_records`: risk-permission and protection events.
+- `strategy_snapshot_records`: normalized strategy-analysis outputs.
+- `mt5_account_snapshot_records`: read-only account observations.
+- `market_snapshot_records`: normalized market observations.
+- `system_audit_log_records`: operational and audit events.
+- `positions`: legacy Day 1 model retained until lifecycle design is finalized.
 
 ## Migration Plan
 
-Migrations are intentionally not enabled on Day 1. Add Alembic once database connectivity and deployment topology are finalized.
-
+Migrations are intentionally not enabled in this foundation phase. Add Alembic before shared or production deployments.

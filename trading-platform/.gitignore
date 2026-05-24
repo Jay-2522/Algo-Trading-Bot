@@ -18,10 +18,12 @@ env/
 logs/*
 !logs/.gitkeep
 *.log
+*.db
+*.sqlite
+*.sqlite3
 
 # Editors and OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-

@@ -16,6 +16,7 @@ REQUIRED_GET_ROUTES = {
     "/execution/status",
     "/mt5/status",
     "/mt5/health",
+    "/database/status",
 }
 
 

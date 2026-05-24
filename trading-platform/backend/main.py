@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="1.0.0",
     description="Day 1 foundation for an AI-assisted algorithmic trading platform.",
     lifespan=lifespan,
 )
@@ -59,20 +59,10 @@ async def health() -> Dict[str, str]:
 
 
 @app.get("/status")
-async def status() -> Dict[str, Any]:
+async def status() -> Dict[str, str]:
     return {
-        "status": "online",
+        "status": "running",
         "environment": settings.environment,
-        "modules": {
-            "strategy_engine": "foundation_ready",
-            "execution_engine": "foundation_ready",
-            "ai_engine": "foundation_ready",
-            "risk_engine": "foundation_ready",
-            "news_engine": "foundation_ready",
-            "analytics": "foundation_ready",
-            "broker_integrations": "foundation_ready",
-            "database": "foundation_ready",
-            "websocket": "foundation_ready",
-        },
+        "service": settings.app_name,
+        "version": app.version,
     }
-

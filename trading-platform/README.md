@@ -80,6 +80,18 @@ Execution Engine API examples:
 - `GET http://127.0.0.1:8000/execution/logs`
 - `GET http://127.0.0.1:8000/execution/logs/{execution_id}`
 
+MT5 Broker Data Layer API examples:
+
+- `GET http://127.0.0.1:8000/mt5/status`
+- `POST http://127.0.0.1:8000/mt5/initialize`
+- `POST http://127.0.0.1:8000/mt5/shutdown`
+- `GET http://127.0.0.1:8000/mt5/account`
+- `GET http://127.0.0.1:8000/mt5/symbol/XAUUSD`
+- `GET http://127.0.0.1:8000/mt5/tick/XAUUSD`
+- `GET http://127.0.0.1:8000/mt5/positions`
+- `GET http://127.0.0.1:8000/mt5/positions/XAUUSD`
+- `GET http://127.0.0.1:8000/mt5/health`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -120,6 +132,15 @@ python tests/day5_verification.py
 ```
 
 The Day 5 execution engine is simulation-only. It validates requests, checks risk permission, records in-memory logs, and returns simulated fills. The MT5 execution path is deliberately disabled and does not place real trades.
+
+## Run Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day6_verification.py
+```
+
+The Day 6 MT5 broker layer is read-only. It provides safe connection, account, symbol, tick, position, and health inspection while returning structured unavailable states when the terminal cannot be reached.
 
 ## MT5 Safety Boundary
 

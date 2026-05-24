@@ -149,3 +149,11 @@ class RiskService:
             return "MEDIUM"
         return "LOW"
 
+
+_shared_risk_service = RiskService()
+
+
+def get_risk_service() -> RiskService:
+    """Return the process-local risk service shared by API consumers."""
+
+    return _shared_risk_service

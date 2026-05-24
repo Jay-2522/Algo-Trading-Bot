@@ -13,6 +13,7 @@ REQUIRED_GET_ROUTES = {
     "/strategy/session",
     "/risk/status",
     "/risk/config",
+    "/execution/status",
 }
 
 
@@ -48,4 +49,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

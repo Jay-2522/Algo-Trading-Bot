@@ -10,11 +10,11 @@ from backend.risk_engine.risk_models import (
     RiskConfig,
     RiskStatus,
 )
-from backend.risk_engine.risk_service import RiskService
+from backend.risk_engine.risk_service import get_risk_service
 
 
 router = APIRouter(prefix="/risk", tags=["Risk Management"])
-risk_service = RiskService()
+risk_service = get_risk_service()
 
 
 @router.get("/status", response_model=RiskStatus)
@@ -60,4 +60,3 @@ async def deactivate_kill_switch() -> dict:
         "status": "deactivated",
         "kill_switch": risk_service.deactivate_kill_switch(),
     }
-

@@ -7,7 +7,7 @@ This repository currently contains only the architectural foundation. It does no
 ## Architecture Overview
 
 - `backend/strategy_engine`: future strategy orchestration and signal lifecycle.
-- `backend/execution_engine`: future order execution workflows with broker and risk controls.
+- `backend/execution_engine`: simulation-only order validation, risk-gated fills, and execution event logging.
 - `backend/ai_engine`: future AI-assisted analytics and decision support.
 - `backend/risk_engine`: risk limits, sizing calculations, guardrails, and emergency permission controls.
 - `backend/news_engine`: future macro, market, and sentiment ingestion.
@@ -71,6 +71,15 @@ Risk Management API examples:
 - `POST http://127.0.0.1:8000/risk/kill-switch/activate`
 - `POST http://127.0.0.1:8000/risk/kill-switch/deactivate`
 
+Execution Engine API examples:
+
+- `GET http://127.0.0.1:8000/execution/status`
+- `POST http://127.0.0.1:8000/execution/validate-order`
+- `POST http://127.0.0.1:8000/execution/simulate-order`
+- `POST http://127.0.0.1:8000/execution/prepare-mt5-order`
+- `GET http://127.0.0.1:8000/execution/logs`
+- `GET http://127.0.0.1:8000/execution/logs/{execution_id}`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -102,6 +111,15 @@ python tests/day4_verification.py
 ```
 
 The Day 4 verifier checks centralized risk modules, router registration, risk guard behavior, position sizing, kill-switch state, and risk status without requiring MT5.
+
+## Run Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day5_verification.py
+```
+
+The Day 5 execution engine is simulation-only. It validates requests, checks risk permission, records in-memory logs, and returns simulated fills. The MT5 execution path is deliberately disabled and does not place real trades.
 
 ## MT5 Safety Boundary
 

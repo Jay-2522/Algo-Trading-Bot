@@ -1,2 +1,2 @@
-"""Execution engine foundation package."""
+"""Simulation-only execution engine package."""
 

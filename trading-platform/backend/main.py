@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.api.execution_routes import router as execution_router
 from backend.api.market_data_routes import router as market_data_router
 from backend.api.risk_routes import router as risk_router
 from backend.api.strategy_routes import router as strategy_router
@@ -59,6 +60,7 @@ async def system_status() -> Dict[str, str]:
 app.include_router(market_data_router)
 app.include_router(strategy_router)
 app.include_router(risk_router)
+app.include_router(execution_router)
 
 
 @app.exception_handler(Exception)

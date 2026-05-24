@@ -1,2 +1,2 @@
-"""AI engine foundation package."""
+"""Rule-based advisory AI decision engine package."""
 

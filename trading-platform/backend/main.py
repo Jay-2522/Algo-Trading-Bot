@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.api.ai_routes import router as ai_router
 from backend.api.database_routes import router as database_router
 from backend.api.execution_routes import router as execution_router
 from backend.api.market_data_routes import router as market_data_router
@@ -65,6 +66,7 @@ app.include_router(risk_router)
 app.include_router(execution_router)
 app.include_router(mt5_router)
 app.include_router(database_router)
+app.include_router(ai_router)
 
 
 @app.exception_handler(Exception)

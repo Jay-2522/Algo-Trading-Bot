@@ -8,7 +8,7 @@ This repository currently contains only the architectural foundation. It does no
 
 - `backend/strategy_engine`: future strategy orchestration and signal lifecycle.
 - `backend/execution_engine`: simulation-only order validation, risk-gated fills, and execution event logging.
-- `backend/ai_engine`: future AI-assisted analytics and decision support.
+- `backend/ai_engine`: rule-based advisory scoring, regime classification, confidence, and persisted trade-quality decisions.
 - `backend/risk_engine`: risk limits, sizing calculations, guardrails, and emergency permission controls.
 - `backend/news_engine`: future macro, market, and sentiment ingestion.
 - `backend/market_data`: read-only MT5 market data collection, validation, candles, and snapshots.
@@ -105,6 +105,15 @@ Database Persistence API examples:
 - `POST http://127.0.0.1:8000/database/audit-logs/test`
 - `POST http://127.0.0.1:8000/database/market-snapshots/test`
 
+AI Decision Engine API examples:
+
+- `GET http://127.0.0.1:8000/ai/status`
+- `GET http://127.0.0.1:8000/ai/regime/XAUUSD`
+- `GET http://127.0.0.1:8000/ai/signal-score/XAUUSD`
+- `GET http://127.0.0.1:8000/ai/decision/XAUUSD`
+- `GET http://127.0.0.1:8000/ai/full-analysis/XAUUSD`
+- `GET http://127.0.0.1:8000/ai/confidence/XAUUSD`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -163,6 +172,15 @@ python tests/day7_verification.py
 ```
 
 The Day 7 persistence layer uses a local SQLite database when `DATABASE_URL` is not configured and remains ready for PostgreSQL through environment configuration.
+
+## Run Day 8 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day8_verification.py
+```
+
+The Day 8 AI layer is rule-based and advisory only. It scores trade quality, classifies regime, records generated decisions for audit and later research, and never enables live trade execution.
 
 ## MT5 Safety Boundary
 

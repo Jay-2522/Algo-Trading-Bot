@@ -2,7 +2,7 @@
 
 Professional modular algorithmic trading platform foundation covering Forex, XAUUSD, and Indian stock markets.
 
-The system now includes analysis, risk, news, orchestration, persistence, and offline backtesting foundations. It does not implement real order execution.
+Phase 1 of the backend foundation is complete. The system includes analysis, risk, news, orchestration, persistence, offline backtesting, simulated trade journaling, streaming, controlled background monitoring, and integration health auditing. It does not implement real order execution.
 
 ## Architecture Overview
 
@@ -19,6 +19,8 @@ The system now includes analysis, risk, news, orchestration, persistence, and of
 - `backend/backtesting`: deterministic historical replay, simulated PnL accounting, performance analysis, and stored reports.
 - `backend/streaming`: read-only market tick streaming, WebSocket subscribers, and simulated fallback updates.
 - `backend/trading_loop`: controlled, rate-limited simulation-only orchestration scheduling.
+- `backend/trade_journal`: analytics-only journal records, performance reporting, drawdown, exposure, and risk alerts.
+- `backend/system_health`: integration readiness, source safety scanning, route auditing, runtime reporting, and Phase 1 reporting.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -168,6 +170,24 @@ Background Trading Loop API examples:
 - `POST http://127.0.0.1:8000/trading-loop/symbols/XAUUSD`
 - `DELETE http://127.0.0.1:8000/trading-loop/symbols/XAUUSD`
 
+Trade Journal And Advanced Risk Analytics API examples:
+
+- `GET http://127.0.0.1:8000/trade-journal/status`
+- `POST http://127.0.0.1:8000/trade-journal/add-test-entry`
+- `GET http://127.0.0.1:8000/trade-journal/recent`
+- `GET http://127.0.0.1:8000/trade-journal/risk-analytics`
+- `GET http://127.0.0.1:8000/trade-journal/exposure`
+- `GET http://127.0.0.1:8000/trade-journal/risk-alerts`
+
+System Health And Phase 1 Hardening API examples:
+
+- `GET http://127.0.0.1:8000/system/status`
+- `GET http://127.0.0.1:8000/system/readiness`
+- `GET http://127.0.0.1:8000/system/safety-scan`
+- `GET http://127.0.0.1:8000/system/routes`
+- `GET http://127.0.0.1:8000/system/phase-report`
+- `GET http://127.0.0.1:8000/system/config-summary`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -282,6 +302,26 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 't
 ```
 
 The Day 13 trading loop owns a single rate-limited, start/stop-controlled monitoring task. It delegates to simulation-only orchestration, tracks cycle results, writes audit events when available, and permanently reports `live_execution_enabled: false`.
+
+## Run Day 14 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day14_verification.py
+```
+
+The Day 14 trade journal stores simulation-only analytics entries and produces performance, exposure, drawdown, strategy-effectiveness, and risk-alert reporting without any broker action.
+
+## Run Day 15 And Phase 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day15_verification.py
+python tests/phase1_full_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'system' in r.path])"
+```
+
+Day 15 supplies unified module readiness, route integrity, runtime configuration reporting, source safety scanning, lifecycle cleanup verification, and the Phase 1 completion report. All system health endpoints are read-only and preserve simulation-only boundaries.
 
 ## MT5 Safety Boundary
 

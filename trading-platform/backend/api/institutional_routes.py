@@ -11,6 +11,7 @@ from backend.institutional_intelligence.smc_models import (
 from backend.institutional_intelligence.smc_service import SMCService
 from backend.institutional_intelligence.liquidity_sweep_models import LiquiditySweep, SweepContext
 from backend.institutional_intelligence.fair_value_gap_models import FairValueGap, FVGContext
+from backend.institutional_intelligence.order_block_models import OrderBlock, OrderBlockContext
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -32,6 +33,7 @@ async def get_institutional_status() -> dict:
             "DISPLACEMENT",
             "LIQUIDITY_SWEEPS",
             "FAIR_VALUE_GAPS",
+            "ORDER_BLOCKS",
         ],
     }
 
@@ -104,3 +106,33 @@ async def get_high_quality_fvgs(symbol: str, timeframe: str = Query(default="M15
 @router.get("/fvg/latest/{symbol}", response_model=FairValueGap | None)
 async def get_latest_fvg(symbol: str, timeframe: str = Query(default="M15")) -> FairValueGap | None:
     return smc_service.analyze_fvgs(symbol, timeframe).latest_fvg
+
+
+@router.get("/order-blocks/{symbol}", response_model=OrderBlockContext)
+async def get_order_blocks(symbol: str, timeframe: str = Query(default="M15")) -> OrderBlockContext:
+    return smc_service.analyze_order_blocks(symbol, timeframe)
+
+
+@router.get("/order-blocks/fresh/{symbol}", response_model=list[OrderBlock])
+async def get_fresh_order_blocks(symbol: str, timeframe: str = Query(default="M15")) -> list[OrderBlock]:
+    return smc_service.analyze_order_blocks(symbol, timeframe).fresh_order_blocks
+
+
+@router.get("/order-blocks/mitigated/{symbol}", response_model=list[OrderBlock])
+async def get_mitigated_order_blocks(symbol: str, timeframe: str = Query(default="M15")) -> list[OrderBlock]:
+    return smc_service.analyze_order_blocks(symbol, timeframe).mitigated_order_blocks
+
+
+@router.get("/order-blocks/high-quality/{symbol}", response_model=list[OrderBlock])
+async def get_high_quality_order_blocks(symbol: str, timeframe: str = Query(default="M15")) -> list[OrderBlock]:
+    return smc_service.analyze_order_blocks(symbol, timeframe).high_quality_order_blocks
+
+
+@router.get("/order-blocks/latest/{symbol}", response_model=OrderBlock | None)
+async def get_latest_order_block(symbol: str, timeframe: str = Query(default="M15")) -> OrderBlock | None:
+    return smc_service.analyze_order_blocks(symbol, timeframe).latest_order_block
+
+
+@router.get("/order-blocks/context/{symbol}")
+async def get_order_block_confluence_context(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    return smc_service.analyze_order_block_confluence(symbol, timeframe)

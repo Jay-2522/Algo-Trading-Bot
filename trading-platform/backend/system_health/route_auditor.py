@@ -37,6 +37,12 @@ REQUIRED_ROUTES = [
     "/institutional/fvg/mitigated/{symbol}",
     "/institutional/fvg/high-quality/{symbol}",
     "/institutional/fvg/latest/{symbol}",
+    "/institutional/order-blocks/{symbol}",
+    "/institutional/order-blocks/fresh/{symbol}",
+    "/institutional/order-blocks/mitigated/{symbol}",
+    "/institutional/order-blocks/high-quality/{symbol}",
+    "/institutional/order-blocks/latest/{symbol}",
+    "/institutional/order-blocks/context/{symbol}",
 ]
 
 

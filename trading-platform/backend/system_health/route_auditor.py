@@ -32,6 +32,11 @@ REQUIRED_ROUTES = [
     "/institutional/sweeps/{symbol}",
     "/institutional/latest-sweep/{symbol}",
     "/institutional/high-quality-sweeps/{symbol}",
+    "/institutional/fvg/{symbol}",
+    "/institutional/fvg/fresh/{symbol}",
+    "/institutional/fvg/mitigated/{symbol}",
+    "/institutional/fvg/high-quality/{symbol}",
+    "/institutional/fvg/latest/{symbol}",
 ]
 
 

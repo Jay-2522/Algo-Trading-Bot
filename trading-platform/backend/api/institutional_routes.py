@@ -10,6 +10,7 @@ from backend.institutional_intelligence.smc_models import (
 )
 from backend.institutional_intelligence.smc_service import SMCService
 from backend.institutional_intelligence.liquidity_sweep_models import LiquiditySweep, SweepContext
+from backend.institutional_intelligence.fair_value_gap_models import FairValueGap, FVGContext
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -30,6 +31,7 @@ async def get_institutional_status() -> dict:
             "PREMIUM_DISCOUNT",
             "DISPLACEMENT",
             "LIQUIDITY_SWEEPS",
+            "FAIR_VALUE_GAPS",
         ],
     }
 
@@ -77,3 +79,28 @@ async def get_latest_sweep(symbol: str, timeframe: str = Query(default="M15")) -
 @router.get("/high-quality-sweeps/{symbol}", response_model=list[LiquiditySweep])
 async def get_high_quality_sweeps(symbol: str, timeframe: str = Query(default="M15")) -> list[LiquiditySweep]:
     return smc_service.analyze_liquidity_sweeps(symbol, timeframe).high_quality_sweeps
+
+
+@router.get("/fvg/{symbol}", response_model=FVGContext)
+async def get_fvg_context(symbol: str, timeframe: str = Query(default="M15")) -> FVGContext:
+    return smc_service.analyze_fvgs(symbol, timeframe)
+
+
+@router.get("/fvg/fresh/{symbol}", response_model=list[FairValueGap])
+async def get_fresh_fvgs(symbol: str, timeframe: str = Query(default="M15")) -> list[FairValueGap]:
+    return smc_service.analyze_fvgs(symbol, timeframe).fresh_fvgs
+
+
+@router.get("/fvg/mitigated/{symbol}", response_model=list[FairValueGap])
+async def get_mitigated_fvgs(symbol: str, timeframe: str = Query(default="M15")) -> list[FairValueGap]:
+    return smc_service.analyze_fvgs(symbol, timeframe).mitigated_fvgs
+
+
+@router.get("/fvg/high-quality/{symbol}", response_model=list[FairValueGap])
+async def get_high_quality_fvgs(symbol: str, timeframe: str = Query(default="M15")) -> list[FairValueGap]:
+    return smc_service.analyze_fvgs(symbol, timeframe).high_quality_fvgs
+
+
+@router.get("/fvg/latest/{symbol}", response_model=FairValueGap | None)
+async def get_latest_fvg(symbol: str, timeframe: str = Query(default="M15")) -> FairValueGap | None:
+    return smc_service.analyze_fvgs(symbol, timeframe).latest_fvg

@@ -4,6 +4,8 @@ from backend.institutional_intelligence.institutional_context import Institution
 from backend.institutional_intelligence.smc_models import InstitutionalContext
 from backend.institutional_intelligence.liquidity_sweep_models import SweepContext
 from backend.institutional_intelligence.sweep_context_builder import SweepContextBuilder
+from backend.institutional_intelligence.fair_value_gap_models import FVGContext
+from backend.institutional_intelligence.fvg_context_builder import FVGContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.utils.logger import get_logger
@@ -20,10 +22,12 @@ class SMCService:
         market_data_service: MarketDataService | None = None,
         context_builder: InstitutionalContextBuilder | None = None,
         sweep_context_builder: SweepContextBuilder | None = None,
+        fvg_context_builder: FVGContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
         self.sweep_context_builder = sweep_context_builder or SweepContextBuilder()
+        self.fvg_context_builder = fvg_context_builder or FVGContextBuilder()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -74,3 +78,25 @@ class SMCService:
             candles,
             context.liquidity_pools,
         )
+
+    def analyze_fvgs(self, symbol: str, timeframe: str = "M15") -> FVGContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.analyze_fvgs_from_candles(normalized_symbol, normalized_timeframe, candles)
+        except Exception as exc:
+            logger.warning("Fair value gap analysis unavailable for %s: %s", normalized_symbol, exc)
+            return self.fvg_context_builder.build_fvg_context(normalized_symbol, normalized_timeframe, [])
+        finally:
+            self.market_data_service.close()
+
+    def analyze_fvgs_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> FVGContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        return self.fvg_context_builder.build_fvg_context(normalized_symbol, normalized_timeframe, candles)

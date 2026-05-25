@@ -10,6 +10,8 @@ from backend.institutional_intelligence.order_block_models import OrderBlockCont
 from backend.institutional_intelligence.order_block_context_builder import OrderBlockContextBuilder
 from backend.institutional_intelligence.breaker_block_models import BreakerBlockContext
 from backend.institutional_intelligence.breaker_block_context_builder import BreakerBlockContextBuilder
+from backend.institutional_intelligence.structure_shift_models import StructureShiftContext
+from backend.institutional_intelligence.structure_shift_context_builder import StructureShiftContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.utils.logger import get_logger
@@ -29,6 +31,7 @@ class SMCService:
         fvg_context_builder: FVGContextBuilder | None = None,
         order_block_context_builder: OrderBlockContextBuilder | None = None,
         breaker_block_context_builder: BreakerBlockContextBuilder | None = None,
+        structure_shift_context_builder: StructureShiftContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -36,6 +39,7 @@ class SMCService:
         self.fvg_context_builder = fvg_context_builder or FVGContextBuilder()
         self.order_block_context_builder = order_block_context_builder or OrderBlockContextBuilder()
         self.breaker_block_context_builder = breaker_block_context_builder or BreakerBlockContextBuilder()
+        self.structure_shift_context_builder = structure_shift_context_builder or StructureShiftContextBuilder()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -279,6 +283,112 @@ class SMCService:
             "order_blocks": order_block_context,
             "fair_value_gaps": fvg_context,
             "liquidity_sweeps": sweep_context,
+            "structure_bias": institutional_context.structure_bias,
+            "simulation_only": True,
+            "live_execution_enabled": False,
+        }
+
+    def analyze_structure_shift(self, symbol: str, timeframe: str = "M15") -> StructureShiftContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.analyze_structure_shift_from_candles(normalized_symbol, normalized_timeframe, candles)
+        except Exception as exc:
+            logger.warning("Structure shift analysis unavailable for %s: %s", normalized_symbol, exc)
+            return self.structure_shift_context_builder.build_structure_shift_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_structure_shift_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> StructureShiftContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        institutional_context = self.context_builder.build_context(normalized_symbol, normalized_timeframe, candles)
+        fvg_context = self.fvg_context_builder.build_fvg_context(normalized_symbol, normalized_timeframe, candles)
+        sweep_context = self.sweep_context_builder.build_sweep_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            institutional_context.liquidity_pools,
+        )
+        order_block_context = self.order_block_context_builder.build_order_block_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            fvg_context=fvg_context,
+            sweep_context=sweep_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+        breaker_context = self.breaker_block_context_builder.build_breaker_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            order_block_context=order_block_context,
+            fvg_context=fvg_context,
+            sweep_context=sweep_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+        return self.structure_shift_context_builder.build_structure_shift_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            swings=institutional_context.swings,
+            sweep_context=sweep_context,
+            fvg_context=fvg_context,
+            ob_context=order_block_context,
+            breaker_context=breaker_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+
+    def analyze_structure_shift_confluence(self, symbol: str, timeframe: str = "M15") -> dict[str, Any]:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+        except Exception as exc:
+            logger.warning("Structure shift confluence unavailable for %s: %s", normalized_symbol, exc)
+            candles = []
+        finally:
+            self.market_data_service.close()
+        institutional_context = self.context_builder.build_context(normalized_symbol, normalized_timeframe, candles)
+        fvg_context = self.fvg_context_builder.build_fvg_context(normalized_symbol, normalized_timeframe, candles)
+        sweep_context = self.sweep_context_builder.build_sweep_context(
+            normalized_symbol, normalized_timeframe, candles, institutional_context.liquidity_pools
+        )
+        order_block_context = self.order_block_context_builder.build_order_block_context(
+            normalized_symbol, normalized_timeframe, candles, fvg_context, sweep_context, institutional_context.structure_bias
+        )
+        breaker_context = self.breaker_block_context_builder.build_breaker_context(
+            normalized_symbol, normalized_timeframe, candles, order_block_context, fvg_context, sweep_context, institutional_context.structure_bias
+        )
+        structure_shift_context = self.structure_shift_context_builder.build_structure_shift_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            institutional_context.swings,
+            sweep_context,
+            fvg_context,
+            order_block_context,
+            breaker_context,
+            institutional_context.structure_bias,
+        )
+        return {
+            "symbol": normalized_symbol,
+            "timeframe": normalized_timeframe,
+            "structure_shift": structure_shift_context,
+            "liquidity_sweeps": sweep_context,
+            "fair_value_gaps": fvg_context,
+            "order_blocks": order_block_context,
+            "breaker_blocks": breaker_context,
             "structure_bias": institutional_context.structure_bias,
             "simulation_only": True,
             "live_execution_enabled": False,

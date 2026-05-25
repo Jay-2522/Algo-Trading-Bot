@@ -49,6 +49,13 @@ REQUIRED_ROUTES = [
     "/institutional/breakers/high-quality/{symbol}",
     "/institutional/breakers/latest/{symbol}",
     "/institutional/breakers/context/{symbol}",
+    "/institutional/structure-shift/{symbol}",
+    "/institutional/structure-shift/bos/{symbol}",
+    "/institutional/structure-shift/choch/{symbol}",
+    "/institutional/structure-shift/mss/{symbol}",
+    "/institutional/structure-shift/latest/{symbol}",
+    "/institutional/structure-shift/high-quality/{symbol}",
+    "/institutional/structure-shift/context/{symbol}",
 ]
 
 

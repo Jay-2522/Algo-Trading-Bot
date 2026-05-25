@@ -13,6 +13,7 @@ from backend.institutional_intelligence.liquidity_sweep_models import LiquidityS
 from backend.institutional_intelligence.fair_value_gap_models import FairValueGap, FVGContext
 from backend.institutional_intelligence.order_block_models import OrderBlock, OrderBlockContext
 from backend.institutional_intelligence.breaker_block_models import BreakerBlock, BreakerBlockContext
+from backend.institutional_intelligence.structure_shift_models import StructureEvent, StructureShiftContext
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -36,6 +37,7 @@ async def get_institutional_status() -> dict:
             "FAIR_VALUE_GAPS",
             "ORDER_BLOCKS",
             "BREAKER_BLOCKS",
+            "STRUCTURE_SHIFT",
         ],
     }
 
@@ -168,3 +170,38 @@ async def get_latest_breaker(symbol: str, timeframe: str = Query(default="M15"))
 @router.get("/breakers/context/{symbol}")
 async def get_breaker_confluence_context(symbol: str, timeframe: str = Query(default="M15")) -> dict:
     return smc_service.analyze_breaker_confluence(symbol, timeframe)
+
+
+@router.get("/structure-shift/{symbol}", response_model=StructureShiftContext)
+async def get_structure_shift(symbol: str, timeframe: str = Query(default="M15")) -> StructureShiftContext:
+    return smc_service.analyze_structure_shift(symbol, timeframe)
+
+
+@router.get("/structure-shift/bos/{symbol}", response_model=list[StructureEvent])
+async def get_bos_events(symbol: str, timeframe: str = Query(default="M15")) -> list[StructureEvent]:
+    return smc_service.analyze_structure_shift(symbol, timeframe).bos_events
+
+
+@router.get("/structure-shift/choch/{symbol}", response_model=list[StructureEvent])
+async def get_choch_events(symbol: str, timeframe: str = Query(default="M15")) -> list[StructureEvent]:
+    return smc_service.analyze_structure_shift(symbol, timeframe).choch_events
+
+
+@router.get("/structure-shift/mss/{symbol}", response_model=list[StructureEvent])
+async def get_mss_events(symbol: str, timeframe: str = Query(default="M15")) -> list[StructureEvent]:
+    return smc_service.analyze_structure_shift(symbol, timeframe).mss_events
+
+
+@router.get("/structure-shift/latest/{symbol}", response_model=StructureEvent | None)
+async def get_latest_structure_event(symbol: str, timeframe: str = Query(default="M15")) -> StructureEvent | None:
+    return smc_service.analyze_structure_shift(symbol, timeframe).latest_event
+
+
+@router.get("/structure-shift/high-quality/{symbol}", response_model=list[StructureEvent])
+async def get_high_quality_structure_events(symbol: str, timeframe: str = Query(default="M15")) -> list[StructureEvent]:
+    return smc_service.analyze_structure_shift(symbol, timeframe).high_quality_events
+
+
+@router.get("/structure-shift/context/{symbol}")
+async def get_structure_shift_confluence(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    return smc_service.analyze_structure_shift_confluence(symbol, timeframe)

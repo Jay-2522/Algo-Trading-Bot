@@ -17,6 +17,7 @@ The system now includes analysis, risk, news, orchestration, persistence, and of
 - `backend/websocket`: future real-time dashboard transport.
 - `backend/database`: SQLAlchemy persistence, repositories, SQLite fallback, and PostgreSQL-ready records.
 - `backend/backtesting`: deterministic historical replay, simulated PnL accounting, performance analysis, and stored reports.
+- `backend/streaming`: read-only market tick streaming, WebSocket subscribers, and simulated fallback updates.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -144,6 +145,15 @@ Backtesting API examples:
 - `GET http://127.0.0.1:8000/backtesting/metrics/{backtest_id}`
 - `GET http://127.0.0.1:8000/backtesting/equity/{backtest_id}`
 
+Live Streaming API examples:
+
+- `GET http://127.0.0.1:8000/streaming/status`
+- `POST http://127.0.0.1:8000/streaming/start/XAUUSD`
+- `POST http://127.0.0.1:8000/streaming/stop/XAUUSD`
+- `GET http://127.0.0.1:8000/streaming/tick/XAUUSD`
+- `GET http://127.0.0.1:8000/streaming/clients`
+- `WS ws://127.0.0.1:8000/ws/market/XAUUSD`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -238,6 +248,16 @@ python tests/day11_verification.py
 ```
 
 The Day 11 backtesting engine replays deterministic historical candles through historical strategy and AI advisory evaluation, simulates PnL with spread and slippage, stores reports and simulated trades, and remains isolated from live broker execution.
+
+## Run Day 12 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day12_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'streaming' in r.path or 'ws' in r.path])"
+```
+
+The Day 12 streaming engine publishes read-only tick messages over REST and WebSocket interfaces. It can use already-available MT5 ticks or simulated fallback data, creates no uncontrolled background loop, and never enables live execution.
 
 ## MT5 Safety Boundary
 

@@ -21,7 +21,10 @@ REQUIRED_GET_ROUTES = {
     "/news/status",
     "/orchestration/status",
     "/backtesting/status",
+    "/streaming/status",
 }
+
+REQUIRED_WEBSOCKET_ROUTES = {"/ws/market/{symbol}"}
 
 
 def main() -> int:
@@ -40,10 +43,20 @@ def main() -> int:
         for path in sorted(REQUIRED_GET_ROUTES):
             status = "PASS" if path in registered_routes else "FAIL"
             print(f"[{status}] GET {path}")
+        registered_websockets = {
+            route.path
+            for route in app.routes
+            if route.__class__.__name__ == "APIWebSocketRoute"
+        }
+        missing_websockets = sorted(REQUIRED_WEBSOCKET_ROUTES - registered_websockets)
+        for path in sorted(REQUIRED_WEBSOCKET_ROUTES):
+            status = "PASS" if path in registered_websockets else "FAIL"
+            print(f"[{status}] WS  {path}")
 
         print("=" * 37)
-        if missing:
-            print(f"FAIL - Missing routes: {', '.join(missing)}")
+        if missing or missing_websockets:
+            all_missing = missing + missing_websockets
+            print(f"FAIL - Missing routes: {', '.join(all_missing)}")
             return 1
         print("PASS")
         return 0

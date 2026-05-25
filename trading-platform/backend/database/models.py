@@ -135,6 +135,34 @@ class BacktestTradeRecord(CreatedAtMixin, Base):
     trade_json: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
+class TradeJournalEntryRecord(CreatedAtMixin, Base):
+    __tablename__ = "trade_journal_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    journal_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+    strategy_name: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    session_name: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    pnl: Mapped[float] = mapped_column(Float, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    entry_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class RiskAlertEntryRecord(CreatedAtMixin, Base):
+    __tablename__ = "risk_alert_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    alert_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+    category: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    alert_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
 # Compatibility exports retained for the Day 1 foundation checks.
 Trade = TradeRecord
 RiskEvent = RiskEventRecord

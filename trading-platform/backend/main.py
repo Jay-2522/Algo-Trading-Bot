@@ -19,6 +19,7 @@ from backend.api.streaming_routes import router as streaming_router
 from backend.api.streaming_routes import websocket_router as streaming_websocket_router
 from backend.api.trading_loop_routes import router as trading_loop_router
 from backend.api.trading_loop_routes import trading_loop_service
+from backend.api.trade_journal_routes import router as trade_journal_router
 from backend.config.settings import get_settings
 from backend.utils.logger import get_logger
 
@@ -82,6 +83,7 @@ app.include_router(backtesting_router)
 app.include_router(streaming_router)
 app.include_router(streaming_websocket_router)
 app.include_router(trading_loop_router)
+app.include_router(trade_journal_router)
 
 
 @app.exception_handler(Exception)

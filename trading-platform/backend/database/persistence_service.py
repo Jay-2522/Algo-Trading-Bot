@@ -10,8 +10,10 @@ from backend.database.repositories import (
     MT5AccountSnapshotRepository,
     MarketSnapshotRepository,
     RiskEventRepository,
+    RiskAlertEntryRepository,
     StrategySnapshotRepository,
     SystemAuditLogRepository,
+    TradeJournalRepository,
     TradeRepository,
 )
 
@@ -29,6 +31,8 @@ class PersistenceService:
         self.mt5_account_snapshots = MT5AccountSnapshotRepository(self.db)
         self.market_snapshots = MarketSnapshotRepository(self.db)
         self.audit_logs = SystemAuditLogRepository(self.db)
+        self.trade_journal_entries = TradeJournalRepository(self.db)
+        self.risk_alert_entries = RiskAlertEntryRepository(self.db)
 
     def initialize_database(self) -> bool:
         return init_db()
@@ -54,6 +58,12 @@ class PersistenceService:
     def save_audit_log(self, data: dict[str, Any]) -> dict:
         return self._serialize(self.audit_logs.create_audit_log(data))
 
+    def save_trade_journal_entry(self, data: dict[str, Any]) -> dict:
+        return self._serialize(self.trade_journal_entries.create_entry(data))
+
+    def save_risk_alert_entry(self, data: dict[str, Any]) -> dict:
+        return self._serialize(self.risk_alert_entries.create_alert(data))
+
     def get_recent_trades(self, limit: int = 50) -> list[dict]:
         return self._serialize_many(self.trades.get_recent_trades(limit))
 
@@ -72,6 +82,18 @@ class PersistenceService:
     def get_recent_audit_logs(self, limit: int = 50) -> list[dict]:
         return self._serialize_many(self.audit_logs.get_recent_audit_logs(limit))
 
+    def get_recent_trade_journal_entries(self, limit: int = 50) -> list[dict]:
+        return self._serialize_many(self.trade_journal_entries.get_recent_entries(limit))
+
+    def get_trade_journal_entries_by_symbol(self, symbol: str, limit: int = 500) -> list[dict]:
+        return self._serialize_many(self.trade_journal_entries.get_entries_by_symbol(symbol, limit))
+
+    def get_trade_journal_entries_by_timeframe(self, timeframe: str, limit: int = 500) -> list[dict]:
+        return self._serialize_many(self.trade_journal_entries.get_entries_by_timeframe(timeframe, limit))
+
+    def get_recent_risk_alert_entries(self, limit: int = 50) -> list[dict]:
+        return self._serialize_many(self.risk_alert_entries.get_recent_alerts(limit))
+
     def close(self) -> None:
         if self._owns_session:
             self.db.close()
@@ -85,4 +107,3 @@ class PersistenceService:
             value = getattr(record, attribute.key)
             result[attribute.key] = value.isoformat() if isinstance(value, datetime) else value
         return result
-

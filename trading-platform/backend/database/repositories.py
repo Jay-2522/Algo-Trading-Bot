@@ -8,8 +8,10 @@ from backend.database.models import (
     MT5AccountSnapshotRecord,
     MarketSnapshotRecord,
     RiskEventRecord,
+    RiskAlertEntryRecord,
     StrategySnapshotRecord,
     SystemAuditLogRecord,
+    TradeJournalEntryRecord,
     TradeRecord,
 )
 
@@ -105,3 +107,36 @@ class SystemAuditLogRepository(BaseRepository):
     def get_recent_audit_logs(self, limit: int = 50) -> list[SystemAuditLogRecord]:
         return self.db.query(SystemAuditLogRecord).order_by(SystemAuditLogRecord.created_at.desc()).limit(limit).all()
 
+
+class TradeJournalRepository(BaseRepository):
+    def create_entry(self, record_data: dict[str, Any]) -> TradeJournalEntryRecord:
+        return self._create(TradeJournalEntryRecord, record_data)
+
+    def get_recent_entries(self, limit: int = 50) -> list[TradeJournalEntryRecord]:
+        return self.db.query(TradeJournalEntryRecord).order_by(TradeJournalEntryRecord.timestamp.desc()).limit(limit).all()
+
+    def get_entries_by_symbol(self, symbol: str, limit: int = 500) -> list[TradeJournalEntryRecord]:
+        return (
+            self.db.query(TradeJournalEntryRecord)
+            .filter(TradeJournalEntryRecord.symbol == symbol)
+            .order_by(TradeJournalEntryRecord.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def get_entries_by_timeframe(self, timeframe: str, limit: int = 500) -> list[TradeJournalEntryRecord]:
+        return (
+            self.db.query(TradeJournalEntryRecord)
+            .filter(TradeJournalEntryRecord.timeframe == timeframe)
+            .order_by(TradeJournalEntryRecord.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+
+
+class RiskAlertEntryRepository(BaseRepository):
+    def create_alert(self, record_data: dict[str, Any]) -> RiskAlertEntryRecord:
+        return self._create(RiskAlertEntryRecord, record_data)
+
+    def get_recent_alerts(self, limit: int = 50) -> list[RiskAlertEntryRecord]:
+        return self.db.query(RiskAlertEntryRecord).order_by(RiskAlertEntryRecord.timestamp.desc()).limit(limit).all()

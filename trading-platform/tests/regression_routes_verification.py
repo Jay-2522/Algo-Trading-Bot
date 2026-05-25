@@ -23,6 +23,7 @@ REQUIRED_GET_ROUTES = {
     "/backtesting/status",
     "/streaming/status",
     "/trading-loop/status",
+    "/trade-journal/status",
 }
 
 REQUIRED_WEBSOCKET_ROUTES = {"/ws/market/{symbol}"}

@@ -15,6 +15,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "trade_journal", "route": "/trade-journal/status"},
     {"name": "system_health", "route": "/system/status"},
     {"name": "institutional_intelligence", "route": "/institutional/status"},
+    {"name": "institutional_liquidity_sweeps", "route": "/institutional/sweeps/{symbol}"},
 ]
 
 

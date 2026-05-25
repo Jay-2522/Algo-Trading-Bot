@@ -29,6 +29,9 @@ REQUIRED_ROUTES = [
     "/system/routes",
     "/system/phase-report",
     "/institutional/status",
+    "/institutional/sweeps/{symbol}",
+    "/institutional/latest-sweep/{symbol}",
+    "/institutional/high-quality-sweeps/{symbol}",
 ]
 
 

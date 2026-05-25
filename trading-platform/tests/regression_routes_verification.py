@@ -26,6 +26,7 @@ REQUIRED_GET_ROUTES = {
     "/trade-journal/status",
     "/system/status",
     "/institutional/status",
+    "/institutional/sweeps/{symbol}",
 }
 
 REQUIRED_WEBSOCKET_ROUTES = {"/ws/market/{symbol}"}

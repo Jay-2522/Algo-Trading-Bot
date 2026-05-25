@@ -21,7 +21,7 @@ Phase 1 of the backend foundation is complete, and Phase 2 has begun with instit
 - `backend/trading_loop`: controlled, rate-limited simulation-only orchestration scheduling.
 - `backend/trade_journal`: analytics-only journal records, performance reporting, drawdown, exposure, and risk alerts.
 - `backend/system_health`: integration readiness, source safety scanning, route auditing, runtime reporting, and Phase 1 reporting.
-- `backend/institutional_intelligence`: SMC/ICT-style swing, liquidity, sweep rejection, FVG and order-block lifecycle, bias, dealing-range, displacement, and context analysis.
+- `backend/institutional_intelligence`: SMC/ICT-style swing, liquidity, sweep rejection, FVG, order-block and breaker lifecycle, bias, dealing-range, displacement, and context analysis.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -212,6 +212,12 @@ Institutional Intelligence API examples:
 - `GET http://127.0.0.1:8000/institutional/order-blocks/high-quality/XAUUSD?timeframe=M15`
 - `GET http://127.0.0.1:8000/institutional/order-blocks/latest/XAUUSD?timeframe=M15`
 - `GET http://127.0.0.1:8000/institutional/order-blocks/context/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/breakers/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/breakers/fresh/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/breakers/mitigated/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/breakers/high-quality/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/breakers/latest/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/breakers/context/XAUUSD?timeframe=M15`
 
 ## Run Day 1 Verification
 
@@ -401,6 +407,22 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 ```
 
 Phase 2 Day 4 detects bullish and bearish order blocks as opposing candles before expanded displacement, requires break-of-structure confirmation, tracks fresh and mitigated zones, and provides deterministic FVG, sweep, and bias confluence scoring. Its outputs remain analysis-only and cannot submit or enable live orders.
+
+## Run Phase 2 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day5_verification.py
+python tests/phase2_day4_verification.py
+python tests/phase2_day3_verification.py
+python tests/phase2_day2_verification.py
+python tests/phase2_day1_verification.py
+python tests/day15_verification.py
+python tests/phase1_full_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 5 identifies bullish and bearish breaker blocks when validated order blocks fail on opposite-direction displacement closes. It confirms structure shifts, tracks converted-zone mitigation, and scores FVG, sweep, source-OB, and bias context without introducing any live execution capability.
 
 ## MT5 Safety Boundary
 

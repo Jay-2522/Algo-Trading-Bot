@@ -43,6 +43,12 @@ REQUIRED_ROUTES = [
     "/institutional/order-blocks/high-quality/{symbol}",
     "/institutional/order-blocks/latest/{symbol}",
     "/institutional/order-blocks/context/{symbol}",
+    "/institutional/breakers/{symbol}",
+    "/institutional/breakers/fresh/{symbol}",
+    "/institutional/breakers/mitigated/{symbol}",
+    "/institutional/breakers/high-quality/{symbol}",
+    "/institutional/breakers/latest/{symbol}",
+    "/institutional/breakers/context/{symbol}",
 ]
 
 

@@ -8,6 +8,8 @@ from backend.institutional_intelligence.fair_value_gap_models import FVGContext
 from backend.institutional_intelligence.fvg_context_builder import FVGContextBuilder
 from backend.institutional_intelligence.order_block_models import OrderBlockContext
 from backend.institutional_intelligence.order_block_context_builder import OrderBlockContextBuilder
+from backend.institutional_intelligence.breaker_block_models import BreakerBlockContext
+from backend.institutional_intelligence.breaker_block_context_builder import BreakerBlockContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.utils.logger import get_logger
@@ -26,12 +28,14 @@ class SMCService:
         sweep_context_builder: SweepContextBuilder | None = None,
         fvg_context_builder: FVGContextBuilder | None = None,
         order_block_context_builder: OrderBlockContextBuilder | None = None,
+        breaker_block_context_builder: BreakerBlockContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
         self.sweep_context_builder = sweep_context_builder or SweepContextBuilder()
         self.fvg_context_builder = fvg_context_builder or FVGContextBuilder()
         self.order_block_context_builder = order_block_context_builder or OrderBlockContextBuilder()
+        self.breaker_block_context_builder = breaker_block_context_builder or BreakerBlockContextBuilder()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -175,6 +179,103 @@ class SMCService:
         return {
             "symbol": normalized_symbol,
             "timeframe": normalized_timeframe,
+            "order_blocks": order_block_context,
+            "fair_value_gaps": fvg_context,
+            "liquidity_sweeps": sweep_context,
+            "structure_bias": institutional_context.structure_bias,
+            "simulation_only": True,
+            "live_execution_enabled": False,
+        }
+
+    def analyze_breaker_blocks(self, symbol: str, timeframe: str = "M15") -> BreakerBlockContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.analyze_breaker_blocks_from_candles(normalized_symbol, normalized_timeframe, candles)
+        except Exception as exc:
+            logger.warning("Breaker block analysis unavailable for %s: %s", normalized_symbol, exc)
+            return self.breaker_block_context_builder.build_breaker_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_breaker_blocks_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> BreakerBlockContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        institutional_context = self.context_builder.build_context(normalized_symbol, normalized_timeframe, candles)
+        fvg_context = self.fvg_context_builder.build_fvg_context(normalized_symbol, normalized_timeframe, candles)
+        sweep_context = self.sweep_context_builder.build_sweep_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            institutional_context.liquidity_pools,
+        )
+        order_block_context = self.order_block_context_builder.build_order_block_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            fvg_context=fvg_context,
+            sweep_context=sweep_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+        return self.breaker_block_context_builder.build_breaker_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            order_block_context=order_block_context,
+            fvg_context=fvg_context,
+            sweep_context=sweep_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+
+    def analyze_breaker_confluence(self, symbol: str, timeframe: str = "M15") -> dict[str, Any]:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+        except Exception as exc:
+            logger.warning("Breaker confluence analysis unavailable for %s: %s", normalized_symbol, exc)
+            candles = []
+        finally:
+            self.market_data_service.close()
+        institutional_context = self.context_builder.build_context(normalized_symbol, normalized_timeframe, candles)
+        fvg_context = self.fvg_context_builder.build_fvg_context(normalized_symbol, normalized_timeframe, candles)
+        sweep_context = self.sweep_context_builder.build_sweep_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            institutional_context.liquidity_pools,
+        )
+        order_block_context = self.order_block_context_builder.build_order_block_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            fvg_context=fvg_context,
+            sweep_context=sweep_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+        breaker_context = self.breaker_block_context_builder.build_breaker_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            order_block_context=order_block_context,
+            fvg_context=fvg_context,
+            sweep_context=sweep_context,
+            structure_bias=institutional_context.structure_bias,
+        )
+        return {
+            "symbol": normalized_symbol,
+            "timeframe": normalized_timeframe,
+            "breaker_blocks": breaker_context,
             "order_blocks": order_block_context,
             "fair_value_gaps": fvg_context,
             "liquidity_sweeps": sweep_context,

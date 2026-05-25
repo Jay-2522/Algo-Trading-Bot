@@ -48,6 +48,7 @@ def verify_routes_and_app() -> bool:
             "/system/routes",
             "/system/phase-report",
             "/system/config-summary",
+            "/institutional/status",
         }
         missing = sorted(expected - paths)
         passed = not missing
@@ -91,7 +92,8 @@ def verify_audit_and_readiness() -> bool:
             and not audit.duplicate_paths
             and readiness.overall_status == "READY"
             and readiness.safety_passed
-            and len(readiness.modules) == len(get_module_registry()) == 15
+            and len(readiness.modules) == len(get_module_registry())
+            and len(readiness.modules) >= 15
             and all(not module.live_execution_enabled for module in readiness.modules)
         )
         print_result("Route auditor and readiness checker certify all Phase 1 modules", passed)
@@ -137,14 +139,11 @@ def verify_status_and_lifecycle_api() -> bool:
         stopped_on_shutdown = not trading_loop_service.get_status().running
         passed = (
             status.status_code == 200
-            and status.json()
-            == {
-                "status": "operational",
-                "phase": "PHASE_1_BACKEND_FOUNDATION",
-                "live_execution_enabled": False,
-                "simulation_only": True,
-                "modules_online": 15,
-            }
+            and status.json()["status"] == "operational"
+            and status.json()["phase"] == "PHASE_1_BACKEND_FOUNDATION"
+            and status.json()["live_execution_enabled"] is False
+            and status.json()["simulation_only"] is True
+            and status.json()["modules_online"] >= 15
             and readiness.json()["overall_status"] == "READY"
             and safety.json()["passed"] is True
             and routes.json()["passed"] is True

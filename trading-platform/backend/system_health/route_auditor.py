@@ -28,6 +28,7 @@ REQUIRED_ROUTES = [
     "/system/safety-scan",
     "/system/routes",
     "/system/phase-report",
+    "/institutional/status",
 ]
 
 

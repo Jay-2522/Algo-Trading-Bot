@@ -35,6 +35,7 @@ def main() -> int:
         from backend.trade_journal.journal_service import JournalService
         from backend.trading_loop.loop_service import TradingLoopService
         from backend.system_health.system_health_service import SystemHealthService
+        from backend.system_health.module_registry import get_module_registry
 
         if (PROJECT_ROOT / "backend/main.py").read_text(encoding="utf-8").count("app = FastAPI(") != 1:
             return 1
@@ -47,7 +48,7 @@ def main() -> int:
         readiness = service.get_readiness()
         if readiness.overall_status != "READY" or readiness.live_execution_enabled:
             return 1
-        if len(readiness.modules) != 15:
+        if len(readiness.modules) != len(get_module_registry()) or len(readiness.modules) < 15:
             return 1
 
         BacktestService()

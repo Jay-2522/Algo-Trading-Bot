@@ -2,7 +2,7 @@
 
 Professional modular algorithmic trading platform foundation covering Forex, XAUUSD, and Indian stock markets.
 
-Phase 1 of the backend foundation is complete. The system includes analysis, risk, news, orchestration, persistence, offline backtesting, simulated trade journaling, streaming, controlled background monitoring, and integration health auditing. It does not implement real order execution.
+Phase 1 of the backend foundation is complete, and Phase 2 has begun with institutional market-structure intelligence. The system includes analysis, risk, news, orchestration, persistence, offline backtesting, simulated trade journaling, streaming, controlled background monitoring, integration health auditing, and SMC/ICT-style observation. It does not implement real order execution.
 
 ## Architecture Overview
 
@@ -21,6 +21,7 @@ Phase 1 of the backend foundation is complete. The system includes analysis, ris
 - `backend/trading_loop`: controlled, rate-limited simulation-only orchestration scheduling.
 - `backend/trade_journal`: analytics-only journal records, performance reporting, drawdown, exposure, and risk alerts.
 - `backend/system_health`: integration readiness, source safety scanning, route auditing, runtime reporting, and Phase 1 reporting.
+- `backend/institutional_intelligence`: SMC/ICT-style swing, liquidity, bias, dealing-range, displacement, and context analysis.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -188,6 +189,16 @@ System Health And Phase 1 Hardening API examples:
 - `GET http://127.0.0.1:8000/system/phase-report`
 - `GET http://127.0.0.1:8000/system/config-summary`
 
+Institutional Intelligence API examples:
+
+- `GET http://127.0.0.1:8000/institutional/status`
+- `GET http://127.0.0.1:8000/institutional/context/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/swings/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/liquidity/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/bias/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/premium-discount/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/displacement/XAUUSD?timeframe=M15`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -322,6 +333,18 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 's
 ```
 
 Day 15 supplies unified module readiness, route integrity, runtime configuration reporting, source safety scanning, lifecycle cleanup verification, and the Phase 1 completion report. All system health endpoints are read-only and preserve simulation-only boundaries.
+
+## Run Phase 2 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day1_verification.py
+python tests/day15_verification.py
+python tests/phase1_full_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 1 adds analysis-only institutional context: swings, equal and structural liquidity, structure bias, premium/discount positioning, and displacement observations. It consumes read-only candle data when available and returns a safe empty context otherwise; it cannot place or enable trades.
 
 ## MT5 Safety Boundary
 

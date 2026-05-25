@@ -9,6 +9,7 @@ from backend.api.ai_routes import router as ai_router
 from backend.api.backtesting_routes import router as backtesting_router
 from backend.api.database_routes import router as database_router
 from backend.api.execution_routes import router as execution_router
+from backend.api.institutional_routes import router as institutional_router
 from backend.api.market_data_routes import router as market_data_router
 from backend.api.mt5_routes import router as mt5_router
 from backend.api.news_routes import router as news_router
@@ -86,6 +87,7 @@ app.include_router(streaming_websocket_router)
 app.include_router(trading_loop_router)
 app.include_router(trade_journal_router)
 app.include_router(system_health_router)
+app.include_router(institutional_router)
 
 
 @app.exception_handler(Exception)

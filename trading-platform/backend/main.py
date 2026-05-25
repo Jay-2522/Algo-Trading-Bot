@@ -17,6 +17,8 @@ from backend.api.risk_routes import router as risk_router
 from backend.api.strategy_routes import router as strategy_router
 from backend.api.streaming_routes import router as streaming_router
 from backend.api.streaming_routes import websocket_router as streaming_websocket_router
+from backend.api.trading_loop_routes import router as trading_loop_router
+from backend.api.trading_loop_routes import trading_loop_service
 from backend.config.settings import get_settings
 from backend.utils.logger import get_logger
 
@@ -31,6 +33,8 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting %s in %s environment", settings.app_name, settings.environment)
     yield
+    if trading_loop_service.get_status().running:
+        await trading_loop_service.stop_loop()
     logger.info("Shutting down %s", settings.app_name)
 
 
@@ -77,6 +81,7 @@ app.include_router(orchestration_router)
 app.include_router(backtesting_router)
 app.include_router(streaming_router)
 app.include_router(streaming_websocket_router)
+app.include_router(trading_loop_router)
 
 
 @app.exception_handler(Exception)

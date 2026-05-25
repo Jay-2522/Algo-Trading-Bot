@@ -18,6 +18,7 @@ The system now includes analysis, risk, news, orchestration, persistence, and of
 - `backend/database`: SQLAlchemy persistence, repositories, SQLite fallback, and PostgreSQL-ready records.
 - `backend/backtesting`: deterministic historical replay, simulated PnL accounting, performance analysis, and stored reports.
 - `backend/streaming`: read-only market tick streaming, WebSocket subscribers, and simulated fallback updates.
+- `backend/trading_loop`: controlled, rate-limited simulation-only orchestration scheduling.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -154,6 +155,19 @@ Live Streaming API examples:
 - `GET http://127.0.0.1:8000/streaming/clients`
 - `WS ws://127.0.0.1:8000/ws/market/XAUUSD`
 
+Background Trading Loop API examples:
+
+- `GET http://127.0.0.1:8000/trading-loop/status`
+- `GET http://127.0.0.1:8000/trading-loop/config`
+- `POST http://127.0.0.1:8000/trading-loop/start`
+- `POST http://127.0.0.1:8000/trading-loop/stop`
+- `POST http://127.0.0.1:8000/trading-loop/pause`
+- `POST http://127.0.0.1:8000/trading-loop/resume`
+- `POST http://127.0.0.1:8000/trading-loop/run-once`
+- `GET http://127.0.0.1:8000/trading-loop/symbols`
+- `POST http://127.0.0.1:8000/trading-loop/symbols/XAUUSD`
+- `DELETE http://127.0.0.1:8000/trading-loop/symbols/XAUUSD`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -258,6 +272,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 's
 ```
 
 The Day 12 streaming engine publishes read-only tick messages over REST and WebSocket interfaces. It can use already-available MT5 ticks or simulated fallback data, creates no uncontrolled background loop, and never enables live execution.
+
+## Run Day 13 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day13_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'trading-loop' in r.path])"
+```
+
+The Day 13 trading loop owns a single rate-limited, start/stop-controlled monitoring task. It delegates to simulation-only orchestration, tracks cycle results, writes audit events when available, and permanently reports `live_execution_enabled: false`.
 
 ## MT5 Safety Boundary
 

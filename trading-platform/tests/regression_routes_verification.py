@@ -19,6 +19,7 @@ REQUIRED_GET_ROUTES = {
     "/database/status",
     "/ai/status",
     "/news/status",
+    "/orchestration/status",
 }
 
 

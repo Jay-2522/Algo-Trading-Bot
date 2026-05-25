@@ -124,6 +124,16 @@ News Intelligence API examples:
 - `GET http://127.0.0.1:8000/news/blackout-windows`
 - `GET http://127.0.0.1:8000/news/macro-score/XAUUSD`
 
+Trading Orchestration API examples:
+
+- `GET http://127.0.0.1:8000/orchestration/status`
+- `POST http://127.0.0.1:8000/orchestration/run/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/orchestration/symbols`
+- `POST http://127.0.0.1:8000/orchestration/symbols/XAUUSD`
+- `DELETE http://127.0.0.1:8000/orchestration/symbols/XAUUSD`
+- `GET http://127.0.0.1:8000/orchestration/last-decision/XAUUSD`
+- `GET http://127.0.0.1:8000/orchestration/config`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -200,6 +210,15 @@ python tests/day9_verification.py
 ```
 
 The Day 9 news engine uses dynamic mock economic-calendar events to calculate macro risk and no-trade blackout windows. It filters trading permission only and never submits orders.
+
+## Run Day 10 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day10_verification.py
+```
+
+The Day 10 orchestration engine runs a single coordinated trade-readiness pipeline across strategy, AI, news, and risk controls. It can invoke simulated execution after approval, records audit outcomes when persistence is available, and does not enable broker order submission.
 
 ## MT5 Safety Boundary
 

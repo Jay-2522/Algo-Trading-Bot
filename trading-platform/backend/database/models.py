@@ -98,6 +98,43 @@ class SystemAuditLogRecord(CreatedAtMixin, Base):
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class BacktestRunRecord(CreatedAtMixin, Base):
+    __tablename__ = "backtest_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    backtest_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(16), nullable=False)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    initial_balance: Mapped[float] = mapped_column(Float, nullable=False)
+    ending_balance: Mapped[float] = mapped_column(Float, nullable=False)
+    net_profit: Mapped[float] = mapped_column(Float, nullable=False)
+    approved: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    metrics_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    equity_curve_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    result_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class BacktestTradeRecord(CreatedAtMixin, Base):
+    __tablename__ = "backtest_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    backtest_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    trade_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    exit_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    exit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    pnl: Mapped[float] = mapped_column(Float, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    trade_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
 # Compatibility exports retained for the Day 1 foundation checks.
 Trade = TradeRecord
 RiskEvent = RiskEventRecord

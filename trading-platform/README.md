@@ -1,8 +1,8 @@
 # AI-Assisted Algorithmic Trading Platform
 
-Professional Day 1 foundation for a modular algorithmic trading platform covering Forex, XAUUSD, and Indian stock markets.
+Professional modular algorithmic trading platform foundation covering Forex, XAUUSD, and Indian stock markets.
 
-This repository currently contains only the architectural foundation. It does not implement trading strategies, AI models, or real order execution.
+The system now includes analysis, risk, news, orchestration, persistence, and offline backtesting foundations. It does not implement real order execution.
 
 ## Architecture Overview
 
@@ -16,6 +16,7 @@ This repository currently contains only the architectural foundation. It does no
 - `backend/broker_integrations`: broker adapters, including MT5 and Indian broker foundations.
 - `backend/websocket`: future real-time dashboard transport.
 - `backend/database`: SQLAlchemy persistence, repositories, SQLite fallback, and PostgreSQL-ready records.
+- `backend/backtesting`: deterministic historical replay, simulated PnL accounting, performance analysis, and stored reports.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -134,6 +135,15 @@ Trading Orchestration API examples:
 - `GET http://127.0.0.1:8000/orchestration/last-decision/XAUUSD`
 - `GET http://127.0.0.1:8000/orchestration/config`
 
+Backtesting API examples:
+
+- `GET http://127.0.0.1:8000/backtesting/status`
+- `POST http://127.0.0.1:8000/backtesting/run/XAUUSD`
+- `GET http://127.0.0.1:8000/backtesting/results/recent`
+- `GET http://127.0.0.1:8000/backtesting/result/{backtest_id}`
+- `GET http://127.0.0.1:8000/backtesting/metrics/{backtest_id}`
+- `GET http://127.0.0.1:8000/backtesting/equity/{backtest_id}`
+
 ## Run Day 1 Verification
 
 ```powershell
@@ -219,6 +229,15 @@ python tests/day10_verification.py
 ```
 
 The Day 10 orchestration engine runs a single coordinated trade-readiness pipeline across strategy, AI, news, and risk controls. It can invoke simulated execution after approval, records audit outcomes when persistence is available, and does not enable broker order submission.
+
+## Run Day 11 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/day11_verification.py
+```
+
+The Day 11 backtesting engine replays deterministic historical candles through historical strategy and AI advisory evaluation, simulates PnL with spread and slippage, stores reports and simulated trades, and remains isolated from live broker execution.
 
 ## MT5 Safety Boundary
 

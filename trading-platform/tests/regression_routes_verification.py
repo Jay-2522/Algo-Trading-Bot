@@ -20,6 +20,7 @@ REQUIRED_GET_ROUTES = {
     "/ai/status",
     "/news/status",
     "/orchestration/status",
+    "/backtesting/status",
 }
 
 

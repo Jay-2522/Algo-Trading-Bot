@@ -21,7 +21,7 @@ Phase 1 of the backend foundation is complete, and Phase 2 has begun with instit
 - `backend/trading_loop`: controlled, rate-limited simulation-only orchestration scheduling.
 - `backend/trade_journal`: analytics-only journal records, performance reporting, drawdown, exposure, and risk alerts.
 - `backend/system_health`: integration readiness, source safety scanning, route auditing, runtime reporting, and Phase 1 reporting.
-- `backend/institutional_intelligence`: SMC/ICT-style swing, liquidity, sweep rejection, FVG, order-block and breaker lifecycle, BOS/CHOCH/MSS transitions, bias, dealing-range, displacement, and context analysis.
+- `backend/institutional_intelligence`: SMC/ICT-style swing, liquidity, sweep rejection, FVG, order-block and breaker lifecycle, BOS/CHOCH/MSS transitions, bias, dealing-range, displacement, and institutional confluence scoring.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -225,6 +225,11 @@ Institutional Intelligence API examples:
 - `GET http://127.0.0.1:8000/institutional/structure-shift/latest/XAUUSD?timeframe=M15`
 - `GET http://127.0.0.1:8000/institutional/structure-shift/high-quality/XAUUSD?timeframe=M15`
 - `GET http://127.0.0.1:8000/institutional/structure-shift/context/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/confluence/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/confluence/score/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/confluence/explanation/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/confluence/components/XAUUSD?timeframe=M15`
+- `GET http://127.0.0.1:8000/institutional/confluence/readiness/XAUUSD?timeframe=M15`
 
 ## Run Day 1 Verification
 
@@ -447,6 +452,24 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 ```
 
 Phase 2 Day 6 identifies strong and weak swing breaks, continuation BOS events, counter-bias CHOCH events, and displacement or follow-through confirmed MSS events. It combines structure events with sweep, FVG, order-block, breaker, and bias context while remaining analysis-only.
+
+## Run Phase 2 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day7_verification.py
+python tests/phase2_day6_verification.py
+python tests/phase2_day5_verification.py
+python tests/phase2_day4_verification.py
+python tests/phase2_day3_verification.py
+python tests/phase2_day2_verification.py
+python tests/phase2_day1_verification.py
+python tests/day15_verification.py
+python tests/phase1_full_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 7 consolidates bias, sweeps, FVGs, order blocks, breakers, structure shifts, dealing-range position, displacement, session quality, and risk status into deterministic bullish/bearish confluence scores, quality/readiness labels, and dashboard-ready explanations. The result is analysis-only and cannot place or enable trades.
 
 ## MT5 Safety Boundary
 

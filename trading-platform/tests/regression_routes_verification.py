@@ -31,6 +31,7 @@ REQUIRED_GET_ROUTES = {
     "/institutional/order-blocks/{symbol}",
     "/institutional/breakers/{symbol}",
     "/institutional/structure-shift/{symbol}",
+    "/institutional/confluence/{symbol}",
 }
 
 REQUIRED_WEBSOCKET_ROUTES = {"/ws/market/{symbol}"}

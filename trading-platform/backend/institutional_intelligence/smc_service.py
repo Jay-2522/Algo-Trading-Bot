@@ -12,6 +12,8 @@ from backend.institutional_intelligence.breaker_block_models import BreakerBlock
 from backend.institutional_intelligence.breaker_block_context_builder import BreakerBlockContextBuilder
 from backend.institutional_intelligence.structure_shift_models import StructureShiftContext
 from backend.institutional_intelligence.structure_shift_context_builder import StructureShiftContextBuilder
+from backend.institutional_intelligence.confluence_models import ConfluenceContext
+from backend.institutional_intelligence.confluence_context_builder import ConfluenceContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.utils.logger import get_logger
@@ -32,6 +34,7 @@ class SMCService:
         order_block_context_builder: OrderBlockContextBuilder | None = None,
         breaker_block_context_builder: BreakerBlockContextBuilder | None = None,
         structure_shift_context_builder: StructureShiftContextBuilder | None = None,
+        confluence_context_builder: ConfluenceContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -40,6 +43,7 @@ class SMCService:
         self.order_block_context_builder = order_block_context_builder or OrderBlockContextBuilder()
         self.breaker_block_context_builder = breaker_block_context_builder or BreakerBlockContextBuilder()
         self.structure_shift_context_builder = structure_shift_context_builder or StructureShiftContextBuilder()
+        self.confluence_context_builder = confluence_context_builder or ConfluenceContextBuilder()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -393,3 +397,33 @@ class SMCService:
             "simulation_only": True,
             "live_execution_enabled": False,
         }
+
+    def analyze_confluence(self, symbol: str, timeframe: str = "M15") -> ConfluenceContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.analyze_confluence_from_candles(normalized_symbol, normalized_timeframe, candles)
+        except Exception as exc:
+            logger.warning("Institutional confluence analysis unavailable for %s: %s", normalized_symbol, exc)
+            return self.confluence_context_builder.build_confluence_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_confluence_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> ConfluenceContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        return self.confluence_context_builder.build_confluence_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+        )

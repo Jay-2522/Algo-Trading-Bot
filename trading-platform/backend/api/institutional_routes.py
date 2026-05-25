@@ -14,6 +14,11 @@ from backend.institutional_intelligence.fair_value_gap_models import FairValueGa
 from backend.institutional_intelligence.order_block_models import OrderBlock, OrderBlockContext
 from backend.institutional_intelligence.breaker_block_models import BreakerBlock, BreakerBlockContext
 from backend.institutional_intelligence.structure_shift_models import StructureEvent, StructureShiftContext
+from backend.institutional_intelligence.confluence_models import (
+    ConfluenceComponentScore,
+    ConfluenceContext,
+    InstitutionalConfluenceScore,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -38,6 +43,7 @@ async def get_institutional_status() -> dict:
             "ORDER_BLOCKS",
             "BREAKER_BLOCKS",
             "STRUCTURE_SHIFT",
+            "INSTITUTIONAL_CONFLUENCE",
         ],
     }
 
@@ -205,3 +211,47 @@ async def get_high_quality_structure_events(symbol: str, timeframe: str = Query(
 @router.get("/structure-shift/context/{symbol}")
 async def get_structure_shift_confluence(symbol: str, timeframe: str = Query(default="M15")) -> dict:
     return smc_service.analyze_structure_shift_confluence(symbol, timeframe)
+
+
+@router.get("/confluence/{symbol}", response_model=ConfluenceContext)
+async def get_confluence(symbol: str, timeframe: str = Query(default="M15")) -> ConfluenceContext:
+    return smc_service.analyze_confluence(symbol, timeframe)
+
+
+@router.get("/confluence/score/{symbol}", response_model=InstitutionalConfluenceScore)
+async def get_confluence_score(symbol: str, timeframe: str = Query(default="M15")) -> InstitutionalConfluenceScore:
+    return smc_service.analyze_confluence(symbol, timeframe).confluence_score
+
+
+@router.get("/confluence/explanation/{symbol}")
+async def get_confluence_explanation(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    score = smc_service.analyze_confluence(symbol, timeframe).confluence_score
+    return {
+        "symbol": score.symbol,
+        "timeframe": score.timeframe,
+        "dominant_direction": score.dominant_direction,
+        "explanation": score.explanation,
+        "strengths": score.strengths,
+        "weaknesses": score.weaknesses,
+        "warnings": score.warnings,
+    }
+
+
+@router.get("/confluence/components/{symbol}", response_model=list[ConfluenceComponentScore])
+async def get_confluence_components(symbol: str, timeframe: str = Query(default="M15")) -> list[ConfluenceComponentScore]:
+    return smc_service.analyze_confluence(symbol, timeframe).confluence_score.component_scores
+
+
+@router.get("/confluence/readiness/{symbol}")
+async def get_confluence_readiness(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    score = smc_service.analyze_confluence(symbol, timeframe).confluence_score
+    return {
+        "symbol": score.symbol,
+        "timeframe": score.timeframe,
+        "setup_quality": score.setup_quality,
+        "trade_readiness": score.trade_readiness,
+        "overall_score": score.overall_score,
+        "confidence": score.confidence,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }

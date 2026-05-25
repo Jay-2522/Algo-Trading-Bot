@@ -6,6 +6,7 @@ from backend.institutional_intelligence.fair_value_gap_models import FVGContext
 from backend.institutional_intelligence.order_block_models import OrderBlockContext
 from backend.institutional_intelligence.breaker_block_models import BreakerBlockContext
 from backend.institutional_intelligence.structure_shift_models import StructureShiftContext
+from backend.institutional_intelligence.confluence_models import ConfluenceContext, InstitutionalConfluenceScore
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -15,5 +16,7 @@ __all__ = [
     "OrderBlockContext",
     "BreakerBlockContext",
     "StructureShiftContext",
+    "ConfluenceContext",
+    "InstitutionalConfluenceScore",
     "SMCService",
 ]

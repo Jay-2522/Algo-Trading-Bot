@@ -56,6 +56,11 @@ REQUIRED_ROUTES = [
     "/institutional/structure-shift/latest/{symbol}",
     "/institutional/structure-shift/high-quality/{symbol}",
     "/institutional/structure-shift/context/{symbol}",
+    "/institutional/confluence/{symbol}",
+    "/institutional/confluence/score/{symbol}",
+    "/institutional/confluence/explanation/{symbol}",
+    "/institutional/confluence/components/{symbol}",
+    "/institutional/confluence/readiness/{symbol}",
 ]
 
 

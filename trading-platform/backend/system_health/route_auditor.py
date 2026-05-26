@@ -61,6 +61,10 @@ REQUIRED_ROUTES = [
     "/institutional/confluence/explanation/{symbol}",
     "/institutional/confluence/components/{symbol}",
     "/institutional/confluence/readiness/{symbol}",
+    "/institutional/alignment/{symbol}",
+    "/institutional/alignment/narrative/{symbol}",
+    "/institutional/alignment/conflicts/{symbol}",
+    "/institutional/alignment/timeframes/{symbol}",
 ]
 
 

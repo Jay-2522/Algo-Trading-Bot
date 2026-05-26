@@ -471,6 +471,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 7 consolidates bias, sweeps, FVGs, order blocks, breakers, structure shifts, dealing-range position, displacement, session quality, and risk status into deterministic bullish/bearish confluence scores, quality/readiness labels, and dashboard-ready explanations. The result is analysis-only and cannot place or enable trades.
 
+## Run Phase 2 Day 8 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day8_verification.py
+python tests/phase2_day7_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 8 evaluates the existing confluence intelligence across H4, H1, M15, and M5. It resolves top-down institutional direction with H4 authority, identifies higher/lower timeframe conflict, and returns dashboard-ready narrative and alignment confidence. The feature is analysis-only and remains incapable of enabling or placing trades.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

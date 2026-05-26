@@ -21,6 +21,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "institutional_breaker_blocks", "route": "/institutional/breakers/{symbol}"},
     {"name": "institutional_structure_shift", "route": "/institutional/structure-shift/{symbol}"},
     {"name": "institutional_confluence", "route": "/institutional/confluence/{symbol}"},
+    {"name": "institutional_alignment", "route": "/institutional/alignment/{symbol}"},
 ]
 
 

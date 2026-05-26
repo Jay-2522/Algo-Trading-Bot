@@ -14,6 +14,8 @@ from backend.institutional_intelligence.structure_shift_models import StructureS
 from backend.institutional_intelligence.structure_shift_context_builder import StructureShiftContextBuilder
 from backend.institutional_intelligence.confluence_models import ConfluenceContext
 from backend.institutional_intelligence.confluence_context_builder import ConfluenceContextBuilder
+from backend.institutional_intelligence.multi_timeframe_models import MultiTimeframeAlignment
+from backend.institutional_intelligence.multi_timeframe_alignment_engine import MultiTimeframeAlignmentEngine
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.utils.logger import get_logger
@@ -35,6 +37,7 @@ class SMCService:
         breaker_block_context_builder: BreakerBlockContextBuilder | None = None,
         structure_shift_context_builder: StructureShiftContextBuilder | None = None,
         confluence_context_builder: ConfluenceContextBuilder | None = None,
+        multi_timeframe_alignment_engine: MultiTimeframeAlignmentEngine | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -44,6 +47,9 @@ class SMCService:
         self.breaker_block_context_builder = breaker_block_context_builder or BreakerBlockContextBuilder()
         self.structure_shift_context_builder = structure_shift_context_builder or StructureShiftContextBuilder()
         self.confluence_context_builder = confluence_context_builder or ConfluenceContextBuilder()
+        self.multi_timeframe_alignment_engine = multi_timeframe_alignment_engine or MultiTimeframeAlignmentEngine(
+            self.analyze_confluence
+        )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -427,3 +433,7 @@ class SMCService:
             normalized_timeframe,
             candles,
         )
+
+    def analyze_multi_timeframe_alignment(self, symbol: str) -> MultiTimeframeAlignment:
+        normalized_symbol = validate_symbol_name(symbol)
+        return self.multi_timeframe_alignment_engine.analyze_alignment(normalized_symbol)

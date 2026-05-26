@@ -7,6 +7,7 @@ from backend.institutional_intelligence.order_block_models import OrderBlockCont
 from backend.institutional_intelligence.breaker_block_models import BreakerBlockContext
 from backend.institutional_intelligence.structure_shift_models import StructureShiftContext
 from backend.institutional_intelligence.confluence_models import ConfluenceContext, InstitutionalConfluenceScore
+from backend.institutional_intelligence.multi_timeframe_models import MultiTimeframeAlignment, InstitutionalNarrative
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -18,5 +19,7 @@ __all__ = [
     "StructureShiftContext",
     "ConfluenceContext",
     "InstitutionalConfluenceScore",
+    "MultiTimeframeAlignment",
+    "InstitutionalNarrative",
     "SMCService",
 ]

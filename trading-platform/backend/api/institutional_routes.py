@@ -19,6 +19,11 @@ from backend.institutional_intelligence.confluence_models import (
     ConfluenceContext,
     InstitutionalConfluenceScore,
 )
+from backend.institutional_intelligence.multi_timeframe_models import (
+    InstitutionalNarrative,
+    MultiTimeframeAlignment,
+    TimeframeDirectionalBias,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -44,6 +49,7 @@ async def get_institutional_status() -> dict:
             "BREAKER_BLOCKS",
             "STRUCTURE_SHIFT",
             "INSTITUTIONAL_CONFLUENCE",
+            "MULTI_TIMEFRAME_ALIGNMENT",
         ],
     }
 
@@ -255,3 +261,39 @@ async def get_confluence_readiness(symbol: str, timeframe: str = Query(default="
         "simulation_only": True,
         "live_execution_enabled": False,
     }
+
+
+@router.get("/alignment/{symbol}", response_model=MultiTimeframeAlignment)
+async def get_alignment(symbol: str) -> MultiTimeframeAlignment:
+    return smc_service.analyze_multi_timeframe_alignment(symbol)
+
+
+@router.get("/alignment/narrative/{symbol}", response_model=InstitutionalNarrative)
+async def get_alignment_narrative(symbol: str) -> InstitutionalNarrative:
+    alignment = smc_service.analyze_multi_timeframe_alignment(symbol)
+    return alignment.institutional_narrative or InstitutionalNarrative(symbol=alignment.symbol)
+
+
+@router.get("/alignment/conflicts/{symbol}")
+async def get_alignment_conflicts(symbol: str) -> dict:
+    alignment = smc_service.analyze_multi_timeframe_alignment(symbol)
+    return {
+        "symbol": alignment.symbol,
+        "overall_direction": alignment.overall_direction,
+        "alignment_quality": alignment.alignment_quality,
+        "conflicts": alignment.conflicts,
+        "warnings": alignment.warnings,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }
+
+
+@router.get("/alignment/timeframes/{symbol}", response_model=list[TimeframeDirectionalBias])
+async def get_alignment_timeframes(symbol: str) -> list[TimeframeDirectionalBias]:
+    alignment = smc_service.analyze_multi_timeframe_alignment(symbol)
+    return [
+        alignment.macro_bias,
+        alignment.directional_bias,
+        alignment.execution_bias,
+        alignment.precision_bias,
+    ]

@@ -17,6 +17,11 @@ from backend.institutional_intelligence.paper_trade_models import (
     PaperTradeLifecycleContext,
     PaperTradePosition,
 )
+from backend.institutional_intelligence.position_management_models import (
+    InstitutionalPositionManagement,
+    ManagedPosition,
+    ManagementDecision,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -40,5 +45,8 @@ __all__ = [
     "PaperTradeCandidate",
     "PaperTradePosition",
     "PaperTradeLifecycleContext",
+    "InstitutionalPositionManagement",
+    "ManagedPosition",
+    "ManagementDecision",
     "SMCService",
 ]

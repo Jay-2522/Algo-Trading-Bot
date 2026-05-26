@@ -537,6 +537,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 13 advances approved simulation intents through a paper-only lifecycle: pending candidate, deterministic midpoint activation, active monitoring, and closed outcome with simulated PnL and R result. Ambiguous candles use conservative invalidation-first evaluation, and all outputs preserve `simulation_only = true` with live execution disabled.
 
+## Run Phase 2 Day 14 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day14_verification.py
+python tests/phase2_day13_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 14 manages active paper positions with deterministic partial profit reduction, break-even protection, structure-aware trailing, institutional invalidation exits, session discipline, and emergency risk shutdown decisions. It is a post-entry simulation-management layer only and does not add any live execution path.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

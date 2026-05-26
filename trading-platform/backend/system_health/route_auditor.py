@@ -94,6 +94,12 @@ REQUIRED_ROUTES = [
     "/institutional/paper-trades/closed/{symbol}",
     "/institutional/paper-trades/latest/{symbol}",
     "/institutional/paper-trades/summary/{symbol}",
+    "/institutional/position-management/{symbol}",
+    "/institutional/position-management/active/{symbol}",
+    "/institutional/position-management/exits/{symbol}",
+    "/institutional/position-management/emergency/{symbol}",
+    "/institutional/position-management/state/{symbol}",
+    "/institutional/position-management/context/{symbol}",
 ]
 
 

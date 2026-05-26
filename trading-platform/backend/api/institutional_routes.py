@@ -43,6 +43,12 @@ from backend.institutional_intelligence.paper_trade_models import (
     PaperTradeLifecycleContext,
     PaperTradePosition,
 )
+from backend.institutional_intelligence.position_management_models import (
+    EmergencyExitSignal,
+    InstitutionalPositionManagement,
+    ManagedPosition,
+    StructuralExitSignal,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -74,6 +80,7 @@ async def get_institutional_status() -> dict:
             "SETUP_VALIDATION_READINESS",
             "SIMULATION_DECISION_PIPELINE",
             "PAPER_TRADE_LIFECYCLE",
+            "POSITION_MANAGEMENT_ENGINE",
         ],
     }
 
@@ -541,3 +548,41 @@ async def get_paper_trade_summary(symbol: str, timeframe: str = Query(default="M
         "simulation_only": True,
         "live_execution_enabled": False,
     }
+
+
+@router.get("/position-management/{symbol}", response_model=InstitutionalPositionManagement)
+async def get_position_management(symbol: str, timeframe: str = Query(default="M15")) -> InstitutionalPositionManagement:
+    return smc_service.get_position_management(symbol, timeframe)
+
+
+@router.get("/position-management/active/{symbol}", response_model=list[ManagedPosition])
+async def get_active_position_management(symbol: str, timeframe: str = Query(default="M15")) -> list[ManagedPosition]:
+    return smc_service.get_active_position_management(symbol, timeframe)
+
+
+@router.get("/position-management/exits/{symbol}", response_model=list[StructuralExitSignal])
+async def get_position_management_exits(symbol: str, timeframe: str = Query(default="M15")) -> list[StructuralExitSignal]:
+    return smc_service.get_structural_exit_signals(symbol, timeframe)
+
+
+@router.get("/position-management/emergency/{symbol}", response_model=EmergencyExitSignal)
+async def get_position_management_emergency(symbol: str, timeframe: str = Query(default="M15")) -> EmergencyExitSignal:
+    return smc_service.get_emergency_exit_status(symbol, timeframe)
+
+
+@router.get("/position-management/state/{symbol}")
+async def get_position_management_state(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.get_position_management(symbol, timeframe)
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "management_status": context.management_status,
+        "latest_state": context.latest_state,
+        "simulation_only": context.simulation_only,
+        "live_execution_enabled": context.live_execution_enabled,
+    }
+
+
+@router.get("/position-management/context/{symbol}", response_model=InstitutionalPositionManagement)
+async def get_position_management_context(symbol: str, timeframe: str = Query(default="M15")) -> InstitutionalPositionManagement:
+    return smc_service.get_position_management(symbol, timeframe)

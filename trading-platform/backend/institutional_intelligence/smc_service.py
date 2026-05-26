@@ -26,6 +26,13 @@ from backend.institutional_intelligence.simulation_decision_models import Simula
 from backend.institutional_intelligence.simulation_decision_context_builder import SimulationDecisionContextBuilder
 from backend.institutional_intelligence.paper_trade_models import PaperTradeLifecycleContext
 from backend.institutional_intelligence.paper_trade_context_builder import PaperTradeContextBuilder
+from backend.institutional_intelligence.position_management_models import (
+    EmergencyExitSignal,
+    InstitutionalPositionManagement,
+    ManagedPosition,
+    StructuralExitSignal,
+)
+from backend.institutional_intelligence.position_management_context_builder import PositionManagementContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -57,6 +64,7 @@ class SMCService:
         risk_service: RiskService | None = None,
         simulation_decision_context_builder: SimulationDecisionContextBuilder | None = None,
         paper_trade_context_builder: PaperTradeContextBuilder | None = None,
+        position_management_context_builder: PositionManagementContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -84,6 +92,9 @@ class SMCService:
         )
         self.paper_trade_context_builder = paper_trade_context_builder or PaperTradeContextBuilder(
             self.simulation_decision_context_builder
+        )
+        self.position_management_context_builder = position_management_context_builder or PositionManagementContextBuilder(
+            self.paper_trade_context_builder
         )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
@@ -804,4 +815,76 @@ class SMCService:
             normalized_timeframe,
             candles,
             decision_context=decision,
+        )
+
+    def get_position_management(self, symbol: str, timeframe: str = "M15") -> InstitutionalPositionManagement:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.get_position_management_from_candles(normalized_symbol, normalized_timeframe, candles)
+        except Exception as exc:
+            logger.warning("Institutional position management unavailable for %s: %s", normalized_symbol, exc)
+            paper = PaperTradeLifecycleContext(
+                symbol=normalized_symbol,
+                timeframe=normalized_timeframe,
+                lifecycle_status="BLOCKED",
+                summary="Paper lifecycle unavailable; position management remains inactive.",
+            )
+            return self.position_management_context_builder.build_position_management_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+                paper_context=paper,
+                risk_context={"overall_status": "BLOCKED"},
+            )
+        finally:
+            self.market_data_service.close()
+
+    def get_position_management_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+        paper_context: PaperTradeLifecycleContext | None = None,
+        structure_context: StructureShiftContext | None = None,
+        breaker_context: BreakerBlockContext | None = None,
+        session_context: SessionIntelligenceContext | None = None,
+        risk_context: Any = None,
+    ) -> InstitutionalPositionManagement:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        paper = paper_context or self.analyze_paper_trade_lifecycle_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        structure = structure_context or self.analyze_structure_shift_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        breaker = breaker_context or self.analyze_breaker_blocks_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        session = session_context or self.analyze_session_intelligence_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        return self.position_management_context_builder.build_position_management_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            paper_context=paper,
+            structure_context=structure,
+            breaker_context=breaker,
+            session_context=session,
+            risk_context=risk_context if risk_context is not None else self._safe_risk_status(),
+        )
+
+    def get_active_position_management(self, symbol: str, timeframe: str = "M15") -> list[ManagedPosition]:
+        return self.get_position_management(symbol, timeframe).active_positions
+
+    def get_structural_exit_signals(self, symbol: str, timeframe: str = "M15") -> list[StructuralExitSignal]:
+        return self.get_position_management(symbol, timeframe).structural_exit_signals
+
+    def get_emergency_exit_status(self, symbol: str, timeframe: str = "M15") -> EmergencyExitSignal:
+        context = self.get_position_management(symbol, timeframe)
+        return context.emergency_exit or EmergencyExitSignal(
+            shutdown_reason="No emergency simulation shutdown condition detected."
         )

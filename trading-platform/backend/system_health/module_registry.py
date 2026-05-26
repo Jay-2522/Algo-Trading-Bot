@@ -27,6 +27,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "institutional_setup_validation", "route": "/institutional/setup-validation/{symbol}"},
     {"name": "institutional_simulation_decision", "route": "/institutional/simulation-decision/{symbol}"},
     {"name": "institutional_paper_trades", "route": "/institutional/paper-trades/{symbol}"},
+    {"name": "institutional_position_management", "route": "/institutional/position-management/{symbol}"},
 ]
 
 

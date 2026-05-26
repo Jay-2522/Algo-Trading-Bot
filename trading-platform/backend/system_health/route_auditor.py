@@ -77,6 +77,12 @@ REQUIRED_ROUTES = [
     "/institutional/entry-models/waiting/{symbol}",
     "/institutional/entry-models/avoided/{symbol}",
     "/institutional/entry-models/explanation/{symbol}",
+    "/institutional/setup-validation/{symbol}",
+    "/institutional/setup-validation/approved/{symbol}",
+    "/institutional/setup-validation/waiting/{symbol}",
+    "/institutional/setup-validation/rejected/{symbol}",
+    "/institutional/setup-validation/best/{symbol}",
+    "/institutional/setup-validation/readiness/{symbol}",
 ]
 
 

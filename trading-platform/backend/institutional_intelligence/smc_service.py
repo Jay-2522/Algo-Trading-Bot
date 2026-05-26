@@ -20,9 +20,12 @@ from backend.institutional_intelligence.session_models import SessionIntelligenc
 from backend.institutional_intelligence.session_context_builder import SessionContextBuilder
 from backend.institutional_intelligence.entry_model_models import EntryModelContext
 from backend.institutional_intelligence.entry_model_context_builder import EntryModelContextBuilder
+from backend.institutional_intelligence.setup_validator_models import SetupValidationContext
+from backend.institutional_intelligence.setup_validation_context_builder import SetupValidationContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
+from backend.risk_engine.risk_service import RiskService, get_risk_service
 from backend.utils.logger import get_logger
 
 
@@ -46,6 +49,8 @@ class SMCService:
         session_context_builder: SessionContextBuilder | None = None,
         news_filter_service: NewsFilterService | None = None,
         entry_model_context_builder: EntryModelContextBuilder | None = None,
+        setup_validation_context_builder: SetupValidationContextBuilder | None = None,
+        risk_service: RiskService | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -64,6 +69,10 @@ class SMCService:
             self.confluence_context_builder,
             self.session_context_builder,
         )
+        self.setup_validation_context_builder = setup_validation_context_builder or SetupValidationContextBuilder(
+            self.entry_model_context_builder
+        )
+        self.risk_service = risk_service or get_risk_service()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -571,3 +580,93 @@ class SMCService:
             session_context=session_context,
             news_status=news_status,
         )
+
+    def analyze_setup_validation(self, symbol: str, timeframe: str = "M15") -> SetupValidationContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            alignment = self.analyze_multi_timeframe_alignment(normalized_symbol)
+            news_status = self._safe_news_status(normalized_symbol)
+            confluence = self.confluence_context_builder.build_confluence_context(
+                normalized_symbol, normalized_timeframe, candles
+            )
+            session = self.analyze_session_intelligence_from_candles(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                alignment_context=alignment,
+                news_status=news_status,
+            )
+            entries = self.entry_model_context_builder.build_entry_model_context(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                confluence_context=confluence,
+                alignment_context=alignment,
+                session_context=session,
+                news_status=news_status,
+            )
+            return self.setup_validation_context_builder.build_validation_context(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                entry_model_context=entries,
+                confluence_context=confluence,
+                alignment_context=alignment,
+                session_context=session,
+                risk_context=self._safe_risk_status(),
+                news_status=news_status,
+            )
+        except Exception as exc:
+            logger.warning("Setup validation unavailable for %s: %s", normalized_symbol, exc)
+            return self.setup_validation_context_builder.build_validation_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+                risk_context=self._safe_risk_status(),
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_setup_validation_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+        alignment_context: MultiTimeframeAlignment | None = None,
+        session_context: SessionIntelligenceContext | None = None,
+        news_status: Any = None,
+    ) -> SetupValidationContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        confluence = self.confluence_context_builder.build_confluence_context(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        entries = self.entry_model_context_builder.build_entry_model_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            confluence_context=confluence,
+            alignment_context=alignment_context,
+            session_context=session_context,
+            news_status=news_status,
+        )
+        return self.setup_validation_context_builder.build_validation_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            entry_model_context=entries,
+            confluence_context=confluence,
+            alignment_context=alignment_context,
+            session_context=session_context,
+            risk_context=self._safe_risk_status(),
+            news_status=news_status,
+        )
+
+    def _safe_risk_status(self) -> Any:
+        try:
+            return self.risk_service.get_risk_status()
+        except Exception as exc:
+            logger.warning("Risk status unavailable for setup validation: %s", exc)
+            return {"overall_status": "BLOCKED"}

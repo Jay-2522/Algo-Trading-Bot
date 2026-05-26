@@ -32,6 +32,7 @@ from backend.institutional_intelligence.session_models import (
     TradingSessionRange,
 )
 from backend.institutional_intelligence.entry_model_models import EntryModelContext, InstitutionalEntryModel
+from backend.institutional_intelligence.setup_validator_models import SetupValidationContext, SetupValidationResult
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -60,6 +61,7 @@ async def get_institutional_status() -> dict:
             "MULTI_TIMEFRAME_ALIGNMENT",
             "SESSION_KILLZONE_INTELLIGENCE",
             "INSTITUTIONAL_ENTRY_MODELS",
+            "SETUP_VALIDATION_READINESS",
         ],
     }
 
@@ -388,6 +390,46 @@ async def get_entry_model_explanation(symbol: str, timeframe: str = Query(defaul
         "confidence": context.confidence,
         "best_model_type": best.model_type if best else None,
         "explanation": best.metadata.get("explanation", {}) if best else {},
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }
+
+
+@router.get("/setup-validation/{symbol}", response_model=SetupValidationContext)
+async def get_setup_validation(symbol: str, timeframe: str = Query(default="M15")) -> SetupValidationContext:
+    return smc_service.analyze_setup_validation(symbol, timeframe)
+
+
+@router.get("/setup-validation/approved/{symbol}", response_model=list[SetupValidationResult])
+async def get_approved_setups(symbol: str, timeframe: str = Query(default="M15")) -> list[SetupValidationResult]:
+    return smc_service.analyze_setup_validation(symbol, timeframe).approved_setups
+
+
+@router.get("/setup-validation/waiting/{symbol}", response_model=list[SetupValidationResult])
+async def get_waiting_setups(symbol: str, timeframe: str = Query(default="M15")) -> list[SetupValidationResult]:
+    return smc_service.analyze_setup_validation(symbol, timeframe).waiting_setups
+
+
+@router.get("/setup-validation/rejected/{symbol}", response_model=list[SetupValidationResult])
+async def get_rejected_setups(symbol: str, timeframe: str = Query(default="M15")) -> list[SetupValidationResult]:
+    return smc_service.analyze_setup_validation(symbol, timeframe).rejected_setups
+
+
+@router.get("/setup-validation/best/{symbol}", response_model=SetupValidationResult | None)
+async def get_best_validated_setup(symbol: str, timeframe: str = Query(default="M15")) -> SetupValidationResult | None:
+    return smc_service.analyze_setup_validation(symbol, timeframe).best_setup
+
+
+@router.get("/setup-validation/readiness/{symbol}")
+async def get_setup_execution_readiness(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.analyze_setup_validation(symbol, timeframe)
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "simulation_eligible": context.simulation_eligible,
+        "execution_readiness": context.execution_readiness,
+        "confidence": context.confidence,
+        "best_decision": context.best_decision,
         "simulation_only": True,
         "live_execution_enabled": False,
     }

@@ -54,6 +54,11 @@ from backend.institutional_intelligence.institutional_orchestration_models impor
     InstitutionalOrchestrationReport,
     InstitutionalSystemState,
 )
+from backend.institutional_intelligence.ai_reasoning_models import (
+    InstitutionalReasoningReport,
+    MarketNarrative,
+    ReasoningQualityCheck,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -87,6 +92,7 @@ async def get_institutional_status() -> dict:
             "PAPER_TRADE_LIFECYCLE",
             "POSITION_MANAGEMENT_ENGINE",
             "INSTITUTIONAL_ORCHESTRATION_ENGINE",
+            "AI_INSTITUTIONAL_REASONING",
         ],
     }
 
@@ -638,3 +644,54 @@ async def get_institutional_orchestration_health(
 ) -> InstitutionalHealthResult:
     report = smc_service.analyze_institutional_orchestration(symbol, timeframe)
     return smc_service.institutional_orchestrator.health_checker.check_institutional_health(report)
+
+
+@router.get("/reasoning/{symbol}", response_model=InstitutionalReasoningReport)
+async def get_institutional_reasoning(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalReasoningReport:
+    return smc_service.analyze_ai_reasoning(symbol, timeframe)
+
+
+@router.get("/reasoning/narrative/{symbol}", response_model=MarketNarrative)
+async def get_institutional_narrative(symbol: str, timeframe: str = Query(default="M15")) -> MarketNarrative:
+    return smc_service.analyze_ai_reasoning(symbol, timeframe).narrative
+
+
+@router.get("/reasoning/summary/{symbol}")
+async def get_institutional_reasoning_summary(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    report = smc_service.analyze_ai_reasoning(symbol, timeframe)
+    return {
+        "symbol": report.symbol,
+        "timeframe": report.timeframe,
+        "executive_summary": report.executive_summary,
+        "client_friendly_summary": report.client_friendly_summary,
+        "recommended_action": report.narrative.recommended_action,
+        "confidence": report.confidence,
+        "simulation_only": report.simulation_only,
+        "live_execution_enabled": report.live_execution_enabled,
+    }
+
+
+@router.get("/reasoning/dashboard/{symbol}")
+async def get_institutional_reasoning_dashboard(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    report = smc_service.analyze_ai_reasoning(symbol, timeframe)
+    return {
+        "symbol": report.symbol,
+        "timeframe": report.timeframe,
+        "headline": report.narrative.headline,
+        "dashboard_summary": report.dashboard_summary,
+        "key_drivers": report.narrative.key_drivers,
+        "risks": report.narrative.risks,
+        "recommended_action": report.narrative.recommended_action,
+        "simulation_only": report.simulation_only,
+        "live_execution_enabled": report.live_execution_enabled,
+    }
+
+
+@router.get("/reasoning/quality/{symbol}", response_model=ReasoningQualityCheck)
+async def get_institutional_reasoning_quality(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> ReasoningQualityCheck:
+    report = smc_service.analyze_ai_reasoning(symbol, timeframe)
+    return smc_service.reasoning_quality_checker.check_reasoning_quality(report)

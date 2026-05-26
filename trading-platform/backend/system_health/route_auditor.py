@@ -105,6 +105,11 @@ REQUIRED_ROUTES = [
     "/institutional/orchestration/report/{symbol}",
     "/institutional/orchestration/summary/{symbol}",
     "/institutional/orchestration/health/{symbol}",
+    "/institutional/reasoning/{symbol}",
+    "/institutional/reasoning/narrative/{symbol}",
+    "/institutional/reasoning/summary/{symbol}",
+    "/institutional/reasoning/dashboard/{symbol}",
+    "/institutional/reasoning/quality/{symbol}",
 ]
 
 

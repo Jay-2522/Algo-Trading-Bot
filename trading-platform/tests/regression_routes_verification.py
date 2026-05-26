@@ -40,6 +40,7 @@ REQUIRED_GET_ROUTES = {
     "/institutional/paper-trades/{symbol}",
     "/institutional/position-management/{symbol}",
     "/institutional/orchestration/{symbol}",
+    "/institutional/reasoning/{symbol}",
 }
 
 REQUIRED_WEBSOCKET_ROUTES = {"/ws/market/{symbol}"}

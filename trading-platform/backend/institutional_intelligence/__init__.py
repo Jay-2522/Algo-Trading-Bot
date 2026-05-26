@@ -26,6 +26,11 @@ from backend.institutional_intelligence.institutional_orchestration_models impor
     InstitutionalOrchestrationReport,
     InstitutionalSystemState,
 )
+from backend.institutional_intelligence.ai_reasoning_models import (
+    InstitutionalReasoningReport,
+    MarketNarrative,
+    ReasoningQualityCheck,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -54,5 +59,8 @@ __all__ = [
     "ManagementDecision",
     "InstitutionalOrchestrationReport",
     "InstitutionalSystemState",
+    "MarketNarrative",
+    "InstitutionalReasoningReport",
+    "ReasoningQualityCheck",
     "SMCService",
 ]

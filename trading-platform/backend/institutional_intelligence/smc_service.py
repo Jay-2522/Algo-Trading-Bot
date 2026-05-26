@@ -35,6 +35,9 @@ from backend.institutional_intelligence.position_management_models import (
 from backend.institutional_intelligence.position_management_context_builder import PositionManagementContextBuilder
 from backend.institutional_intelligence.institutional_orchestration_models import InstitutionalOrchestrationReport
 from backend.institutional_intelligence.institutional_orchestrator import InstitutionalOrchestrator
+from backend.institutional_intelligence.ai_reasoning_models import InstitutionalReasoningReport
+from backend.institutional_intelligence.institutional_reasoning_engine import InstitutionalReasoningEngine
+from backend.institutional_intelligence.reasoning_quality_checker import ReasoningQualityChecker
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -68,6 +71,8 @@ class SMCService:
         paper_trade_context_builder: PaperTradeContextBuilder | None = None,
         position_management_context_builder: PositionManagementContextBuilder | None = None,
         institutional_orchestrator: InstitutionalOrchestrator | None = None,
+        institutional_reasoning_engine: InstitutionalReasoningEngine | None = None,
+        reasoning_quality_checker: ReasoningQualityChecker | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -100,6 +105,8 @@ class SMCService:
             self.paper_trade_context_builder
         )
         self.institutional_orchestrator = institutional_orchestrator or InstitutionalOrchestrator(self)
+        self.institutional_reasoning_engine = institutional_reasoning_engine or InstitutionalReasoningEngine()
+        self.reasoning_quality_checker = reasoning_quality_checker or ReasoningQualityChecker()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -925,3 +932,22 @@ class SMCService:
         return self.institutional_orchestrator.analyze_from_candles(
             normalized_symbol, normalized_timeframe, candles
         )
+
+    def analyze_ai_reasoning(self, symbol: str, timeframe: str = "M15") -> InstitutionalReasoningReport:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        orchestration = self.analyze_institutional_orchestration(normalized_symbol, normalized_timeframe)
+        return self.institutional_reasoning_engine.generate_reasoning(orchestration)
+
+    def analyze_ai_reasoning_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> InstitutionalReasoningReport:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        orchestration = self.analyze_institutional_orchestration_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        return self.institutional_reasoning_engine.generate_reasoning(orchestration)

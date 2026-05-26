@@ -44,6 +44,8 @@ from backend.institutional_intelligence.dashboard_context_models import Institut
 from backend.institutional_intelligence.dashboard_context_builder import DashboardContextBuilder
 from backend.institutional_intelligence.phase2_completion_models import Phase2ReadinessReport
 from backend.institutional_intelligence.phase2_completion_report_builder import Phase2CompletionReportBuilder
+from backend.institutional_intelligence.client_demo_models import ClientDemoReport, ClientDemoSummary
+from backend.institutional_intelligence.client_demo_summary_builder import ClientDemoSummaryBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -82,6 +84,7 @@ class SMCService:
         performance_analytics_context_builder: PerformanceAnalyticsContextBuilder | None = None,
         dashboard_context_builder: DashboardContextBuilder | None = None,
         phase2_completion_report_builder: Phase2CompletionReportBuilder | None = None,
+        client_demo_summary_builder: ClientDemoSummaryBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -123,6 +126,11 @@ class SMCService:
             self.performance_analytics_context_builder,
         )
         self.phase2_completion_report_builder = phase2_completion_report_builder or Phase2CompletionReportBuilder()
+        self.client_demo_summary_builder = client_demo_summary_builder or ClientDemoSummaryBuilder(
+            self.analyze_dashboard_context,
+            self.analyze_ai_reasoning,
+            self.analyze_phase2_readiness,
+        )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -1029,6 +1037,42 @@ class SMCService:
 
     def analyze_phase2_completion_report(self) -> Phase2ReadinessReport:
         return self.phase2_completion_report_builder.build_report(self._phase2_registered_routes())
+
+    def analyze_client_demo_summary(self, symbol: str, timeframe: str = "M15") -> ClientDemoSummary:
+        return self.analyze_client_demo_report(symbol, timeframe).summary
+
+    def analyze_client_demo_report(self, symbol: str, timeframe: str = "M15") -> ClientDemoReport:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+        except Exception as exc:
+            logger.warning("Institutional client demo context unavailable for %s: %s", normalized_symbol, exc)
+            candles = []
+        finally:
+            self.market_data_service.close()
+        orchestration = self.analyze_institutional_orchestration_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        reasoning = self.institutional_reasoning_engine.generate_reasoning(orchestration)
+        performance = self.performance_analytics_context_builder.build_performance_context(
+            normalized_symbol, normalized_timeframe, [orchestration]
+        )
+        dashboard = self.dashboard_context_builder.build_dashboard_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            orchestration_report=orchestration,
+            reasoning_report=reasoning,
+            performance_context=performance,
+        )
+        return self.client_demo_summary_builder.build_demo_report(
+            normalized_symbol,
+            normalized_timeframe,
+            dashboard_context=dashboard,
+            reasoning_report=reasoning,
+            phase2_report=self.analyze_phase2_readiness(),
+        )
 
     def _phase2_registered_routes(self) -> list[str]:
         from backend.api.institutional_routes import router

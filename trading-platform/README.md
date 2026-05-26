@@ -603,6 +603,28 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 19 certifies all nineteen institutional modules, audits the complete institutional API route surface, and publishes typed completion/readiness and safety reporting. Phase 2 is complete in simulation-only mode with live execution disabled.
 
+## Phase 2 Completion And Client Demo
+
+Phase 2 is complete and client-demo ready as a simulation-only institutional intelligence backend. It detects institutional market structure, grades and validates hypothetical setups, manages paper positions, explains decisions, reports analytics, and audits its own safety boundary.
+
+Client demo endpoints:
+
+- `GET http://127.0.0.1:8000/institutional/demo/XAUUSD`
+- `GET http://127.0.0.1:8000/institutional/demo/summary/XAUUSD`
+- `GET http://127.0.0.1:8000/institutional/demo/modules/XAUUSD`
+- `GET http://127.0.0.1:8000/institutional/demo/talking-points/XAUUSD`
+- `GET http://127.0.0.1:8000/institutional/phase2/completion-report`
+
+Full final verification:
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day19_verification.py
+python tests/phase2_full_verification.py
+```
+
+See `docs/phase-2-final-summary.md` for the final architecture and `docs/phase-2-client-demo-guide.md` for a concise presentation flow. Broker execution remains disabled throughout Phase 2.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

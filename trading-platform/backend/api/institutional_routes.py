@@ -78,6 +78,11 @@ from backend.institutional_intelligence.phase2_completion_models import (
     Phase2ReadinessReport,
     Phase2SafetyAudit,
 )
+from backend.institutional_intelligence.client_demo_models import (
+    ClientDemoModule,
+    ClientDemoReport,
+    ClientDemoSummary,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -800,26 +805,98 @@ async def get_institutional_dashboard_status(symbol: str, timeframe: str = Query
     }
 
 
-@router.get("/phase2/status", response_model=Phase2ReadinessReport)
+@router.get(
+    "/phase2/status",
+    response_model=Phase2ReadinessReport,
+    summary="Phase 2 certification status",
+    description="Returns the simulation-only institutional completion certification and readiness flags.",
+)
 async def get_phase2_status() -> Phase2ReadinessReport:
     return smc_service.analyze_phase2_readiness()
 
 
-@router.get("/phase2/readiness", response_model=Phase2ReadinessReport)
+@router.get(
+    "/phase2/readiness",
+    response_model=Phase2ReadinessReport,
+    summary="Phase 2 readiness report",
+    description="Validates institutional module and route readiness without executing trades.",
+)
 async def get_phase2_readiness() -> Phase2ReadinessReport:
     return smc_service.analyze_phase2_readiness()
 
 
-@router.get("/phase2/safety-audit", response_model=Phase2SafetyAudit)
+@router.get(
+    "/phase2/safety-audit",
+    response_model=Phase2SafetyAudit,
+    summary="Phase 2 execution safety audit",
+    description="Reports source safety checks confirming the simulation-only boundary.",
+)
 async def get_phase2_safety_audit() -> Phase2SafetyAudit:
     return smc_service.analyze_phase2_readiness().safety_audit
 
 
-@router.get("/phase2/completion-report", response_model=Phase2ReadinessReport)
+@router.get(
+    "/phase2/completion-report",
+    response_model=Phase2ReadinessReport,
+    summary="Client-ready Phase 2 completion report",
+    description="Returns completion, safety, and next-phase summaries for institutional review.",
+)
 async def get_phase2_completion_report() -> Phase2ReadinessReport:
     return smc_service.analyze_phase2_completion_report()
 
 
-@router.get("/phase2/modules", response_model=list[Phase2ModuleStatus])
+@router.get(
+    "/phase2/modules",
+    response_model=list[Phase2ModuleStatus],
+    summary="Phase 2 module registry",
+    description="Lists the institutional modules and primary route readiness.",
+)
 async def get_phase2_modules() -> list[Phase2ModuleStatus]:
     return smc_service.analyze_phase2_readiness().module_statuses
+
+
+@router.get(
+    "/demo/{symbol}",
+    response_model=ClientDemoReport,
+    summary="Client demonstration report",
+    description="Presents a concise simulation-only institutional intelligence overview for a symbol.",
+)
+async def get_client_demo_report(symbol: str, timeframe: str = Query(default="M15")) -> ClientDemoReport:
+    return smc_service.analyze_client_demo_report(symbol, timeframe)
+
+
+@router.get(
+    "/demo/summary/{symbol}",
+    response_model=ClientDemoSummary,
+    summary="Client demonstration summary",
+    description="Returns a short client-readable market and safety summary.",
+)
+async def get_client_demo_summary(symbol: str, timeframe: str = Query(default="M15")) -> ClientDemoSummary:
+    return smc_service.analyze_client_demo_summary(symbol, timeframe)
+
+
+@router.get(
+    "/demo/modules/{symbol}",
+    response_model=list[ClientDemoModule],
+    summary="Client demonstration modules",
+    description="Explains the Phase 2 institutional modules in presentation-ready language.",
+)
+async def get_client_demo_modules(symbol: str, timeframe: str = Query(default="M15")) -> list[ClientDemoModule]:
+    return smc_service.analyze_client_demo_report(symbol, timeframe).modules
+
+
+@router.get(
+    "/demo/talking-points/{symbol}",
+    summary="Client demonstration talking points",
+    description="Returns concise, safety-aware talking points for the institutional demonstration.",
+)
+async def get_client_demo_talking_points(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    report = smc_service.analyze_client_demo_report(symbol, timeframe)
+    return {
+        "symbol": report.summary.symbol,
+        "timeframe": report.summary.timeframe,
+        "talking_points": report.demo_talking_points,
+        "safe_to_demo": report.safe_to_demo,
+        "simulation_only": report.summary.simulation_only,
+        "live_execution_enabled": report.summary.live_execution_enabled,
+    }

@@ -113,6 +113,10 @@ class Phase2ReadinessChecker:
         "/institutional/phase2/safety-audit",
         "/institutional/phase2/completion-report",
         "/institutional/phase2/modules",
+        "/institutional/demo/{symbol}",
+        "/institutional/demo/summary/{symbol}",
+        "/institutional/demo/modules/{symbol}",
+        "/institutional/demo/talking-points/{symbol}",
     ]
 
     def __init__(

@@ -42,4 +42,7 @@ class Phase2ReadinessReport(BaseModel):
     simulation_only: bool = True
     live_execution_enabled: bool = False
     summary: str = ""
+    safety_summary: str = ""
+    client_ready_summary: str = ""
+    next_phase_direction: str = ""
     timestamp: datetime = Field(default_factory=utc_now)

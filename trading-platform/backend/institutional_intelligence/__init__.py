@@ -46,6 +46,11 @@ from backend.institutional_intelligence.phase2_completion_models import (
     Phase2ReadinessReport,
     Phase2SafetyAudit,
 )
+from backend.institutional_intelligence.client_demo_models import (
+    ClientDemoModule,
+    ClientDemoReport,
+    ClientDemoSummary,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -86,5 +91,8 @@ __all__ = [
     "Phase2ModuleStatus",
     "Phase2ReadinessReport",
     "Phase2SafetyAudit",
+    "ClientDemoModule",
+    "ClientDemoReport",
+    "ClientDemoSummary",
     "SMCService",
 ]

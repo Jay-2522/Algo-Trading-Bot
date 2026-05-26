@@ -25,33 +25,33 @@ class DashboardSummaryBuilder:
             return DashboardRecommendation(
                 action="REVIEW_SYSTEM",
                 confidence=confidence,
-                reason=reason or "Institutional context is incomplete or safety status requires review.",
-                next_step="Keep simulation decisions blocked until system evidence is complete.",
+                reason="Review system status. Institutional verification is incomplete.",
+                next_step="Keep simulation decisions blocked until checks pass.",
             )
         mappings = {
             "BLOCKED": (
                 "AVOID",
-                "Do not approve a simulated setup while recorded blocking conditions remain.",
+                "Avoid simulation now. Institutional conditions are not fully aligned.",
                 False,
             ),
             "WAITING_FOR_CONFIRMATION": (
                 "WAIT",
-                "Monitor for confirmation before permitting a simulation decision.",
+                "Wait for confirmation. Setup quality is not ready.",
                 False,
             ),
             "READY_FOR_SIMULATION": (
                 "READY_FOR_SIMULATION",
-                "Eligible setup may proceed through simulation-only review.",
+                "Ready for simulation. Risk and structure gates passed.",
                 True,
             ),
             "MANAGING_POSITION": (
                 "MANAGE_POSITION",
-                "Continue managing the existing paper position under protection rules.",
+                "Manage the paper position. Protection rules are active.",
                 False,
             ),
             "NO_TRADE": (
                 "MONITOR",
-                "Observe institutional conditions until a validated setup is present.",
+                "Monitor conditions. No approved simulated setup is present.",
                 False,
             ),
         }
@@ -59,7 +59,7 @@ class DashboardSummaryBuilder:
         return DashboardRecommendation(
             action=action,
             confidence=confidence,
-            reason=reason or f"Institutional system state is {final_state}.",
+            reason=next_step,
             next_step=next_step,
             simulation_allowed=allowed,
         )

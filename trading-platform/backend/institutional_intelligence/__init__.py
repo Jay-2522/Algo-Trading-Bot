@@ -22,6 +22,10 @@ from backend.institutional_intelligence.position_management_models import (
     ManagedPosition,
     ManagementDecision,
 )
+from backend.institutional_intelligence.institutional_orchestration_models import (
+    InstitutionalOrchestrationReport,
+    InstitutionalSystemState,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -48,5 +52,7 @@ __all__ = [
     "InstitutionalPositionManagement",
     "ManagedPosition",
     "ManagementDecision",
+    "InstitutionalOrchestrationReport",
+    "InstitutionalSystemState",
     "SMCService",
 ]

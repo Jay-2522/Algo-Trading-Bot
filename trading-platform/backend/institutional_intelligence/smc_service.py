@@ -33,6 +33,8 @@ from backend.institutional_intelligence.position_management_models import (
     StructuralExitSignal,
 )
 from backend.institutional_intelligence.position_management_context_builder import PositionManagementContextBuilder
+from backend.institutional_intelligence.institutional_orchestration_models import InstitutionalOrchestrationReport
+from backend.institutional_intelligence.institutional_orchestrator import InstitutionalOrchestrator
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -65,6 +67,7 @@ class SMCService:
         simulation_decision_context_builder: SimulationDecisionContextBuilder | None = None,
         paper_trade_context_builder: PaperTradeContextBuilder | None = None,
         position_management_context_builder: PositionManagementContextBuilder | None = None,
+        institutional_orchestrator: InstitutionalOrchestrator | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -96,6 +99,7 @@ class SMCService:
         self.position_management_context_builder = position_management_context_builder or PositionManagementContextBuilder(
             self.paper_trade_context_builder
         )
+        self.institutional_orchestrator = institutional_orchestrator or InstitutionalOrchestrator(self)
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -887,4 +891,37 @@ class SMCService:
         context = self.get_position_management(symbol, timeframe)
         return context.emergency_exit or EmergencyExitSignal(
             shutdown_reason="No emergency simulation shutdown condition detected."
+        )
+
+    def analyze_institutional_orchestration(
+        self, symbol: str, timeframe: str = "M15"
+    ) -> InstitutionalOrchestrationReport:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.institutional_orchestrator.analyze_from_candles(
+                normalized_symbol, normalized_timeframe, candles
+            )
+        except Exception as exc:
+            logger.warning("Institutional orchestration unavailable for %s: %s", normalized_symbol, exc)
+            report = self.institutional_orchestrator.analyze_from_candles(
+                normalized_symbol, normalized_timeframe, []
+            )
+            return report.model_copy(
+                update={"warnings": report.warnings + ["Market data unavailable; report generated in safe fallback mode."]}
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_institutional_orchestration_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> InstitutionalOrchestrationReport:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        return self.institutional_orchestrator.analyze_from_candles(
+            normalized_symbol, normalized_timeframe, candles
         )

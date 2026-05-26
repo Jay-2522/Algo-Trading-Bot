@@ -100,6 +100,11 @@ REQUIRED_ROUTES = [
     "/institutional/position-management/emergency/{symbol}",
     "/institutional/position-management/state/{symbol}",
     "/institutional/position-management/context/{symbol}",
+    "/institutional/orchestration/{symbol}",
+    "/institutional/orchestration/state/{symbol}",
+    "/institutional/orchestration/report/{symbol}",
+    "/institutional/orchestration/summary/{symbol}",
+    "/institutional/orchestration/health/{symbol}",
 ]
 
 

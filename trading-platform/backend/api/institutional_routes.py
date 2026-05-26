@@ -49,6 +49,11 @@ from backend.institutional_intelligence.position_management_models import (
     ManagedPosition,
     StructuralExitSignal,
 )
+from backend.institutional_intelligence.institutional_orchestration_models import (
+    InstitutionalHealthResult,
+    InstitutionalOrchestrationReport,
+    InstitutionalSystemState,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -81,6 +86,7 @@ async def get_institutional_status() -> dict:
             "SIMULATION_DECISION_PIPELINE",
             "PAPER_TRADE_LIFECYCLE",
             "POSITION_MANAGEMENT_ENGINE",
+            "INSTITUTIONAL_ORCHESTRATION_ENGINE",
         ],
     }
 
@@ -586,3 +592,49 @@ async def get_position_management_state(symbol: str, timeframe: str = Query(defa
 @router.get("/position-management/context/{symbol}", response_model=InstitutionalPositionManagement)
 async def get_position_management_context(symbol: str, timeframe: str = Query(default="M15")) -> InstitutionalPositionManagement:
     return smc_service.get_position_management(symbol, timeframe)
+
+
+@router.get("/orchestration/{symbol}", response_model=InstitutionalOrchestrationReport)
+async def get_institutional_orchestration(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalOrchestrationReport:
+    return smc_service.analyze_institutional_orchestration(symbol, timeframe)
+
+
+@router.get("/orchestration/state/{symbol}", response_model=InstitutionalSystemState)
+async def get_institutional_orchestration_state(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalSystemState:
+    report = smc_service.analyze_institutional_orchestration(symbol, timeframe)
+    return report.system_state
+
+
+@router.get("/orchestration/report/{symbol}", response_model=InstitutionalOrchestrationReport)
+async def get_institutional_orchestration_report(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalOrchestrationReport:
+    return smc_service.analyze_institutional_orchestration(symbol, timeframe)
+
+
+@router.get("/orchestration/summary/{symbol}")
+async def get_institutional_orchestration_summary(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    report = smc_service.analyze_institutional_orchestration(symbol, timeframe)
+    return {
+        "symbol": report.symbol,
+        "timeframe": report.timeframe,
+        "final_state": report.system_state.final_state if report.system_state else "ERROR_SAFE_MODE",
+        "executive_summary": report.executive_summary,
+        "strengths": report.strengths,
+        "weaknesses": report.weaknesses,
+        "warnings": report.warnings,
+        "simulation_only": report.simulation_only,
+        "live_execution_enabled": report.live_execution_enabled,
+    }
+
+
+@router.get("/orchestration/health/{symbol}", response_model=InstitutionalHealthResult)
+async def get_institutional_orchestration_health(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalHealthResult:
+    report = smc_service.analyze_institutional_orchestration(symbol, timeframe)
+    return smc_service.institutional_orchestrator.health_checker.check_institutional_health(report)

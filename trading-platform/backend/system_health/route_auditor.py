@@ -121,6 +121,11 @@ REQUIRED_ROUTES = [
     "/institutional/dashboard/alerts/{symbol}",
     "/institutional/dashboard/recommendation/{symbol}",
     "/institutional/dashboard/status/{symbol}",
+    "/institutional/phase2/status",
+    "/institutional/phase2/readiness",
+    "/institutional/phase2/safety-audit",
+    "/institutional/phase2/completion-report",
+    "/institutional/phase2/modules",
 ]
 
 

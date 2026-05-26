@@ -43,6 +43,7 @@ REQUIRED_GET_ROUTES = {
     "/institutional/reasoning/{symbol}",
     "/institutional/performance/{symbol}",
     "/institutional/dashboard/{symbol}",
+    "/institutional/phase2/status",
 }
 
 REQUIRED_WEBSOCKET_ROUTES = {"/ws/market/{symbol}"}

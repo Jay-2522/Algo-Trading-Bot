@@ -41,6 +41,11 @@ from backend.institutional_intelligence.dashboard_context_models import (
     DashboardRecommendation,
     InstitutionalDashboardContext,
 )
+from backend.institutional_intelligence.phase2_completion_models import (
+    Phase2ModuleStatus,
+    Phase2ReadinessReport,
+    Phase2SafetyAudit,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -78,5 +83,8 @@ __all__ = [
     "DashboardCard",
     "DashboardRecommendation",
     "InstitutionalDashboardContext",
+    "Phase2ModuleStatus",
+    "Phase2ReadinessReport",
+    "Phase2SafetyAudit",
     "SMCService",
 ]

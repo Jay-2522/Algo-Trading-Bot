@@ -592,6 +592,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 18 packages orchestration, reasoning, and performance outputs into JSON-safe dashboard cards, alerts, a final recommendation, and an overall dashboard status. It is a backend context layer only; recommendation eligibility is limited to paper simulation and no broker execution is added.
 
+## Run Phase 2 Day 19 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day19_verification.py
+python tests/phase2_day18_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 19 certifies all nineteen institutional modules, audits the complete institutional API route surface, and publishes typed completion/readiness and safety reporting. Phase 2 is complete in simulation-only mode with live execution disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

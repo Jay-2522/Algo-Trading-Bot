@@ -73,6 +73,11 @@ from backend.institutional_intelligence.dashboard_context_models import (
     DashboardRecommendation,
     InstitutionalDashboardContext,
 )
+from backend.institutional_intelligence.phase2_completion_models import (
+    Phase2ModuleStatus,
+    Phase2ReadinessReport,
+    Phase2SafetyAudit,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -793,3 +798,28 @@ async def get_institutional_dashboard_status(symbol: str, timeframe: str = Query
         "simulation_only": context.simulation_only,
         "live_execution_enabled": context.live_execution_enabled,
     }
+
+
+@router.get("/phase2/status", response_model=Phase2ReadinessReport)
+async def get_phase2_status() -> Phase2ReadinessReport:
+    return smc_service.analyze_phase2_readiness()
+
+
+@router.get("/phase2/readiness", response_model=Phase2ReadinessReport)
+async def get_phase2_readiness() -> Phase2ReadinessReport:
+    return smc_service.analyze_phase2_readiness()
+
+
+@router.get("/phase2/safety-audit", response_model=Phase2SafetyAudit)
+async def get_phase2_safety_audit() -> Phase2SafetyAudit:
+    return smc_service.analyze_phase2_readiness().safety_audit
+
+
+@router.get("/phase2/completion-report", response_model=Phase2ReadinessReport)
+async def get_phase2_completion_report() -> Phase2ReadinessReport:
+    return smc_service.analyze_phase2_completion_report()
+
+
+@router.get("/phase2/modules", response_model=list[Phase2ModuleStatus])
+async def get_phase2_modules() -> list[Phase2ModuleStatus]:
+    return smc_service.analyze_phase2_readiness().module_statuses

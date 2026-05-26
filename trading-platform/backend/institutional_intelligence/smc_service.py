@@ -42,6 +42,8 @@ from backend.institutional_intelligence.performance_analytics_models import Inst
 from backend.institutional_intelligence.performance_analytics_context_builder import PerformanceAnalyticsContextBuilder
 from backend.institutional_intelligence.dashboard_context_models import InstitutionalDashboardContext
 from backend.institutional_intelligence.dashboard_context_builder import DashboardContextBuilder
+from backend.institutional_intelligence.phase2_completion_models import Phase2ReadinessReport
+from backend.institutional_intelligence.phase2_completion_report_builder import Phase2CompletionReportBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -79,6 +81,7 @@ class SMCService:
         reasoning_quality_checker: ReasoningQualityChecker | None = None,
         performance_analytics_context_builder: PerformanceAnalyticsContextBuilder | None = None,
         dashboard_context_builder: DashboardContextBuilder | None = None,
+        phase2_completion_report_builder: Phase2CompletionReportBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -119,6 +122,7 @@ class SMCService:
             self.institutional_reasoning_engine,
             self.performance_analytics_context_builder,
         )
+        self.phase2_completion_report_builder = phase2_completion_report_builder or Phase2CompletionReportBuilder()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -1019,3 +1023,14 @@ class SMCService:
             reasoning_report=reasoning,
             performance_context=performance,
         )
+
+    def analyze_phase2_readiness(self) -> Phase2ReadinessReport:
+        return self.phase2_completion_report_builder.build_report(self._phase2_registered_routes())
+
+    def analyze_phase2_completion_report(self) -> Phase2ReadinessReport:
+        return self.phase2_completion_report_builder.build_report(self._phase2_registered_routes())
+
+    def _phase2_registered_routes(self) -> list[str]:
+        from backend.api.institutional_routes import router
+
+        return [route.path for route in router.routes]

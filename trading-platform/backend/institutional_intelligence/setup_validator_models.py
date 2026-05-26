@@ -24,6 +24,11 @@ class SetupValidationResult(BaseModel):
     timeframe: str
     model_type: str
     direction: str
+    source_model_id: str | None = None
+    entry_zone_low: float | None = None
+    entry_zone_high: float | None = None
+    invalidation_level: float | None = None
+    target_level: float | None = None
     approved_for_simulation: bool = False
     overall_score: float = Field(default=0.0, ge=0.0, le=100.0)
     confidence: float = Field(default=0.0, ge=0.0, le=100.0)
@@ -34,6 +39,7 @@ class SetupValidationResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     rejection_reasons: list[str] = Field(default_factory=list)
     approval_reasons: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=utc_now)
 
 

@@ -22,6 +22,8 @@ from backend.institutional_intelligence.entry_model_models import EntryModelCont
 from backend.institutional_intelligence.entry_model_context_builder import EntryModelContextBuilder
 from backend.institutional_intelligence.setup_validator_models import SetupValidationContext
 from backend.institutional_intelligence.setup_validation_context_builder import SetupValidationContextBuilder
+from backend.institutional_intelligence.simulation_decision_models import SimulationDecisionContext
+from backend.institutional_intelligence.simulation_decision_context_builder import SimulationDecisionContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -51,6 +53,7 @@ class SMCService:
         entry_model_context_builder: EntryModelContextBuilder | None = None,
         setup_validation_context_builder: SetupValidationContextBuilder | None = None,
         risk_service: RiskService | None = None,
+        simulation_decision_context_builder: SimulationDecisionContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -73,6 +76,9 @@ class SMCService:
             self.entry_model_context_builder
         )
         self.risk_service = risk_service or get_risk_service()
+        self.simulation_decision_context_builder = simulation_decision_context_builder or SimulationDecisionContextBuilder(
+            self.setup_validation_context_builder
+        )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -670,3 +676,74 @@ class SMCService:
         except Exception as exc:
             logger.warning("Risk status unavailable for setup validation: %s", exc)
             return {"overall_status": "BLOCKED"}
+
+    def analyze_simulation_decision(self, symbol: str, timeframe: str = "M15") -> SimulationDecisionContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            alignment = self.analyze_multi_timeframe_alignment(normalized_symbol)
+            news_status = self._safe_news_status(normalized_symbol)
+            session = self.analyze_session_intelligence_from_candles(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                alignment_context=alignment,
+                news_status=news_status,
+            )
+            validation = self.analyze_setup_validation_from_candles(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                alignment_context=alignment,
+                session_context=session,
+                news_status=news_status,
+            )
+            return self.simulation_decision_context_builder.build_simulation_decision_context(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                validation_context=validation,
+                risk_status=self._safe_risk_status(),
+                news_status=news_status,
+                session_context=session,
+            )
+        except Exception as exc:
+            logger.warning("Institutional simulation decision unavailable for %s: %s", normalized_symbol, exc)
+            return self.simulation_decision_context_builder.build_simulation_decision_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+                risk_status={"overall_status": "BLOCKED"},
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_simulation_decision_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+        alignment_context: MultiTimeframeAlignment | None = None,
+        session_context: SessionIntelligenceContext | None = None,
+        news_status: Any = None,
+    ) -> SimulationDecisionContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        validation = self.analyze_setup_validation_from_candles(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            alignment_context=alignment_context,
+            session_context=session_context,
+            news_status=news_status,
+        )
+        return self.simulation_decision_context_builder.build_simulation_decision_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            validation_context=validation,
+            risk_status=self._safe_risk_status(),
+            news_status=news_status,
+            session_context=session_context,
+        )

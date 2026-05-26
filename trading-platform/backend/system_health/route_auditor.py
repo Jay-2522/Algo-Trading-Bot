@@ -83,6 +83,11 @@ REQUIRED_ROUTES = [
     "/institutional/setup-validation/rejected/{symbol}",
     "/institutional/setup-validation/best/{symbol}",
     "/institutional/setup-validation/readiness/{symbol}",
+    "/institutional/simulation-decision/{symbol}",
+    "/institutional/simulation-decision/action/{symbol}",
+    "/institutional/simulation-decision/intent/{symbol}",
+    "/institutional/simulation-decision/explanation/{symbol}",
+    "/institutional/simulation-decision/readiness/{symbol}",
 ]
 
 

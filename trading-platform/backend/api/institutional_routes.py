@@ -33,6 +33,11 @@ from backend.institutional_intelligence.session_models import (
 )
 from backend.institutional_intelligence.entry_model_models import EntryModelContext, InstitutionalEntryModel
 from backend.institutional_intelligence.setup_validator_models import SetupValidationContext, SetupValidationResult
+from backend.institutional_intelligence.simulation_decision_models import (
+    InstitutionalSimulationDecision,
+    SimulationDecisionContext,
+    SimulationOrderIntent,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -62,6 +67,7 @@ async def get_institutional_status() -> dict:
             "SESSION_KILLZONE_INTELLIGENCE",
             "INSTITUTIONAL_ENTRY_MODELS",
             "SETUP_VALIDATION_READINESS",
+            "SIMULATION_DECISION_PIPELINE",
         ],
     }
 
@@ -432,4 +438,50 @@ async def get_setup_execution_readiness(symbol: str, timeframe: str = Query(defa
         "best_decision": context.best_decision,
         "simulation_only": True,
         "live_execution_enabled": False,
+    }
+
+
+@router.get("/simulation-decision/{symbol}", response_model=SimulationDecisionContext)
+async def get_simulation_decision(symbol: str, timeframe: str = Query(default="M15")) -> SimulationDecisionContext:
+    return smc_service.analyze_simulation_decision(symbol, timeframe)
+
+
+@router.get("/simulation-decision/action/{symbol}", response_model=InstitutionalSimulationDecision)
+async def get_simulation_action(symbol: str, timeframe: str = Query(default="M15")) -> InstitutionalSimulationDecision:
+    return smc_service.analyze_simulation_decision(symbol, timeframe).decision
+
+
+@router.get("/simulation-decision/intent/{symbol}", response_model=SimulationOrderIntent)
+async def get_simulation_intent(symbol: str, timeframe: str = Query(default="M15")) -> SimulationOrderIntent:
+    return smc_service.analyze_simulation_decision(symbol, timeframe).decision.order_intent
+
+
+@router.get("/simulation-decision/explanation/{symbol}")
+async def get_simulation_explanation(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    decision = smc_service.analyze_simulation_decision(symbol, timeframe).decision
+    return {
+        "symbol": decision.symbol,
+        "timeframe": decision.timeframe,
+        "action": decision.action,
+        "explanation": decision.explanation,
+        "approval_reasons": decision.approval_reasons,
+        "rejection_reasons": decision.rejection_reasons,
+        "warnings": decision.warnings,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }
+
+
+@router.get("/simulation-decision/readiness/{symbol}")
+async def get_simulation_readiness(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    decision = smc_service.analyze_simulation_decision(symbol, timeframe).decision
+    return {
+        "symbol": decision.symbol,
+        "timeframe": decision.timeframe,
+        "approved_for_simulation": decision.approved_for_simulation,
+        "readiness": decision.readiness,
+        "setup_quality": decision.setup_quality,
+        "risk_quality": decision.order_intent.risk_quality,
+        "simulation_only": decision.simulation_only,
+        "live_execution_enabled": decision.live_execution_enabled,
     }

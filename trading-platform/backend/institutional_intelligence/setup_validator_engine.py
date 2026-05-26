@@ -54,6 +54,11 @@ class SetupValidatorEngine:
             timeframe=self._get(entry_model, "timeframe") or "",
             model_type=self._get(entry_model, "model_type") or "UNKNOWN",
             direction=self._get(entry_model, "direction") or "NEUTRAL",
+            source_model_id=self._get(entry_model, "model_id"),
+            entry_zone_low=self._get(entry_model, "entry_zone_low"),
+            entry_zone_high=self._get(entry_model, "entry_zone_high"),
+            invalidation_level=self._get(entry_model, "invalidation_level"),
+            target_level=self._get(entry_model, "target_level"),
             approved_for_simulation=readiness == "APPROVED",
             overall_score=score,
             confidence=round(min(confidence, 100.0), 2),
@@ -64,6 +69,7 @@ class SetupValidatorEngine:
             warnings=list(self._get(entry_model, "warnings") or []),
             rejection_reasons=critical,
             approval_reasons=passed if readiness == "APPROVED" else [],
+            metadata={"source_model_quality_score": self._get(entry_model, "quality_score")},
         )
 
     def _validate_structure(self, model: Any) -> SetupValidationRule:

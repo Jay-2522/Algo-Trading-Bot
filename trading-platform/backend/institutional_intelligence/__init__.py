@@ -12,6 +12,11 @@ from backend.institutional_intelligence.session_models import SessionIntelligenc
 from backend.institutional_intelligence.entry_model_models import EntryModelContext, InstitutionalEntryModel
 from backend.institutional_intelligence.setup_validator_models import SetupValidationContext, SetupValidationResult
 from backend.institutional_intelligence.simulation_decision_models import SimulationDecisionContext, InstitutionalSimulationDecision
+from backend.institutional_intelligence.paper_trade_models import (
+    PaperTradeCandidate,
+    PaperTradeLifecycleContext,
+    PaperTradePosition,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -32,5 +37,8 @@ __all__ = [
     "SetupValidationResult",
     "SimulationDecisionContext",
     "InstitutionalSimulationDecision",
+    "PaperTradeCandidate",
+    "PaperTradePosition",
+    "PaperTradeLifecycleContext",
     "SMCService",
 ]

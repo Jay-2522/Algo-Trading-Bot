@@ -24,6 +24,8 @@ from backend.institutional_intelligence.setup_validator_models import SetupValid
 from backend.institutional_intelligence.setup_validation_context_builder import SetupValidationContextBuilder
 from backend.institutional_intelligence.simulation_decision_models import SimulationDecisionContext
 from backend.institutional_intelligence.simulation_decision_context_builder import SimulationDecisionContextBuilder
+from backend.institutional_intelligence.paper_trade_models import PaperTradeLifecycleContext
+from backend.institutional_intelligence.paper_trade_context_builder import PaperTradeContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -54,6 +56,7 @@ class SMCService:
         setup_validation_context_builder: SetupValidationContextBuilder | None = None,
         risk_service: RiskService | None = None,
         simulation_decision_context_builder: SimulationDecisionContextBuilder | None = None,
+        paper_trade_context_builder: PaperTradeContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -78,6 +81,9 @@ class SMCService:
         self.risk_service = risk_service or get_risk_service()
         self.simulation_decision_context_builder = simulation_decision_context_builder or SimulationDecisionContextBuilder(
             self.setup_validation_context_builder
+        )
+        self.paper_trade_context_builder = paper_trade_context_builder or PaperTradeContextBuilder(
+            self.simulation_decision_context_builder
         )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
@@ -746,4 +752,56 @@ class SMCService:
             risk_status=self._safe_risk_status(),
             news_status=news_status,
             session_context=session_context,
+        )
+
+    def analyze_paper_trade_lifecycle(self, symbol: str, timeframe: str = "M15") -> PaperTradeLifecycleContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            decision = self.analyze_simulation_decision_from_candles(
+                normalized_symbol, normalized_timeframe, candles
+            )
+            return self.paper_trade_context_builder.build_paper_trade_context(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                decision_context=decision,
+            )
+        except Exception as exc:
+            logger.warning("Institutional paper trade lifecycle unavailable for %s: %s", normalized_symbol, exc)
+            decision = self.simulation_decision_context_builder.build_simulation_decision_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+                risk_status={"overall_status": "BLOCKED"},
+            )
+            return self.paper_trade_context_builder.build_paper_trade_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+                decision_context=decision,
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_paper_trade_lifecycle_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+        decision_context: SimulationDecisionContext | None = None,
+    ) -> PaperTradeLifecycleContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        decision = decision_context or self.analyze_simulation_decision_from_candles(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+        )
+        return self.paper_trade_context_builder.build_paper_trade_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            decision_context=decision,
         )

@@ -526,6 +526,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 12 turns validated approvals into final simulation-only decisions and analytical intents. It selects approved or conditional setups, estimates reward-to-risk, rechecks risk/news/session restrictions, and outputs `SIMULATE_BUY`, `SIMULATE_SELL`, `WAIT`, `AVOID`, or `NO_TRADE` without constructing broker orders or enabling live trading.
 
+## Run Phase 2 Day 13 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day13_verification.py
+python tests/phase2_day12_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 13 advances approved simulation intents through a paper-only lifecycle: pending candidate, deterministic midpoint activation, active monitoring, and closed outcome with simulated PnL and R result. Ambiguous candles use conservative invalidation-first evaluation, and all outputs preserve `simulation_only = true` with live execution disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

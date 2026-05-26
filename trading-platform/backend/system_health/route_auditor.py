@@ -88,6 +88,12 @@ REQUIRED_ROUTES = [
     "/institutional/simulation-decision/intent/{symbol}",
     "/institutional/simulation-decision/explanation/{symbol}",
     "/institutional/simulation-decision/readiness/{symbol}",
+    "/institutional/paper-trades/{symbol}",
+    "/institutional/paper-trades/candidates/{symbol}",
+    "/institutional/paper-trades/active/{symbol}",
+    "/institutional/paper-trades/closed/{symbol}",
+    "/institutional/paper-trades/latest/{symbol}",
+    "/institutional/paper-trades/summary/{symbol}",
 ]
 
 

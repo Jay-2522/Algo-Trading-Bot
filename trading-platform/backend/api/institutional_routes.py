@@ -38,6 +38,11 @@ from backend.institutional_intelligence.simulation_decision_models import (
     SimulationDecisionContext,
     SimulationOrderIntent,
 )
+from backend.institutional_intelligence.paper_trade_models import (
+    PaperTradeCandidate,
+    PaperTradeLifecycleContext,
+    PaperTradePosition,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -68,6 +73,7 @@ async def get_institutional_status() -> dict:
             "INSTITUTIONAL_ENTRY_MODELS",
             "SETUP_VALIDATION_READINESS",
             "SIMULATION_DECISION_PIPELINE",
+            "PAPER_TRADE_LIFECYCLE",
         ],
     }
 
@@ -484,4 +490,54 @@ async def get_simulation_readiness(symbol: str, timeframe: str = Query(default="
         "risk_quality": decision.order_intent.risk_quality,
         "simulation_only": decision.simulation_only,
         "live_execution_enabled": decision.live_execution_enabled,
+    }
+
+
+@router.get("/paper-trades/{symbol}", response_model=PaperTradeLifecycleContext)
+async def get_paper_trades(symbol: str, timeframe: str = Query(default="M15")) -> PaperTradeLifecycleContext:
+    return smc_service.analyze_paper_trade_lifecycle(symbol, timeframe)
+
+
+@router.get("/paper-trades/candidates/{symbol}", response_model=list[PaperTradeCandidate])
+async def get_paper_trade_candidates(symbol: str, timeframe: str = Query(default="M15")) -> list[PaperTradeCandidate]:
+    return smc_service.analyze_paper_trade_lifecycle(symbol, timeframe).candidates
+
+
+@router.get("/paper-trades/active/{symbol}", response_model=list[PaperTradePosition])
+async def get_active_paper_trades(symbol: str, timeframe: str = Query(default="M15")) -> list[PaperTradePosition]:
+    return smc_service.analyze_paper_trade_lifecycle(symbol, timeframe).active_positions
+
+
+@router.get("/paper-trades/closed/{symbol}", response_model=list[PaperTradePosition])
+async def get_closed_paper_trades(symbol: str, timeframe: str = Query(default="M15")) -> list[PaperTradePosition]:
+    return smc_service.analyze_paper_trade_lifecycle(symbol, timeframe).closed_positions
+
+
+@router.get("/paper-trades/latest/{symbol}")
+async def get_latest_paper_trade(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.analyze_paper_trade_lifecycle(symbol, timeframe)
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "candidate": context.latest_candidate,
+        "position": context.latest_position,
+        "lifecycle_status": context.lifecycle_status,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }
+
+
+@router.get("/paper-trades/summary/{symbol}")
+async def get_paper_trade_summary(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.analyze_paper_trade_lifecycle(symbol, timeframe)
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "lifecycle_status": context.lifecycle_status,
+        "summary": context.summary,
+        "candidate_count": len(context.candidates),
+        "active_position_count": len(context.active_positions),
+        "closed_position_count": len(context.closed_positions),
+        "simulation_only": True,
+        "live_execution_enabled": False,
     }

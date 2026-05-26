@@ -30,6 +30,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "institutional_position_management", "route": "/institutional/position-management/{symbol}"},
     {"name": "institutional_orchestration", "route": "/institutional/orchestration/{symbol}"},
     {"name": "institutional_reasoning", "route": "/institutional/reasoning/{symbol}"},
+    {"name": "institutional_performance", "route": "/institutional/performance/{symbol}"},
 ]
 
 

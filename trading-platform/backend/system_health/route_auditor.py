@@ -110,6 +110,12 @@ REQUIRED_ROUTES = [
     "/institutional/reasoning/summary/{symbol}",
     "/institutional/reasoning/dashboard/{symbol}",
     "/institutional/reasoning/quality/{symbol}",
+    "/institutional/performance/{symbol}",
+    "/institutional/performance/setups/{symbol}",
+    "/institutional/performance/decisions/{symbol}",
+    "/institutional/performance/paper-trades/{symbol}",
+    "/institutional/performance/position-management/{symbol}",
+    "/institutional/performance/recommendations/{symbol}",
 ]
 
 

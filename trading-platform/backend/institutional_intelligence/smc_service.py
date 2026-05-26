@@ -38,6 +38,8 @@ from backend.institutional_intelligence.institutional_orchestrator import Instit
 from backend.institutional_intelligence.ai_reasoning_models import InstitutionalReasoningReport
 from backend.institutional_intelligence.institutional_reasoning_engine import InstitutionalReasoningEngine
 from backend.institutional_intelligence.reasoning_quality_checker import ReasoningQualityChecker
+from backend.institutional_intelligence.performance_analytics_models import InstitutionalPerformanceAnalyticsContext
+from backend.institutional_intelligence.performance_analytics_context_builder import PerformanceAnalyticsContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -73,6 +75,7 @@ class SMCService:
         institutional_orchestrator: InstitutionalOrchestrator | None = None,
         institutional_reasoning_engine: InstitutionalReasoningEngine | None = None,
         reasoning_quality_checker: ReasoningQualityChecker | None = None,
+        performance_analytics_context_builder: PerformanceAnalyticsContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -107,6 +110,7 @@ class SMCService:
         self.institutional_orchestrator = institutional_orchestrator or InstitutionalOrchestrator(self)
         self.institutional_reasoning_engine = institutional_reasoning_engine or InstitutionalReasoningEngine()
         self.reasoning_quality_checker = reasoning_quality_checker or ReasoningQualityChecker()
+        self.performance_analytics_context_builder = performance_analytics_context_builder or PerformanceAnalyticsContextBuilder()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -951,3 +955,19 @@ class SMCService:
             normalized_symbol, normalized_timeframe, candles
         )
         return self.institutional_reasoning_engine.generate_reasoning(orchestration)
+
+    def analyze_performance_analytics(
+        self, symbol: str, timeframe: str = "M15"
+    ) -> InstitutionalPerformanceAnalyticsContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            current_report = self.analyze_institutional_orchestration(normalized_symbol, normalized_timeframe)
+            return self.performance_analytics_context_builder.build_performance_context(
+                normalized_symbol, normalized_timeframe, [current_report]
+            )
+        except Exception as exc:
+            logger.warning("Institutional performance analytics unavailable for %s: %s", normalized_symbol, exc)
+            return self.performance_analytics_context_builder.build_performance_context(
+                normalized_symbol, normalized_timeframe
+            )

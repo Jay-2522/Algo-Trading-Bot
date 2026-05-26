@@ -570,6 +570,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 16 translates institutional orchestration output into evidence-bounded market narratives, detailed desk reasoning, client summaries, dashboard summaries, and consistency checks. The reasoning output remains analysis-only and cannot claim or initiate live execution.
 
+## Run Phase 2 Day 17 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day17_verification.py
+python tests/phase2_day16_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 17 measures validated setups, simulation decisions, deduplicated paper outcomes, and position-management actions, then generates evidence-led optimization recommendations. Limited observations are identified as insufficient data, and the analytics layer cannot execute or enable live trading.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

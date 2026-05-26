@@ -31,6 +31,10 @@ from backend.institutional_intelligence.ai_reasoning_models import (
     MarketNarrative,
     ReasoningQualityCheck,
 )
+from backend.institutional_intelligence.performance_analytics_models import (
+    InstitutionalPerformanceAnalyticsContext,
+    InstitutionalOptimizationRecommendation,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -62,5 +66,7 @@ __all__ = [
     "MarketNarrative",
     "InstitutionalReasoningReport",
     "ReasoningQualityCheck",
+    "InstitutionalPerformanceAnalyticsContext",
+    "InstitutionalOptimizationRecommendation",
     "SMCService",
 ]

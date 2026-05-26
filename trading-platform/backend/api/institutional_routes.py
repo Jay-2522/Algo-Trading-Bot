@@ -59,6 +59,14 @@ from backend.institutional_intelligence.ai_reasoning_models import (
     MarketNarrative,
     ReasoningQualityCheck,
 )
+from backend.institutional_intelligence.performance_analytics_models import (
+    DecisionQualityMetrics,
+    InstitutionalOptimizationRecommendation,
+    InstitutionalPerformanceAnalyticsContext,
+    PaperTradePerformanceMetrics,
+    PositionManagementMetrics,
+    SetupPerformanceMetrics,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -93,6 +101,7 @@ async def get_institutional_status() -> dict:
             "POSITION_MANAGEMENT_ENGINE",
             "INSTITUTIONAL_ORCHESTRATION_ENGINE",
             "AI_INSTITUTIONAL_REASONING",
+            "INSTITUTIONAL_PERFORMANCE_ANALYTICS",
         ],
     }
 
@@ -695,3 +704,45 @@ async def get_institutional_reasoning_quality(
 ) -> ReasoningQualityCheck:
     report = smc_service.analyze_ai_reasoning(symbol, timeframe)
     return smc_service.reasoning_quality_checker.check_reasoning_quality(report)
+
+
+@router.get("/performance/{symbol}", response_model=InstitutionalPerformanceAnalyticsContext)
+async def get_institutional_performance(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalPerformanceAnalyticsContext:
+    return smc_service.analyze_performance_analytics(symbol, timeframe)
+
+
+@router.get("/performance/setups/{symbol}", response_model=SetupPerformanceMetrics)
+async def get_institutional_setup_performance(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> SetupPerformanceMetrics:
+    return smc_service.analyze_performance_analytics(symbol, timeframe).setup_metrics
+
+
+@router.get("/performance/decisions/{symbol}", response_model=DecisionQualityMetrics)
+async def get_institutional_decision_performance(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> DecisionQualityMetrics:
+    return smc_service.analyze_performance_analytics(symbol, timeframe).decision_metrics
+
+
+@router.get("/performance/paper-trades/{symbol}", response_model=PaperTradePerformanceMetrics)
+async def get_institutional_paper_performance(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> PaperTradePerformanceMetrics:
+    return smc_service.analyze_performance_analytics(symbol, timeframe).paper_trade_metrics
+
+
+@router.get("/performance/position-management/{symbol}", response_model=PositionManagementMetrics)
+async def get_institutional_management_performance(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> PositionManagementMetrics:
+    return smc_service.analyze_performance_analytics(symbol, timeframe).position_management_metrics
+
+
+@router.get("/performance/recommendations/{symbol}", response_model=list[InstitutionalOptimizationRecommendation])
+async def get_institutional_performance_recommendations(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> list[InstitutionalOptimizationRecommendation]:
+    return smc_service.analyze_performance_analytics(symbol, timeframe).recommendations

@@ -65,6 +65,12 @@ REQUIRED_ROUTES = [
     "/institutional/alignment/narrative/{symbol}",
     "/institutional/alignment/conflicts/{symbol}",
     "/institutional/alignment/timeframes/{symbol}",
+    "/institutional/session/{symbol}",
+    "/institutional/session/ranges/{symbol}",
+    "/institutional/session/killzone/{symbol}",
+    "/institutional/session/liquidity/{symbol}",
+    "/institutional/session/manipulation/{symbol}",
+    "/institutional/session/readiness/{symbol}",
 ]
 
 

@@ -482,6 +482,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 
 Phase 2 Day 8 evaluates the existing confluence intelligence across H4, H1, M15, and M5. It resolves top-down institutional direction with H4 authority, identifies higher/lower timeframe conflict, and returns dashboard-ready narrative and alignment confidence. The feature is analysis-only and remains incapable of enabling or placing trades.
 
+## Run Phase 2 Day 9 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day9_verification.py
+python tests/phase2_day8_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 9 measures Asian, London, and New York UTC ranges; identifies London Open, New York Open, and London Close killzones; and ranks time-of-day quality using range expansion, confirmed range raids, advisory news risk, confluence, and multi-timeframe alignment. It is a simulation-only timing assessment and cannot enable or place trades.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

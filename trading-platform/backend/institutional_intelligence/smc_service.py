@@ -16,8 +16,11 @@ from backend.institutional_intelligence.confluence_models import ConfluenceConte
 from backend.institutional_intelligence.confluence_context_builder import ConfluenceContextBuilder
 from backend.institutional_intelligence.multi_timeframe_models import MultiTimeframeAlignment
 from backend.institutional_intelligence.multi_timeframe_alignment_engine import MultiTimeframeAlignmentEngine
+from backend.institutional_intelligence.session_models import SessionIntelligenceContext
+from backend.institutional_intelligence.session_context_builder import SessionContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
+from backend.news_engine.news_filter_service import NewsFilterService
 from backend.utils.logger import get_logger
 
 
@@ -38,6 +41,8 @@ class SMCService:
         structure_shift_context_builder: StructureShiftContextBuilder | None = None,
         confluence_context_builder: ConfluenceContextBuilder | None = None,
         multi_timeframe_alignment_engine: MultiTimeframeAlignmentEngine | None = None,
+        session_context_builder: SessionContextBuilder | None = None,
+        news_filter_service: NewsFilterService | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -50,6 +55,8 @@ class SMCService:
         self.multi_timeframe_alignment_engine = multi_timeframe_alignment_engine or MultiTimeframeAlignmentEngine(
             self.analyze_confluence
         )
+        self.session_context_builder = session_context_builder or SessionContextBuilder()
+        self.news_filter_service = news_filter_service or NewsFilterService()
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -437,3 +444,65 @@ class SMCService:
     def analyze_multi_timeframe_alignment(self, symbol: str) -> MultiTimeframeAlignment:
         normalized_symbol = validate_symbol_name(symbol)
         return self.multi_timeframe_alignment_engine.analyze_alignment(normalized_symbol)
+
+    def analyze_session_intelligence(self, symbol: str, timeframe: str = "M15") -> SessionIntelligenceContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            alignment = self.analyze_multi_timeframe_alignment(normalized_symbol)
+            return self.analyze_session_intelligence_from_candles(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                alignment_context=alignment,
+                news_status=self._safe_news_status(normalized_symbol),
+            )
+        except Exception as exc:
+            logger.warning("Session intelligence unavailable for %s: %s", normalized_symbol, exc)
+            return self.session_context_builder.build_session_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_session_intelligence_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+        alignment_context: MultiTimeframeAlignment | None = None,
+        news_status: Any = None,
+    ) -> SessionIntelligenceContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        institutional_context = self.context_builder.build_context(normalized_symbol, normalized_timeframe, candles)
+        sweep_context = self.sweep_context_builder.build_sweep_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            institutional_context.liquidity_pools,
+        )
+        confluence_context = self.confluence_context_builder.build_confluence_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+        )
+        return self.session_context_builder.build_session_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            sweep_context=sweep_context,
+            news_status=news_status,
+            confluence_context=confluence_context,
+            alignment_context=alignment_context,
+        )
+
+    def _safe_news_status(self, symbol: str) -> Any:
+        try:
+            return self.news_filter_service.get_news_risk_status(symbol)
+        except Exception as exc:
+            logger.warning("News risk unavailable for session intelligence on %s: %s", symbol, exc)
+            return None

@@ -24,6 +24,13 @@ from backend.institutional_intelligence.multi_timeframe_models import (
     MultiTimeframeAlignment,
     TimeframeDirectionalBias,
 )
+from backend.institutional_intelligence.session_models import (
+    KillzoneStatus,
+    SessionIntelligenceContext,
+    SessionLiquidityProfile,
+    SessionManipulationSignal,
+    TradingSessionRange,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -50,6 +57,7 @@ async def get_institutional_status() -> dict:
             "STRUCTURE_SHIFT",
             "INSTITUTIONAL_CONFLUENCE",
             "MULTI_TIMEFRAME_ALIGNMENT",
+            "SESSION_KILLZONE_INTELLIGENCE",
         ],
     }
 
@@ -297,3 +305,46 @@ async def get_alignment_timeframes(symbol: str) -> list[TimeframeDirectionalBias
         alignment.execution_bias,
         alignment.precision_bias,
     ]
+
+
+@router.get("/session/{symbol}", response_model=SessionIntelligenceContext)
+async def get_session_intelligence(symbol: str, timeframe: str = Query(default="M15")) -> SessionIntelligenceContext:
+    return smc_service.analyze_session_intelligence(symbol, timeframe)
+
+
+@router.get("/session/ranges/{symbol}", response_model=list[TradingSessionRange])
+async def get_session_ranges(symbol: str, timeframe: str = Query(default="M15")) -> list[TradingSessionRange]:
+    context = smc_service.analyze_session_intelligence(symbol, timeframe)
+    return [context.asian_range, context.london_range, context.new_york_range]
+
+
+@router.get("/session/killzone/{symbol}", response_model=KillzoneStatus)
+async def get_session_killzone(symbol: str, timeframe: str = Query(default="M15")) -> KillzoneStatus:
+    return smc_service.analyze_session_intelligence(symbol, timeframe).active_killzone
+
+
+@router.get("/session/liquidity/{symbol}", response_model=SessionLiquidityProfile)
+async def get_session_liquidity(symbol: str, timeframe: str = Query(default="M15")) -> SessionLiquidityProfile:
+    return smc_service.analyze_session_intelligence(symbol, timeframe).liquidity_profile
+
+
+@router.get("/session/manipulation/{symbol}", response_model=list[SessionManipulationSignal])
+async def get_session_manipulation(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> list[SessionManipulationSignal]:
+    return smc_service.analyze_session_intelligence(symbol, timeframe).manipulation_signals
+
+
+@router.get("/session/readiness/{symbol}")
+async def get_session_readiness(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.analyze_session_intelligence(symbol, timeframe)
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "current_session": context.current_session,
+        "trade_timing_readiness": context.trade_timing_readiness,
+        "session_quality_score": context.session_quality_score,
+        "warnings": context.warnings,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }

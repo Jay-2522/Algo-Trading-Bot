@@ -9,6 +9,7 @@ from backend.institutional_intelligence.structure_shift_models import StructureS
 from backend.institutional_intelligence.confluence_models import ConfluenceContext, InstitutionalConfluenceScore
 from backend.institutional_intelligence.multi_timeframe_models import MultiTimeframeAlignment, InstitutionalNarrative
 from backend.institutional_intelligence.session_models import SessionIntelligenceContext
+from backend.institutional_intelligence.entry_model_models import EntryModelContext, InstitutionalEntryModel
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -23,5 +24,7 @@ __all__ = [
     "MultiTimeframeAlignment",
     "InstitutionalNarrative",
     "SessionIntelligenceContext",
+    "EntryModelContext",
+    "InstitutionalEntryModel",
     "SMCService",
 ]

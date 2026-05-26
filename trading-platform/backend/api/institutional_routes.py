@@ -31,6 +31,7 @@ from backend.institutional_intelligence.session_models import (
     SessionManipulationSignal,
     TradingSessionRange,
 )
+from backend.institutional_intelligence.entry_model_models import EntryModelContext, InstitutionalEntryModel
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -58,6 +59,7 @@ async def get_institutional_status() -> dict:
             "INSTITUTIONAL_CONFLUENCE",
             "MULTI_TIMEFRAME_ALIGNMENT",
             "SESSION_KILLZONE_INTELLIGENCE",
+            "INSTITUTIONAL_ENTRY_MODELS",
         ],
     }
 
@@ -345,6 +347,47 @@ async def get_session_readiness(symbol: str, timeframe: str = Query(default="M15
         "trade_timing_readiness": context.trade_timing_readiness,
         "session_quality_score": context.session_quality_score,
         "warnings": context.warnings,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+    }
+
+
+@router.get("/entry-models/{symbol}", response_model=EntryModelContext)
+async def get_entry_models(symbol: str, timeframe: str = Query(default="M15")) -> EntryModelContext:
+    return smc_service.analyze_entry_models(symbol, timeframe)
+
+
+@router.get("/entry-models/best/{symbol}", response_model=InstitutionalEntryModel | None)
+async def get_best_entry_model(symbol: str, timeframe: str = Query(default="M15")) -> InstitutionalEntryModel | None:
+    return smc_service.analyze_entry_models(symbol, timeframe).best_model
+
+
+@router.get("/entry-models/ready/{symbol}", response_model=list[InstitutionalEntryModel])
+async def get_ready_entry_models(symbol: str, timeframe: str = Query(default="M15")) -> list[InstitutionalEntryModel]:
+    return smc_service.analyze_entry_models(symbol, timeframe).ready_models
+
+
+@router.get("/entry-models/waiting/{symbol}", response_model=list[InstitutionalEntryModel])
+async def get_waiting_entry_models(symbol: str, timeframe: str = Query(default="M15")) -> list[InstitutionalEntryModel]:
+    return smc_service.analyze_entry_models(symbol, timeframe).waiting_models
+
+
+@router.get("/entry-models/avoided/{symbol}", response_model=list[InstitutionalEntryModel])
+async def get_avoided_entry_models(symbol: str, timeframe: str = Query(default="M15")) -> list[InstitutionalEntryModel]:
+    return smc_service.analyze_entry_models(symbol, timeframe).avoided_models
+
+
+@router.get("/entry-models/explanation/{symbol}")
+async def get_entry_model_explanation(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.analyze_entry_models(symbol, timeframe)
+    best = context.best_model
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "overall_readiness": context.overall_readiness,
+        "confidence": context.confidence,
+        "best_model_type": best.model_type if best else None,
+        "explanation": best.metadata.get("explanation", {}) if best else {},
         "simulation_only": True,
         "live_execution_enabled": False,
     }

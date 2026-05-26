@@ -71,6 +71,12 @@ REQUIRED_ROUTES = [
     "/institutional/session/liquidity/{symbol}",
     "/institutional/session/manipulation/{symbol}",
     "/institutional/session/readiness/{symbol}",
+    "/institutional/entry-models/{symbol}",
+    "/institutional/entry-models/best/{symbol}",
+    "/institutional/entry-models/ready/{symbol}",
+    "/institutional/entry-models/waiting/{symbol}",
+    "/institutional/entry-models/avoided/{symbol}",
+    "/institutional/entry-models/explanation/{symbol}",
 ]
 
 

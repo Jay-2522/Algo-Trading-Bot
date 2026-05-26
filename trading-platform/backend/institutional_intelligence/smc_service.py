@@ -18,6 +18,8 @@ from backend.institutional_intelligence.multi_timeframe_models import MultiTimef
 from backend.institutional_intelligence.multi_timeframe_alignment_engine import MultiTimeframeAlignmentEngine
 from backend.institutional_intelligence.session_models import SessionIntelligenceContext
 from backend.institutional_intelligence.session_context_builder import SessionContextBuilder
+from backend.institutional_intelligence.entry_model_models import EntryModelContext
+from backend.institutional_intelligence.entry_model_context_builder import EntryModelContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -43,6 +45,7 @@ class SMCService:
         multi_timeframe_alignment_engine: MultiTimeframeAlignmentEngine | None = None,
         session_context_builder: SessionContextBuilder | None = None,
         news_filter_service: NewsFilterService | None = None,
+        entry_model_context_builder: EntryModelContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -57,6 +60,10 @@ class SMCService:
         )
         self.session_context_builder = session_context_builder or SessionContextBuilder()
         self.news_filter_service = news_filter_service or NewsFilterService()
+        self.entry_model_context_builder = entry_model_context_builder or EntryModelContextBuilder(
+            self.confluence_context_builder,
+            self.session_context_builder,
+        )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -506,3 +513,61 @@ class SMCService:
         except Exception as exc:
             logger.warning("News risk unavailable for session intelligence on %s: %s", symbol, exc)
             return None
+
+    def analyze_entry_models(self, symbol: str, timeframe: str = "M15") -> EntryModelContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            alignment = self.analyze_multi_timeframe_alignment(normalized_symbol)
+            news_status = self._safe_news_status(normalized_symbol)
+            session = self.analyze_session_intelligence_from_candles(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                alignment_context=alignment,
+                news_status=news_status,
+            )
+            return self.analyze_entry_models_from_candles(
+                normalized_symbol,
+                normalized_timeframe,
+                candles,
+                alignment_context=alignment,
+                session_context=session,
+                news_status=news_status,
+            )
+        except Exception as exc:
+            logger.warning("Institutional entry model analysis unavailable for %s: %s", normalized_symbol, exc)
+            return self.entry_model_context_builder.build_entry_model_context(
+                normalized_symbol,
+                normalized_timeframe,
+                [],
+            )
+        finally:
+            self.market_data_service.close()
+
+    def analyze_entry_models_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+        alignment_context: MultiTimeframeAlignment | None = None,
+        session_context: SessionIntelligenceContext | None = None,
+        news_status: Any = None,
+    ) -> EntryModelContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        confluence = self.confluence_context_builder.build_confluence_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+        )
+        return self.entry_model_context_builder.build_entry_model_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            confluence_context=confluence,
+            alignment_context=alignment_context,
+            session_context=session_context,
+            news_status=news_status,
+        )

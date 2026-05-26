@@ -23,6 +23,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "institutional_confluence", "route": "/institutional/confluence/{symbol}"},
     {"name": "institutional_alignment", "route": "/institutional/alignment/{symbol}"},
     {"name": "institutional_session_intelligence", "route": "/institutional/session/{symbol}"},
+    {"name": "institutional_entry_models", "route": "/institutional/entry-models/{symbol}"},
 ]
 
 

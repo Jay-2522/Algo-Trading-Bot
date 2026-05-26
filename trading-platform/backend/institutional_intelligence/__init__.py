@@ -35,6 +35,12 @@ from backend.institutional_intelligence.performance_analytics_models import (
     InstitutionalPerformanceAnalyticsContext,
     InstitutionalOptimizationRecommendation,
 )
+from backend.institutional_intelligence.dashboard_context_models import (
+    DashboardAlert,
+    DashboardCard,
+    DashboardRecommendation,
+    InstitutionalDashboardContext,
+)
 from backend.institutional_intelligence.smc_service import SMCService
 
 __all__ = [
@@ -68,5 +74,9 @@ __all__ = [
     "ReasoningQualityCheck",
     "InstitutionalPerformanceAnalyticsContext",
     "InstitutionalOptimizationRecommendation",
+    "DashboardAlert",
+    "DashboardCard",
+    "DashboardRecommendation",
+    "InstitutionalDashboardContext",
     "SMCService",
 ]

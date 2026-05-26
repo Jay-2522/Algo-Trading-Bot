@@ -67,6 +67,12 @@ from backend.institutional_intelligence.performance_analytics_models import (
     PositionManagementMetrics,
     SetupPerformanceMetrics,
 )
+from backend.institutional_intelligence.dashboard_context_models import (
+    DashboardAlert,
+    DashboardCard,
+    DashboardRecommendation,
+    InstitutionalDashboardContext,
+)
 
 
 router = APIRouter(prefix="/institutional", tags=["Institutional Intelligence"])
@@ -746,3 +752,44 @@ async def get_institutional_performance_recommendations(
     symbol: str, timeframe: str = Query(default="M15")
 ) -> list[InstitutionalOptimizationRecommendation]:
     return smc_service.analyze_performance_analytics(symbol, timeframe).recommendations
+
+
+@router.get("/dashboard/{symbol}", response_model=InstitutionalDashboardContext)
+async def get_institutional_dashboard(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> InstitutionalDashboardContext:
+    return smc_service.analyze_dashboard_context(symbol, timeframe)
+
+
+@router.get("/dashboard/cards/{symbol}", response_model=list[DashboardCard])
+async def get_institutional_dashboard_cards(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> list[DashboardCard]:
+    return smc_service.analyze_dashboard_context(symbol, timeframe).cards
+
+
+@router.get("/dashboard/alerts/{symbol}", response_model=list[DashboardAlert])
+async def get_institutional_dashboard_alerts(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> list[DashboardAlert]:
+    return smc_service.analyze_dashboard_context(symbol, timeframe).alerts
+
+
+@router.get("/dashboard/recommendation/{symbol}", response_model=DashboardRecommendation)
+async def get_institutional_dashboard_recommendation(
+    symbol: str, timeframe: str = Query(default="M15")
+) -> DashboardRecommendation:
+    return smc_service.analyze_dashboard_context(symbol, timeframe).final_recommendation
+
+
+@router.get("/dashboard/status/{symbol}")
+async def get_institutional_dashboard_status(symbol: str, timeframe: str = Query(default="M15")) -> dict:
+    context = smc_service.analyze_dashboard_context(symbol, timeframe)
+    return {
+        "symbol": context.symbol,
+        "timeframe": context.timeframe,
+        "dashboard_status": context.dashboard_status,
+        "recommendation": context.final_recommendation.action,
+        "simulation_only": context.simulation_only,
+        "live_execution_enabled": context.live_execution_enabled,
+    }

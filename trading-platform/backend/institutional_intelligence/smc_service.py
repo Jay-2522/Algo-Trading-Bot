@@ -40,6 +40,8 @@ from backend.institutional_intelligence.institutional_reasoning_engine import In
 from backend.institutional_intelligence.reasoning_quality_checker import ReasoningQualityChecker
 from backend.institutional_intelligence.performance_analytics_models import InstitutionalPerformanceAnalyticsContext
 from backend.institutional_intelligence.performance_analytics_context_builder import PerformanceAnalyticsContextBuilder
+from backend.institutional_intelligence.dashboard_context_models import InstitutionalDashboardContext
+from backend.institutional_intelligence.dashboard_context_builder import DashboardContextBuilder
 from backend.market_data.market_data_service import MarketDataService
 from backend.market_data.validators import validate_symbol_name, validate_timeframe
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -76,6 +78,7 @@ class SMCService:
         institutional_reasoning_engine: InstitutionalReasoningEngine | None = None,
         reasoning_quality_checker: ReasoningQualityChecker | None = None,
         performance_analytics_context_builder: PerformanceAnalyticsContextBuilder | None = None,
+        dashboard_context_builder: DashboardContextBuilder | None = None,
     ) -> None:
         self.market_data_service = market_data_service or MarketDataService()
         self.context_builder = context_builder or InstitutionalContextBuilder()
@@ -111,6 +114,11 @@ class SMCService:
         self.institutional_reasoning_engine = institutional_reasoning_engine or InstitutionalReasoningEngine()
         self.reasoning_quality_checker = reasoning_quality_checker or ReasoningQualityChecker()
         self.performance_analytics_context_builder = performance_analytics_context_builder or PerformanceAnalyticsContextBuilder()
+        self.dashboard_context_builder = dashboard_context_builder or DashboardContextBuilder(
+            self.institutional_orchestrator,
+            self.institutional_reasoning_engine,
+            self.performance_analytics_context_builder,
+        )
 
     def analyze_symbol(self, symbol: str, timeframe: str = "M15") -> InstitutionalContext:
         normalized_symbol = validate_symbol_name(symbol)
@@ -971,3 +979,43 @@ class SMCService:
             return self.performance_analytics_context_builder.build_performance_context(
                 normalized_symbol, normalized_timeframe
             )
+
+    def analyze_dashboard_context(
+        self, symbol: str, timeframe: str = "M15"
+    ) -> InstitutionalDashboardContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        try:
+            candles = self.market_data_service.get_candles(normalized_symbol, normalized_timeframe, count=250)
+            return self.analyze_dashboard_context_from_candles(
+                normalized_symbol, normalized_timeframe, candles
+            )
+        except Exception as exc:
+            logger.warning("Institutional dashboard context unavailable for %s: %s", normalized_symbol, exc)
+            return self.analyze_dashboard_context_from_candles(normalized_symbol, normalized_timeframe, [])
+        finally:
+            self.market_data_service.close()
+
+    def analyze_dashboard_context_from_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        candles: list[Any] | None,
+    ) -> InstitutionalDashboardContext:
+        normalized_symbol = validate_symbol_name(symbol)
+        normalized_timeframe = validate_timeframe(timeframe)
+        orchestration = self.analyze_institutional_orchestration_from_candles(
+            normalized_symbol, normalized_timeframe, candles
+        )
+        reasoning = self.institutional_reasoning_engine.generate_reasoning(orchestration)
+        performance = self.performance_analytics_context_builder.build_performance_context(
+            normalized_symbol, normalized_timeframe, [orchestration]
+        )
+        return self.dashboard_context_builder.build_dashboard_context(
+            normalized_symbol,
+            normalized_timeframe,
+            candles,
+            orchestration_report=orchestration,
+            reasoning_report=reasoning,
+            performance_context=performance,
+        )

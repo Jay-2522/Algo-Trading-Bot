@@ -21,7 +21,7 @@ Phase 1 of the backend foundation is complete, and Phase 2 has begun with instit
 - `backend/trading_loop`: controlled, rate-limited simulation-only orchestration scheduling.
 - `backend/trade_journal`: analytics-only journal records, performance reporting, drawdown, exposure, and risk alerts.
 - `backend/system_health`: integration readiness, source safety scanning, route auditing, runtime reporting, and Phase 1 reporting.
-- `backend/institutional_intelligence`: SMC/ICT-style swing, liquidity, sweep rejection, FVG, order-block and breaker lifecycle, BOS/CHOCH/MSS transitions, bias, dealing-range, displacement, and institutional confluence scoring.
+- `backend/institutional_intelligence`: SMC/ICT-style market analysis, simulated setup lifecycle, institutional reasoning and analytics, and unified backend dashboard context reporting.
 - `backend/config`: environment-driven settings.
 - `backend/utils`: shared logging and utility code.
 - `frontend`: reserved dashboard and admin surfaces.
@@ -580,6 +580,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'i
 ```
 
 Phase 2 Day 17 measures validated setups, simulation decisions, deduplicated paper outcomes, and position-management actions, then generates evidence-led optimization recommendations. Limited observations are identified as insufficient data, and the analytics layer cannot execute or enable live trading.
+
+## Run Phase 2 Day 18 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase2_day18_verification.py
+python tests/phase2_day17_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'institutional' in r.path])"
+```
+
+Phase 2 Day 18 packages orchestration, reasoning, and performance outputs into JSON-safe dashboard cards, alerts, a final recommendation, and an overall dashboard status. It is a backend context layer only; recommendation eligibility is limited to paper simulation and no broker execution is added.
 
 ## MT5 Safety Boundary
 

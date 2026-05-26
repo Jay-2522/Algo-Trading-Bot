@@ -116,6 +116,11 @@ REQUIRED_ROUTES = [
     "/institutional/performance/paper-trades/{symbol}",
     "/institutional/performance/position-management/{symbol}",
     "/institutional/performance/recommendations/{symbol}",
+    "/institutional/dashboard/{symbol}",
+    "/institutional/dashboard/cards/{symbol}",
+    "/institutional/dashboard/alerts/{symbol}",
+    "/institutional/dashboard/recommendation/{symbol}",
+    "/institutional/dashboard/status/{symbol}",
 ]
 
 

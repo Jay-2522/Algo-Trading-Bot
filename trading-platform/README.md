@@ -687,6 +687,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'b
 
 Phase 3 Day 6 adds simulation-only broker compatibility metadata for STARTRADER, FxPro, and Vantage. It maps `EURUSD` and `XAUUSD` as theoretical demo candidates, marks `NIFTY50` as conditional/unsupported pending terminal verification, and exposes `/brokers/status`, `/brokers`, `/brokers/{broker_id}/symbols`, and `/brokers/{broker_id}/demo-readiness`.
 
+## Run Phase 3 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day7_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'broker' in r.path or 'brokers' in r.path])"
+```
+
+Phase 3 Day 7 adds read-only MT5 demo-readiness and broker symbol verification. It exposes `/brokers/mt5/readiness`, `/brokers/verification/all`, `/brokers/{broker_id}/verification`, and `/brokers/{broker_id}/verification/{symbol}`. If MT5 is unavailable, verification degrades safely; NIFTY50 remains conditional unless confirmed by the demo terminal.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

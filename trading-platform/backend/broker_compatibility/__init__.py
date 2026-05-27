@@ -7,6 +7,11 @@ from backend.broker_compatibility.broker_models import (
     BrokerSymbolMapping,
     SupportedBroker,
 )
+from backend.broker_compatibility.mt5_demo_models import (
+    BrokerDemoVerificationReport,
+    BrokerSymbolVerification,
+    MT5TerminalReadiness,
+)
 
 __all__ = [
     "BrokerCompatibilityService",
@@ -14,4 +19,7 @@ __all__ = [
     "BrokerDemoReadinessReport",
     "BrokerSymbolMapping",
     "SupportedBroker",
+    "MT5TerminalReadiness",
+    "BrokerSymbolVerification",
+    "BrokerDemoVerificationReport",
 ]

@@ -2,12 +2,18 @@ from typing import Any
 
 from backend.broker_compatibility.broker_capability_checker import BrokerCapabilityChecker
 from backend.broker_compatibility.broker_demo_readiness import BrokerDemoReadinessChecker
+from backend.broker_compatibility.broker_demo_verification_service import BrokerDemoVerificationService
 from backend.broker_compatibility.broker_models import (
     BrokerCompatibilityResult,
     BrokerDemoReadinessReport,
     SupportedBroker,
 )
 from backend.broker_compatibility.broker_registry import BrokerRegistry
+from backend.broker_compatibility.mt5_demo_models import (
+    BrokerDemoVerificationReport,
+    BrokerSymbolVerification,
+    MT5TerminalReadiness,
+)
 
 
 class BrokerCompatibilityService:
@@ -18,10 +24,12 @@ class BrokerCompatibilityService:
         registry: BrokerRegistry | None = None,
         capability_checker: BrokerCapabilityChecker | None = None,
         demo_readiness: BrokerDemoReadinessChecker | None = None,
+        demo_verification: BrokerDemoVerificationService | None = None,
     ) -> None:
         self.registry = registry or BrokerRegistry()
         self.capability_checker = capability_checker or BrokerCapabilityChecker(self.registry)
         self.demo_readiness = demo_readiness or BrokerDemoReadinessChecker(self.registry, self.capability_checker)
+        self.demo_verification = demo_verification or BrokerDemoVerificationService(self.registry)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -46,3 +54,15 @@ class BrokerCompatibilityService:
 
     def check_demo_readiness(self, broker_id: str) -> BrokerDemoReadinessReport:
         return self.demo_readiness.check_demo_readiness(broker_id)
+
+    def get_mt5_demo_readiness(self) -> MT5TerminalReadiness:
+        return self.demo_verification.get_mt5_readiness()
+
+    def verify_broker_symbols(self, broker_id: str) -> BrokerDemoVerificationReport:
+        return self.demo_verification.verify_broker_symbols(broker_id)
+
+    def verify_all_broker_symbols(self) -> list[BrokerDemoVerificationReport]:
+        return self.demo_verification.verify_all_brokers()
+
+    def verify_broker_symbol(self, broker_id: str, symbol: str) -> BrokerSymbolVerification:
+        return self.demo_verification.verify_symbol_for_broker(broker_id, symbol)

@@ -779,6 +779,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'a
 
 Phase 3 Day 15 adds the multi-account routing foundation. It defines broker demo account profiles, account groups, a default `COPY_TO_ALL` routing policy, simulation-only route previews, and conservative disabled placeholders for Zerodha, AngelOne, and Upstox. Routes include `/accounts/status`, `/accounts`, `/accounts/groups`, `/accounts/policy/default`, and `/accounts/route-preview`.
 
+## Run Phase 3 Day 16 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day15_verification.py
+python tests/phase3_day16_verification.py
+```
+
+Phase 3 Day 16 adds account allocation and risk distribution previews. It maintains simulated account risk profiles, balance snapshots, symbol risk rules, broker lot constraints, exposure checks, and allocation previews through `/accounts/allocation/status`, `/accounts/risk-profiles`, `/accounts/balance-snapshots`, `/accounts/symbol-rules/{symbol}`, and `/accounts/allocation/preview`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

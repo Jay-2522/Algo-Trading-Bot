@@ -7,6 +7,12 @@ from backend.account_routing.account_models import (
     RejectedAccountReason,
 )
 from backend.account_routing.account_routing_service import AccountRoutingService
+from backend.account_routing.allocation_models import (
+    AccountBalanceSnapshot,
+    AccountRiskProfile,
+    AllocationDecision,
+    LotAllocation,
+)
 
 __all__ = [
     "AccountRoutingService",
@@ -14,4 +20,8 @@ __all__ = [
     "AccountRoutingPolicy",
     "AccountRoutingDecision",
     "RejectedAccountReason",
+    "AccountRiskProfile",
+    "AccountBalanceSnapshot",
+    "LotAllocation",
+    "AllocationDecision",
 ]

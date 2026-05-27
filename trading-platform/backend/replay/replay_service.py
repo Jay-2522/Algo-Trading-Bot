@@ -1,3 +1,7 @@
+from typing import Any
+
+from backend.replay.client_symbol_models import ClientInstrument, ClientSymbolResolution
+from backend.replay.client_symbol_registry import ClientSymbolRegistry
 from backend.replay.replay_engine import AdvancedHistoricalReplayEngine
 from backend.replay.replay_models import ReplayRequest, ReplayRunResult, ReplayStatus
 from backend.replay.replay_calibration_models import ReplayCalibrationReport
@@ -13,6 +17,7 @@ from backend.replay.replay_report_builder import ReplayReportBuilder
 from backend.replay.replay_report_models import ReplayHistoricalReport
 from backend.replay.replay_storage import ReplayStorage
 from backend.replay.replay_timeframe_comparator import ReplayTimeframeComparator
+from backend.replay.symbol_metadata_service import SymbolMetadataService
 
 
 class ReplayService:
@@ -25,12 +30,15 @@ class ReplayService:
         report_builder: ReplayReportBuilder | None = None,
         calibration_builder: ReplayCalibrationReportBuilder | None = None,
         comparison_builder: ReplayComparisonReportBuilder | None = None,
+        symbol_registry: ClientSymbolRegistry | None = None,
     ) -> None:
         self.storage = storage or ReplayStorage()
         self.engine = engine or AdvancedHistoricalReplayEngine()
         self.report_builder = report_builder or ReplayReportBuilder()
         self.calibration_builder = calibration_builder or ReplayCalibrationReportBuilder()
         self.comparison_builder = comparison_builder or ReplayComparisonReportBuilder()
+        self.symbol_registry = symbol_registry or ClientSymbolRegistry()
+        self.symbol_metadata = SymbolMetadataService(self.symbol_registry)
         self._reports: dict[str, ReplayHistoricalReport] = {}
         self._calibrations: dict[str, ReplayCalibrationReport] = {}
 
@@ -43,8 +51,12 @@ class ReplayService:
         timeframe: str = "M15",
         request: ReplayRequest | None = None,
     ) -> ReplayRunResult:
+        resolution = self.resolve_symbol(symbol)
+        if not resolution.supported or resolution.canonical_symbol is None:
+            raise ValueError(resolution.message)
+        canonical = resolution.canonical_symbol
         configured = (request or ReplayRequest()).model_copy(
-            update={"symbol": symbol.strip().upper(), "timeframe": timeframe.strip().upper()}
+            update={"symbol": canonical, "timeframe": timeframe.strip().upper()}
         )
         result = self.engine.run_replay(ReplayRequest.model_validate(configured.model_dump()))
         stored = self.storage.save_result(result)
@@ -154,3 +166,53 @@ class ReplayService:
             if calibration is not None
         ]
         return ReplayFilterComparator().compare_filters(calibrations)
+
+    def list_supported_symbols(self) -> list[ClientInstrument]:
+        return self.symbol_registry.list_supported_symbols()
+
+    def resolve_symbol(self, symbol: str) -> ClientSymbolResolution:
+        return self.symbol_registry.resolve_symbol(symbol)
+
+    def run_all_client_symbols(self, timeframe: str = "M15") -> dict[str, Any]:
+        symbols: dict[str, Any] = {}
+        for instrument in self.list_supported_symbols():
+            request = ReplayRequest(
+                symbol=instrument.canonical_symbol,
+                timeframe=timeframe.strip().upper(),
+                window_size=30,
+                step_size=10,
+                max_steps=2,
+            )
+            result = self.run_replay(instrument.canonical_symbol, timeframe, request)
+            symbols[instrument.canonical_symbol] = {
+                "replay_id": result.replay_id,
+                "symbol": result.symbol,
+                "timeframe": result.timeframe,
+                "total_steps": result.total_steps,
+                "summary": result.summary,
+                "simulation_only": result.simulation_only,
+                "live_execution_enabled": result.live_execution_enabled,
+            }
+        return {
+            "timeframe": timeframe.strip().upper(),
+            "symbols": symbols,
+            "simulation_only": True,
+            "live_execution_enabled": False,
+        }
+
+    def compare_client_symbols(self, timeframe: str = "M15") -> ReplayScenarioComparison:
+        timeframe = timeframe.strip().upper()
+        canonical_symbols = {instrument.canonical_symbol for instrument in self.list_supported_symbols()}
+        recent = [
+            result
+            for result in self.storage.get_recent_results(100)
+            if result.symbol in canonical_symbols and result.timeframe.upper() == timeframe
+        ]
+        if not recent:
+            self.run_all_client_symbols(timeframe)
+            recent = [
+                result
+                for result in self.storage.get_recent_results(100)
+                if result.symbol in canonical_symbols and result.timeframe.upper() == timeframe
+            ]
+        return self.compare_replay_ids([result.replay_id for result in recent])

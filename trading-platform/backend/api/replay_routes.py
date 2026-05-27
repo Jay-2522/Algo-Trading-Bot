@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from backend.replay.client_symbol_models import ClientInstrument, ClientSymbolResolution
 from backend.replay.replay_calibration_models import (
     ReplayBlockReasonMetrics,
     ReplayCalibrationReport,
@@ -28,6 +29,16 @@ replay_service = ReplayService()
 @router.get("/status", response_model=ReplayStatus)
 async def get_replay_status() -> ReplayStatus:
     return replay_service.get_status()
+
+
+@router.get("/symbols", response_model=list[ClientInstrument])
+async def list_supported_replay_symbols() -> list[ClientInstrument]:
+    return replay_service.list_supported_symbols()
+
+
+@router.get("/symbols/{symbol}", response_model=ClientSymbolResolution)
+async def resolve_replay_symbol(symbol: str) -> ClientSymbolResolution:
+    return replay_service.resolve_symbol(symbol)
 
 
 @router.post("/run/{symbol}", response_model=ReplayRunResult)
@@ -172,3 +183,13 @@ async def compare_replay_timeframes(symbol: str) -> ReplayTimeframeComparison:
 @router.get("/compare/filters", response_model=ReplayFilterComparison)
 async def compare_replay_filters() -> ReplayFilterComparison:
     return replay_service.compare_filters()
+
+
+@router.post("/run-all-client-symbols")
+async def run_all_client_symbols(timeframe: str = Query(default="M15")) -> dict:
+    return replay_service.run_all_client_symbols(timeframe)
+
+
+@router.get("/compare/client-symbols", response_model=ReplayScenarioComparison)
+async def compare_client_symbols(timeframe: str = Query(default="M15")) -> ReplayScenarioComparison:
+    return replay_service.compare_client_symbols(timeframe)

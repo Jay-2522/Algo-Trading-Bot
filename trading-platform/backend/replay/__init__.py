@@ -1,5 +1,6 @@
 """Simulation-only historical institutional replay engine."""
 
+from backend.replay.client_symbol_models import ClientInstrument, ClientSymbolResolution
 from backend.replay.replay_models import ReplayRequest, ReplayRunResult, ReplayStatus, ReplayStepResult
 from backend.replay.replay_calibration_models import ReplayCalibrationReport
 from backend.replay.replay_comparison_models import ReplayScenarioComparison
@@ -14,5 +15,7 @@ __all__ = [
     "ReplayHistoricalReport",
     "ReplayCalibrationReport",
     "ReplayScenarioComparison",
+    "ClientInstrument",
+    "ClientSymbolResolution",
     "ReplayService",
 ]

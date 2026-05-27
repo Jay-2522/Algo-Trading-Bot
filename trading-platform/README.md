@@ -667,6 +667,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'r
 
 Phase 3 Day 4 adds historical replay scenario comparison. It ranks replay scenarios, compares timeframe performance, compares calibration filter behavior, and exposes `/replay/compare/recent`, `/replay/compare`, `/replay/compare/timeframes/{symbol}`, and `/replay/compare/filters`. The engine is comparison analytics only and cannot alter execution behavior.
 
+## Run Phase 3 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day5_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'replay' in r.path])"
+```
+
+Phase 3 Day 5 adds official multi-symbol replay support for `EURUSD`, `XAUUSD`, and `NIFTY50`, including aliases such as `EUR/USD`, `GOLD`, and `NIFTY`. The deterministic replay loader uses symbol-specific price scales, and the API exposes `/replay/symbols`, `/replay/symbols/{symbol}`, `/replay/run-all-client-symbols`, and `/replay/compare/client-symbols`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

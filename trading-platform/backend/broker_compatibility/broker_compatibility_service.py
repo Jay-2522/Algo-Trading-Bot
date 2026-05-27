@@ -8,6 +8,12 @@ from backend.broker_compatibility.broker_models import (
     BrokerDemoReadinessReport,
     SupportedBroker,
 )
+from backend.broker_compatibility.broker_observation_models import (
+    BrokerObservationReport,
+    BrokerObservationStatus,
+    BrokerSymbolSnapshot,
+)
+from backend.broker_compatibility.broker_observation_service import BrokerObservationService
 from backend.broker_compatibility.broker_registry import BrokerRegistry
 from backend.broker_compatibility.mt5_demo_models import (
     BrokerDemoVerificationReport,
@@ -25,11 +31,13 @@ class BrokerCompatibilityService:
         capability_checker: BrokerCapabilityChecker | None = None,
         demo_readiness: BrokerDemoReadinessChecker | None = None,
         demo_verification: BrokerDemoVerificationService | None = None,
+        observation_service: BrokerObservationService | None = None,
     ) -> None:
         self.registry = registry or BrokerRegistry()
         self.capability_checker = capability_checker or BrokerCapabilityChecker(self.registry)
         self.demo_readiness = demo_readiness or BrokerDemoReadinessChecker(self.registry, self.capability_checker)
         self.demo_verification = demo_verification or BrokerDemoVerificationService(self.registry)
+        self.observation_service = observation_service or BrokerObservationService(self.registry)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -66,3 +74,15 @@ class BrokerCompatibilityService:
 
     def verify_broker_symbol(self, broker_id: str, symbol: str) -> BrokerSymbolVerification:
         return self.demo_verification.verify_symbol_for_broker(broker_id, symbol)
+
+    def get_observation_status(self) -> BrokerObservationStatus:
+        return self.observation_service.get_status()
+
+    def observe_broker(self, broker_id: str) -> BrokerObservationReport:
+        return self.observation_service.observe_broker(broker_id)
+
+    def observe_all_brokers(self) -> list[BrokerObservationReport]:
+        return self.observation_service.observe_all_brokers()
+
+    def snapshot_broker_symbol(self, broker_id: str, symbol: str) -> BrokerSymbolSnapshot:
+        return self.observation_service.snapshot_symbol(broker_id, symbol)

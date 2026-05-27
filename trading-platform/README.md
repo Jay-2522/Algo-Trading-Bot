@@ -697,6 +697,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'b
 
 Phase 3 Day 7 adds read-only MT5 demo-readiness and broker symbol verification. It exposes `/brokers/mt5/readiness`, `/brokers/verification/all`, `/brokers/{broker_id}/verification`, and `/brokers/{broker_id}/verification/{symbol}`. If MT5 is unavailable, verification degrades safely; NIFTY50 remains conditional unless confirmed by the demo terminal.
 
+## Run Phase 3 Day 8 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day7_verification.py
+python tests/phase3_day8_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'broker' in r.path or 'brokers' in r.path])"
+```
+
+Phase 3 Day 8 adds broker demo observation mode. It exposes `/brokers/observation/status`, `/brokers/observation/all`, `/brokers/{broker_id}/observation`, and `/brokers/{broker_id}/observation/{symbol}`. The observer uses read-only MT5 tick/symbol data when available and marks fallback or unavailable data explicitly.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

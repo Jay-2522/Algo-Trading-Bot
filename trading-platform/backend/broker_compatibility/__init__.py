@@ -12,6 +12,11 @@ from backend.broker_compatibility.mt5_demo_models import (
     BrokerSymbolVerification,
     MT5TerminalReadiness,
 )
+from backend.broker_compatibility.broker_observation_models import (
+    BrokerObservationReport,
+    BrokerObservationStatus,
+    BrokerSymbolSnapshot,
+)
 
 __all__ = [
     "BrokerCompatibilityService",
@@ -22,4 +27,7 @@ __all__ = [
     "MT5TerminalReadiness",
     "BrokerSymbolVerification",
     "BrokerDemoVerificationReport",
+    "BrokerSymbolSnapshot",
+    "BrokerObservationReport",
+    "BrokerObservationStatus",
 ]

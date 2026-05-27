@@ -6,6 +6,11 @@ from backend.broker_compatibility.broker_models import (
     BrokerDemoReadinessReport,
     SupportedBroker,
 )
+from backend.broker_compatibility.broker_observation_models import (
+    BrokerObservationReport,
+    BrokerObservationStatus,
+    BrokerSymbolSnapshot,
+)
 from backend.broker_compatibility.mt5_demo_models import (
     BrokerDemoVerificationReport,
     BrokerSymbolVerification,
@@ -30,6 +35,16 @@ async def get_mt5_demo_readiness() -> MT5TerminalReadiness:
 @router.get("/verification/all", response_model=list[BrokerDemoVerificationReport])
 async def verify_all_broker_symbols() -> list[BrokerDemoVerificationReport]:
     return broker_compatibility_service.verify_all_broker_symbols()
+
+
+@router.get("/observation/status", response_model=BrokerObservationStatus)
+async def get_broker_observation_status() -> BrokerObservationStatus:
+    return broker_compatibility_service.get_observation_status()
+
+
+@router.get("/observation/all", response_model=list[BrokerObservationReport])
+async def observe_all_brokers() -> list[BrokerObservationReport]:
+    return broker_compatibility_service.observe_all_brokers()
 
 
 @router.get("", response_model=list[SupportedBroker])
@@ -78,3 +93,17 @@ async def verify_broker_symbol(broker_id: str, symbol: str) -> BrokerSymbolVerif
     if broker_compatibility_service.get_broker(broker_id) is None:
         raise HTTPException(status_code=404, detail="Broker is not supported.")
     return broker_compatibility_service.verify_broker_symbol(broker_id, symbol)
+
+
+@router.get("/{broker_id}/observation", response_model=BrokerObservationReport)
+async def observe_broker(broker_id: str) -> BrokerObservationReport:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.observe_broker(broker_id)
+
+
+@router.get("/{broker_id}/observation/{symbol}", response_model=BrokerSymbolSnapshot)
+async def observe_broker_symbol(broker_id: str, symbol: str) -> BrokerSymbolSnapshot:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.snapshot_broker_symbol(broker_id, symbol)

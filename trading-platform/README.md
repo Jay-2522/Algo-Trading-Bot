@@ -739,6 +739,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'b
 
 Phase 3 Day 11 adds read-only canonical candle feeds for `M5`, `M15`, `H1`, and `H4`. It fetches MT5 OHLC candles when read-only terminal data is available, falls back to deterministic simulated candles when unavailable, validates OHLC integrity, and exposes `/brokers/candles/status`, `/brokers/candles/all`, `/brokers/{broker_id}/candles/{symbol}`, and `/brokers/{broker_id}/candles/{symbol}/{timeframe}`.
 
+## Run Phase 3 Day 12 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day12_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'webhook' in r.path or 'webhooks' in r.path])"
+```
+
+Phase 3 Day 12 adds the TradingView webhook foundation. It safely ingests alerts, authenticates optional webhook secrets, validates payloads, normalizes aliases for `EURUSD`, `XAUUSD`, and `NIFTY50`, creates orchestration-ready signal objects, and exposes `/webhooks/tradingview`, `/webhooks/status`, `/webhooks/events`, and `/webhooks/events/{event_id}`. This is ingestion only and does not route or place trades.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

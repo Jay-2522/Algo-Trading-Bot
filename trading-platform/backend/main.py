@@ -21,6 +21,7 @@ from backend.api.strategy_routes import router as strategy_router
 from backend.api.streaming_routes import router as streaming_router
 from backend.api.streaming_routes import websocket_router as streaming_websocket_router
 from backend.api.system_health_routes import router as system_health_router
+from backend.api.tradingview_webhook_routes import router as tradingview_webhook_router
 from backend.api.trading_loop_routes import router as trading_loop_router
 from backend.api.trading_loop_routes import trading_loop_service
 from backend.api.trade_journal_routes import router as trade_journal_router
@@ -86,6 +87,7 @@ app.include_router(orchestration_router)
 app.include_router(backtesting_router)
 app.include_router(replay_router)
 app.include_router(broker_compatibility_router)
+app.include_router(tradingview_webhook_router)
 app.include_router(streaming_router)
 app.include_router(streaming_websocket_router)
 app.include_router(trading_loop_router)

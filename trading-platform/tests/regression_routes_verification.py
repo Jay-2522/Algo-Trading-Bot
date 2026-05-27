@@ -24,6 +24,7 @@ REQUIRED_GET_ROUTES = {
     "/replay/status",
     "/brokers/status",
     "/brokers/candles/status",
+    "/webhooks/status",
     "/streaming/status",
     "/trading-loop/status",
     "/trade-journal/status",

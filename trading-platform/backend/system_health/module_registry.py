@@ -10,6 +10,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "news", "route": "/news/status"},
     {"name": "orchestration", "route": "/orchestration/status"},
     {"name": "backtesting", "route": "/backtesting/status"},
+    {"name": "advanced_historical_replay", "route": "/replay/status"},
     {"name": "streaming", "route": "/streaming/status"},
     {"name": "trading_loop", "route": "/trading-loop/status"},
     {"name": "trade_journal", "route": "/trade-journal/status"},

@@ -625,6 +625,16 @@ python tests/phase2_full_verification.py
 
 See `docs/phase-2-final-summary.md` for the final architecture and `docs/phase-2-client-demo-guide.md` for a concise presentation flow. Broker execution remains disabled throughout Phase 2.
 
+## Run Phase 3 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day1_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'replay' in r.path])"
+```
+
+Phase 3 Day 1 adds a simulation-only advanced historical replay engine. It replays deterministic candle windows through the institutional pipeline without lookahead bias, records replay steps, calculates summary metrics, and exposes `/replay` APIs while keeping live execution disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

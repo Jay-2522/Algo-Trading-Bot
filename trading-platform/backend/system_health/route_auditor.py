@@ -20,6 +20,7 @@ REQUIRED_ROUTES = [
     "/news/status",
     "/orchestration/status",
     "/backtesting/status",
+    "/replay/status",
     "/streaming/status",
     "/trading-loop/status",
     "/trade-journal/status",

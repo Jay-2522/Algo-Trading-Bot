@@ -66,3 +66,4 @@ class ReplayHistoricalReport(BaseModel):
     simulation_only: bool = True
     live_execution_enabled: bool = False
     timestamp: datetime = Field(default_factory=utc_now)
+    metadata: dict = Field(default_factory=dict)

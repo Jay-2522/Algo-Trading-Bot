@@ -47,6 +47,7 @@ class ReplayReportBuilder:
             summary=self._summary(replay_result, trade_analytics, decision_analytics),
             simulation_only=True,
             live_execution_enabled=False,
+            metadata={"total_steps": replay_result.total_steps},
         )
 
     def _conditions(self, steps: list[ReplayStepResult]) -> tuple[list[str], list[str]]:

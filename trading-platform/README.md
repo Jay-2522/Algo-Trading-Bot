@@ -646,6 +646,27 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'r
 
 Phase 3 Day 2 adds replay trade analytics and historical reporting. It analyzes replayed simulation decisions, paper-trade outcomes, equity progression, and recurring weaknesses through JSON-safe report routes such as `/replay/report/latest`, `/replay/analytics/trades/{replay_id}`, `/replay/equity/{replay_id}`, and `/replay/weaknesses/{replay_id}`. The reporting layer is historical analytics only and preserves `simulation_only = true` with live execution disabled.
 
+## Run Phase 3 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day3_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'replay' in r.path])"
+```
+
+Phase 3 Day 3 adds replay calibration analytics. It analyzes blocked replay decisions, identifies restrictive gates, detects threshold strictness patterns, and produces safe research-mode tuning suggestions through `/replay/calibration/latest`, `/replay/calibration/{replay_id}`, `/replay/calibration/block-reasons/{replay_id}`, and `/replay/calibration/suggestions/{replay_id}`. It never changes live behavior and keeps hard safety gates strict.
+
+## Run Phase 3 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day3_verification.py
+python tests/phase3_day4_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'replay' in r.path])"
+```
+
+Phase 3 Day 4 adds historical replay scenario comparison. It ranks replay scenarios, compares timeframe performance, compares calibration filter behavior, and exposes `/replay/compare/recent`, `/replay/compare`, `/replay/compare/timeframes/{symbol}`, and `/replay/compare/filters`. The engine is comparison analytics only and cannot alter execution behavior.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

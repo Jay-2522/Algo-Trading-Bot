@@ -1,5 +1,15 @@
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from backend.replay.replay_calibration_models import (
+    ReplayBlockReasonMetrics,
+    ReplayCalibrationReport,
+    ThresholdAdjustmentSuggestion,
+)
+from backend.replay.replay_comparison_models import (
+    ReplayFilterComparison,
+    ReplayScenarioComparison,
+    ReplayTimeframeComparison,
+)
 from backend.replay.replay_models import ReplayRequest, ReplayRunResult, ReplayStatus
 from backend.replay.replay_report_models import (
     ReplayDecisionAnalytics,
@@ -113,3 +123,52 @@ async def get_replay_weaknesses(replay_id: str) -> list[ReplayWeaknessInsight]:
     if report is None:
         raise HTTPException(status_code=404, detail="Replay report not found.")
     return report.weakness_insights
+
+
+@router.get("/calibration/latest", response_model=ReplayCalibrationReport)
+async def get_latest_replay_calibration() -> ReplayCalibrationReport:
+    return replay_service.get_latest_replay_calibration()
+
+
+@router.get("/calibration/{replay_id}", response_model=ReplayCalibrationReport)
+async def get_replay_calibration(replay_id: str) -> ReplayCalibrationReport:
+    calibration = replay_service.get_replay_calibration(replay_id)
+    if calibration is None:
+        raise HTTPException(status_code=404, detail="Replay calibration not found.")
+    return calibration
+
+
+@router.get("/calibration/block-reasons/{replay_id}", response_model=ReplayBlockReasonMetrics)
+async def get_replay_calibration_block_reasons(replay_id: str) -> ReplayBlockReasonMetrics:
+    calibration = replay_service.get_replay_calibration(replay_id)
+    if calibration is None:
+        raise HTTPException(status_code=404, detail="Replay calibration not found.")
+    return calibration.block_reason_metrics
+
+
+@router.get("/calibration/suggestions/{replay_id}", response_model=list[ThresholdAdjustmentSuggestion])
+async def get_replay_calibration_suggestions(replay_id: str) -> list[ThresholdAdjustmentSuggestion]:
+    calibration = replay_service.get_replay_calibration(replay_id)
+    if calibration is None:
+        raise HTTPException(status_code=404, detail="Replay calibration not found.")
+    return calibration.threshold_suggestions
+
+
+@router.get("/compare/recent", response_model=ReplayScenarioComparison)
+async def compare_recent_replays(limit: int = Query(default=5, ge=1, le=50)) -> ReplayScenarioComparison:
+    return replay_service.compare_recent_replays(limit)
+
+
+@router.post("/compare", response_model=ReplayScenarioComparison)
+async def compare_replay_ids(replay_ids: list[str] = Body(default_factory=list)) -> ReplayScenarioComparison:
+    return replay_service.compare_replay_ids(replay_ids)
+
+
+@router.get("/compare/timeframes/{symbol}", response_model=ReplayTimeframeComparison)
+async def compare_replay_timeframes(symbol: str) -> ReplayTimeframeComparison:
+    return replay_service.compare_timeframes(symbol)
+
+
+@router.get("/compare/filters", response_model=ReplayFilterComparison)
+async def compare_replay_filters() -> ReplayFilterComparison:
+    return replay_service.compare_filters()

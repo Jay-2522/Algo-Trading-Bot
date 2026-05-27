@@ -3,6 +3,11 @@ from typing import Any
 from backend.broker_compatibility.broker_capability_checker import BrokerCapabilityChecker
 from backend.broker_compatibility.broker_demo_readiness import BrokerDemoReadinessChecker
 from backend.broker_compatibility.broker_demo_verification_service import BrokerDemoVerificationService
+from backend.broker_compatibility.broker_feed_quality_models import (
+    BrokerFeedQualityReport,
+    BrokerSymbolFeedQuality,
+)
+from backend.broker_compatibility.broker_feed_quality_service import BrokerFeedQualityService
 from backend.broker_compatibility.broker_models import (
     BrokerCompatibilityResult,
     BrokerDemoReadinessReport,
@@ -15,6 +20,8 @@ from backend.broker_compatibility.broker_observation_models import (
 )
 from backend.broker_compatibility.broker_observation_service import BrokerObservationService
 from backend.broker_compatibility.broker_registry import BrokerRegistry
+from backend.broker_compatibility.canonical_feed_models import CanonicalFeedReport, CanonicalMarketTick
+from backend.broker_compatibility.canonical_feed_service import CanonicalFeedService
 from backend.broker_compatibility.mt5_demo_models import (
     BrokerDemoVerificationReport,
     BrokerSymbolVerification,
@@ -32,12 +39,16 @@ class BrokerCompatibilityService:
         demo_readiness: BrokerDemoReadinessChecker | None = None,
         demo_verification: BrokerDemoVerificationService | None = None,
         observation_service: BrokerObservationService | None = None,
+        feed_quality_service: BrokerFeedQualityService | None = None,
+        canonical_feed_service: CanonicalFeedService | None = None,
     ) -> None:
         self.registry = registry or BrokerRegistry()
         self.capability_checker = capability_checker or BrokerCapabilityChecker(self.registry)
         self.demo_readiness = demo_readiness or BrokerDemoReadinessChecker(self.registry, self.capability_checker)
         self.demo_verification = demo_verification or BrokerDemoVerificationService(self.registry)
         self.observation_service = observation_service or BrokerObservationService(self.registry)
+        self.feed_quality_service = feed_quality_service or BrokerFeedQualityService(self.registry, self.observation_service)
+        self.canonical_feed_service = canonical_feed_service or CanonicalFeedService(self.registry)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -86,3 +97,27 @@ class BrokerCompatibilityService:
 
     def snapshot_broker_symbol(self, broker_id: str, symbol: str) -> BrokerSymbolSnapshot:
         return self.observation_service.snapshot_symbol(broker_id, symbol)
+
+    def get_feed_quality_status(self) -> dict[str, Any]:
+        return self.feed_quality_service.get_status()
+
+    def check_broker_feed_quality(self, broker_id: str) -> BrokerFeedQualityReport:
+        return self.feed_quality_service.check_broker_feed(broker_id)
+
+    def check_all_broker_feed_quality(self) -> list[BrokerFeedQualityReport]:
+        return self.feed_quality_service.check_all_broker_feeds()
+
+    def check_broker_symbol_feed_quality(self, broker_id: str, symbol: str) -> BrokerSymbolFeedQuality:
+        return self.feed_quality_service.check_symbol_feed(broker_id, symbol)
+
+    def get_canonical_feed_status(self) -> dict[str, Any]:
+        return self.canonical_feed_service.get_status()
+
+    def get_canonical_broker_feed(self, broker_id: str) -> CanonicalFeedReport:
+        return self.canonical_feed_service.get_broker_feed(broker_id)
+
+    def get_all_canonical_feeds(self) -> list[CanonicalFeedReport]:
+        return self.canonical_feed_service.get_all_broker_feeds()
+
+    def get_canonical_symbol_feed(self, broker_id: str, symbol: str) -> CanonicalMarketTick:
+        return self.canonical_feed_service.get_symbol_feed(broker_id, symbol)

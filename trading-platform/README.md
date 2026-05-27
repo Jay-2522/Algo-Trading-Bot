@@ -708,6 +708,27 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'b
 
 Phase 3 Day 8 adds broker demo observation mode. It exposes `/brokers/observation/status`, `/brokers/observation/all`, `/brokers/{broker_id}/observation`, and `/brokers/{broker_id}/observation/{symbol}`. The observer uses read-only MT5 tick/symbol data when available and marks fallback or unavailable data explicitly.
 
+## Run Phase 3 Day 9 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day9_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'broker' in r.path or 'brokers' in r.path])"
+```
+
+Phase 3 Day 9 adds broker feed quality validation. It classifies spread quality, validates tick freshness, detects missing bid/ask data, and exposes `/brokers/feed-quality/status`, `/brokers/feed-quality/all`, `/brokers/{broker_id}/feed-quality`, and `/brokers/{broker_id}/feed-quality/{symbol}`. The engine is read-only data validation only.
+
+## Run Phase 3 Day 10 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day9_verification.py
+python tests/phase3_day10_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'broker' in r.path or 'brokers' in r.path])"
+```
+
+Phase 3 Day 10 adds canonical market feed normalization. It converts broker observation snapshots into AI-ready canonical ticks with bid, ask, mid, spread, market type, source metadata, usability, and quality. Routes include `/brokers/canonical-feed/status`, `/brokers/canonical-feed/all`, `/brokers/{broker_id}/canonical-feed`, and `/brokers/{broker_id}/canonical-feed/{symbol}`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

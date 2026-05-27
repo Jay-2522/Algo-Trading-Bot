@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException
 
 from backend.broker_compatibility.broker_compatibility_service import BrokerCompatibilityService
+from backend.broker_compatibility.broker_feed_quality_models import (
+    BrokerFeedQualityReport,
+    BrokerSymbolFeedQuality,
+)
 from backend.broker_compatibility.broker_models import (
     BrokerCompatibilityResult,
     BrokerDemoReadinessReport,
@@ -11,6 +15,7 @@ from backend.broker_compatibility.broker_observation_models import (
     BrokerObservationStatus,
     BrokerSymbolSnapshot,
 )
+from backend.broker_compatibility.canonical_feed_models import CanonicalFeedReport, CanonicalMarketTick
 from backend.broker_compatibility.mt5_demo_models import (
     BrokerDemoVerificationReport,
     BrokerSymbolVerification,
@@ -45,6 +50,26 @@ async def get_broker_observation_status() -> BrokerObservationStatus:
 @router.get("/observation/all", response_model=list[BrokerObservationReport])
 async def observe_all_brokers() -> list[BrokerObservationReport]:
     return broker_compatibility_service.observe_all_brokers()
+
+
+@router.get("/feed-quality/status")
+async def get_broker_feed_quality_status() -> dict:
+    return broker_compatibility_service.get_feed_quality_status()
+
+
+@router.get("/feed-quality/all", response_model=list[BrokerFeedQualityReport])
+async def check_all_broker_feed_quality() -> list[BrokerFeedQualityReport]:
+    return broker_compatibility_service.check_all_broker_feed_quality()
+
+
+@router.get("/canonical-feed/status")
+async def get_canonical_feed_status() -> dict:
+    return broker_compatibility_service.get_canonical_feed_status()
+
+
+@router.get("/canonical-feed/all", response_model=list[CanonicalFeedReport])
+async def get_all_canonical_feeds() -> list[CanonicalFeedReport]:
+    return broker_compatibility_service.get_all_canonical_feeds()
 
 
 @router.get("", response_model=list[SupportedBroker])
@@ -107,3 +132,31 @@ async def observe_broker_symbol(broker_id: str, symbol: str) -> BrokerSymbolSnap
     if broker_compatibility_service.get_broker(broker_id) is None:
         raise HTTPException(status_code=404, detail="Broker is not supported.")
     return broker_compatibility_service.snapshot_broker_symbol(broker_id, symbol)
+
+
+@router.get("/{broker_id}/feed-quality", response_model=BrokerFeedQualityReport)
+async def check_broker_feed_quality(broker_id: str) -> BrokerFeedQualityReport:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.check_broker_feed_quality(broker_id)
+
+
+@router.get("/{broker_id}/feed-quality/{symbol}", response_model=BrokerSymbolFeedQuality)
+async def check_broker_symbol_feed_quality(broker_id: str, symbol: str) -> BrokerSymbolFeedQuality:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.check_broker_symbol_feed_quality(broker_id, symbol)
+
+
+@router.get("/{broker_id}/canonical-feed", response_model=CanonicalFeedReport)
+async def get_canonical_broker_feed(broker_id: str) -> CanonicalFeedReport:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.get_canonical_broker_feed(broker_id)
+
+
+@router.get("/{broker_id}/canonical-feed/{symbol}", response_model=CanonicalMarketTick)
+async def get_canonical_symbol_feed(broker_id: str, symbol: str) -> CanonicalMarketTick:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.get_canonical_symbol_feed(broker_id, symbol)

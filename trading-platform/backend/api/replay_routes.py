@@ -1,6 +1,13 @@
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from backend.replay.replay_models import ReplayRequest, ReplayRunResult, ReplayStatus
+from backend.replay.replay_report_models import (
+    ReplayDecisionAnalytics,
+    ReplayEquityPoint,
+    ReplayHistoricalReport,
+    ReplayTradeAnalytics,
+    ReplayWeaknessInsight,
+)
 from backend.replay.replay_service import ReplayService
 
 
@@ -61,3 +68,48 @@ async def get_replay_metrics(replay_id: str) -> dict:
         "simulation_only": result.simulation_only,
         "live_execution_enabled": result.live_execution_enabled,
     }
+
+
+@router.get("/report/latest", response_model=ReplayHistoricalReport)
+async def get_latest_replay_report() -> ReplayHistoricalReport:
+    return replay_service.get_latest_replay_report()
+
+
+@router.get("/report/{replay_id}", response_model=ReplayHistoricalReport)
+async def get_replay_report(replay_id: str) -> ReplayHistoricalReport:
+    report = replay_service.get_replay_report(replay_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Replay report not found.")
+    return report
+
+
+@router.get("/analytics/trades/{replay_id}", response_model=ReplayTradeAnalytics)
+async def get_replay_trade_analytics(replay_id: str) -> ReplayTradeAnalytics:
+    report = replay_service.get_replay_report(replay_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Replay report not found.")
+    return report.trade_analytics
+
+
+@router.get("/analytics/decisions/{replay_id}", response_model=ReplayDecisionAnalytics)
+async def get_replay_decision_analytics(replay_id: str) -> ReplayDecisionAnalytics:
+    report = replay_service.get_replay_report(replay_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Replay report not found.")
+    return report.decision_analytics
+
+
+@router.get("/equity/{replay_id}", response_model=list[ReplayEquityPoint])
+async def get_replay_equity_curve(replay_id: str) -> list[ReplayEquityPoint]:
+    report = replay_service.get_replay_report(replay_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Replay report not found.")
+    return report.equity_curve
+
+
+@router.get("/weaknesses/{replay_id}", response_model=list[ReplayWeaknessInsight])
+async def get_replay_weaknesses(replay_id: str) -> list[ReplayWeaknessInsight]:
+    report = replay_service.get_replay_report(replay_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Replay report not found.")
+    return report.weakness_insights

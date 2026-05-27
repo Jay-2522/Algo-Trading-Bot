@@ -635,6 +635,17 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'r
 
 Phase 3 Day 1 adds a simulation-only advanced historical replay engine. It replays deterministic candle windows through the institutional pipeline without lookahead bias, records replay steps, calculates summary metrics, and exposes `/replay` APIs while keeping live execution disabled.
 
+## Run Phase 3 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day1_verification.py
+python tests/phase3_day2_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'replay' in r.path])"
+```
+
+Phase 3 Day 2 adds replay trade analytics and historical reporting. It analyzes replayed simulation decisions, paper-trade outcomes, equity progression, and recurring weaknesses through JSON-safe report routes such as `/replay/report/latest`, `/replay/analytics/trades/{replay_id}`, `/replay/equity/{replay_id}`, and `/replay/weaknesses/{replay_id}`. The reporting layer is historical analytics only and preserves `simulation_only = true` with live execution disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

@@ -677,6 +677,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'r
 
 Phase 3 Day 5 adds official multi-symbol replay support for `EURUSD`, `XAUUSD`, and `NIFTY50`, including aliases such as `EUR/USD`, `GOLD`, and `NIFTY`. The deterministic replay loader uses symbol-specific price scales, and the API exposes `/replay/symbols`, `/replay/symbols/{symbol}`, `/replay/run-all-client-symbols`, and `/replay/compare/client-symbols`.
 
+## Run Phase 3 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day6_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'broker' in r.path or 'brokers' in r.path])"
+```
+
+Phase 3 Day 6 adds simulation-only broker compatibility metadata for STARTRADER, FxPro, and Vantage. It maps `EURUSD` and `XAUUSD` as theoretical demo candidates, marks `NIFTY50` as conditional/unsupported pending terminal verification, and exposes `/brokers/status`, `/brokers`, `/brokers/{broker_id}/symbols`, and `/brokers/{broker_id}/demo-readiness`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

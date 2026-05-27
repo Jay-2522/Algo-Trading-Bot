@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from backend.api.ai_routes import router as ai_router
 from backend.api.backtesting_routes import router as backtesting_router
+from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.database_routes import router as database_router
 from backend.api.execution_routes import router as execution_router
 from backend.api.institutional_routes import router as institutional_router
@@ -84,6 +85,7 @@ app.include_router(news_router)
 app.include_router(orchestration_router)
 app.include_router(backtesting_router)
 app.include_router(replay_router)
+app.include_router(broker_compatibility_router)
 app.include_router(streaming_router)
 app.include_router(streaming_websocket_router)
 app.include_router(trading_loop_router)

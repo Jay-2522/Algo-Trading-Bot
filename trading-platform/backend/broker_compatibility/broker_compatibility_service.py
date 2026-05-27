@@ -1,0 +1,48 @@
+from typing import Any
+
+from backend.broker_compatibility.broker_capability_checker import BrokerCapabilityChecker
+from backend.broker_compatibility.broker_demo_readiness import BrokerDemoReadinessChecker
+from backend.broker_compatibility.broker_models import (
+    BrokerCompatibilityResult,
+    BrokerDemoReadinessReport,
+    SupportedBroker,
+)
+from backend.broker_compatibility.broker_registry import BrokerRegistry
+
+
+class BrokerCompatibilityService:
+    """API facade for simulation-only broker compatibility metadata."""
+
+    def __init__(
+        self,
+        registry: BrokerRegistry | None = None,
+        capability_checker: BrokerCapabilityChecker | None = None,
+        demo_readiness: BrokerDemoReadinessChecker | None = None,
+    ) -> None:
+        self.registry = registry or BrokerRegistry()
+        self.capability_checker = capability_checker or BrokerCapabilityChecker(self.registry)
+        self.demo_readiness = demo_readiness or BrokerDemoReadinessChecker(self.registry, self.capability_checker)
+
+    def get_status(self) -> dict[str, Any]:
+        return {
+            "status": "operational",
+            "mode": "BROKER_COMPATIBILITY_METADATA_ONLY",
+            "supported_brokers": [broker.broker_id for broker in self.registry.list_brokers()],
+            "simulation_only": True,
+            "live_execution_enabled": False,
+        }
+
+    def list_brokers(self) -> list[SupportedBroker]:
+        return self.registry.list_brokers()
+
+    def get_broker(self, broker_id: str) -> SupportedBroker | None:
+        return self.registry.get_broker(broker_id)
+
+    def check_broker_symbol(self, broker_id: str, symbol: str) -> BrokerCompatibilityResult:
+        return self.capability_checker.check_symbol_support(broker_id, symbol)
+
+    def check_broker_all_symbols(self, broker_id: str) -> list[BrokerCompatibilityResult]:
+        return self.capability_checker.check_all_client_symbols(broker_id)
+
+    def check_demo_readiness(self, broker_id: str) -> BrokerDemoReadinessReport:
+        return self.demo_readiness.check_demo_readiness(broker_id)

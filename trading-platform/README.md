@@ -749,6 +749,26 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'w
 
 Phase 3 Day 12 adds the TradingView webhook foundation. It safely ingests alerts, authenticates optional webhook secrets, validates payloads, normalizes aliases for `EURUSD`, `XAUUSD`, and `NIFTY50`, creates orchestration-ready signal objects, and exposes `/webhooks/tradingview`, `/webhooks/status`, `/webhooks/events`, and `/webhooks/events/{event_id}`. This is ingestion only and does not route or place trades.
 
+## Run Phase 3 Day 13 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day13_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'webhook' in r.path or 'webhooks' in r.path])"
+```
+
+Phase 3 Day 13 adds the webhook signal orchestration bridge. It consumes normalized TradingView signals, checks institutional dashboard context when available, applies a simulation-only risk gate, builds broker routing previews, and returns decisions through `/webhooks/orchestration/status`, `/webhooks/orchestration/decisions`, `/webhooks/orchestration/decisions/{decision_id}`, and `/webhooks/orchestration/test`.
+
+## Run Phase 3 Day 14 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day14_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'webhook' in r.path or 'webhooks' in r.path])"
+```
+
+Phase 3 Day 14 adds webhook validation hardening for VPS/public deployment preparation. It includes deterministic request fingerprinting, duplicate/replay detection, source-IP rate limiting, malformed payload classification, security audit logging, and `/webhooks/security/status`, `/webhooks/security/events`, and `/webhooks/security/test`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

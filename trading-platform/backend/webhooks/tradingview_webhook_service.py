@@ -5,6 +5,7 @@ from backend.webhooks.tradingview_signal_normalizer import TradingViewSignalNorm
 from backend.webhooks.tradingview_webhook_auth import TradingViewWebhookAuthenticator
 from backend.webhooks.webhook_event_store import WebhookEventStore
 from backend.webhooks.webhook_models import NormalizedTradingSignal, WebhookEventRecord
+from backend.webhooks.webhook_security_service import WebhookSecurityService
 
 
 class TradingViewWebhookService:
@@ -16,14 +17,29 @@ class TradingViewWebhookService:
         validator: TradingViewPayloadValidator | None = None,
         normalizer: TradingViewSignalNormalizer | None = None,
         store: WebhookEventStore | None = None,
+        security_service: WebhookSecurityService | None = None,
     ) -> None:
         self.authenticator = authenticator or TradingViewWebhookAuthenticator()
         self.validator = validator or TradingViewPayloadValidator()
         self.normalizer = normalizer or TradingViewSignalNormalizer()
         self.store = store or WebhookEventStore()
+        self.security_service = security_service or WebhookSecurityService()
 
-    def process_webhook(self, payload: dict[str, Any] | None) -> NormalizedTradingSignal:
+    def process_webhook(self, payload: dict[str, Any] | None, source_ip: str | None = None) -> NormalizedTradingSignal:
         payload = payload or {}
+        security_event = self.security_service.validate_webhook_request(payload, source_ip or "unknown")
+        if security_event.blocked:
+            event = WebhookEventRecord(
+                authenticated=False,
+                valid=False,
+                symbol=str(payload.get("symbol")) if payload.get("symbol") is not None else None,
+                action=str(payload.get("action")) if payload.get("action") is not None else None,
+                processing_status="REJECTED",
+                issues=[f"Webhook security block: {security_event.event_type}.", *security_event.reasons],
+            )
+            self.store.store_event(event)
+            raise RuntimeError(f"Webhook security block: {security_event.event_type}.")
+
         authenticated = self.authenticator.authenticate_request(payload)
         event = WebhookEventRecord(
             authenticated=authenticated,
@@ -33,6 +49,16 @@ class TradingViewWebhookService:
             processing_status="RECEIVED",
         )
         if not authenticated:
+            self.security_service.audit_logger.log_security_event(
+                security_event.model_copy(
+                    update={
+                        "event_type": "AUTH_FAILURE",
+                        "severity": "HIGH",
+                        "blocked": True,
+                        "reasons": [*security_event.reasons, "Webhook authentication failed."],
+                    }
+                )
+            )
             event.processing_status = "REJECTED"
             event.issues.append("Webhook authentication failed.")
             self.store.store_event(event)
@@ -59,6 +85,7 @@ class TradingViewWebhookService:
             "status": "operational",
             "mode": "TRADINGVIEW_WEBHOOK_INGESTION_ONLY",
             "supported_symbols": ["EURUSD", "XAUUSD", "NIFTY50"],
+            "security_hardening": "enabled",
             "simulation_only": True,
             "live_execution_enabled": False,
         }

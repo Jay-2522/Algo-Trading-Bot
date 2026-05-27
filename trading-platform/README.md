@@ -729,6 +729,16 @@ python -c "from backend.main import app; print([r.path for r in app.routes if 'b
 
 Phase 3 Day 10 adds canonical market feed normalization. It converts broker observation snapshots into AI-ready canonical ticks with bid, ask, mid, spread, market type, source metadata, usability, and quality. Routes include `/brokers/canonical-feed/status`, `/brokers/canonical-feed/all`, `/brokers/{broker_id}/canonical-feed`, and `/brokers/{broker_id}/canonical-feed/{symbol}`.
 
+## Run Phase 3 Day 11 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day11_verification.py
+python -c "from backend.main import app; print([r.path for r in app.routes if 'broker' in r.path or 'brokers' in r.path])"
+```
+
+Phase 3 Day 11 adds read-only canonical candle feeds for `M5`, `M15`, `H1`, and `H4`. It fetches MT5 OHLC candles when read-only terminal data is available, falls back to deterministic simulated candles when unavailable, validates OHLC integrity, and exposes `/brokers/candles/status`, `/brokers/candles/all`, `/brokers/{broker_id}/candles/{symbol}`, and `/brokers/{broker_id}/candles/{symbol}/{timeframe}`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

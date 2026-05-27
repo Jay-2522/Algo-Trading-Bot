@@ -16,6 +16,7 @@ from backend.broker_compatibility.broker_observation_models import (
     BrokerSymbolSnapshot,
 )
 from backend.broker_compatibility.canonical_feed_models import CanonicalFeedReport, CanonicalMarketTick
+from backend.broker_compatibility.canonical_candle_models import MultiTimeframeFeedReport
 from backend.broker_compatibility.mt5_demo_models import (
     BrokerDemoVerificationReport,
     BrokerSymbolVerification,
@@ -70,6 +71,16 @@ async def get_canonical_feed_status() -> dict:
 @router.get("/canonical-feed/all", response_model=list[CanonicalFeedReport])
 async def get_all_canonical_feeds() -> list[CanonicalFeedReport]:
     return broker_compatibility_service.get_all_canonical_feeds()
+
+
+@router.get("/candles/status")
+async def get_candle_feed_status() -> dict:
+    return broker_compatibility_service.get_candle_feed_status()
+
+
+@router.get("/candles/all", response_model=list[MultiTimeframeFeedReport])
+async def get_all_broker_candle_feeds() -> list[MultiTimeframeFeedReport]:
+    return broker_compatibility_service.get_all_broker_feeds()
 
 
 @router.get("", response_model=list[SupportedBroker])
@@ -160,3 +171,21 @@ async def get_canonical_symbol_feed(broker_id: str, symbol: str) -> CanonicalMar
     if broker_compatibility_service.get_broker(broker_id) is None:
         raise HTTPException(status_code=404, detail="Broker is not supported.")
     return broker_compatibility_service.get_canonical_symbol_feed(broker_id, symbol)
+
+
+@router.get("/{broker_id}/candles/{symbol}", response_model=MultiTimeframeFeedReport)
+async def get_broker_symbol_candles(broker_id: str, symbol: str) -> MultiTimeframeFeedReport:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.get_broker_symbol_feed(broker_id, symbol)
+
+
+@router.get("/{broker_id}/candles/{symbol}/{timeframe}", response_model=MultiTimeframeFeedReport)
+async def get_broker_symbol_timeframe_candles(
+    broker_id: str,
+    symbol: str,
+    timeframe: str,
+) -> MultiTimeframeFeedReport:
+    if broker_compatibility_service.get_broker(broker_id) is None:
+        raise HTTPException(status_code=404, detail="Broker is not supported.")
+    return broker_compatibility_service.get_broker_timeframe_feed(broker_id, symbol, timeframe)

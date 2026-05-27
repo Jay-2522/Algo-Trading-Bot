@@ -23,6 +23,7 @@ REQUIRED_GET_ROUTES = {
     "/backtesting/status",
     "/replay/status",
     "/brokers/status",
+    "/brokers/candles/status",
     "/streaming/status",
     "/trading-loop/status",
     "/trade-journal/status",

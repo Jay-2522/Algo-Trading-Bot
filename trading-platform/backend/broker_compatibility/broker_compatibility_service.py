@@ -22,6 +22,8 @@ from backend.broker_compatibility.broker_observation_service import BrokerObserv
 from backend.broker_compatibility.broker_registry import BrokerRegistry
 from backend.broker_compatibility.canonical_feed_models import CanonicalFeedReport, CanonicalMarketTick
 from backend.broker_compatibility.canonical_feed_service import CanonicalFeedService
+from backend.broker_compatibility.canonical_candle_feed_service import CanonicalCandleFeedService
+from backend.broker_compatibility.canonical_candle_models import MultiTimeframeFeedReport
 from backend.broker_compatibility.mt5_demo_models import (
     BrokerDemoVerificationReport,
     BrokerSymbolVerification,
@@ -41,6 +43,7 @@ class BrokerCompatibilityService:
         observation_service: BrokerObservationService | None = None,
         feed_quality_service: BrokerFeedQualityService | None = None,
         canonical_feed_service: CanonicalFeedService | None = None,
+        candle_feed_service: CanonicalCandleFeedService | None = None,
     ) -> None:
         self.registry = registry or BrokerRegistry()
         self.capability_checker = capability_checker or BrokerCapabilityChecker(self.registry)
@@ -49,6 +52,7 @@ class BrokerCompatibilityService:
         self.observation_service = observation_service or BrokerObservationService(self.registry)
         self.feed_quality_service = feed_quality_service or BrokerFeedQualityService(self.registry, self.observation_service)
         self.canonical_feed_service = canonical_feed_service or CanonicalFeedService(self.registry)
+        self.candle_feed_service = candle_feed_service or CanonicalCandleFeedService(self.registry)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -121,3 +125,15 @@ class BrokerCompatibilityService:
 
     def get_canonical_symbol_feed(self, broker_id: str, symbol: str) -> CanonicalMarketTick:
         return self.canonical_feed_service.get_symbol_feed(broker_id, symbol)
+
+    def get_candle_feed_status(self) -> dict[str, Any]:
+        return self.candle_feed_service.get_status()
+
+    def get_broker_symbol_feed(self, broker_id: str, symbol: str) -> MultiTimeframeFeedReport:
+        return self.candle_feed_service.get_symbol_feed(broker_id, symbol)
+
+    def get_broker_timeframe_feed(self, broker_id: str, symbol: str, timeframe: str) -> MultiTimeframeFeedReport:
+        return self.candle_feed_service.get_timeframe_feed(broker_id, symbol, timeframe)
+
+    def get_all_broker_feeds(self) -> list[MultiTimeframeFeedReport]:
+        return self.candle_feed_service.get_all_feeds()

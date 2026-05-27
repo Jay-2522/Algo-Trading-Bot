@@ -22,6 +22,7 @@ from backend.broker_compatibility.broker_feed_quality_models import (
     BrokerSymbolFeedQuality,
 )
 from backend.broker_compatibility.canonical_feed_models import CanonicalFeedReport, CanonicalMarketTick
+from backend.broker_compatibility.canonical_candle_models import CanonicalCandle, MultiTimeframeFeedReport
 
 __all__ = [
     "BrokerCompatibilityService",
@@ -39,4 +40,6 @@ __all__ = [
     "BrokerFeedQualityReport",
     "CanonicalMarketTick",
     "CanonicalFeedReport",
+    "CanonicalCandle",
+    "MultiTimeframeFeedReport",
 ]

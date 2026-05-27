@@ -12,6 +12,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "backtesting", "route": "/backtesting/status"},
     {"name": "advanced_historical_replay", "route": "/replay/status"},
     {"name": "broker_compatibility", "route": "/brokers/status"},
+    {"name": "broker_candle_feed", "route": "/brokers/candles/status"},
     {"name": "streaming", "route": "/streaming/status"},
     {"name": "trading_loop", "route": "/trading-loop/status"},
     {"name": "trade_journal", "route": "/trade-journal/status"},

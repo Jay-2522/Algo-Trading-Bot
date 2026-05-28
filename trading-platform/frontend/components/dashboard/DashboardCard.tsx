@@ -1,34 +1,29 @@
 import type { DashboardCardData } from "@/lib/dashboard-api";
+import { StatusBadge } from "./StatusBadge";
 
-const severityStyles: Record<DashboardCardData["severity"], string> = {
-  INFO: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
-  LOW: "border-sky-400/20 bg-sky-400/10 text-sky-200",
-  MEDIUM: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  HIGH: "border-rose-400/25 bg-rose-400/10 text-rose-200",
-  CRITICAL: "border-red-400/30 bg-red-400/10 text-red-200",
+const severityTone: Record<DashboardCardData["severity"], "good" | "info" | "warning" | "danger" | "muted"> = {
+  INFO: "good",
+  LOW: "info",
+  MEDIUM: "warning",
+  HIGH: "danger",
+  CRITICAL: "danger",
 };
 
 export function DashboardCard({ card }: { card: DashboardCardData }) {
   return (
-    <article className="rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl transition hover:border-sky-300/30 hover:bg-slate-900/70">
+    <article className="group rounded-3xl border border-white/10 bg-slate-950/50 p-4 shadow-xl shadow-black/15 backdrop-blur-xl transition duration-200 hover:-translate-y-0.5 hover:border-cyan-200/25 hover:bg-slate-900/60 sm:p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-slate-200">{card.title}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
+          <p className="text-sm font-bold text-slate-100">{card.title}</p>
+          <p className="mt-1 text-[0.65rem] uppercase tracking-[0.22em] text-slate-500">
             {card.card_id.replaceAll("_", " ")}
           </p>
         </div>
-        <span
-          className={`rounded-full border px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wide ${
-            severityStyles[card.severity] ?? severityStyles.INFO
-          }`}
-        >
-          {card.status}
-        </span>
+        <StatusBadge label={card.status} tone={severityTone[card.severity] ?? "info"} />
       </div>
 
-      <div className="mt-7 text-3xl font-black tracking-tight text-white">{card.value}</div>
-      <p className="mt-3 min-h-10 text-sm leading-6 text-slate-400">{card.subtitle}</p>
+      <div className="mt-5 truncate text-2xl font-black tracking-tight text-white">{card.value}</div>
+      <p className="mt-2 min-h-10 text-xs leading-5 text-slate-400 sm:text-sm">{card.subtitle}</p>
     </article>
   );
 }

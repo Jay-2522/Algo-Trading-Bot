@@ -847,6 +847,18 @@ python tests/phase4_day2_verification.py
 
 Phase 4 Day 2 adds the VPS dashboard frontend shell at `frontend/app/dashboard/page.tsx`, with reusable components under `frontend/components/dashboard` and API helpers in `frontend/lib/dashboard-api.ts`. The shell displays system, broker, webhook, routing, allocation, execution queue, alerts, Phase 3 readiness, and safety status. It is display-only and keeps live execution disabled.
 
+## Run Phase 4 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day3_verification.py
+cd frontend
+npm run lint
+npm run build
+```
+
+Phase 4 Day 3 upgrades the dashboard into a premium client-ready trading UI. It adds refined glass cards, a compact gradient header, broker status widgets, account status widgets, execution safety guardrails, and a cleaner responsive layout while preserving simulation-only display behavior.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

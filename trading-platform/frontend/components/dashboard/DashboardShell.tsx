@@ -2,9 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AccountStatusPanel } from "./AccountStatusPanel";
+import { BrokerStatusPanel } from "./BrokerStatusPanel";
 import { DashboardAlertsPanel } from "./DashboardAlertsPanel";
+import { DashboardHeader } from "./DashboardHeader";
 import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
 import { DashboardStatusGrid } from "./DashboardStatusGrid";
+import { ExecutionSafetyPanel } from "./ExecutionSafetyPanel";
 import { fetchDashboardBundle, type DashboardBundle } from "@/lib/dashboard-api";
 
 const emptyBundle: DashboardBundle = {
@@ -13,6 +17,10 @@ const emptyBundle: DashboardBundle = {
   cards: [],
   summary: null,
   alerts: [],
+  brokerStatus: null,
+  accountStatus: null,
+  executionStatus: null,
+  phase3Status: null,
   errors: [],
 };
 
@@ -48,36 +56,10 @@ export function DashboardShell() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#07111f] text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.22),transparent_34rem),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.16),transparent_28rem),linear-gradient(135deg,#07111f,#0f172a_55%,#111827)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.2),transparent_32rem),radial-gradient(circle_at_80%_8%,rgba(20,184,166,0.14),transparent_28rem),linear-gradient(135deg,#06101d,#0f172a_54%,#0b1120)]" />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-8 sm:px-8 lg:px-10">
-        <section className="rounded-[2rem] border border-white/10 bg-slate-950/55 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl md:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300/80">
-                Client VPS Dashboard
-              </p>
-              <h1 className="mt-3 max-w-4xl text-4xl font-black tracking-[-0.05em] text-white sm:text-6xl">
-                AI Multi-Market Trading Bot
-              </h1>
-              <p className="mt-4 text-lg text-slate-300">VPS Dashboard &amp; Simulation Control Center</p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">
-              <button
-                className="rounded-full bg-sky-300 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-sky-950/30 transition hover:bg-sky-200 disabled:cursor-wait disabled:opacity-70"
-                disabled={loading}
-                onClick={() => void loadDashboard()}
-                type="button"
-              >
-                {loading ? "Refreshing..." : "Refresh Dashboard"}
-              </button>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                {lastUpdated ? `Updated ${lastUpdated}` : "Waiting for first refresh"}
-              </p>
-            </div>
-          </div>
-        </section>
+      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+        <DashboardHeader loading={loading} lastUpdated={lastUpdated} onRefresh={() => void loadDashboard()} />
 
         <DashboardSafetyBanner />
 
@@ -92,7 +74,7 @@ export function DashboardShell() {
           </section>
         ) : null}
 
-        <section className="grid gap-5 lg:grid-cols-[1fr_22rem]">
+        <section className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           <div className="rounded-3xl border border-white/10 bg-slate-950/55 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Readiness Summary</p>
             <h2 className="mt-2 text-2xl font-bold text-white">
@@ -104,9 +86,9 @@ export function DashboardShell() {
             </p>
           </div>
 
-          <div className="rounded-3xl border border-sky-300/15 bg-sky-300/10 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+          <div className="rounded-3xl border border-cyan-300/15 bg-cyan-300/10 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.24em] text-sky-200/70">Backend Readiness</p>
-            <div className="mt-3 text-4xl font-black text-sky-100">
+            <div className="mt-3 text-3xl font-black text-sky-100">
               {backendHealthy ? "Ready" : loading ? "Loading" : "Review"}
             </div>
             <p className="mt-3 text-sm leading-6 text-sky-50/75">
@@ -117,7 +99,31 @@ export function DashboardShell() {
 
         <DashboardStatusGrid cards={cards} loading={loading} />
 
-        <DashboardAlertsPanel alerts={alerts} />
+        <section className="grid gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-4">
+            <BrokerStatusPanel status={bundle.brokerStatus} />
+          </div>
+          <div className="xl:col-span-4">
+            <AccountStatusPanel status={bundle.accountStatus} />
+          </div>
+          <div className="xl:col-span-4">
+            <ExecutionSafetyPanel status={bundle.executionStatus} />
+          </div>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[1fr_22rem]">
+          <DashboardAlertsPanel alerts={alerts} />
+          <div className="rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">Phase 3 Readiness</p>
+            <h2 className="mt-1 text-xl font-bold text-white">{String(bundle.phase3Status?.overall_status ?? "Loading")}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Full signal-to-simulation pipeline, safety audit, broker readiness, routing, allocation, queue, and monitoring context.
+            </p>
+            <div className="mt-4 rounded-2xl border border-emerald-300/15 bg-emerald-300/10 p-3 text-xs text-emerald-100">
+              Live execution remains disabled.
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );

@@ -7,7 +7,7 @@ export function DashboardStatusGrid({ cards, loading }: { cards: DashboardCardDa
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 8 }, (_, index) => (
           <div
-            className="h-44 animate-pulse rounded-3xl border border-white/10 bg-slate-900/60"
+            className="h-40 animate-pulse rounded-3xl border border-white/10 bg-slate-900/55"
             key={index}
           />
         ))}

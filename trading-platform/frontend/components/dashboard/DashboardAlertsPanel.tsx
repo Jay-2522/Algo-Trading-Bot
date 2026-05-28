@@ -17,8 +17,11 @@ export function DashboardAlertsPanel({ alerts }: { alerts: Array<Record<string, 
       </div>
 
       {alerts.length === 0 ? (
-        <div className="mt-5 rounded-2xl border border-emerald-400/15 bg-emerald-400/10 p-5 text-sm text-emerald-100">
-          No monitoring alerts are currently reported. The dashboard will show new operational alerts here.
+        <div className="mt-5 rounded-2xl border border-emerald-400/15 bg-emerald-400/10 p-5">
+          <strong className="text-sm text-emerald-100">No active alerts</strong>
+          <p className="mt-2 text-sm leading-6 text-emerald-50/70">
+            Monitoring is quiet. New operational warnings will appear here.
+          </p>
         </div>
       ) : (
         <div className="mt-5 grid gap-3">

@@ -1,11 +1,7 @@
 export function DashboardHeader({
-  loading,
-  lastUpdated,
-  onRefresh,
+  controls,
 }: {
-  loading: boolean;
-  lastUpdated: string | null;
-  onRefresh: () => void;
+  controls: React.ReactNode;
 }) {
   return (
     <header className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(8,47,73,0.58),rgba(15,23,42,0.82))] p-5 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-6 lg:p-7">
@@ -18,19 +14,7 @@ export function DashboardHeader({
           <p className="mt-3 text-sm text-slate-300 sm:text-base">VPS Dashboard &amp; Simulation Control Center</p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:flex-col lg:items-end">
-          <button
-            className="rounded-full border border-cyan-200/30 bg-cyan-200 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:bg-cyan-100 disabled:cursor-wait disabled:opacity-70"
-            disabled={loading}
-            onClick={onRefresh}
-            type="button"
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-slate-500">
-            {lastUpdated ? `Updated ${lastUpdated}` : "Awaiting refresh"}
-          </p>
-        </div>
+        {controls}
       </div>
     </header>
   );

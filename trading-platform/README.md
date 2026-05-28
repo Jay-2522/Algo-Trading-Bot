@@ -859,6 +859,19 @@ npm run build
 
 Phase 4 Day 3 upgrades the dashboard into a premium client-ready trading UI. It adds refined glass cards, a compact gradient header, broker status widgets, account status widgets, execution safety guardrails, and a cleaner responsive layout while preserving simulation-only display behavior.
 
+## Run Phase 4 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day3_verification.py
+python tests/phase4_day4_verification.py
+cd frontend
+npm run lint
+npm run build
+```
+
+Phase 4 Day 4 adds live dashboard data panels and safe auto-refresh. The dashboard polls backend status every 10 seconds by default, supports pause/resume and manual refresh, preserves previous data during partial backend failures, and displays live broker, account routing, execution queue, webhook, monitoring, and Phase 3 readiness state.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

@@ -43,8 +43,13 @@ export type DashboardBundle = {
   summary: DashboardSummary | null;
   alerts: Array<Record<string, unknown>>;
   brokerStatus: Record<string, unknown> | null;
+  brokerObservationStatus: Record<string, unknown> | null;
   accountStatus: Record<string, unknown> | null;
+  allocationStatus: Record<string, unknown> | null;
   executionStatus: Record<string, unknown> | null;
+  lifecycleStatus: Record<string, unknown> | null;
+  webhookStatus: Record<string, unknown> | null;
+  webhookOrchestrationStatus: Record<string, unknown> | null;
   phase3Status: Record<string, unknown> | null;
   errors: string[];
 };
@@ -56,15 +61,29 @@ const endpoints = {
   summary: "/dashboard/summary",
   alerts: "/monitoring/alerts",
   brokerStatus: "/brokers/status",
+  brokerObservationStatus: "/brokers/observation/status",
   accountStatus: "/accounts/status",
+  allocationStatus: "/accounts/allocation/status",
   executionStatus: "/execution-queue/status",
+  lifecycleStatus: "/execution-queue/lifecycle/status",
+  webhookStatus: "/webhooks/status",
+  webhookOrchestrationStatus: "/webhooks/orchestration/status",
   phase3Status: "/phase3/status",
 };
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { cache: "no-store" });
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+
+function buildApiUrl(endpoint: string): string {
+  const url = new URL(endpoint, API_BASE_URL);
+  url.searchParams.set("_ts", String(Date.now()));
+  return url.toString();
+}
+
+async function fetchJson<T>(endpoint: string): Promise<T> {
+  const url = buildApiUrl(endpoint);
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`${path} returned ${response.status}`);
+    throw new Error(`${endpoint} returned ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
@@ -84,12 +103,32 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<DashboardSummary>(endpoints.summary),
     fetchJson<Array<Record<string, unknown>>>(endpoints.alerts),
     fetchJson<Record<string, unknown>>(endpoints.brokerStatus),
+    fetchJson<Record<string, unknown>>(endpoints.brokerObservationStatus),
     fetchJson<Record<string, unknown>>(endpoints.accountStatus),
+    fetchJson<Record<string, unknown>>(endpoints.allocationStatus),
     fetchJson<Record<string, unknown>>(endpoints.executionStatus),
+    fetchJson<Record<string, unknown>>(endpoints.lifecycleStatus),
+    fetchJson<Record<string, unknown>>(endpoints.webhookStatus),
+    fetchJson<Record<string, unknown>>(endpoints.webhookOrchestrationStatus),
     fetchJson<Record<string, unknown>>(endpoints.phase3Status),
   ]);
 
-  const [status, overview, cards, summary, alerts, brokerStatus, accountStatus, executionStatus, phase3Status] = results;
+  const [
+    status,
+    overview,
+    cards,
+    summary,
+    alerts,
+    brokerStatus,
+    brokerObservationStatus,
+    accountStatus,
+    allocationStatus,
+    executionStatus,
+    lifecycleStatus,
+    webhookStatus,
+    webhookOrchestrationStatus,
+    phase3Status,
+  ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
     .filter((message): message is string => Boolean(message));
@@ -101,8 +140,13 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     summary: summary.status === "fulfilled" ? summary.value : null,
     alerts: alerts.status === "fulfilled" ? alerts.value : [],
     brokerStatus: brokerStatus.status === "fulfilled" ? brokerStatus.value : null,
+    brokerObservationStatus: brokerObservationStatus.status === "fulfilled" ? brokerObservationStatus.value : null,
     accountStatus: accountStatus.status === "fulfilled" ? accountStatus.value : null,
+    allocationStatus: allocationStatus.status === "fulfilled" ? allocationStatus.value : null,
     executionStatus: executionStatus.status === "fulfilled" ? executionStatus.value : null,
+    lifecycleStatus: lifecycleStatus.status === "fulfilled" ? lifecycleStatus.value : null,
+    webhookStatus: webhookStatus.status === "fulfilled" ? webhookStatus.value : null,
+    webhookOrchestrationStatus: webhookOrchestrationStatus.status === "fulfilled" ? webhookOrchestrationStatus.value : null,
     phase3Status: phase3Status.status === "fulfilled" ? phase3Status.value : null,
     errors,
   };

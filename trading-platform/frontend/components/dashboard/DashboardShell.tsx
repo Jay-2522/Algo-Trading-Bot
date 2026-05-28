@@ -1,50 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { AccountStatusPanel } from "./AccountStatusPanel";
+import { AutoRefreshControl } from "./AutoRefreshControl";
 import { BrokerStatusPanel } from "./BrokerStatusPanel";
 import { DashboardAlertsPanel } from "./DashboardAlertsPanel";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
 import { DashboardStatusGrid } from "./DashboardStatusGrid";
 import { ExecutionSafetyPanel } from "./ExecutionSafetyPanel";
-import { fetchDashboardBundle, type DashboardBundle } from "@/lib/dashboard-api";
-
-const emptyBundle: DashboardBundle = {
-  status: null,
-  overview: null,
-  cards: [],
-  summary: null,
-  alerts: [],
-  brokerStatus: null,
-  accountStatus: null,
-  executionStatus: null,
-  phase3Status: null,
-  errors: [],
-};
+import { LiveAccountRoutingPanel } from "./LiveAccountRoutingPanel";
+import { LiveBrokerPanel } from "./LiveBrokerPanel";
+import { LiveExecutionQueuePanel } from "./LiveExecutionQueuePanel";
+import { LiveMonitoringPanel } from "./LiveMonitoringPanel";
+import { LiveWebhookPanel } from "./LiveWebhookPanel";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 export function DashboardShell() {
-  const [bundle, setBundle] = useState<DashboardBundle>(emptyBundle);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    const nextBundle = await fetchDashboardBundle();
-    setBundle(nextBundle);
-    setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    const initialRefresh = window.setTimeout(() => void loadDashboard(), 0);
-    const interval = window.setInterval(() => void loadDashboard(), 20000);
-    return () => {
-      window.clearTimeout(initialRefresh);
-      window.clearInterval(interval);
-    };
-  }, [loadDashboard]);
+  const { bundle, loading, isPaused, lastUpdated, lastError, refresh, togglePause } = useDashboardData(10000);
 
   const cards = useMemo(
     () => (bundle.cards.length ? bundle.cards : bundle.overview?.cards ?? []),
@@ -59,13 +33,24 @@ export function DashboardShell() {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.2),transparent_32rem),radial-gradient(circle_at_80%_8%,rgba(20,184,166,0.14),transparent_28rem),linear-gradient(135deg,#06101d,#0f172a_54%,#0b1120)]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-        <DashboardHeader loading={loading} lastUpdated={lastUpdated} onRefresh={() => void loadDashboard()} />
+        <DashboardHeader
+          controls={
+            <AutoRefreshControl
+              isPaused={isPaused}
+              lastUpdated={lastUpdated}
+              loading={loading}
+              onManualRefresh={() => void refresh()}
+              onTogglePause={togglePause}
+            />
+          }
+        />
 
         <DashboardSafetyBanner />
 
-        {bundle.errors.length > 0 ? (
+        {lastError || bundle.errors.length > 0 ? (
           <section className="rounded-3xl border border-rose-300/20 bg-rose-400/10 p-5 text-sm text-rose-100">
             <strong className="block text-base">Partial dashboard data unavailable</strong>
+            {lastError ? <p className="mt-2">{lastError}</p> : null}
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {bundle.errors.map((error) => (
                 <li key={error}>{error}</li>
@@ -98,6 +83,14 @@ export function DashboardShell() {
         </section>
 
         <DashboardStatusGrid cards={cards} loading={loading} />
+
+        <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
+          <LiveBrokerPanel brokerStatus={bundle.brokerStatus} observationStatus={bundle.brokerObservationStatus} />
+          <LiveAccountRoutingPanel accountStatus={bundle.accountStatus} allocationStatus={bundle.allocationStatus} />
+          <LiveExecutionQueuePanel executionStatus={bundle.executionStatus} lifecycleStatus={bundle.lifecycleStatus} />
+          <LiveWebhookPanel webhookStatus={bundle.webhookStatus} orchestrationStatus={bundle.webhookOrchestrationStatus} />
+          <LiveMonitoringPanel alerts={alerts} phase3Status={bundle.phase3Status} />
+        </section>
 
         <section className="grid gap-4 xl:grid-cols-12">
           <div className="xl:col-span-4">

@@ -19,6 +19,11 @@ const emptyBundle: DashboardBundle = {
   webhookStatus: null,
   webhookOrchestrationStatus: null,
   phase3Status: null,
+  webhookEvents: [],
+  orchestrationDecisions: [],
+  queueItems: [],
+  lifecycleAuditEvents: [],
+  webhookSecurityEvents: [],
   errors: [],
 };
 
@@ -44,6 +49,17 @@ export function useDashboardData(refreshIntervalMs = 10000) {
         ...nextBundle,
         cards: nextBundle.cards.length ? nextBundle.cards : previous.cards,
         alerts: nextBundle.alerts.length ? nextBundle.alerts : previous.alerts,
+        webhookEvents: nextBundle.webhookEvents.length ? nextBundle.webhookEvents : previous.webhookEvents,
+        orchestrationDecisions: nextBundle.orchestrationDecisions.length
+          ? nextBundle.orchestrationDecisions
+          : previous.orchestrationDecisions,
+        queueItems: nextBundle.queueItems.length ? nextBundle.queueItems : previous.queueItems,
+        lifecycleAuditEvents: nextBundle.lifecycleAuditEvents.length
+          ? nextBundle.lifecycleAuditEvents
+          : previous.lifecycleAuditEvents,
+        webhookSecurityEvents: nextBundle.webhookSecurityEvents.length
+          ? nextBundle.webhookSecurityEvents
+          : previous.webhookSecurityEvents,
         errors: nextBundle.errors,
       }));
       setLastError(nextBundle.errors.length ? nextBundle.errors.join("; ") : null);

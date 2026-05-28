@@ -51,6 +51,11 @@ export type DashboardBundle = {
   webhookStatus: Record<string, unknown> | null;
   webhookOrchestrationStatus: Record<string, unknown> | null;
   phase3Status: Record<string, unknown> | null;
+  webhookEvents: Array<Record<string, unknown>>;
+  orchestrationDecisions: Array<Record<string, unknown>>;
+  queueItems: Array<Record<string, unknown>>;
+  lifecycleAuditEvents: Array<Record<string, unknown>>;
+  webhookSecurityEvents: Array<Record<string, unknown>>;
   errors: string[];
 };
 
@@ -69,6 +74,11 @@ const endpoints = {
   webhookStatus: "/webhooks/status",
   webhookOrchestrationStatus: "/webhooks/orchestration/status",
   phase3Status: "/phase3/status",
+  webhookEvents: "/webhooks/events?limit=20",
+  orchestrationDecisions: "/webhooks/orchestration/decisions?limit=20",
+  queueItems: "/execution-queue/items?limit=20",
+  lifecycleAuditEvents: "/execution-queue/lifecycle/audit-events?limit=20",
+  webhookSecurityEvents: "/webhooks/security/events?limit=20",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -111,6 +121,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<Record<string, unknown>>(endpoints.webhookStatus),
     fetchJson<Record<string, unknown>>(endpoints.webhookOrchestrationStatus),
     fetchJson<Record<string, unknown>>(endpoints.phase3Status),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.webhookEvents),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.orchestrationDecisions),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.queueItems),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.lifecycleAuditEvents),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.webhookSecurityEvents),
   ]);
 
   const [
@@ -128,6 +143,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     webhookStatus,
     webhookOrchestrationStatus,
     phase3Status,
+    webhookEvents,
+    orchestrationDecisions,
+    queueItems,
+    lifecycleAuditEvents,
+    webhookSecurityEvents,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -148,6 +168,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     webhookStatus: webhookStatus.status === "fulfilled" ? webhookStatus.value : null,
     webhookOrchestrationStatus: webhookOrchestrationStatus.status === "fulfilled" ? webhookOrchestrationStatus.value : null,
     phase3Status: phase3Status.status === "fulfilled" ? phase3Status.value : null,
+    webhookEvents: webhookEvents.status === "fulfilled" ? webhookEvents.value : [],
+    orchestrationDecisions: orchestrationDecisions.status === "fulfilled" ? orchestrationDecisions.value : [],
+    queueItems: queueItems.status === "fulfilled" ? queueItems.value : [],
+    lifecycleAuditEvents: lifecycleAuditEvents.status === "fulfilled" ? lifecycleAuditEvents.value : [],
+    webhookSecurityEvents: webhookSecurityEvents.status === "fulfilled" ? webhookSecurityEvents.value : [],
     errors,
   };
 }

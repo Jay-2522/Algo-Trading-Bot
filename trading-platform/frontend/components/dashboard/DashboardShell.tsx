@@ -10,11 +10,15 @@ import { DashboardHeader } from "./DashboardHeader";
 import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
 import { DashboardStatusGrid } from "./DashboardStatusGrid";
 import { ExecutionSafetyPanel } from "./ExecutionSafetyPanel";
+import { LiveActivityFeed } from "./LiveActivityFeed";
 import { LiveAccountRoutingPanel } from "./LiveAccountRoutingPanel";
 import { LiveBrokerPanel } from "./LiveBrokerPanel";
 import { LiveExecutionQueuePanel } from "./LiveExecutionQueuePanel";
 import { LiveMonitoringPanel } from "./LiveMonitoringPanel";
 import { LiveWebhookPanel } from "./LiveWebhookPanel";
+import { RecentSignalsPanel } from "./RecentSignalsPanel";
+import { SystemEventStream } from "./SystemEventStream";
+import { TradeLifecycleTimeline } from "./TradeLifecycleTimeline";
 import { useDashboardData } from "@/hooks/useDashboardData";
 
 export function DashboardShell() {
@@ -91,6 +95,31 @@ export function DashboardShell() {
           <LiveWebhookPanel webhookStatus={bundle.webhookStatus} orchestrationStatus={bundle.webhookOrchestrationStatus} />
           <LiveMonitoringPanel alerts={alerts} phase3Status={bundle.phase3Status} />
         </section>
+
+        <TradeLifecycleTimeline
+          lifecycleAuditEvents={bundle.lifecycleAuditEvents}
+          orchestrationDecisions={bundle.orchestrationDecisions}
+          queueItems={bundle.queueItems}
+          webhookEvents={bundle.webhookEvents}
+        />
+
+        <section className="grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
+          <LiveActivityFeed
+            lifecycleAuditEvents={bundle.lifecycleAuditEvents}
+            orchestrationDecisions={bundle.orchestrationDecisions}
+            queueItems={bundle.queueItems}
+            securityEvents={bundle.webhookSecurityEvents}
+            webhookEvents={bundle.webhookEvents}
+          />
+          <RecentSignalsPanel webhookEvents={bundle.webhookEvents} />
+        </section>
+
+        <SystemEventStream
+          alerts={alerts}
+          lifecycleAuditEvents={bundle.lifecycleAuditEvents}
+          orchestrationDecisions={bundle.orchestrationDecisions}
+          securityEvents={bundle.webhookSecurityEvents}
+        />
 
         <section className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           <div className="min-w-0">

@@ -894,6 +894,17 @@ npm run build
 
 Phase 4 Day 7 adds client demo mode and an executive overview dashboard section. Backend routes under `/demo-mode` summarize supported markets, supported brokers, TradingView-to-simulation pipeline readiness, executive KPI cards, safety posture, and next production steps. The frontend now presents this as a polished top-level client demo section while preserving simulation-only behavior.
 
+## Run Phase 4 Day 8 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day8_verification.py
+cd frontend
+npm run build
+```
+
+Phase 4 Day 8 adds portfolio and account analytics. Backend routes under `/portfolio` expose simulated account summaries, portfolio overview, symbol-level exposure, and placeholder P&L. The dashboard now shows broker demo balances, enabled/disabled account state, EURUSD/XAUUSD readiness, NIFTY50 conditional status, and live-execution-disabled portfolio safety labels.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

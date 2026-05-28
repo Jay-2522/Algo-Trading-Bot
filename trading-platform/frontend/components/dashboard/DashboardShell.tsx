@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { AccountStatusPanel } from "./AccountStatusPanel";
+import { AccountAnalyticsPanel } from "./AccountAnalyticsPanel";
 import { AutoRefreshControl } from "./AutoRefreshControl";
 import { BrokerStatusPanel } from "./BrokerStatusPanel";
 import { ClientDemoModePanel } from "./ClientDemoModePanel";
@@ -12,6 +13,7 @@ import { DashboardHeader } from "./DashboardHeader";
 import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
 import { DashboardStatusGrid } from "./DashboardStatusGrid";
 import { ExecutionSafetyPanel } from "./ExecutionSafetyPanel";
+import { ExposureSummaryPanel } from "./ExposureSummaryPanel";
 import { LiveActivityFeed } from "./LiveActivityFeed";
 import { LiveAccountRoutingPanel } from "./LiveAccountRoutingPanel";
 import { LiveBrokerPanel } from "./LiveBrokerPanel";
@@ -19,8 +21,10 @@ import { LiveExecutionQueuePanel } from "./LiveExecutionQueuePanel";
 import { LiveMonitoringPanel } from "./LiveMonitoringPanel";
 import { LiveWebhookPanel } from "./LiveWebhookPanel";
 import { ManualControlPanel } from "./ManualControlPanel";
+import { PortfolioOverviewPanel } from "./PortfolioOverviewPanel";
 import { RecentSignalsPanel } from "./RecentSignalsPanel";
 import { SafetyLockPanel } from "./SafetyLockPanel";
+import { SimulatedPnlPanel } from "./SimulatedPnlPanel";
 import { SystemEventStream } from "./SystemEventStream";
 import { TradeLifecycleTimeline } from "./TradeLifecycleTimeline";
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -56,6 +60,17 @@ export function DashboardShell() {
         <DashboardSafetyBanner />
 
         <ClientDemoModePanel overview={bundle.demoOverview} kpis={bundle.demoKpis} />
+
+        <section className="space-y-4">
+          <PortfolioOverviewPanel overview={bundle.portfolioOverview} />
+          <section className="grid gap-4 xl:grid-cols-[1.25fr_0.85fr]">
+            <AccountAnalyticsPanel accounts={bundle.portfolioAccounts.length ? bundle.portfolioAccounts : bundle.portfolioOverview?.accounts ?? []} />
+            <div className="grid gap-4">
+              <ExposureSummaryPanel exposure={bundle.portfolioExposure ?? bundle.portfolioOverview?.exposure_summary ?? null} />
+              <SimulatedPnlPanel pnl={bundle.portfolioPnlSummary ?? bundle.portfolioOverview?.pnl_summary ?? null} />
+            </div>
+          </section>
+        </section>
 
         {lastError || bundle.errors.length > 0 ? (
           <section className="rounded-3xl border border-rose-300/20 bg-rose-400/10 p-5 text-sm text-rose-100">

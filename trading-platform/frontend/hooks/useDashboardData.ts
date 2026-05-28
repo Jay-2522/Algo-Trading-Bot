@@ -31,6 +31,11 @@ const emptyBundle: DashboardBundle = {
   demoOverview: null,
   demoKpis: [],
   demoPipelineSummary: null,
+  portfolioStatus: null,
+  portfolioOverview: null,
+  portfolioAccounts: [],
+  portfolioExposure: null,
+  portfolioPnlSummary: null,
   errors: [],
 };
 
@@ -69,6 +74,7 @@ export function useDashboardData(refreshIntervalMs = 10000) {
           : previous.webhookSecurityEvents,
         controlAuditEvents: nextBundle.controlAuditEvents.length ? nextBundle.controlAuditEvents : previous.controlAuditEvents,
         demoKpis: nextBundle.demoKpis.length ? nextBundle.demoKpis : previous.demoKpis,
+        portfolioAccounts: nextBundle.portfolioAccounts.length ? nextBundle.portfolioAccounts : previous.portfolioAccounts,
         errors: nextBundle.errors,
       }));
       setLastError(nextBundle.errors.length ? nextBundle.errors.join("; ") : null);

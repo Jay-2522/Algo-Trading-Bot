@@ -28,6 +28,7 @@ REQUIRED_GET_ROUTES = {
     "/news/status",
     "/orchestration/status",
     "/phase3/status",
+    "/portfolio/status",
     "/backtesting/status",
     "/replay/status",
     "/brokers/status",

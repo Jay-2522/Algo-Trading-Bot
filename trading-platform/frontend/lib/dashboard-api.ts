@@ -57,6 +57,45 @@ export type ClientDemoOverviewData = {
   timestamp?: string;
 };
 
+export type PortfolioAccountSummaryData = {
+  account_id: string;
+  broker_id: string;
+  account_mode: string;
+  balance: number;
+  equity: number;
+  free_margin: number;
+  enabled: boolean;
+  demo_ready: boolean;
+  supported_symbols: string[];
+  risk_status: string;
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+};
+
+export type PortfolioExposureSummaryData = {
+  total_accounts: number;
+  enabled_accounts: number;
+  supported_symbols: string[];
+  blocked_symbols: string[];
+  total_simulated_balance: number;
+  total_simulated_equity: number;
+  exposure_by_symbol: Record<string, Record<string, unknown>>;
+  risk_summary: Record<string, unknown>;
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+};
+
+export type PortfolioOverviewData = {
+  portfolio_status: string;
+  accounts: PortfolioAccountSummaryData[];
+  exposure_summary: PortfolioExposureSummaryData;
+  pnl_summary: Record<string, unknown>;
+  warnings: string[];
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+  timestamp?: string;
+};
+
 export type DashboardBundle = {
   status: DashboardStatus | null;
   overview: DashboardOverview | null;
@@ -84,6 +123,11 @@ export type DashboardBundle = {
   demoOverview: ClientDemoOverviewData | null;
   demoKpis: ExecutiveKpiData[];
   demoPipelineSummary: Record<string, unknown> | null;
+  portfolioStatus: Record<string, unknown> | null;
+  portfolioOverview: PortfolioOverviewData | null;
+  portfolioAccounts: PortfolioAccountSummaryData[];
+  portfolioExposure: PortfolioExposureSummaryData | null;
+  portfolioPnlSummary: Record<string, unknown> | null;
   errors: string[];
 };
 
@@ -114,6 +158,11 @@ const endpoints = {
   demoOverview: "/demo-mode/overview",
   demoKpis: "/demo-mode/kpis",
   demoPipelineSummary: "/demo-mode/pipeline-summary",
+  portfolioStatus: "/portfolio/status",
+  portfolioOverview: "/portfolio/overview",
+  portfolioAccounts: "/portfolio/accounts",
+  portfolioExposure: "/portfolio/exposure",
+  portfolioPnlSummary: "/portfolio/pnl-summary",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -182,6 +231,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<ClientDemoOverviewData>(endpoints.demoOverview),
     fetchJson<ExecutiveKpiData[]>(endpoints.demoKpis),
     fetchJson<Record<string, unknown>>(endpoints.demoPipelineSummary),
+    fetchJson<Record<string, unknown>>(endpoints.portfolioStatus),
+    fetchJson<PortfolioOverviewData>(endpoints.portfolioOverview),
+    fetchJson<PortfolioAccountSummaryData[]>(endpoints.portfolioAccounts),
+    fetchJson<PortfolioExposureSummaryData>(endpoints.portfolioExposure),
+    fetchJson<Record<string, unknown>>(endpoints.portfolioPnlSummary),
   ]);
 
   const [
@@ -211,6 +265,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     demoOverview,
     demoKpis,
     demoPipelineSummary,
+    portfolioStatus,
+    portfolioOverview,
+    portfolioAccounts,
+    portfolioExposure,
+    portfolioPnlSummary,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -243,6 +302,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     demoOverview: demoOverview.status === "fulfilled" ? demoOverview.value : null,
     demoKpis: demoKpis.status === "fulfilled" ? demoKpis.value : [],
     demoPipelineSummary: demoPipelineSummary.status === "fulfilled" ? demoPipelineSummary.value : null,
+    portfolioStatus: portfolioStatus.status === "fulfilled" ? portfolioStatus.value : null,
+    portfolioOverview: portfolioOverview.status === "fulfilled" ? portfolioOverview.value : null,
+    portfolioAccounts: portfolioAccounts.status === "fulfilled" ? portfolioAccounts.value : [],
+    portfolioExposure: portfolioExposure.status === "fulfilled" ? portfolioExposure.value : null,
+    portfolioPnlSummary: portfolioPnlSummary.status === "fulfilled" ? portfolioPnlSummary.value : null,
     errors,
   };
 }

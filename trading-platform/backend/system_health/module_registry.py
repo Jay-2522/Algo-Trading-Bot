@@ -13,6 +13,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "account_allocation", "route": "/accounts/allocation/status"},
     {"name": "news", "route": "/news/status"},
     {"name": "orchestration", "route": "/orchestration/status"},
+    {"name": "phase3_readiness", "route": "/phase3/status"},
     {"name": "backtesting", "route": "/backtesting/status"},
     {"name": "advanced_historical_replay", "route": "/replay/status"},
     {"name": "broker_compatibility", "route": "/brokers/status"},

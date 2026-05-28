@@ -24,6 +24,7 @@ REQUIRED_GET_ROUTES = {
     "/accounts/allocation/status",
     "/news/status",
     "/orchestration/status",
+    "/phase3/status",
     "/backtesting/status",
     "/replay/status",
     "/brokers/status",

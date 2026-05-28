@@ -817,6 +817,17 @@ python tests/phase3_day19_verification.py
 
 Phase 3 Day 19 adds centralized monitoring and alerting. It tracks module health, system snapshots, execution queue summaries, webhook/security metrics, broker feed health, and alert acknowledgement through `/monitoring/status`, `/monitoring/system-health`, `/monitoring/modules`, `/monitoring/execution`, `/monitoring/webhooks`, `/monitoring/brokers`, and `/monitoring/alerts`.
 
+## Run Phase 3 Day 20 / Full Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day19_verification.py
+python tests/phase3_day20_verification.py
+python tests/phase3_full_verification.py
+```
+
+Phase 3 Day 20 adds integration hardening and delivery readiness. It exposes `/phase3/status`, `/phase3/modules`, `/phase3/routes`, `/phase3/pipeline`, `/phase3/safety-audit`, and `/phase3/client-readiness`, validating the full simulation-only chain from TradingView signal to simulated lifecycle and monitoring.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

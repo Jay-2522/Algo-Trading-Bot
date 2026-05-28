@@ -18,6 +18,7 @@ from backend.api.monitoring_routes import router as monitoring_router
 from backend.api.mt5_routes import router as mt5_router
 from backend.api.news_routes import router as news_router
 from backend.api.orchestration_routes import router as orchestration_router
+from backend.api.phase3_readiness_routes import router as phase3_readiness_router
 from backend.api.risk_routes import router as risk_router
 from backend.api.replay_routes import router as replay_router
 from backend.api.strategy_routes import router as strategy_router
@@ -90,6 +91,7 @@ app.include_router(database_router)
 app.include_router(ai_router)
 app.include_router(news_router)
 app.include_router(orchestration_router)
+app.include_router(phase3_readiness_router)
 app.include_router(backtesting_router)
 app.include_router(replay_router)
 app.include_router(broker_compatibility_router)

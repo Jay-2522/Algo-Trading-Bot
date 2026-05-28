@@ -24,6 +24,9 @@ const emptyBundle: DashboardBundle = {
   queueItems: [],
   lifecycleAuditEvents: [],
   webhookSecurityEvents: [],
+  controlStatus: null,
+  safetyState: null,
+  controlAuditEvents: [],
   errors: [],
 };
 
@@ -60,6 +63,7 @@ export function useDashboardData(refreshIntervalMs = 10000) {
         webhookSecurityEvents: nextBundle.webhookSecurityEvents.length
           ? nextBundle.webhookSecurityEvents
           : previous.webhookSecurityEvents,
+        controlAuditEvents: nextBundle.controlAuditEvents.length ? nextBundle.controlAuditEvents : previous.controlAuditEvents,
         errors: nextBundle.errors,
       }));
       setLastError(nextBundle.errors.length ? nextBundle.errors.join("; ") : null);

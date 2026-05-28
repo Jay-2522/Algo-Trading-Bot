@@ -56,6 +56,9 @@ export type DashboardBundle = {
   queueItems: Array<Record<string, unknown>>;
   lifecycleAuditEvents: Array<Record<string, unknown>>;
   webhookSecurityEvents: Array<Record<string, unknown>>;
+  controlStatus: Record<string, unknown> | null;
+  safetyState: Record<string, unknown> | null;
+  controlAuditEvents: Array<Record<string, unknown>>;
   errors: string[];
 };
 
@@ -79,6 +82,9 @@ const endpoints = {
   queueItems: "/execution-queue/items?limit=20",
   lifecycleAuditEvents: "/execution-queue/lifecycle/audit-events?limit=20",
   webhookSecurityEvents: "/webhooks/security/events?limit=20",
+  controlStatus: "/control-center/status",
+  safetyState: "/control-center/safety-state",
+  controlAuditEvents: "/control-center/audit-events?limit=20",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -92,6 +98,20 @@ function buildApiUrl(endpoint: string): string {
 async function fetchJson<T>(endpoint: string): Promise<T> {
   const url = buildApiUrl(endpoint);
   const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`${endpoint} returned ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function postJson<T>(endpoint: string, payload: Record<string, unknown> = {}): Promise<T> {
+  const url = buildApiUrl(endpoint);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
   if (!response.ok) {
     throw new Error(`${endpoint} returned ${response.status}`);
   }
@@ -126,6 +146,9 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<Array<Record<string, unknown>>>(endpoints.queueItems),
     fetchJson<Array<Record<string, unknown>>>(endpoints.lifecycleAuditEvents),
     fetchJson<Array<Record<string, unknown>>>(endpoints.webhookSecurityEvents),
+    fetchJson<Record<string, unknown>>(endpoints.controlStatus),
+    fetchJson<Record<string, unknown>>(endpoints.safetyState),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.controlAuditEvents),
   ]);
 
   const [
@@ -148,6 +171,9 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     queueItems,
     lifecycleAuditEvents,
     webhookSecurityEvents,
+    controlStatus,
+    safetyState,
+    controlAuditEvents,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -173,6 +199,29 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     queueItems: queueItems.status === "fulfilled" ? queueItems.value : [],
     lifecycleAuditEvents: lifecycleAuditEvents.status === "fulfilled" ? lifecycleAuditEvents.value : [],
     webhookSecurityEvents: webhookSecurityEvents.status === "fulfilled" ? webhookSecurityEvents.value : [],
+    controlStatus: controlStatus.status === "fulfilled" ? controlStatus.value : null,
+    safetyState: safetyState.status === "fulfilled" ? safetyState.value : null,
+    controlAuditEvents: controlAuditEvents.status === "fulfilled" ? controlAuditEvents.value : [],
     errors,
   };
+}
+
+export function pauseSimulationQueue(reason: string) {
+  return postJson<Record<string, unknown>>("/control-center/queue/pause", { reason });
+}
+
+export function resumeSimulationQueue(reason: string) {
+  return postJson<Record<string, unknown>>("/control-center/queue/resume", { reason });
+}
+
+export function emergencyStopPlaceholder(reason: string) {
+  return postJson<Record<string, unknown>>("/control-center/emergency-stop-placeholder", { reason });
+}
+
+export function cancelSimulationQueueItem(queueId: string, reason: string) {
+  return postJson<Record<string, unknown>>(`/control-center/queue/${encodeURIComponent(queueId)}/cancel`, { reason });
+}
+
+export function acknowledgeMonitoringAlert(alertId: string, reason: string) {
+  return postJson<Record<string, unknown>>(`/control-center/alerts/${encodeURIComponent(alertId)}/acknowledge`, { reason });
 }

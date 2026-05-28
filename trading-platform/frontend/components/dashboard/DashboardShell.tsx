@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { AccountStatusPanel } from "./AccountStatusPanel";
 import { AutoRefreshControl } from "./AutoRefreshControl";
 import { BrokerStatusPanel } from "./BrokerStatusPanel";
+import { ControlAuditPanel } from "./ControlAuditPanel";
 import { DashboardAlertsPanel } from "./DashboardAlertsPanel";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
@@ -16,7 +17,9 @@ import { LiveBrokerPanel } from "./LiveBrokerPanel";
 import { LiveExecutionQueuePanel } from "./LiveExecutionQueuePanel";
 import { LiveMonitoringPanel } from "./LiveMonitoringPanel";
 import { LiveWebhookPanel } from "./LiveWebhookPanel";
+import { ManualControlPanel } from "./ManualControlPanel";
 import { RecentSignalsPanel } from "./RecentSignalsPanel";
+import { SafetyLockPanel } from "./SafetyLockPanel";
 import { SystemEventStream } from "./SystemEventStream";
 import { TradeLifecycleTimeline } from "./TradeLifecycleTimeline";
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -87,6 +90,18 @@ export function DashboardShell() {
         </section>
 
         <DashboardStatusGrid cards={cards} loading={loading} />
+
+        <section className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+          <ManualControlPanel
+            alerts={alerts}
+            onActionComplete={() => refresh()}
+            queueItems={bundle.queueItems}
+            safetyState={bundle.safetyState}
+          />
+          <SafetyLockPanel safetyState={bundle.safetyState} />
+        </section>
+
+        <ControlAuditPanel events={bundle.controlAuditEvents} />
 
         <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           <LiveBrokerPanel brokerStatus={bundle.brokerStatus} observationStatus={bundle.brokerObservationStatus} />

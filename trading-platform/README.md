@@ -789,6 +789,25 @@ python tests/phase3_day16_verification.py
 
 Phase 3 Day 16 adds account allocation and risk distribution previews. It maintains simulated account risk profiles, balance snapshots, symbol risk rules, broker lot constraints, exposure checks, and allocation previews through `/accounts/allocation/status`, `/accounts/risk-profiles`, `/accounts/balance-snapshots`, `/accounts/symbol-rules/{symbol}`, and `/accounts/allocation/preview`.
 
+## Run Phase 3 Day 17 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day17_verification.py
+```
+
+Phase 3 Day 17 adds the execution queue foundation. It converts approved allocation previews into non-executing execution intents, validates demo-queue readiness, stores queue items, supports cancellation, and exposes `/execution-queue/status`, `/execution-queue/items`, `/execution-queue/items/{queue_id}`, `/execution-queue/enqueue-preview`, and `/execution-queue/items/{queue_id}/cancel`.
+
+## Run Phase 3 Day 18 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day17_verification.py
+python tests/phase3_day18_verification.py
+```
+
+Phase 3 Day 18 adds the simulated execution lifecycle emulator. It processes execution queue items without broker orders, simulates acceptance/fill/rejection, tracks lifecycle states, records audit events, reconciles simulated fills, and exposes `/execution-queue/lifecycle/status`, `/execution-queue/lifecycle/items`, `/execution-queue/lifecycle/audit-events`, `/execution-queue/items/{queue_id}/simulate`, and `/execution-queue/simulate-latest`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

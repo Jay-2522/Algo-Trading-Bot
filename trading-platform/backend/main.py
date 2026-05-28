@@ -11,6 +11,7 @@ from backend.api.backtesting_routes import router as backtesting_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.database_routes import router as database_router
 from backend.api.execution_routes import router as execution_router
+from backend.api.execution_queue_routes import router as execution_queue_router
 from backend.api.institutional_routes import router as institutional_router
 from backend.api.market_data_routes import router as market_data_router
 from backend.api.mt5_routes import router as mt5_router
@@ -81,6 +82,7 @@ app.include_router(account_routing_router)
 app.include_router(strategy_router)
 app.include_router(risk_router)
 app.include_router(execution_router)
+app.include_router(execution_queue_router)
 app.include_router(mt5_router)
 app.include_router(database_router)
 app.include_router(ai_router)

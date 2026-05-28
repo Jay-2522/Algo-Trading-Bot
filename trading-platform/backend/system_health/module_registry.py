@@ -4,6 +4,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "strategy", "route": "/strategy/session"},
     {"name": "risk", "route": "/risk/status"},
     {"name": "execution", "route": "/execution/status"},
+    {"name": "execution_queue", "route": "/execution-queue/status"},
     {"name": "mt5", "route": "/mt5/status"},
     {"name": "database", "route": "/database/status"},
     {"name": "ai", "route": "/ai/status"},

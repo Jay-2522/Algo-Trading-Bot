@@ -11,6 +11,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "ai", "route": "/ai/status"},
     {"name": "account_routing", "route": "/accounts/status"},
     {"name": "account_allocation", "route": "/accounts/allocation/status"},
+    {"name": "vps_dashboard_backend", "route": "/dashboard/status"},
     {"name": "news", "route": "/news/status"},
     {"name": "orchestration", "route": "/orchestration/status"},
     {"name": "phase3_readiness", "route": "/phase3/status"},

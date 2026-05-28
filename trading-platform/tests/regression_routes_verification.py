@@ -22,6 +22,7 @@ REQUIRED_GET_ROUTES = {
     "/ai/status",
     "/accounts/status",
     "/accounts/allocation/status",
+    "/dashboard/status",
     "/news/status",
     "/orchestration/status",
     "/phase3/status",

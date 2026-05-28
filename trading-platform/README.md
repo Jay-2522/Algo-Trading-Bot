@@ -828,6 +828,15 @@ python tests/phase3_full_verification.py
 
 Phase 3 Day 20 adds integration hardening and delivery readiness. It exposes `/phase3/status`, `/phase3/modules`, `/phase3/routes`, `/phase3/pipeline`, `/phase3/safety-audit`, and `/phase3/client-readiness`, validating the full simulation-only chain from TradingView signal to simulated lifecycle and monitoring.
 
+## Run Phase 4 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day1_verification.py
+```
+
+Phase 4 Day 1 begins the VPS dashboard backend foundation. It aggregates existing backend services into dashboard-ready status, overview, card, and summary outputs through `/dashboard/status`, `/dashboard/overview`, `/dashboard/cards`, and `/dashboard/summary`. This is backend context only; frontend UI and manual safety controls come later.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

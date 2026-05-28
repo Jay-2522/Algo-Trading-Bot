@@ -16,22 +16,22 @@ export function LiveWebhookPanel({
   const decisions = numberValue(orchestrationStatus, "decisions_stored");
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-950/50 p-5 shadow-xl shadow-black/15 backdrop-blur-xl">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">Live Webhook Panel</p>
-          <h2 className="mt-1 text-lg font-bold text-white">TradingView Intake</h2>
+    <section className="min-h-64 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/50 p-5 shadow-xl shadow-black/15 backdrop-blur-xl">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-[0.68rem] uppercase leading-relaxed tracking-[0.2em] text-slate-500">Live Webhook Panel</p>
+          <h2 className="mt-1 break-words text-lg font-bold leading-relaxed text-white">TradingView Intake</h2>
         </div>
         <StatusBadge label={String(webhookStatus?.status ?? "loading")} tone="info" />
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <p className="text-xs text-slate-500">Events stored</p>
-          <strong className="mt-1 block text-2xl text-white">{events}</strong>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="break-words text-xs leading-relaxed text-slate-500">Events stored</p>
+          <strong className="mt-1 block break-words text-2xl leading-tight text-white">{events}</strong>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <p className="text-xs text-slate-500">Orchestration decisions</p>
-          <strong className="mt-1 block text-2xl text-white">{decisions}</strong>
+        <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="break-words text-xs leading-relaxed text-slate-500">Orchestration decisions</p>
+          <strong className="mt-1 block break-words text-2xl leading-tight text-white">{decisions}</strong>
         </div>
       </div>
     </section>

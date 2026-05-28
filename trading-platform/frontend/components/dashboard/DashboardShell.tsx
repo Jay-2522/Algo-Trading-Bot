@@ -84,7 +84,7 @@ export function DashboardShell() {
 
         <DashboardStatusGrid cards={cards} loading={loading} />
 
-        <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           <LiveBrokerPanel brokerStatus={bundle.brokerStatus} observationStatus={bundle.brokerObservationStatus} />
           <LiveAccountRoutingPanel accountStatus={bundle.accountStatus} allocationStatus={bundle.allocationStatus} />
           <LiveExecutionQueuePanel executionStatus={bundle.executionStatus} lifecycleStatus={bundle.lifecycleStatus} />
@@ -92,14 +92,14 @@ export function DashboardShell() {
           <LiveMonitoringPanel alerts={alerts} phase3Status={bundle.phase3Status} />
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-12">
-          <div className="xl:col-span-4">
+        <section className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          <div className="min-w-0">
             <BrokerStatusPanel status={bundle.brokerStatus} />
           </div>
-          <div className="xl:col-span-4">
+          <div className="min-w-0">
             <AccountStatusPanel status={bundle.accountStatus} />
           </div>
-          <div className="xl:col-span-4">
+          <div className="min-w-0 lg:col-span-2 2xl:col-span-1">
             <ExecutionSafetyPanel status={bundle.executionStatus} />
           </div>
         </section>

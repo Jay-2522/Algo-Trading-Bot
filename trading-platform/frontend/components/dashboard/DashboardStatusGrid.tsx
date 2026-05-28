@@ -4,7 +4,7 @@ import { DashboardCard } from "./DashboardCard";
 export function DashboardStatusGrid({ cards, loading }: { cards: DashboardCardData[]; loading: boolean }) {
   if (loading && cards.length === 0) {
     return (
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         {Array.from({ length: 8 }, (_, index) => (
           <div
             className="h-40 animate-pulse rounded-3xl border border-white/10 bg-slate-900/55"
@@ -24,7 +24,7 @@ export function DashboardStatusGrid({ cards, loading }: { cards: DashboardCardDa
   }
 
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Dashboard status cards">
+    <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" aria-label="Dashboard status cards">
       {cards.map((card) => (
         <DashboardCard key={card.card_id} card={card} />
       ))}

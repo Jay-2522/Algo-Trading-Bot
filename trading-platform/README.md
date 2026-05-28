@@ -872,6 +872,28 @@ npm run build
 
 Phase 4 Day 4 adds live dashboard data panels and safe auto-refresh. The dashboard polls backend status every 10 seconds by default, supports pause/resume and manual refresh, preserves previous data during partial backend failures, and displays live broker, account routing, execution queue, webhook, monitoring, and Phase 3 readiness state.
 
+## Run Phase 4 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day6_verification.py
+cd frontend
+npm run build
+```
+
+Phase 4 Day 6 adds the simulation-only manual override and safety control panel. Backend routes under `/control-center` expose safety lock state, queue pause/resume, queue-item cancellation, alert acknowledgement, emergency-stop placeholder state, and audit events. The dashboard now includes manual controls, a safety lock panel, and an operator audit trail while keeping live and broker execution disabled.
+
+## Run Phase 4 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day7_verification.py
+cd frontend
+npm run build
+```
+
+Phase 4 Day 7 adds client demo mode and an executive overview dashboard section. Backend routes under `/demo-mode` summarize supported markets, supported brokers, TradingView-to-simulation pipeline readiness, executive KPI cards, safety posture, and next production steps. The frontend now presents this as a polished top-level client demo section while preserving simulation-only behavior.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

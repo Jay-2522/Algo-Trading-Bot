@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { AccountStatusPanel } from "./AccountStatusPanel";
 import { AutoRefreshControl } from "./AutoRefreshControl";
 import { BrokerStatusPanel } from "./BrokerStatusPanel";
+import { ClientDemoModePanel } from "./ClientDemoModePanel";
 import { ControlAuditPanel } from "./ControlAuditPanel";
 import { DashboardAlertsPanel } from "./DashboardAlertsPanel";
 import { DashboardHeader } from "./DashboardHeader";
@@ -53,6 +54,8 @@ export function DashboardShell() {
         />
 
         <DashboardSafetyBanner />
+
+        <ClientDemoModePanel overview={bundle.demoOverview} kpis={bundle.demoKpis} />
 
         {lastError || bundle.errors.length > 0 ? (
           <section className="rounded-3xl border border-rose-300/20 bg-rose-400/10 p-5 text-sm text-rose-100">

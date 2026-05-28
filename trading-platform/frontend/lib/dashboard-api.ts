@@ -36,6 +36,27 @@ export type DashboardSummary = {
   live_execution_enabled: boolean;
 };
 
+export type ExecutiveKpiData = {
+  label: string;
+  value: string;
+  status: string;
+  description: string;
+};
+
+export type ClientDemoOverviewData = {
+  system_status: string;
+  client_mvp_status: string;
+  supported_markets: string[];
+  supported_brokers: string[];
+  pipeline_summary: string[];
+  safety_summary: string[];
+  kpis: ExecutiveKpiData[];
+  next_steps: string[];
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+  timestamp?: string;
+};
+
 export type DashboardBundle = {
   status: DashboardStatus | null;
   overview: DashboardOverview | null;
@@ -59,6 +80,10 @@ export type DashboardBundle = {
   controlStatus: Record<string, unknown> | null;
   safetyState: Record<string, unknown> | null;
   controlAuditEvents: Array<Record<string, unknown>>;
+  demoStatus: Record<string, unknown> | null;
+  demoOverview: ClientDemoOverviewData | null;
+  demoKpis: ExecutiveKpiData[];
+  demoPipelineSummary: Record<string, unknown> | null;
   errors: string[];
 };
 
@@ -85,6 +110,10 @@ const endpoints = {
   controlStatus: "/control-center/status",
   safetyState: "/control-center/safety-state",
   controlAuditEvents: "/control-center/audit-events?limit=20",
+  demoStatus: "/demo-mode/status",
+  demoOverview: "/demo-mode/overview",
+  demoKpis: "/demo-mode/kpis",
+  demoPipelineSummary: "/demo-mode/pipeline-summary",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -149,6 +178,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<Record<string, unknown>>(endpoints.controlStatus),
     fetchJson<Record<string, unknown>>(endpoints.safetyState),
     fetchJson<Array<Record<string, unknown>>>(endpoints.controlAuditEvents),
+    fetchJson<Record<string, unknown>>(endpoints.demoStatus),
+    fetchJson<ClientDemoOverviewData>(endpoints.demoOverview),
+    fetchJson<ExecutiveKpiData[]>(endpoints.demoKpis),
+    fetchJson<Record<string, unknown>>(endpoints.demoPipelineSummary),
   ]);
 
   const [
@@ -174,6 +207,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     controlStatus,
     safetyState,
     controlAuditEvents,
+    demoStatus,
+    demoOverview,
+    demoKpis,
+    demoPipelineSummary,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -202,6 +239,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     controlStatus: controlStatus.status === "fulfilled" ? controlStatus.value : null,
     safetyState: safetyState.status === "fulfilled" ? safetyState.value : null,
     controlAuditEvents: controlAuditEvents.status === "fulfilled" ? controlAuditEvents.value : [],
+    demoStatus: demoStatus.status === "fulfilled" ? demoStatus.value : null,
+    demoOverview: demoOverview.status === "fulfilled" ? demoOverview.value : null,
+    demoKpis: demoKpis.status === "fulfilled" ? demoKpis.value : [],
+    demoPipelineSummary: demoPipelineSummary.status === "fulfilled" ? demoPipelineSummary.value : null,
     errors,
   };
 }

@@ -808,6 +808,15 @@ python tests/phase3_day18_verification.py
 
 Phase 3 Day 18 adds the simulated execution lifecycle emulator. It processes execution queue items without broker orders, simulates acceptance/fill/rejection, tracks lifecycle states, records audit events, reconciles simulated fills, and exposes `/execution-queue/lifecycle/status`, `/execution-queue/lifecycle/items`, `/execution-queue/lifecycle/audit-events`, `/execution-queue/items/{queue_id}/simulate`, and `/execution-queue/simulate-latest`.
 
+## Run Phase 3 Day 19 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase3_day19_verification.py
+```
+
+Phase 3 Day 19 adds centralized monitoring and alerting. It tracks module health, system snapshots, execution queue summaries, webhook/security metrics, broker feed health, and alert acknowledgement through `/monitoring/status`, `/monitoring/system-health`, `/monitoring/modules`, `/monitoring/execution`, `/monitoring/webhooks`, `/monitoring/brokers`, and `/monitoring/alerts`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

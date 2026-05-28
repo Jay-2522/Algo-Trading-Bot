@@ -8,6 +8,7 @@ from backend.dashboard.dashboard_models import DashboardCard
 from backend.execution_queue.execution_queue_service import ExecutionQueueService
 from backend.monitoring.monitoring_service import MonitoringService
 from backend.phase3_readiness.phase3_readiness_service import Phase3ReadinessService
+from backend.utils.json_safety import to_json_safe
 from backend.webhooks.webhook_monitoring_service import WebhookMonitoringService
 
 
@@ -31,11 +32,12 @@ class DashboardCardService:
         self.account_service = account_service or AccountRoutingService()
 
     def _as_dict(self, value: Any) -> dict[str, Any]:
-        if isinstance(value, BaseModel):
-            return value.model_dump(mode="json")
-        if isinstance(value, dict):
-            return value
-        return {"value": value}
+        safe_value = to_json_safe(value)
+        if isinstance(safe_value, dict):
+            safe_value.setdefault("simulation_only", True)
+            safe_value.setdefault("live_execution_enabled", False)
+            return safe_value
+        return {"value": safe_value, "simulation_only": True, "live_execution_enabled": False}
 
     def _safe_card(
         self,

@@ -16,6 +16,8 @@ class DashboardCard(BaseModel):
     subtitle: str
     severity: Literal["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"] = "INFO"
     metadata: dict[str, Any] = Field(default_factory=dict)
+    simulation_only: bool = True
+    live_execution_enabled: bool = False
     timestamp: datetime = Field(default_factory=utc_now)
 
 

@@ -7,6 +7,7 @@ from backend.dashboard.dashboard_models import DashboardOverview, DashboardStatu
 from backend.execution_queue.execution_queue_service import ExecutionQueueService
 from backend.monitoring.monitoring_service import MonitoringService
 from backend.phase3_readiness.phase3_readiness_service import Phase3ReadinessService
+from backend.utils.json_safety import safe_error_payload, to_json_safe
 from backend.webhooks.webhook_monitoring_service import WebhookMonitoringService
 
 
@@ -30,19 +31,14 @@ class DashboardStatusBuilder:
     def _safe_collect(self, name: str, collector: Callable[[], Any]) -> dict[str, Any]:
         try:
             value = collector()
-            if isinstance(value, BaseModel):
-                return value.model_dump(mode="json")
-            if isinstance(value, dict):
-                return value
-            return {"status": "available", "value": value, "simulation_only": True, "live_execution_enabled": False}
+            safe_value = to_json_safe(value)
+            if isinstance(safe_value, dict):
+                safe_value.setdefault("simulation_only", True)
+                safe_value.setdefault("live_execution_enabled", False)
+                return safe_value
+            return {"status": "available", "value": safe_value, "simulation_only": True, "live_execution_enabled": False}
         except Exception as exc:
-            return {
-                "status": "unavailable",
-                "module": name,
-                "message": f"{name} dashboard source unavailable: {exc}",
-                "simulation_only": True,
-                "live_execution_enabled": False,
-            }
+            return safe_error_payload(f"{name} dashboard source unavailable: {exc}", name)
 
     def build_status(self) -> DashboardStatusResponse:
         phase3 = self._safe_collect("phase3", self.phase3_service.get_status)
@@ -68,7 +64,7 @@ class DashboardStatusBuilder:
         webhook = self._safe_collect("webhook", self.webhook_service.get_status)
         execution = self._safe_collect("execution_queue", self.execution_service.get_status)
         system = self._safe_collect("system_health", self.monitoring_service.get_system_health)
-        alerts = self._safe_collect("alerts", lambda: [alert.model_dump(mode="json") for alert in self.monitoring_service.get_alerts(25)])
+        alerts = to_json_safe(self.monitoring_service.get_alerts(25))
         alert_list = alerts if isinstance(alerts, list) else alerts.get("value", [])
         cards = DashboardCardService(
             phase3_service=self.phase3_service,

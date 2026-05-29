@@ -947,6 +947,17 @@ python tests/phase5_day2_verification.py
 
 Phase 5 Day 2 adds the first controlled end-to-end demo execution flow. `/demo-execution/eligible-queue-items` lists EURUSD-only queue items that meet the tiny-lot demo rules, `/demo-execution/execute-latest-eligible` submits the newest eligible item through the guarded demo executor, and `/demo-execution/audit-events` exposes request, blocked, order-sent, filled, rejected, and failed-safe audit events. Duplicate queue execution is blocked, lifecycle states are updated, and live execution remains disabled.
 
+## Run Phase 5 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+python tests/phase5_day2_verification.py
+python tests/phase5_day3_verification.py
+```
+
+Phase 5 Day 3 adds multi-account MT5 demo routing. Backend routes under `/multi-account-execution` preview STARTRADER/FxPro/Vantage demo account plans, enforce EURUSD-only 0.01-lot-per-account rules, block XAUUSD and NIFTY50, prevent duplicate per-account execution attempts, and store per-account batch results. Any MT5 submission remains delegated through the existing guarded demo executor only.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

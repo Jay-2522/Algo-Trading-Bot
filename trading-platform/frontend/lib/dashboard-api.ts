@@ -121,6 +121,29 @@ export type OperationalHealthSummaryData = {
   live_execution_enabled: boolean;
 };
 
+export type DeliveryReadinessData = {
+  overall_score: number;
+  dashboard_ready: boolean;
+  orchestration_ready: boolean;
+  monitoring_ready: boolean;
+  broker_ready: boolean;
+  portfolio_ready: boolean;
+  control_center_ready: boolean;
+  simulation_ready: boolean;
+  deployment_ready: boolean;
+  client_demo_ready: boolean;
+  remaining_items: string[];
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+  timestamp?: string;
+};
+
+export type AcceptanceChecklistItemData = {
+  label: string;
+  complete: boolean;
+  status: string;
+};
+
 export type DashboardBundle = {
   status: DashboardStatus | null;
   overview: DashboardOverview | null;
@@ -158,6 +181,10 @@ export type DashboardBundle = {
   operationalModules: OperationalModuleStatusData[];
   operationalWarnings: WarningSummaryData[];
   operationalHealthScore: Record<string, unknown> | null;
+  clientAcceptanceStatus: Record<string, unknown> | null;
+  deliveryReadiness: DeliveryReadinessData | null;
+  acceptanceChecklist: AcceptanceChecklistItemData[];
+  remainingDeliveryItems: Record<string, unknown> | null;
   errors: string[];
 };
 
@@ -198,6 +225,10 @@ const endpoints = {
   operationalModules: "/operational-intelligence/modules",
   operationalWarnings: "/operational-intelligence/warnings",
   operationalHealthScore: "/operational-intelligence/health-score",
+  clientAcceptanceStatus: "/client-acceptance/status",
+  deliveryReadiness: "/client-acceptance/readiness",
+  acceptanceChecklist: "/client-acceptance/checklist",
+  remainingDeliveryItems: "/client-acceptance/remaining-items",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -276,6 +307,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<OperationalModuleStatusData[]>(endpoints.operationalModules),
     fetchJson<WarningSummaryData[]>(endpoints.operationalWarnings),
     fetchJson<Record<string, unknown>>(endpoints.operationalHealthScore),
+    fetchJson<Record<string, unknown>>(endpoints.clientAcceptanceStatus),
+    fetchJson<DeliveryReadinessData>(endpoints.deliveryReadiness),
+    fetchJson<AcceptanceChecklistItemData[]>(endpoints.acceptanceChecklist),
+    fetchJson<Record<string, unknown>>(endpoints.remainingDeliveryItems),
   ]);
 
   const [
@@ -315,6 +350,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     operationalModules,
     operationalWarnings,
     operationalHealthScore,
+    clientAcceptanceStatus,
+    deliveryReadiness,
+    acceptanceChecklist,
+    remainingDeliveryItems,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -357,6 +396,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     operationalModules: operationalModules.status === "fulfilled" ? operationalModules.value : [],
     operationalWarnings: operationalWarnings.status === "fulfilled" ? operationalWarnings.value : [],
     operationalHealthScore: operationalHealthScore.status === "fulfilled" ? operationalHealthScore.value : null,
+    clientAcceptanceStatus: clientAcceptanceStatus.status === "fulfilled" ? clientAcceptanceStatus.value : null,
+    deliveryReadiness: deliveryReadiness.status === "fulfilled" ? deliveryReadiness.value : null,
+    acceptanceChecklist: acceptanceChecklist.status === "fulfilled" ? acceptanceChecklist.value : [],
+    remainingDeliveryItems: remainingDeliveryItems.status === "fulfilled" ? remainingDeliveryItems.value : null,
     errors,
   };
 }

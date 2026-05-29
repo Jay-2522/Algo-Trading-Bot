@@ -916,6 +916,18 @@ npm run build
 
 Phase 4 Day 9 adds the Operational Intelligence Center. Backend routes under `/operational-intelligence` aggregate health score, module status, warnings, alerts, broker readiness, webhook posture, queue health, control center state, portfolio analytics, and safety posture. The dashboard now includes a health score card, monitored module grid, warning center, and operational insights.
 
+## Run Phase 4 Day 10 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day9_verification.py
+python tests/phase4_day10_verification.py
+cd frontend
+npm run build
+```
+
+Phase 4 Day 10 adds the client acceptance and delivery readiness layer. Backend routes under `/client-acceptance` expose final readiness score, checklist, and remaining production items. The dashboard now includes a client delivery readiness section with score visualization, completed systems, deployment/demo readiness badges, remaining work, and safety confirmation.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

@@ -12,6 +12,7 @@ import { DashboardAlertsPanel } from "./DashboardAlertsPanel";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
 import { DashboardStatusGrid } from "./DashboardStatusGrid";
+import { DeliveryReadinessPanel } from "./DeliveryReadinessPanel";
 import { ExecutionSafetyPanel } from "./ExecutionSafetyPanel";
 import { ExposureSummaryPanel } from "./ExposureSummaryPanel";
 import { LiveActivityFeed } from "./LiveActivityFeed";
@@ -59,6 +60,8 @@ export function DashboardShell() {
         />
 
         <DashboardSafetyBanner />
+
+        <DeliveryReadinessPanel checklist={bundle.acceptanceChecklist} readiness={bundle.deliveryReadiness} />
 
         <ClientDemoModePanel overview={bundle.demoOverview} kpis={bundle.demoKpis} />
 

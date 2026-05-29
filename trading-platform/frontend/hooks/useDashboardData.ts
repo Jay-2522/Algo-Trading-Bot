@@ -49,6 +49,10 @@ const emptyBundle: DashboardBundle = {
   executionDashboardOverview: null,
   executionDashboardCards: [],
   executionDashboardSummary: null,
+  openPositions: [],
+  recentTrades: [],
+  tradePerformance: null,
+  tradeRiskAnalytics: null,
   errors: [],
 };
 
@@ -94,6 +98,8 @@ export function useDashboardData(refreshIntervalMs = 10000) {
         executionDashboardCards: nextBundle.executionDashboardCards.length
           ? nextBundle.executionDashboardCards
           : previous.executionDashboardCards,
+        openPositions: nextBundle.openPositions.length ? nextBundle.openPositions : previous.openPositions,
+        recentTrades: nextBundle.recentTrades.length ? nextBundle.recentTrades : previous.recentTrades,
         errors: nextBundle.errors,
       }));
       setLastError(nextBundle.errors.length ? nextBundle.errors.join("; ") : null);

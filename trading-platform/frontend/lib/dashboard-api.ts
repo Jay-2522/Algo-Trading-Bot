@@ -246,6 +246,10 @@ export type DashboardBundle = {
   executionDashboardOverview: ExecutionDashboardOverviewData | null;
   executionDashboardCards: ExecutionDashboardCardData[];
   executionDashboardSummary: ExecutionDashboardSummaryData | null;
+  openPositions: Array<Record<string, unknown>>;
+  recentTrades: Array<Record<string, unknown>>;
+  tradePerformance: Record<string, unknown> | null;
+  tradeRiskAnalytics: Record<string, unknown> | null;
   errors: string[];
 };
 
@@ -294,6 +298,10 @@ const endpoints = {
   executionDashboardOverview: "/execution-dashboard/overview",
   executionDashboardCards: "/execution-dashboard/cards",
   executionDashboardSummary: "/execution-dashboard/summary",
+  openPositions: "/mt5/positions",
+  recentTrades: "/trade-journal/recent?limit=8",
+  tradePerformance: "/trade-journal/overall-performance",
+  tradeRiskAnalytics: "/trade-journal/risk-analytics",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -380,6 +388,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<ExecutionDashboardOverviewData>(endpoints.executionDashboardOverview),
     fetchJson<ExecutionDashboardCardData[]>(endpoints.executionDashboardCards),
     fetchJson<ExecutionDashboardSummaryData>(endpoints.executionDashboardSummary),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.openPositions),
+    fetchJson<Array<Record<string, unknown>>>(endpoints.recentTrades),
+    fetchJson<Record<string, unknown>>(endpoints.tradePerformance),
+    fetchJson<Record<string, unknown>>(endpoints.tradeRiskAnalytics),
   ]);
 
   const [
@@ -427,6 +439,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     executionDashboardOverview,
     executionDashboardCards,
     executionDashboardSummary,
+    openPositions,
+    recentTrades,
+    tradePerformance,
+    tradeRiskAnalytics,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -477,6 +493,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     executionDashboardOverview: executionDashboardOverview.status === "fulfilled" ? executionDashboardOverview.value : null,
     executionDashboardCards: executionDashboardCards.status === "fulfilled" ? executionDashboardCards.value : [],
     executionDashboardSummary: executionDashboardSummary.status === "fulfilled" ? executionDashboardSummary.value : null,
+    openPositions: openPositions.status === "fulfilled" ? openPositions.value : [],
+    recentTrades: recentTrades.status === "fulfilled" ? recentTrades.value : [],
+    tradePerformance: tradePerformance.status === "fulfilled" ? tradePerformance.value : null,
+    tradeRiskAnalytics: tradeRiskAnalytics.status === "fulfilled" ? tradeRiskAnalytics.value : null,
     errors,
   };
 }

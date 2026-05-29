@@ -8,6 +8,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "mt5", "route": "/mt5/status"},
     {"name": "monitoring", "route": "/monitoring/status"},
     {"name": "control_center", "route": "/control-center/status"},
+    {"name": "mt5_demo_execution_bridge", "route": "/demo-execution/status"},
     {"name": "database", "route": "/database/status"},
     {"name": "ai", "route": "/ai/status"},
     {"name": "account_routing", "route": "/accounts/status"},

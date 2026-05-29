@@ -20,6 +20,7 @@ REQUIRED_GET_ROUTES = {
     "/monitoring/status",
     "/client-acceptance/status",
     "/control-center/status",
+    "/demo-execution/status",
     "/demo-mode/status",
     "/database/status",
     "/ai/status",

@@ -928,6 +928,15 @@ npm run build
 
 Phase 4 Day 10 adds the client acceptance and delivery readiness layer. Backend routes under `/client-acceptance` expose final readiness score, checklist, and remaining production items. The dashboard now includes a client delivery readiness section with score visualization, completed systems, deployment/demo readiness badges, remaining work, and safety confirmation.
 
+## Run Phase 5 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+```
+
+Phase 5 Day 1 adds the MT5 demo execution bridge. Backend routes under `/demo-execution` verify demo-account status, guard execution queue items, build tiny EURUSD-only market requests, store demo execution results, and block safely whenever MT5 demo conditions are not satisfied. Live account execution remains disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

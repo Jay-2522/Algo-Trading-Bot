@@ -31,7 +31,14 @@ class XAUUSDStrategyEngine:
 
         confidence = self._confidence(session_context, indicator_context, liquidity_context, smc_context)
         action = "WAIT"
-        reason = "Waiting for complete XAUUSD confluence across trend, liquidity, SMC structure, session, and RSI."
+        reason = (
+            "Waiting for complete XAUUSD confluence. "
+            f"Liquidity sweep={liquidity_context.sweep_direction}, "
+            f"level={liquidity_context.active_sweep_level or 'NONE'}, "
+            f"quality={liquidity_context.sweep_quality}, "
+            f"confidence={liquidity_context.confidence}. "
+            "Future SMC confirmation is still required before any directional signal."
+        )
 
         if self._buy_conditions(session_context, indicator_context, liquidity_context, smc_context):
             action = "BUY"
@@ -78,7 +85,7 @@ class XAUUSDStrategyEngine:
         if indicator_context.rsi is not None:
             score += 10.0
         if liquidity_context.sweep_direction != "NONE":
-            score += liquidity_context.confidence * 25.0
+            score += (liquidity_context.confidence / 100.0) * 25.0
         if smc_context.structure_bias != "NEUTRAL":
             score += smc_context.confidence * 20.0
 

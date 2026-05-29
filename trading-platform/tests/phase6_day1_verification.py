@@ -20,9 +20,11 @@ def verify_files() -> bool:
         "backend/strategy_engine/strategy_models.py",
         "backend/strategy_engine/market_session_service.py",
         "backend/strategy_engine/indicator_context_builder.py",
+        "backend/strategy_engine/liquidity_level_builder.py",
         "backend/strategy_engine/liquidity_sweep_detector.py",
         "backend/strategy_engine/smc_structure_detector.py",
         "backend/strategy_engine/xauusd_strategy_engine.py",
+        "backend/strategy_engine/sweep_strength_scorer.py",
         "backend/strategy_engine/strategy_signal_store.py",
         "backend/strategy_engine/strategy_service.py",
         "backend/api/strategy_routes.py",
@@ -81,6 +83,7 @@ def verify_safe_context_builders() -> bool:
             and indicator.warnings
             and liquidity.sweep_direction == "NONE"
             and liquidity.confidence == 0.0
+            and liquidity.sweep_quality == "NONE"
             and liquidity.warnings
             and smc.structure_bias == "NEUTRAL"
             and smc.confidence == 0.0
@@ -173,9 +176,11 @@ def verify_no_execution_call_added() -> bool:
         PROJECT_ROOT / "backend/strategy_engine/strategy_models.py",
         PROJECT_ROOT / "backend/strategy_engine/market_session_service.py",
         PROJECT_ROOT / "backend/strategy_engine/indicator_context_builder.py",
+        PROJECT_ROOT / "backend/strategy_engine/liquidity_level_builder.py",
         PROJECT_ROOT / "backend/strategy_engine/liquidity_sweep_detector.py",
         PROJECT_ROOT / "backend/strategy_engine/smc_structure_detector.py",
         PROJECT_ROOT / "backend/strategy_engine/xauusd_strategy_engine.py",
+        PROJECT_ROOT / "backend/strategy_engine/sweep_strength_scorer.py",
         PROJECT_ROOT / "backend/strategy_engine/strategy_signal_store.py",
         PROJECT_ROOT / "backend/api/strategy_routes.py",
     ]

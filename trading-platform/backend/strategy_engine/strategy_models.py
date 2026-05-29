@@ -9,6 +9,8 @@ SessionQuality = Literal["HIGH", "MEDIUM", "LOW"]
 TrendBias = Literal["BULLISH", "BEARISH", "NEUTRAL"]
 VolatilityState = Literal["LOW", "NORMAL", "HIGH", "EXTREME"]
 SweepDirection = Literal["BUY_SIDE_SWEEP", "SELL_SIDE_SWEEP", "NONE"]
+SweepQuality = Literal["HIGH", "MEDIUM", "LOW", "NONE"]
+RejectionCandleType = Literal["PIN_BAR", "ENGULFING", "STRONG_CLOSE_BACK_INSIDE", "NONE"]
 StructureBias = Literal["BULLISH", "BEARISH", "NEUTRAL"]
 StrategyAction = Literal["BUY", "SELL", "WAIT"]
 
@@ -48,10 +50,22 @@ class LiquiditySweepContext(BaseModel):
     asian_low: float | None = None
     previous_day_high: float | None = None
     previous_day_low: float | None = None
+    equal_highs: list[dict[str, Any]] = Field(default_factory=list)
+    equal_lows: list[dict[str, Any]] = Field(default_factory=list)
+    liquidity_pools: list[dict[str, Any]] = Field(default_factory=list)
     swept_asian_high: bool = False
     swept_asian_low: bool = False
     swept_previous_high: bool = False
     swept_previous_low: bool = False
+    active_sweep_level: str | None = None
+    sweep_price: float | None = None
+    rejection_detected: bool = False
+    rejection_candle_type: RejectionCandleType = "NONE"
+    sweep_strength: float = 0.0
+    sweep_quality: SweepQuality = "NONE"
+    session_alignment: bool = False
+    volume_spike_detected: bool = False
+    structure_confirmation_pending: bool = False
     sweep_direction: SweepDirection = "NONE"
     confidence: float = 0.0
     warnings: list[str] = Field(default_factory=list)

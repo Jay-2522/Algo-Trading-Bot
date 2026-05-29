@@ -1024,6 +1024,16 @@ python tests/phase6_day1_verification.py
 
 Phase 6 Day 1 adds the XAUUSD strategy engine foundation. Backend routes under `/strategy` expose analysis-only status, XAUUSD signal generation, stored signals, and session context. The engine builds UTC session context, EMA/ATR/RSI indicator context, Asian and previous-day liquidity sweep context, SMC/ICT placeholders, and risk-safe strategy signals. Signals default to `WAIT` without sufficient market context and always return `execution_allowed=false`.
 
+## Run Phase 6 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase6_day1_verification.py
+python tests/phase6_day2_verification.py
+```
+
+Phase 6 Day 2 adds the professional XAUUSD liquidity sweep detection engine. Backend routes under `/strategy/liquidity/xauusd` expose Asian high/low, previous-day high/low, equal highs/lows, liquidity pools, buy-side and sell-side sweep detection, rejection classification, session alignment, sweep strength, confidence, and sweep quality. This remains strategy analysis only; the strategy engine still requires future SMC confirmation and keeps `execution_allowed=false`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

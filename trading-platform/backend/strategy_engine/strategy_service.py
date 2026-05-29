@@ -81,7 +81,9 @@ class StrategyService:
             "features": {
                 "session_context": True,
                 "indicator_context": True,
-                "liquidity_sweep_foundation": True,
+                "liquidity_level_builder": True,
+                "liquidity_sweep_detection": True,
+                "sweep_strength_scoring": True,
                 "smc_structure_placeholders": True,
                 "risk_safe_signal_output": True,
             },
@@ -97,6 +99,11 @@ class StrategyService:
 
         signal = self.xauusd_engine.analyze(symbol="XAUUSD", candles=candles)
         return self.signal_store.store_signal(signal)
+
+    def analyze_xauusd_liquidity(self, candles: list | None = None):
+        """Return XAUUSD liquidity sweep context without generating execution intent."""
+
+        return self.xauusd_engine.liquidity_detector.detect(symbol="XAUUSD", candles=candles)
 
     def list_signals(self, limit: int = 100):
         """Return stored analysis signals."""

@@ -3,6 +3,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "market_data", "route": "/market-data/timeframes"},
     {"name": "strategy", "route": "/strategy/session"},
     {"name": "xauusd_strategy_engine", "route": "/strategy/status"},
+    {"name": "xauusd_liquidity_sweeps", "route": "/strategy/liquidity/xauusd"},
     {"name": "risk", "route": "/risk/status"},
     {"name": "execution", "route": "/execution/status"},
     {"name": "execution_queue", "route": "/execution-queue/status"},

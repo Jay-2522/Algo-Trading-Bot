@@ -63,6 +63,25 @@ async def get_phase6_session_context() -> dict:
         service.close()
 
 
+@router.get("/liquidity/xauusd")
+async def get_xauusd_liquidity_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_xauusd_liquidity().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.post("/liquidity/xauusd/analyze")
+async def analyze_xauusd_liquidity(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_xauusd_liquidity(candles=candles).model_dump(mode="json")
+    finally:
+        service.close()
+
+
 @router.get("/trend/{symbol}")
 async def get_trend_analysis(symbol: str, timeframe: str = Query(default="M15")) -> dict:
     service = StrategyService()

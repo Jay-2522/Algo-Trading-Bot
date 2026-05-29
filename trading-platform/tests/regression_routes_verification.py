@@ -10,6 +10,7 @@ REQUIRED_GET_ROUTES = {
     "/health",
     "/status",
     "/market-data/timeframes",
+    "/strategy/liquidity/xauusd",
     "/strategy/session",
     "/strategy/session-context",
     "/strategy/signals",

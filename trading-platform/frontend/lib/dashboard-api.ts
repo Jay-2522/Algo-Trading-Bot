@@ -13,6 +13,10 @@ export type DashboardStatus = {
   status: string;
   mode: string;
   dashboard_ready: boolean;
+  platform_health_score?: number;
+  system_status?: string;
+  phase3_status?: string;
+  metric_sources?: Array<Record<string, unknown>>;
   simulation_only: boolean;
   live_execution_enabled: boolean;
   timestamp?: string;
@@ -114,6 +118,8 @@ export type WarningSummaryData = {
 export type OperationalHealthSummaryData = {
   overall_status: string;
   health_score: number;
+  metric?: string;
+  metric_source?: string;
   active_warnings: number;
   active_alerts: number;
   monitored_modules: number;
@@ -142,6 +148,57 @@ export type AcceptanceChecklistItemData = {
   label: string;
   complete: boolean;
   status: string;
+};
+
+export type ExecutionDashboardOverviewData = {
+  execution_bridge_status: string;
+  routing_status: string;
+  copier_status: string;
+  confirmation_status: string;
+  reconciliation_status: string;
+  risk_status: string;
+  health_score: number;
+  execution_readiness: string;
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+  broker_execution_enabled: boolean;
+  timestamp?: string;
+};
+
+export type ExecutionDashboardCardData = {
+  title: string;
+  value: string;
+  status: string;
+  description: string;
+};
+
+export type ExecutionDashboardSummaryData = {
+  total_demo_executions: number;
+  total_confirmations: number;
+  total_reconciliations: number;
+  total_risk_decisions: number;
+  total_copy_batches: number;
+  total_multi_account_batches: number;
+  blocked_attempts: number;
+  warnings: string[];
+  timestamp?: string;
+};
+
+export type ExecutionDashboardStatusData = {
+  status: string;
+  mode: string;
+  dashboard_ready: boolean;
+  execution_readiness: string;
+  health_score: number;
+  metric?: string;
+  metric_source?: string;
+  monitored_demo_executions: number;
+  monitored_confirmations: number;
+  simulation_only: boolean;
+  demo_execution: boolean;
+  live_execution_enabled: boolean;
+  broker_execution_enabled: boolean;
+  timestamp?: string;
 };
 
 export type DashboardBundle = {
@@ -185,6 +242,10 @@ export type DashboardBundle = {
   deliveryReadiness: DeliveryReadinessData | null;
   acceptanceChecklist: AcceptanceChecklistItemData[];
   remainingDeliveryItems: Record<string, unknown> | null;
+  executionDashboardStatus: ExecutionDashboardStatusData | null;
+  executionDashboardOverview: ExecutionDashboardOverviewData | null;
+  executionDashboardCards: ExecutionDashboardCardData[];
+  executionDashboardSummary: ExecutionDashboardSummaryData | null;
   errors: string[];
 };
 
@@ -229,6 +290,10 @@ const endpoints = {
   deliveryReadiness: "/client-acceptance/readiness",
   acceptanceChecklist: "/client-acceptance/checklist",
   remainingDeliveryItems: "/client-acceptance/remaining-items",
+  executionDashboardStatus: "/execution-dashboard/status",
+  executionDashboardOverview: "/execution-dashboard/overview",
+  executionDashboardCards: "/execution-dashboard/cards",
+  executionDashboardSummary: "/execution-dashboard/summary",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -311,6 +376,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<DeliveryReadinessData>(endpoints.deliveryReadiness),
     fetchJson<AcceptanceChecklistItemData[]>(endpoints.acceptanceChecklist),
     fetchJson<Record<string, unknown>>(endpoints.remainingDeliveryItems),
+    fetchJson<ExecutionDashboardStatusData>(endpoints.executionDashboardStatus),
+    fetchJson<ExecutionDashboardOverviewData>(endpoints.executionDashboardOverview),
+    fetchJson<ExecutionDashboardCardData[]>(endpoints.executionDashboardCards),
+    fetchJson<ExecutionDashboardSummaryData>(endpoints.executionDashboardSummary),
   ]);
 
   const [
@@ -354,6 +423,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     deliveryReadiness,
     acceptanceChecklist,
     remainingDeliveryItems,
+    executionDashboardStatus,
+    executionDashboardOverview,
+    executionDashboardCards,
+    executionDashboardSummary,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -400,6 +473,10 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     deliveryReadiness: deliveryReadiness.status === "fulfilled" ? deliveryReadiness.value : null,
     acceptanceChecklist: acceptanceChecklist.status === "fulfilled" ? acceptanceChecklist.value : [],
     remainingDeliveryItems: remainingDeliveryItems.status === "fulfilled" ? remainingDeliveryItems.value : null,
+    executionDashboardStatus: executionDashboardStatus.status === "fulfilled" ? executionDashboardStatus.value : null,
+    executionDashboardOverview: executionDashboardOverview.status === "fulfilled" ? executionDashboardOverview.value : null,
+    executionDashboardCards: executionDashboardCards.status === "fulfilled" ? executionDashboardCards.value : [],
+    executionDashboardSummary: executionDashboardSummary.status === "fulfilled" ? executionDashboardSummary.value : null,
     errors,
   };
 }

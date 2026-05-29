@@ -30,9 +30,12 @@ class Phase3ReadinessService:
         completed = [status.module_name for status in module_statuses if status.route_available]
         missing = [status.module_name for status in module_statuses if not status.route_available]
         warnings = [status.module_name for status in module_statuses if status.status not in {"READY"}]
-        if missing or safety.safety_status != "PASSED":
-            overall = "FAILED" if safety.safety_status != "PASSED" else "INCOMPLETE"
-        elif warnings:
+        pipeline = self.validate_pipeline()
+        if safety.safety_status != "PASSED" or pipeline.pipeline_status == "FAILED_SAFE":
+            overall = "FAILED"
+        elif missing:
+            overall = "INCOMPLETE"
+        elif warnings or pipeline.pipeline_status == "WARNING":
             overall = "WARNING"
         else:
             overall = "READY"

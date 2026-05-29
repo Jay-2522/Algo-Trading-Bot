@@ -10,7 +10,7 @@ def utc_now() -> datetime:
 
 
 class OperationalHealthSummary(BaseModel):
-    overall_status: Literal["HEALTHY", "WARNING", "DEGRADED", "CRITICAL"]
+    overall_status: Literal["HEALTHY", "WARNING", "DEGRADED", "CRITICAL", "READY"]
     health_score: int
     active_warnings: int
     active_alerts: int

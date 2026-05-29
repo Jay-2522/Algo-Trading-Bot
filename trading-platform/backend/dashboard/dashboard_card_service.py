@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from backend.account_routing.account_routing_service import AccountRoutingService
 from backend.broker_compatibility.broker_compatibility_service import BrokerCompatibilityService
 from backend.dashboard.dashboard_models import DashboardCard
+from backend.dashboard.dashboard_state_provider import DashboardStateProvider, dashboard_state_provider
 from backend.execution_queue.execution_queue_service import ExecutionQueueService
 from backend.monitoring.monitoring_service import MonitoringService
 from backend.phase3_readiness.phase3_readiness_service import Phase3ReadinessService
@@ -23,6 +24,7 @@ class DashboardCardService:
         webhook_service: WebhookMonitoringService | None = None,
         execution_service: ExecutionQueueService | None = None,
         account_service: AccountRoutingService | None = None,
+        state_provider: DashboardStateProvider | None = None,
     ) -> None:
         self.phase3_service = phase3_service or Phase3ReadinessService()
         self.monitoring_service = monitoring_service or MonitoringService()
@@ -30,6 +32,7 @@ class DashboardCardService:
         self.webhook_service = webhook_service or WebhookMonitoringService()
         self.execution_service = execution_service or ExecutionQueueService()
         self.account_service = account_service or AccountRoutingService()
+        self.state_provider = state_provider or dashboard_state_provider
 
     def _as_dict(self, value: Any) -> dict[str, Any]:
         safe_value = to_json_safe(value)
@@ -76,7 +79,22 @@ class DashboardCardService:
 
     def build_cards(self) -> list[DashboardCard]:
         allocation_status = lambda: self.account_service.get_allocation_status()
+        state = self.state_provider.build_state()
         return [
+            DashboardCard(
+                card_id="platform_health",
+                title="Platform Health",
+                status="ACTIVE" if state.dashboard_ready else "WARNING",
+                value=str(state.platform_health_score),
+                subtitle="Shared dashboard health score.",
+                severity="INFO" if state.dashboard_ready else "MEDIUM",
+                metadata={
+                    "metric_source": "DashboardStateProvider",
+                    "description": "Single source of truth for dashboard health indicators.",
+                    "simulation_only": True,
+                    "live_execution_enabled": False,
+                },
+            ),
             self._safe_card(
                 "system_health",
                 "System Health",

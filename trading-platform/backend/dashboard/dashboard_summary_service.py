@@ -1,16 +1,22 @@
 from backend.phase3_readiness.phase3_readiness_service import Phase3ReadinessService
+from backend.dashboard.dashboard_state_provider import DashboardStateProvider, dashboard_state_provider
 
 
 class DashboardSummaryService:
     """Create concise client-facing dashboard summary text."""
 
-    def __init__(self, phase3_service: Phase3ReadinessService | None = None) -> None:
+    def __init__(
+        self,
+        phase3_service: Phase3ReadinessService | None = None,
+        state_provider: DashboardStateProvider | None = None,
+    ) -> None:
         self.phase3_service = phase3_service or Phase3ReadinessService()
+        self.state_provider = state_provider or dashboard_state_provider
 
     def build_summary(self) -> dict:
         try:
-            phase3 = self.phase3_service.get_status()
-            phase3_status = phase3.overall_status
+            state = self.state_provider.build_state()
+            phase3_status = state.phase3_status
         except Exception:
             phase3_status = "WARNING"
         return {

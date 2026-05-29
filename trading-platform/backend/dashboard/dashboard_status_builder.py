@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from backend.broker_compatibility.broker_compatibility_service import BrokerCompatibilityService
 from backend.dashboard.dashboard_models import DashboardOverview, DashboardStatusResponse
+from backend.dashboard.dashboard_state_provider import DashboardStateProvider, dashboard_state_provider
 from backend.execution_queue.execution_queue_service import ExecutionQueueService
 from backend.monitoring.monitoring_service import MonitoringService
 from backend.phase3_readiness.phase3_readiness_service import Phase3ReadinessService
@@ -21,12 +22,14 @@ class DashboardStatusBuilder:
         broker_service: BrokerCompatibilityService | None = None,
         webhook_service: WebhookMonitoringService | None = None,
         execution_service: ExecutionQueueService | None = None,
+        state_provider: DashboardStateProvider | None = None,
     ) -> None:
         self.phase3_service = phase3_service or Phase3ReadinessService()
         self.monitoring_service = monitoring_service or MonitoringService()
         self.broker_service = broker_service or BrokerCompatibilityService()
         self.webhook_service = webhook_service or WebhookMonitoringService()
         self.execution_service = execution_service or ExecutionQueueService()
+        self.state_provider = state_provider or dashboard_state_provider
 
     def _safe_collect(self, name: str, collector: Callable[[], Any]) -> dict[str, Any]:
         try:
@@ -41,16 +44,14 @@ class DashboardStatusBuilder:
             return safe_error_payload(f"{name} dashboard source unavailable: {exc}", name)
 
     def build_status(self) -> DashboardStatusResponse:
-        phase3 = self._safe_collect("phase3", self.phase3_service.get_status)
-        monitoring = self._safe_collect("monitoring", self.monitoring_service.get_status)
-        dashboard_ready = (
-            phase3.get("overall_status") in {"READY", "WARNING"}
-            and monitoring.get("simulation_only") is True
-            and phase3.get("live_execution_enabled") is False
-        )
+        state = self.state_provider.build_state()
         return DashboardStatusResponse(
-            status="READY" if dashboard_ready else "DEGRADED",
-            dashboard_ready=dashboard_ready,
+            status=state.backend_readiness,
+            dashboard_ready=state.dashboard_ready,
+            platform_health_score=state.platform_health_score,
+            system_status=state.system_status,
+            phase3_status=state.phase3_status,
+            metric_sources=[source.model_dump(mode="json") for source in state.metric_sources],
             simulation_only=True,
             live_execution_enabled=False,
         )
@@ -73,8 +74,9 @@ class DashboardStatusBuilder:
             webhook_service=self.webhook_service,
             execution_service=self.execution_service,
         ).build_cards()
+        state = self.state_provider.build_state()
         problem_cards = [card for card in cards if card.severity in {"HIGH", "CRITICAL"}]
-        overall_status = "WARNING" if problem_cards else "READY"
+        overall_status = "WARNING" if problem_cards or state.warnings else state.backend_readiness
         return DashboardOverview(
             overall_status=overall_status,
             system_status=system,

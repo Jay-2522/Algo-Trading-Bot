@@ -11,7 +11,12 @@ export function SystemHealthScore({ summary }: { summary: OperationalHealthSumma
     <section className="min-w-0 rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-cyan-100/70">Health Score</p>
+          <p
+            className="text-[0.68rem] uppercase tracking-[0.22em] text-cyan-100/70"
+            title="Operational Health uses the shared platform health score from DashboardStateProvider."
+          >
+            Operational Health
+          </p>
           <h3 className="mt-1 break-words text-xl font-black text-white">Operational Status</h3>
         </div>
         <StatusBadge label={summary?.overall_status ?? "Loading"} tone={score >= 90 ? "good" : score >= 70 ? "warning" : "danger"} />

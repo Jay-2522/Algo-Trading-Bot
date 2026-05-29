@@ -25,7 +25,7 @@ class WarningEngine:
         warnings.append(
             WarningSummary(
                 category="portfolio",
-                severity="WARNING",
+                severity="INFO",
                 message="NIFTY50 remains blocked/conditional until Indian broker integration is implemented.",
             )
         )

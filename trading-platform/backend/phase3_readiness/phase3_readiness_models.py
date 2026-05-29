@@ -19,7 +19,7 @@ class Phase3ModuleStatus(BaseModel):
 
 class Phase3ReadinessReport(BaseModel):
     phase: str = "Phase 3"
-    overall_status: Literal["READY", "WARNING", "INCOMPLETE", "FAILED"] = "INCOMPLETE"
+    overall_status: Literal["READY", "DEMO_READY", "COMPLETE", "WARNING", "INCOMPLETE", "FAILED"] = "INCOMPLETE"
     completed_modules: list[str] = Field(default_factory=list)
     missing_modules: list[str] = Field(default_factory=list)
     warning_modules: list[str] = Field(default_factory=list)

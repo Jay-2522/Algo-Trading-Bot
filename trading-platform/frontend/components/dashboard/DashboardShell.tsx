@@ -14,6 +14,10 @@ import { DashboardSafetyBanner } from "./DashboardSafetyBanner";
 import { DashboardStatusGrid } from "./DashboardStatusGrid";
 import { DeliveryReadinessPanel } from "./DeliveryReadinessPanel";
 import { ExecutionSafetyPanel } from "./ExecutionSafetyPanel";
+import { ExecutionHealthCards } from "./ExecutionHealthCards";
+import { ExecutionOverviewPanel } from "./ExecutionOverviewPanel";
+import { ExecutionReadinessPanel } from "./ExecutionReadinessPanel";
+import { ExecutionSummaryPanel } from "./ExecutionSummaryPanel";
 import { ExposureSummaryPanel } from "./ExposureSummaryPanel";
 import { LiveActivityFeed } from "./LiveActivityFeed";
 import { LiveAccountRoutingPanel } from "./LiveAccountRoutingPanel";
@@ -40,6 +44,7 @@ export function DashboardShell() {
   );
 
   const alerts = bundle.alerts.length ? bundle.alerts : bundle.overview?.alerts ?? [];
+  const backendStatus = bundle.status?.status ?? null;
   const backendHealthy = Boolean(bundle.status?.dashboard_ready) && bundle.errors.length === 0;
 
   return (
@@ -82,6 +87,15 @@ export function DashboardShell() {
           warnings={bundle.operationalWarnings}
         />
 
+        <section className="space-y-4">
+          <ExecutionOverviewPanel overview={bundle.executionDashboardOverview} />
+          <ExecutionReadinessPanel overview={bundle.executionDashboardOverview} status={bundle.executionDashboardStatus} />
+          <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <ExecutionHealthCards cards={bundle.executionDashboardCards} />
+            <ExecutionSummaryPanel summary={bundle.executionDashboardSummary} />
+          </section>
+        </section>
+
         {lastError || bundle.errors.length > 0 ? (
           <section className="rounded-3xl border border-rose-300/20 bg-rose-400/10 p-5 text-sm text-rose-100">
             <strong className="block text-base">Partial dashboard data unavailable</strong>
@@ -109,7 +123,7 @@ export function DashboardShell() {
           <div className="rounded-3xl border border-cyan-300/15 bg-cyan-300/10 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.24em] text-sky-200/70">Backend Readiness</p>
             <div className="mt-3 text-3xl font-black text-sky-100">
-              {backendHealthy ? "Ready" : loading ? "Loading" : "Review"}
+              {backendStatus ? backendStatus : loading ? "Loading" : backendHealthy ? "READY" : "Review"}
             </div>
             <p className="mt-3 text-sm leading-6 text-sky-50/75">
               {bundle.summary?.safety_status ?? "Simulation-only safety status is being checked."}

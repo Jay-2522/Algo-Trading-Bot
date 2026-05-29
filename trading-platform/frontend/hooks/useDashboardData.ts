@@ -45,6 +45,10 @@ const emptyBundle: DashboardBundle = {
   deliveryReadiness: null,
   acceptanceChecklist: [],
   remainingDeliveryItems: null,
+  executionDashboardStatus: null,
+  executionDashboardOverview: null,
+  executionDashboardCards: [],
+  executionDashboardSummary: null,
   errors: [],
 };
 
@@ -87,6 +91,9 @@ export function useDashboardData(refreshIntervalMs = 10000) {
         operationalModules: nextBundle.operationalModules.length ? nextBundle.operationalModules : previous.operationalModules,
         operationalWarnings: nextBundle.operationalWarnings.length ? nextBundle.operationalWarnings : previous.operationalWarnings,
         acceptanceChecklist: nextBundle.acceptanceChecklist.length ? nextBundle.acceptanceChecklist : previous.acceptanceChecklist,
+        executionDashboardCards: nextBundle.executionDashboardCards.length
+          ? nextBundle.executionDashboardCards
+          : previous.executionDashboardCards,
         errors: nextBundle.errors,
       }));
       setLastError(nextBundle.errors.length ? nextBundle.errors.join("; ") : null);

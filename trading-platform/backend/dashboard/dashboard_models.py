@@ -40,6 +40,10 @@ class DashboardStatusResponse(BaseModel):
     status: str
     mode: str = "VPS_DASHBOARD_BACKEND_CONTEXT_ONLY"
     dashboard_ready: bool
+    platform_health_score: int = 0
+    system_status: str = "UNKNOWN"
+    phase3_status: str = "UNKNOWN"
+    metric_sources: list[dict[str, Any]] = Field(default_factory=list)
     simulation_only: bool = True
     live_execution_enabled: bool = False
     timestamp: datetime = Field(default_factory=utc_now)

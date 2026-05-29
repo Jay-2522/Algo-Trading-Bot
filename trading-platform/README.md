@@ -997,6 +997,23 @@ python tests/phase5_day6_verification.py
 
 Phase 5 Day 6 adds execution-time risk enforcement. Backend routes under `/execution-risk` expose the active policy, evaluate proposed demo execution requests, and list risk decisions and audit events. The demo execution guard, multi-account execution guard, and trade copier service now call the risk evaluator before allowing execution or copy workflows to proceed. Policy remains EURUSD-only, max `0.01` lot per account, max three target accounts, queue/emergency-stop aware, and live/broker execution disabled.
 
+## Run Phase 5 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+python tests/phase5_day2_verification.py
+python tests/phase5_day3_verification.py
+python tests/phase5_day4_verification.py
+python tests/phase5_day5_verification.py
+python tests/phase5_day6_verification.py
+python tests/phase5_day7_verification.py
+cd frontend
+npm run build
+```
+
+Phase 5 Day 7 adds the unified Execution Operations Dashboard. Backend routes under `/execution-dashboard` aggregate demo execution bridge status, multi-account routing, trade copier state, confirmations, reconciliation, risk decisions, audit warnings, health score, and client-facing execution readiness. The frontend dashboard now includes the Execution Operations Center with health cards, summary metrics, and readiness safety flags. This is display and monitoring only; live and broker execution remain disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

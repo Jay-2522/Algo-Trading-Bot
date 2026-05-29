@@ -13,6 +13,7 @@ class DeliveryReadinessService:
         return {
             "status": "CLIENT_ACCEPTANCE_READY",
             "mode": "DELIVERY_READINESS_DISPLAY_ONLY",
+            "metric": "Client Readiness",
             "overall_score": readiness.overall_score,
             "deployment_ready": readiness.deployment_ready,
             "client_demo_ready": readiness.client_demo_ready,

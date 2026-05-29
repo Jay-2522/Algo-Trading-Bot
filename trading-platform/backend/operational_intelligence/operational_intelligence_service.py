@@ -5,6 +5,7 @@ from backend.api.dashboard_routes import dashboard_service
 from backend.api.execution_queue_routes import execution_queue_service
 from backend.api.monitoring_routes import monitoring_service
 from backend.broker_compatibility.broker_compatibility_service import BrokerCompatibilityService
+from backend.dashboard.dashboard_state_provider import DashboardStateProvider, dashboard_state_provider
 from backend.demo_mode.client_demo_service import ClientDemoService
 from backend.operational_intelligence.health_aggregator import HealthAggregator
 from backend.operational_intelligence.monitoring_summary_builder import MonitoringSummaryBuilder
@@ -23,10 +24,12 @@ class OperationalIntelligenceService:
         health_aggregator: HealthAggregator | None = None,
         warning_engine: WarningEngine | None = None,
         summary_builder: MonitoringSummaryBuilder | None = None,
+        state_provider: DashboardStateProvider | None = None,
     ) -> None:
         self.health_aggregator = health_aggregator or HealthAggregator()
         self.warning_engine = warning_engine or WarningEngine()
         self.summary_builder = summary_builder or MonitoringSummaryBuilder()
+        self.state_provider = state_provider or dashboard_state_provider
         self.broker_service = BrokerCompatibilityService()
         self.webhook_service = WebhookMonitoringService()
         self.phase3_service = Phase3ReadinessService()
@@ -56,10 +59,14 @@ class OperationalIntelligenceService:
     def get_health_summary(self) -> OperationalHealthSummary:
         statuses = self.get_modules()
         warnings = self.warning_engine.build_warnings(statuses)
+        active_warnings = len([warning for warning in warnings if warning.severity in {"WARNING", "ERROR", "CRITICAL"}])
         active_alerts = len(monitoring_service.get_alerts(100))
-        score = self.health_aggregator.calculate_health_score(statuses, len(warnings), active_alerts)
-        overall = self.health_aggregator.overall_status(score, statuses)
-        return self.summary_builder.build_summary(statuses, warnings, active_alerts, score, overall)
+        state = self.state_provider.build_state()
+        score = state.operational_health_score
+        overall = state.dashboard_status
+        summary = self.summary_builder.build_summary(statuses, warnings, active_alerts, score, overall)
+        summary.active_warnings = active_warnings
+        return summary
 
     def get_status(self) -> dict[str, Any]:
         summary = self.get_health_summary()
@@ -78,6 +85,8 @@ class OperationalIntelligenceService:
         return {
             "health_score": summary.health_score,
             "overall_status": summary.overall_status,
+            "metric": "Operational Health",
+            "metric_source": "DashboardStateProvider",
             "simulation_only": True,
             "live_execution_enabled": False,
         }

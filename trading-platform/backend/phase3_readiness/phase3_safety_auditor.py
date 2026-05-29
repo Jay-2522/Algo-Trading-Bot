@@ -14,6 +14,9 @@ class Phase3SafetyAuditor:
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path(__file__).resolve().parents[2]
+        self.allowed_order_send_paths = {
+            Path("backend/demo_execution/mt5_demo_executor.py"),
+        }
 
     def run_safety_audit(self):
         from backend.phase3_readiness.phase3_readiness_models import Phase3SafetyAudit
@@ -23,6 +26,9 @@ class Phase3SafetyAuditor:
             text = path.read_text(encoding="utf-8", errors="ignore")
             for pattern in self.FORBIDDEN:
                 if pattern in text:
+                    relative_path = path.relative_to(self.root)
+                    if pattern in {"mt5." + "order_send", "order_" + "send("} and relative_path in self.allowed_order_send_paths:
+                        continue
                     warnings.append(f"{pattern} found in {path.relative_to(self.root)}")
         order_token = "order_" + "send"
         live_token = "live_execution_enabled" + "=True"

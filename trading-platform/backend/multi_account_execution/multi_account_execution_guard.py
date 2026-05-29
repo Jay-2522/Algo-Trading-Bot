@@ -2,6 +2,7 @@ from typing import Any
 
 from backend.control_center.control_center_service import ControlCenterService
 from backend.demo_execution.mt5_demo_account_verifier import MT5DemoAccountVerifier
+from backend.execution_risk.execution_risk_evaluator import ExecutionRiskEvaluator
 from backend.multi_account_execution.multi_account_models import AccountDemoExecutionPlan
 from backend.multi_account_execution.multi_account_result_store import MultiAccountResultStore
 
@@ -13,10 +14,12 @@ class MultiAccountExecutionGuard:
         self,
         account_verifier: MT5DemoAccountVerifier | None = None,
         control_center_service: ControlCenterService | None = None,
+        risk_evaluator: ExecutionRiskEvaluator | None = None,
         result_store: MultiAccountResultStore | None = None,
     ) -> None:
         self.account_verifier = account_verifier or MT5DemoAccountVerifier()
         self.control_center_service = control_center_service or ControlCenterService()
+        self.risk_evaluator = risk_evaluator or ExecutionRiskEvaluator(control_center_service=self.control_center_service)
         self.result_store = result_store or MultiAccountResultStore()
 
     def validate_plan(self, plan: AccountDemoExecutionPlan) -> tuple[bool, list[str]]:
@@ -46,6 +49,21 @@ class MultiAccountExecutionGuard:
             reasons.append("Per-account demo lot must be <= 0.01.")
         if plan.live_execution_enabled:
             reasons.append("Plan indicates live execution; blocked.")
+        risk_decision = self.risk_evaluator.evaluate_single_account_request(
+            {
+                "request_id": plan.plan_id,
+                "canonical_symbol": plan.canonical_symbol,
+                "action": plan.action,
+                "account_id": plan.account_id,
+                "broker_id": plan.broker_id,
+                "lot": plan.lot,
+                "confirm_demo_execution": True,
+                "live_execution_enabled": plan.live_execution_enabled,
+                "broker_execution_enabled": False,
+            }
+        )
+        if not risk_decision.approved:
+            reasons.extend(f"Execution risk blocked: {reason}" for reason in risk_decision.rejection_reasons)
         return not reasons, reasons
 
     def validate_batch(self, plans: list[AccountDemoExecutionPlan]) -> tuple[bool, list[str]]:

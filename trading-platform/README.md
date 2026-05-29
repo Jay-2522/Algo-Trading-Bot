@@ -983,6 +983,20 @@ python tests/phase5_day5_verification.py
 
 Phase 5 Day 5 adds execution confirmation tracking and position lifecycle reconciliation. Backend routes under `/execution-confirmation` ingest existing demo and multi-account execution results, track order/deal/position confirmation state, classify confirmed, pending, rejected, missing-position, and mismatched lifecycles, expose reconciliation summaries, and keep an audit trail. This layer is read-only, demo-only, and adds no order placement path.
 
+## Run Phase 5 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+python tests/phase5_day2_verification.py
+python tests/phase5_day3_verification.py
+python tests/phase5_day4_verification.py
+python tests/phase5_day5_verification.py
+python tests/phase5_day6_verification.py
+```
+
+Phase 5 Day 6 adds execution-time risk enforcement. Backend routes under `/execution-risk` expose the active policy, evaluate proposed demo execution requests, and list risk decisions and audit events. The demo execution guard, multi-account execution guard, and trade copier service now call the risk evaluator before allowing execution or copy workflows to proceed. Policy remains EURUSD-only, max `0.01` lot per account, max three target accounts, queue/emergency-stop aware, and live/broker execution disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

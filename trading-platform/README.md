@@ -905,6 +905,17 @@ npm run build
 
 Phase 4 Day 8 adds portfolio and account analytics. Backend routes under `/portfolio` expose simulated account summaries, portfolio overview, symbol-level exposure, and placeholder P&L. The dashboard now shows broker demo balances, enabled/disabled account state, EURUSD/XAUUSD readiness, NIFTY50 conditional status, and live-execution-disabled portfolio safety labels.
 
+## Run Phase 4 Day 9 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase4_day9_verification.py
+cd frontend
+npm run build
+```
+
+Phase 4 Day 9 adds the Operational Intelligence Center. Backend routes under `/operational-intelligence` aggregate health score, module status, warnings, alerts, broker readiness, webhook posture, queue health, control center state, portfolio analytics, and safety posture. The dashboard now includes a health score card, monitored module grid, warning center, and operational insights.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.

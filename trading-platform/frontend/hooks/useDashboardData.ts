@@ -36,6 +36,11 @@ const emptyBundle: DashboardBundle = {
   portfolioAccounts: [],
   portfolioExposure: null,
   portfolioPnlSummary: null,
+  operationalStatus: null,
+  operationalHealthSummary: null,
+  operationalModules: [],
+  operationalWarnings: [],
+  operationalHealthScore: null,
   errors: [],
 };
 
@@ -75,6 +80,8 @@ export function useDashboardData(refreshIntervalMs = 10000) {
         controlAuditEvents: nextBundle.controlAuditEvents.length ? nextBundle.controlAuditEvents : previous.controlAuditEvents,
         demoKpis: nextBundle.demoKpis.length ? nextBundle.demoKpis : previous.demoKpis,
         portfolioAccounts: nextBundle.portfolioAccounts.length ? nextBundle.portfolioAccounts : previous.portfolioAccounts,
+        operationalModules: nextBundle.operationalModules.length ? nextBundle.operationalModules : previous.operationalModules,
+        operationalWarnings: nextBundle.operationalWarnings.length ? nextBundle.operationalWarnings : previous.operationalWarnings,
         errors: nextBundle.errors,
       }));
       setLastError(nextBundle.errors.length ? nextBundle.errors.join("; ") : null);

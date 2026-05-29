@@ -21,6 +21,7 @@ import { LiveExecutionQueuePanel } from "./LiveExecutionQueuePanel";
 import { LiveMonitoringPanel } from "./LiveMonitoringPanel";
 import { LiveWebhookPanel } from "./LiveWebhookPanel";
 import { ManualControlPanel } from "./ManualControlPanel";
+import { OperationalHealthPanel } from "./OperationalHealthPanel";
 import { PortfolioOverviewPanel } from "./PortfolioOverviewPanel";
 import { RecentSignalsPanel } from "./RecentSignalsPanel";
 import { SafetyLockPanel } from "./SafetyLockPanel";
@@ -71,6 +72,12 @@ export function DashboardShell() {
             </div>
           </section>
         </section>
+
+        <OperationalHealthPanel
+          modules={bundle.operationalModules}
+          summary={bundle.operationalHealthSummary}
+          warnings={bundle.operationalWarnings}
+        />
 
         {lastError || bundle.errors.length > 0 ? (
           <section className="rounded-3xl border border-rose-300/20 bg-rose-400/10 p-5 text-sm text-rose-100">

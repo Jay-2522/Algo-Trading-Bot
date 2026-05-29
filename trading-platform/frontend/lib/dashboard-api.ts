@@ -96,6 +96,31 @@ export type PortfolioOverviewData = {
   timestamp?: string;
 };
 
+export type OperationalModuleStatusData = {
+  module_name: string;
+  status: string;
+  last_check: string;
+  message: string;
+};
+
+export type WarningSummaryData = {
+  warning_id: string;
+  category: string;
+  severity: string;
+  message: string;
+  timestamp: string;
+};
+
+export type OperationalHealthSummaryData = {
+  overall_status: string;
+  health_score: number;
+  active_warnings: number;
+  active_alerts: number;
+  monitored_modules: number;
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+};
+
 export type DashboardBundle = {
   status: DashboardStatus | null;
   overview: DashboardOverview | null;
@@ -128,6 +153,11 @@ export type DashboardBundle = {
   portfolioAccounts: PortfolioAccountSummaryData[];
   portfolioExposure: PortfolioExposureSummaryData | null;
   portfolioPnlSummary: Record<string, unknown> | null;
+  operationalStatus: Record<string, unknown> | null;
+  operationalHealthSummary: OperationalHealthSummaryData | null;
+  operationalModules: OperationalModuleStatusData[];
+  operationalWarnings: WarningSummaryData[];
+  operationalHealthScore: Record<string, unknown> | null;
   errors: string[];
 };
 
@@ -163,6 +193,11 @@ const endpoints = {
   portfolioAccounts: "/portfolio/accounts",
   portfolioExposure: "/portfolio/exposure",
   portfolioPnlSummary: "/portfolio/pnl-summary",
+  operationalStatus: "/operational-intelligence/status",
+  operationalHealthSummary: "/operational-intelligence/health-summary",
+  operationalModules: "/operational-intelligence/modules",
+  operationalWarnings: "/operational-intelligence/warnings",
+  operationalHealthScore: "/operational-intelligence/health-score",
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
@@ -236,6 +271,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<PortfolioAccountSummaryData[]>(endpoints.portfolioAccounts),
     fetchJson<PortfolioExposureSummaryData>(endpoints.portfolioExposure),
     fetchJson<Record<string, unknown>>(endpoints.portfolioPnlSummary),
+    fetchJson<Record<string, unknown>>(endpoints.operationalStatus),
+    fetchJson<OperationalHealthSummaryData>(endpoints.operationalHealthSummary),
+    fetchJson<OperationalModuleStatusData[]>(endpoints.operationalModules),
+    fetchJson<WarningSummaryData[]>(endpoints.operationalWarnings),
+    fetchJson<Record<string, unknown>>(endpoints.operationalHealthScore),
   ]);
 
   const [
@@ -270,6 +310,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     portfolioAccounts,
     portfolioExposure,
     portfolioPnlSummary,
+    operationalStatus,
+    operationalHealthSummary,
+    operationalModules,
+    operationalWarnings,
+    operationalHealthScore,
   ] = results;
   const errors = results
     .map((result, index) => errorMessage(Object.keys(endpoints)[index], result))
@@ -307,6 +352,11 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     portfolioAccounts: portfolioAccounts.status === "fulfilled" ? portfolioAccounts.value : [],
     portfolioExposure: portfolioExposure.status === "fulfilled" ? portfolioExposure.value : null,
     portfolioPnlSummary: portfolioPnlSummary.status === "fulfilled" ? portfolioPnlSummary.value : null,
+    operationalStatus: operationalStatus.status === "fulfilled" ? operationalStatus.value : null,
+    operationalHealthSummary: operationalHealthSummary.status === "fulfilled" ? operationalHealthSummary.value : null,
+    operationalModules: operationalModules.status === "fulfilled" ? operationalModules.value : [],
+    operationalWarnings: operationalWarnings.status === "fulfilled" ? operationalWarnings.value : [],
+    operationalHealthScore: operationalHealthScore.status === "fulfilled" ? operationalHealthScore.value : null,
     errors,
   };
 }

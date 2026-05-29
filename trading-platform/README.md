@@ -970,6 +970,19 @@ python tests/phase5_day4_verification.py
 
 Phase 5 Day 4 adds the demo trade copier coordination layer. Backend routes under `/trade-copier` preview READY/PLANNED copy batches, create auditable copy batches, track per-account copy status, summarize synchronized outcomes, identify partial copies and unavailable accounts, block duplicate copy attempts per signal/account/symbol/action on created batches, and prepare dashboard-visible batch status. The copier remains EURUSD-only, demo-only, and never submits MT5 orders directly.
 
+## Run Phase 5 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+python tests/phase5_day2_verification.py
+python tests/phase5_day3_verification.py
+python tests/phase5_day4_verification.py
+python tests/phase5_day5_verification.py
+```
+
+Phase 5 Day 5 adds execution confirmation tracking and position lifecycle reconciliation. Backend routes under `/execution-confirmation` ingest existing demo and multi-account execution results, track order/deal/position confirmation state, classify confirmed, pending, rejected, missing-position, and mismatched lifecycles, expose reconciliation summaries, and keep an audit trail. This layer is read-only, demo-only, and adds no order placement path.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

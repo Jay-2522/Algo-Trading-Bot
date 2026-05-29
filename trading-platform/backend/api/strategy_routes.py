@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from backend.strategy_engine.session_manager import SessionManager
 from backend.strategy_engine.strategy_service import StrategyService
@@ -9,6 +11,56 @@ router = APIRouter(prefix="/strategy", tags=["Strategy"])
 
 def _service_unavailable(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=str(exc))
+
+
+@router.get("/status")
+async def get_strategy_status() -> dict:
+    service = StrategyService()
+    try:
+        return service.get_status()
+    finally:
+        service.close()
+
+
+@router.post("/analyze/xauusd")
+async def analyze_xauusd(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        signal = service.analyze_xauusd(candles=candles)
+        return signal.model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.get("/signals")
+async def list_strategy_signals(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
+    service = StrategyService()
+    try:
+        return [signal.model_dump(mode="json") for signal in service.list_signals(limit)]
+    finally:
+        service.close()
+
+
+@router.get("/signals/{signal_id}")
+async def get_strategy_signal(signal_id: str) -> dict:
+    service = StrategyService()
+    try:
+        signal = service.get_signal(signal_id)
+        if signal is None:
+            raise HTTPException(status_code=404, detail="Strategy signal not found.")
+        return signal.model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.get("/session-context")
+async def get_phase6_session_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.get_session_context().model_dump(mode="json")
+    finally:
+        service.close()
 
 
 @router.get("/trend/{symbol}")

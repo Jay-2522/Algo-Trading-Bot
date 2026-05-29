@@ -1014,6 +1014,16 @@ npm run build
 
 Phase 5 Day 7 adds the unified Execution Operations Dashboard. Backend routes under `/execution-dashboard` aggregate demo execution bridge status, multi-account routing, trade copier state, confirmations, reconciliation, risk decisions, audit warnings, health score, and client-facing execution readiness. The frontend dashboard now includes the Execution Operations Center with health cards, summary metrics, and readiness safety flags. This is display and monitoring only; live and broker execution remain disabled.
 
+## Run Phase 6 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day7_verification.py
+python tests/phase6_day1_verification.py
+```
+
+Phase 6 Day 1 adds the XAUUSD strategy engine foundation. Backend routes under `/strategy` expose analysis-only status, XAUUSD signal generation, stored signals, and session context. The engine builds UTC session context, EMA/ATR/RSI indicator context, Asian and previous-day liquidity sweep context, SMC/ICT placeholders, and risk-safe strategy signals. Signals default to `WAIT` without sufficient market context and always return `execution_allowed=false`.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

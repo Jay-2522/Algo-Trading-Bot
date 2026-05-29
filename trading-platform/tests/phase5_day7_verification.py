@@ -97,21 +97,22 @@ def verify_endpoints() -> bool:
 
 
 def verify_frontend_integration() -> bool:
-    dashboard_shell = (PROJECT_ROOT / "frontend/components/dashboard/DashboardShell.tsx").read_text(encoding="utf-8")
-    dashboard_page = (PROJECT_ROOT / "frontend/app/dashboard/page.tsx").read_text(encoding="utf-8")
+    developer_shell = (PROJECT_ROOT / "frontend/components/dashboard/DeveloperDashboardShell.tsx").read_text(encoding="utf-8")
+    developer_page = (PROJECT_ROOT / "frontend/app/dashboard/developer/page.tsx").read_text(encoding="utf-8")
     api = (PROJECT_ROOT / "frontend/lib/dashboard-api.ts").read_text(encoding="utf-8")
     passed = (
-        "ExecutionOverviewPanel" in dashboard_shell
-        and "ExecutionHealthCards" in dashboard_shell
-        and "ExecutionSummaryPanel" in dashboard_shell
-        and "ExecutionReadinessPanel" in dashboard_shell
-        and "force-dynamic" in dashboard_page
+        "ExecutionOverviewPanel" in developer_shell
+        and "ExecutionHealthCards" in developer_shell
+        and "ExecutionSummaryPanel" in developer_shell
+        and "ExecutionReadinessPanel" in developer_shell
+        and "DeveloperDashboardShell" in developer_page
+        and "force-dynamic" in developer_page
         and "/execution-dashboard/status" in api
         and "/execution-dashboard/overview" in api
         and "/execution-dashboard/cards" in api
         and "/execution-dashboard/summary" in api
     )
-    return show("Dashboard page and API bundle include execution operations panels", passed)
+    return show("Developer dashboard page and API bundle include execution operations panels", passed)
 
 
 def verify_module_registry() -> bool:
@@ -177,4 +178,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

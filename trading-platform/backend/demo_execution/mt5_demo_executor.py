@@ -24,7 +24,7 @@ class MT5DemoExecutor:
     ) -> DemoExecutionResult:
         allowed, reasons, account_status = self.guard.validate_demo_execution(queue_item, request)
         if not allowed or queue_item is None:
-            status = "MT5_UNAVAILABLE" if not account_status.terminal_available else "BLOCKED"
+            status = "MT5_UNAVAILABLE" if self._only_mt5_unavailable(reasons, account_status.terminal_available) else "BLOCKED"
             return self._result(queue_item, request.queue_id, status, reasons)
 
         try:
@@ -60,6 +60,14 @@ class MT5DemoExecutor:
         }
         return retcode in {code for code in success_codes if code is not None}
 
+    def _only_mt5_unavailable(self, reasons: list[str], terminal_available: bool) -> bool:
+        if terminal_available:
+            return False
+        if not reasons:
+            return True
+        mt5_markers = ("metatrader5", "mt5", "terminal")
+        return all(any(marker in reason.lower() for marker in mt5_markers) for reason in reasons)
+
     def _result(
         self,
         queue_item: ExecutionQueueItem | None,
@@ -89,5 +97,7 @@ class MT5DemoExecutor:
             rejection_reasons=rejection_reasons,
             warnings=["Demo execution bridge only. Live execution remains disabled."],
             demo_execution=True,
+            simulation_only=True,
             live_execution_enabled=False,
+            broker_execution_enabled=False,
         )

@@ -937,6 +937,16 @@ python tests/phase5_day1_verification.py
 
 Phase 5 Day 1 adds the MT5 demo execution bridge. Backend routes under `/demo-execution` verify demo-account status, guard execution queue items, build tiny EURUSD-only market requests, store demo execution results, and block safely whenever MT5 demo conditions are not satisfied. Live account execution remains disabled.
 
+## Run Phase 5 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+python tests/phase5_day2_verification.py
+```
+
+Phase 5 Day 2 adds the first controlled end-to-end demo execution flow. `/demo-execution/eligible-queue-items` lists EURUSD-only queue items that meet the tiny-lot demo rules, `/demo-execution/execute-latest-eligible` submits the newest eligible item through the guarded demo executor, and `/demo-execution/audit-events` exposes request, blocked, order-sent, filled, rejected, and failed-safe audit events. Duplicate queue execution is blocked, lifecycle states are updated, and live execution remains disabled.
+
 ## MT5 Safety Boundary
 
-The MT5 foundation is read-only. It supports connection checks, account info, symbol info, and latest ticks. Order placement must be added later through the execution engine with risk checks, audit logging, and environment safeguards.
+The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

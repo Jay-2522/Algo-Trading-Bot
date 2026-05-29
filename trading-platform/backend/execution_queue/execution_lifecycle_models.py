@@ -37,6 +37,9 @@ class OrderLifecycleState(BaseModel):
         "SIMULATED_ACCEPTED",
         "SIMULATED_FILLED",
         "SIMULATED_REJECTED",
+        "DEMO_ORDER_SENT",
+        "DEMO_FILLED",
+        "DEMO_REJECTED",
         "CANCELLED",
         "FAILED_SAFE",
     ] = "CREATED"

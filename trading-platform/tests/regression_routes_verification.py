@@ -21,6 +21,8 @@ REQUIRED_GET_ROUTES = {
     "/client-acceptance/status",
     "/control-center/status",
     "/demo-execution/status",
+    "/demo-execution/eligible-queue-items",
+    "/demo-execution/audit-events",
     "/demo-mode/status",
     "/database/status",
     "/ai/status",

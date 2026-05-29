@@ -12,6 +12,7 @@ class DemoExecutionResultStore:
     def store_result(self, result: DemoExecutionResult) -> DemoExecutionResult:
         result.simulation_only = True
         result.live_execution_enabled = False
+        result.broker_execution_enabled = False
         result.demo_execution = True
         self.results.appendleft(result)
         return result
@@ -25,3 +26,12 @@ class DemoExecutionResultStore:
             if result.execution_id == execution_id:
                 return result
         return None
+
+    def get_result_for_queue(self, queue_id: str) -> DemoExecutionResult | None:
+        for result in self.results:
+            if result.queue_id == queue_id:
+                return result
+        return None
+
+    def has_queue_execution(self, queue_id: str) -> bool:
+        return self.get_result_for_queue(queue_id) is not None

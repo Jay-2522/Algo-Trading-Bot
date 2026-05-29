@@ -91,6 +91,17 @@ class LotAllocationEngine:
         if mode == "RISK_WEIGHTED":
             total_equity = sum(account.equity for account in accounts) or 1.0
             return [round(total_lot * (account.equity / total_equity), 4) for account in accounts]
+        min_lot = float(self.lot_constraints.DEFAULTS["min"])
+        if total_lot < min_lot * len(accounts):
+            remaining = round(total_lot, 4)
+            lots: list[float] = []
+            for _account in accounts:
+                if remaining >= min_lot:
+                    lots.append(min_lot)
+                    remaining = round(remaining - min_lot, 4)
+                else:
+                    lots.append(0.0)
+            return lots
         return [round(total_lot / len(accounts), 4) for _ in accounts]
 
     def _default_total_lot(self, symbol: str, mode: str) -> float:

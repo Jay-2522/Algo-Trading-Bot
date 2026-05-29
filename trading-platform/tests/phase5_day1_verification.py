@@ -38,8 +38,11 @@ def verify_routes() -> bool:
             "/demo-execution/status",
             "/demo-execution/account-status",
             "/demo-execution/results",
+            "/demo-execution/eligible-queue-items",
+            "/demo-execution/audit-events",
             "/demo-execution/results/{execution_id}",
             "/demo-execution/queue/{queue_id}/execute-demo",
+            "/demo-execution/execute-latest-eligible",
             "/execution-queue/status",
         }
         return show("Demo execution routes and previous queue routes registered", expected <= routes)
@@ -71,6 +74,7 @@ def verify_verifier_and_builder() -> bool:
             status.demo_execution_allowed is False
             and status.simulation_only is True
             and status.live_execution_enabled is False
+            and status.broker_execution_enabled is False
             and order["symbol"] == "EURUSD"
             and order["volume"] == 0.01
             and order["comment"] == "AI_BOT_DEMO_TEST"
@@ -182,8 +186,10 @@ def verify_store_and_routes_json() -> bool:
             and status.json().get("broker_execution_enabled") is False
             and account.json().get("simulation_only") is True
             and account.json().get("live_execution_enabled") is False
+            and account.json().get("broker_execution_enabled") is False
             and blocked_json.get("simulation_only") is True
             and blocked_json.get("live_execution_enabled") is False
+            and blocked_json.get("broker_execution_enabled") is False
         )
         return show("Result store works and demo execution APIs return JSON-safe status", passed)
     except Exception as exc:

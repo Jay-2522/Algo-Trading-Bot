@@ -20,6 +20,7 @@ class MT5DemoAccountStatus(BaseModel):
     rejection_reasons: list[str] = Field(default_factory=list)
     simulation_only: bool = True
     live_execution_enabled: bool = False
+    broker_execution_enabled: bool = False
     timestamp: datetime = Field(default_factory=utc_now)
 
 
@@ -50,4 +51,5 @@ class DemoExecutionResult(BaseModel):
     demo_execution: bool = True
     simulation_only: bool = True
     live_execution_enabled: bool = False
+    broker_execution_enabled: bool = False
     timestamp: datetime = Field(default_factory=utc_now)

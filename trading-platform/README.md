@@ -958,6 +958,18 @@ python tests/phase5_day3_verification.py
 
 Phase 5 Day 3 adds multi-account MT5 demo routing. Backend routes under `/multi-account-execution` preview STARTRADER/FxPro/Vantage demo account plans, enforce EURUSD-only 0.01-lot-per-account rules, block XAUUSD and NIFTY50, prevent duplicate per-account execution attempts, and store per-account batch results. Any MT5 submission remains delegated through the existing guarded demo executor only.
 
+## Run Phase 5 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase5_day1_verification.py
+python tests/phase5_day2_verification.py
+python tests/phase5_day3_verification.py
+python tests/phase5_day4_verification.py
+```
+
+Phase 5 Day 4 adds the demo trade copier coordination layer. Backend routes under `/trade-copier` preview READY/PLANNED copy batches, create auditable copy batches, track per-account copy status, summarize synchronized outcomes, identify partial copies and unavailable accounts, block duplicate copy attempts per signal/account/symbol/action on created batches, and prepare dashboard-visible batch status. The copier remains EURUSD-only, demo-only, and never submits MT5 orders directly.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

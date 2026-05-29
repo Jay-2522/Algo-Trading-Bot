@@ -33,6 +33,7 @@ from backend.api.strategy_routes import router as strategy_router
 from backend.api.streaming_routes import router as streaming_router
 from backend.api.streaming_routes import websocket_router as streaming_websocket_router
 from backend.api.system_health_routes import router as system_health_router
+from backend.api.trade_copier_routes import router as trade_copier_router
 from backend.api.tradingview_webhook_routes import router as tradingview_webhook_router
 from backend.api.trading_loop_routes import router as trading_loop_router
 from backend.api.trading_loop_routes import trading_loop_service
@@ -100,6 +101,7 @@ app.include_router(execution_router)
 app.include_router(execution_queue_router)
 app.include_router(mt5_router)
 app.include_router(multi_account_execution_router)
+app.include_router(trade_copier_router)
 app.include_router(monitoring_router)
 app.include_router(database_router)
 app.include_router(ai_router)

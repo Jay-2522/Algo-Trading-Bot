@@ -18,6 +18,8 @@ REQUIRED_GET_ROUTES = {
     "/mt5/status",
     "/mt5/health",
     "/multi-account-execution/status",
+    "/trade-copier/status",
+    "/trade-copier/batches",
     "/monitoring/status",
     "/client-acceptance/status",
     "/control-center/status",

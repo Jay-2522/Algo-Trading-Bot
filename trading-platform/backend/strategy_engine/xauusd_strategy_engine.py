@@ -48,20 +48,23 @@ class XAUUSDStrategyEngine:
             f"FVG direction={smc_context.fvg_direction}, "
             f"quality={smc_context.fvg_quality}, "
             f"aligned={smc_context.latest_fvg.aligned_with_structure if smc_context.latest_fvg else False}. "
-            "Waiting because liquidity, market structure, and active FVG confirmation are not fully aligned."
+            f"Order block direction={smc_context.order_block_direction}, "
+            f"quality={smc_context.order_block_quality}, "
+            f"active={smc_context.active_order_block_detected}. "
+            "Waiting because liquidity, market structure, active FVG, and active order block confirmation are not fully aligned."
         )
 
         if self._buy_conditions(session_context, indicator_context, liquidity_context, smc_context):
             action = "BUY"
             reason = (
                 "BUY candidate only: sell-side liquidity sweep has bullish BOS/CHOCH confirmation "
-                "and a bullish active FVG during a high-quality session. Execution remains disabled."
+                "with bullish active FVG and bullish active order block during a high-quality session. Execution remains disabled."
             )
         elif self._sell_conditions(session_context, indicator_context, liquidity_context, smc_context):
             action = "SELL"
             reason = (
                 "SELL candidate only: buy-side liquidity sweep has bearish BOS/CHOCH confirmation "
-                "and a bearish active FVG during a high-quality session. Execution remains disabled."
+                "with bearish active FVG and bearish active order block during a high-quality session. Execution remains disabled."
             )
 
         return XAUUSDStrategySignal(
@@ -107,6 +110,8 @@ class XAUUSDStrategyEngine:
             score += (smc_context.confidence / 100.0) * 20.0
         if smc_context.active_fvg_detected:
             score += (smc_context.fvg_confidence / 100.0) * 10.0
+        if smc_context.active_order_block_detected:
+            score += (smc_context.order_block_confidence / 100.0) * 10.0
 
         return round(min(score, 100.0), 2)
 
@@ -117,6 +122,8 @@ class XAUUSDStrategyEngine:
             and smc_context.post_sweep_confirmation is True
             and smc_context.active_fvg_detected is True
             and smc_context.fvg_direction == "BULLISH"
+            and smc_context.active_order_block_detected is True
+            and smc_context.order_block_direction == "BULLISH"
             and session_context.session_quality == "HIGH"
         )
 
@@ -127,5 +134,7 @@ class XAUUSDStrategyEngine:
             and smc_context.post_sweep_confirmation is True
             and smc_context.active_fvg_detected is True
             and smc_context.fvg_direction == "BEARISH"
+            and smc_context.active_order_block_detected is True
+            and smc_context.order_block_direction == "BEARISH"
             and session_context.session_quality == "HIGH"
         )

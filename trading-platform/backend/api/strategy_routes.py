@@ -120,6 +120,25 @@ async def analyze_xauusd_fvg(payload: dict[str, Any] | None = Body(default=None)
         service.close()
 
 
+@router.get("/order-block/xauusd")
+async def get_xauusd_order_block_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_xauusd_order_block()
+    finally:
+        service.close()
+
+
+@router.post("/order-block/xauusd/analyze")
+async def analyze_xauusd_order_block(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_xauusd_order_block(candles=candles)
+    finally:
+        service.close()
+
+
 @router.get("/trend/{symbol}")
 async def get_trend_analysis(symbol: str, timeframe: str = Query(default="M15")) -> dict:
     service = StrategyService()

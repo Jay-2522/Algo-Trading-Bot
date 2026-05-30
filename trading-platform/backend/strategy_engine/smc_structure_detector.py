@@ -4,6 +4,7 @@ from typing import Any
 from backend.strategy_engine.bos_choch_detector import BosChochDetector
 from backend.strategy_engine.fvg_detector import FairValueGapDetector
 from backend.strategy_engine.market_session_service import MarketSessionService
+from backend.strategy_engine.order_block_detector import OrderBlockDetector
 from backend.strategy_engine.strategy_models import SMCStructureContext
 from backend.strategy_engine.structure_strength_scorer import StructureStrengthScorer
 
@@ -15,11 +16,13 @@ class SMCStructureDetector:
         self,
         bos_choch_detector: BosChochDetector | None = None,
         fvg_detector: FairValueGapDetector | None = None,
+        order_block_detector: OrderBlockDetector | None = None,
         scorer: StructureStrengthScorer | None = None,
         session_service: MarketSessionService | None = None,
     ) -> None:
         self.bos_choch_detector = bos_choch_detector or BosChochDetector()
         self.fvg_detector = fvg_detector or FairValueGapDetector()
+        self.order_block_detector = order_block_detector or OrderBlockDetector()
         self.scorer = scorer or StructureStrengthScorer()
         self.session_service = session_service or MarketSessionService()
 
@@ -59,7 +62,6 @@ class SMCStructureDetector:
             confirmation_reason=detected["confirmation_reason"],
             warnings=[
                 *detected["warnings"],
-                "FVG and order block detection remain placeholders for future Phase 6 days.",
             ],
         )
         strength, confidence, quality = self.scorer.score(
@@ -91,6 +93,29 @@ class SMCStructureDetector:
         )
         context.fvg_detected = bool(fvgs)
         context.warnings.extend(fvg_data["warnings"])
+        order_block_data = self.order_block_detector.detect(
+            candles=candles,
+            symbol=symbol,
+            structure_context=context,
+            liquidity_context=liquidity_context,
+        )
+        order_blocks = order_block_data["order_blocks"]
+        latest_order_block = order_block_data["latest_order_block"]
+        context.order_blocks = order_blocks
+        context.latest_order_block = latest_order_block
+        context.bullish_order_block_detected = any(order_block.direction == "BULLISH" for order_block in order_blocks)
+        context.bearish_order_block_detected = any(order_block.direction == "BEARISH" for order_block in order_blocks)
+        context.active_order_block_detected = any(order_block.active for order_block in order_blocks)
+        context.order_block_direction = latest_order_block.direction if latest_order_block else "NONE"
+        context.order_block_quality = latest_order_block.quality if latest_order_block else "NONE"
+        context.order_block_confidence = latest_order_block.strength if latest_order_block else 0.0
+        context.order_block_alignment_reason = (
+            latest_order_block.warnings[0]
+            if latest_order_block and latest_order_block.warnings
+            else "No active order block alignment detected."
+        )
+        context.order_block_detected = bool(order_blocks)
+        context.warnings.extend(order_block_data["warnings"])
         return context
 
     def _session_context_from_latest(self, candles: list[Any]):

@@ -17,6 +17,7 @@ ChochDirection = Literal["BULLISH_CHOCH", "BEARISH_CHOCH", "NONE"]
 StructureQuality = Literal["HIGH", "MEDIUM", "LOW", "NONE"]
 StrategyAction = Literal["BUY", "SELL", "WAIT"]
 FVGDirection = Literal["BULLISH", "BEARISH"]
+OrderBlockDirection = Literal["BULLISH", "BEARISH"]
 
 
 def utc_now() -> datetime:
@@ -105,6 +106,15 @@ class SMCStructureContext(BaseModel):
     fvg_quality: StructureQuality = "NONE"
     fvg_confidence: float = 0.0
     fvg_alignment_reason: str = "No active FVG alignment detected."
+    order_blocks: list["OrderBlock"] = Field(default_factory=list)
+    latest_order_block: "OrderBlock | None" = None
+    bullish_order_block_detected: bool = False
+    bearish_order_block_detected: bool = False
+    active_order_block_detected: bool = False
+    order_block_direction: OrderBlockDirection | Literal["NONE"] = "NONE"
+    order_block_quality: StructureQuality = "NONE"
+    order_block_confidence: float = 0.0
+    order_block_alignment_reason: str = "No active order block alignment detected."
     structure_bias: StructureBias = "NEUTRAL"
     confidence: float = 0.0
     warnings: list[str] = Field(default_factory=list)
@@ -128,6 +138,28 @@ class FairValueGap(BaseModel):
     quality: StructureQuality = "NONE"
     aligned_with_structure: bool = False
     aligned_with_liquidity: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+
+class OrderBlock(BaseModel):
+    order_block_id: str
+    symbol: str
+    direction: OrderBlockDirection
+    creation_time: str
+    upper_bound: float
+    lower_bound: float
+    midpoint: float
+    active: bool = True
+    fresh: bool = True
+    mitigated: bool = False
+    broken: bool = False
+    fill_percentage: float = 0.0
+    remaining_effectiveness: float = 100.0
+    strength: float = 0.0
+    quality: StructureQuality = "NONE"
+    aligned_with_structure: bool = False
+    aligned_with_liquidity: bool = False
+    aligned_with_fvg: bool = False
     warnings: list[str] = Field(default_factory=list)
 
 

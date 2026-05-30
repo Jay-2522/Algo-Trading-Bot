@@ -12,6 +12,7 @@ REQUIRED_GET_ROUTES = {
     "/market-data/timeframes",
     "/strategy/fvg/xauusd",
     "/strategy/liquidity/xauusd",
+    "/strategy/order-block/xauusd",
     "/strategy/session",
     "/strategy/session-context",
     "/strategy/signals",

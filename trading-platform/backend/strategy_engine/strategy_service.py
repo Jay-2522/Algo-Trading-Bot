@@ -89,6 +89,8 @@ class StrategyService:
                 "structure_strength_scoring": True,
                 "fair_value_gap_detection": True,
                 "fvg_quality_scoring": True,
+                "order_block_detection": True,
+                "order_block_quality_scoring": True,
                 "risk_safe_signal_output": True,
             },
             "execution_allowed": False,
@@ -132,6 +134,26 @@ class StrategyService:
             "fvg_quality": structure_context.fvg_quality,
             "fvg_confidence": structure_context.fvg_confidence,
             "fvg_alignment_reason": structure_context.fvg_alignment_reason,
+            "warnings": structure_context.warnings,
+        }
+
+    def analyze_xauusd_order_block(self, candles: list | None = None) -> Dict[str, Any]:
+        """Return XAUUSD order block context without generating execution intent."""
+
+        structure_context = self.analyze_xauusd_structure(candles=candles)
+        return {
+            "symbol": "XAUUSD",
+            "order_blocks": [order_block.model_dump(mode="json") for order_block in structure_context.order_blocks],
+            "latest_order_block": (
+                structure_context.latest_order_block.model_dump(mode="json")
+                if structure_context.latest_order_block
+                else None
+            ),
+            "active_order_block_detected": structure_context.active_order_block_detected,
+            "order_block_direction": structure_context.order_block_direction,
+            "order_block_quality": structure_context.order_block_quality,
+            "order_block_confidence": structure_context.order_block_confidence,
+            "order_block_alignment_reason": structure_context.order_block_alignment_reason,
             "warnings": structure_context.warnings,
         }
 

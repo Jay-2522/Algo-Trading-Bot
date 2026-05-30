@@ -65,6 +65,7 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/trend/XAUUSD`
 - `GET http://127.0.0.1:8000/strategy/liquidity/XAUUSD`
 - `GET http://127.0.0.1:8000/strategy/structure/XAUUSD`
+- `GET http://127.0.0.1:8000/strategy/order-block/xauusd`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1056,6 +1057,19 @@ python tests/phase6_day4_verification.py
 ```
 
 Phase 6 Day 4 adds the Fair Value Gap detection engine. Backend routes under `/strategy/fvg/xauusd` expose bullish and bearish FVGs, bounds, midpoint, size, fill percentage, mitigation state, active state, quality, and alignment with BOS/CHOCH and liquidity sweeps. This remains strategy analysis only; FVG is confluence, not a standalone trading trigger.
+
+## Run Phase 6 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase6_day1_verification.py
+python tests/phase6_day2_verification.py
+python tests/phase6_day3_verification.py
+python tests/phase6_day4_verification.py
+python tests/phase6_day5_verification.py
+```
+
+Phase 6 Day 5 adds the Institutional Order Block detection engine. Backend routes under `/strategy/order-block/xauusd` expose bullish and bearish order blocks, bounds, midpoint, active/fresh/mitigated/broken state, fill percentage, remaining effectiveness, quality, and alignment with BOS/CHOCH, liquidity sweeps, and FVGs. This remains strategy analysis only; order blocks are confluence confirmation and never enable execution.
 
 ## MT5 Safety Boundary
 

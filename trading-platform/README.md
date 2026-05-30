@@ -1060,3 +1060,4 @@ Phase 6 Day 4 adds the Fair Value Gap detection engine. Backend routes under `/s
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.
+##

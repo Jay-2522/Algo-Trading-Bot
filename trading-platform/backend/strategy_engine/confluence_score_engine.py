@@ -15,6 +15,7 @@ class ConfluenceScoreEngine:
         liquidity_context: Any,
         smc_context: Any,
         regime_context: Any,
+        news_filter_decision: Any | None = None,
     ) -> ConfluenceScoreBreakdown:
         breakdown = ConfluenceScoreBreakdown()
         aligned: list[str] = []
@@ -49,11 +50,34 @@ class ConfluenceScoreEngine:
             breakdown.risk_mode = "NO_TRADE"
             breakdown.confidence = min(breakdown.confidence, 20.0)
             warnings.append("Market regime risk mode is NO_TRADE; confluence is hard-blocked.")
+        self._apply_news_decision(breakdown, news_filter_decision, warnings)
 
         breakdown.aligned_confirmations = aligned
         breakdown.missing_confirmations = missing
         breakdown.warnings = warnings
         return breakdown
+
+    def _apply_news_decision(
+        self,
+        breakdown: ConfluenceScoreBreakdown,
+        news_filter_decision: Any | None,
+        warnings: list[str],
+    ) -> None:
+        if news_filter_decision is None:
+            return
+        if self._get(news_filter_decision, "blocked", False):
+            cap = self._get(news_filter_decision, "confidence_cap", 0.0)
+            breakdown.confidence = min(breakdown.confidence, float(cap if cap is not None else 0.0))
+            breakdown.trade_quality = "NO_TRADE"
+            breakdown.risk_mode = "NO_TRADE"
+            warnings.append(self._get(news_filter_decision, "technical_message", "News filter blocked confluence."))
+            return
+        penalty = float(self._get(news_filter_decision, "confidence_penalty", 0.0) or 0.0)
+        if penalty > 0:
+            breakdown.confidence = round(max(0.0, breakdown.confidence - penalty), 2)
+            breakdown.trade_quality = self._trade_quality(breakdown.confidence)
+            breakdown.risk_mode = "REDUCED_RISK"
+            warnings.append(self._get(news_filter_decision, "technical_message", "News filter reduced confluence."))
 
     def _session_score(self, session_context: Any, aligned: list[str], missing: list[str]) -> float:
         quality = self._get(session_context, "session_quality", "LOW")

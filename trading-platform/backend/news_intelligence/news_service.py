@@ -6,6 +6,7 @@ from backend.news_intelligence.event_classifier import EventClassifier
 from backend.news_intelligence.forex_factory_adapter import ForexFactoryAdapter
 from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent, NewsIntelligenceStatus, NewsRiskContext
 from backend.news_intelligence.news_risk_engine import NewsRiskEngine
+from backend.news_intelligence.news_strategy_filter import NewsStrategyFilter
 from backend.news_intelligence.news_window_engine import NewsWindowEngine
 
 
@@ -21,6 +22,7 @@ class NewsService:
         forex_factory_adapter: ForexFactoryAdapter | None = None,
         calendar_store: EconomicCalendarStore | None = None,
         window_engine: NewsWindowEngine | None = None,
+        strategy_filter: NewsStrategyFilter | None = None,
     ) -> None:
         self.classifier = classifier or EventClassifier()
         self.risk_engine = risk_engine or NewsRiskEngine()
@@ -30,6 +32,7 @@ class NewsService:
         )
         self.calendar_store = calendar_store or EconomicCalendarStore()
         self.window_engine = window_engine or NewsWindowEngine()
+        self.strategy_filter = strategy_filter or NewsStrategyFilter()
 
     def get_status(self) -> NewsIntelligenceStatus:
         return NewsIntelligenceStatus(
@@ -90,3 +93,9 @@ class NewsService:
 
     def get_news_risk_context(self) -> NewsRiskContext:
         return self.window_engine.build_context(self.calendar_store.list_events())
+
+    def evaluate_filter(self, symbol: str = "XAUUSD", news_context: NewsRiskContext | dict | None = None):
+        return self.strategy_filter.evaluate(
+            symbol=symbol,
+            news_context=news_context or self.get_news_risk_context(),
+        )

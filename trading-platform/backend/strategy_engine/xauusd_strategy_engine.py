@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from backend.news_intelligence.news_service import NewsService
+from backend.news_intelligence.news_strategy_filter import NewsStrategyFilter
 from backend.strategy_engine.confluence_score_engine import ConfluenceScoreEngine
 from backend.strategy_engine.indicator_context_builder import IndicatorContextBuilder
 from backend.strategy_engine.liquidity_sweep_detector import LiquiditySweepDetector
@@ -24,6 +25,7 @@ class XAUUSDStrategyEngine:
         confluence_engine: ConfluenceScoreEngine | None = None,
         reason_builder: SignalReasonBuilder | None = None,
         news_service: NewsService | None = None,
+        news_strategy_filter: NewsStrategyFilter | None = None,
     ) -> None:
         self.session_service = session_service or MarketSessionService()
         self.indicator_builder = indicator_builder or IndicatorContextBuilder()
@@ -33,6 +35,7 @@ class XAUUSDStrategyEngine:
         self.confluence_engine = confluence_engine or ConfluenceScoreEngine()
         self.reason_builder = reason_builder or SignalReasonBuilder()
         self.news_service = news_service or NewsService()
+        self.news_strategy_filter = news_strategy_filter or NewsStrategyFilter()
 
     def analyze(self, symbol: str = "XAUUSD", candles: list | None = None) -> XAUUSDStrategySignal:
         normalized_symbol = symbol.upper()
@@ -52,14 +55,19 @@ class XAUUSDStrategyEngine:
             session_context=session_context,
         )
 
+        news_context = self.news_service.get_news_risk_context()
+        news_filter_decision = self.news_strategy_filter.evaluate(
+            symbol=normalized_symbol,
+            news_context=news_context,
+        )
         confluence_score = self.confluence_engine.score(
             session_context=session_context,
             indicator_context=indicator_context,
             liquidity_context=liquidity_context,
             smc_context=smc_context,
             regime_context=regime_context,
+            news_filter_decision=news_filter_decision,
         )
-        news_context = self.news_service.get_news_risk_context()
         confidence = confluence_score.confidence
         action = "WAIT"
         reason = (
@@ -104,13 +112,11 @@ class XAUUSDStrategyEngine:
                 "with bearish active FVG/order block, acceptable market regime, and sufficient confluence confidence. Execution remains disabled."
             )
 
-        if news_context.trade_action == "BLOCK":
+        if news_filter_decision.blocked:
             action = "WAIT"
-            confidence = min(confidence, 40.0)
-            reason = f"WAIT: active news risk window blocks strategy candidates. {news_context.reason} {reason}"
-        elif news_context.trade_action == "REDUCE_RISK":
-            confidence = min(confidence, 70.0)
-            reason = f"News reduced-risk mode active. {news_context.reason} {reason}"
+            reason = f"WAIT: active news risk filter block. {news_filter_decision.client_message} {news_filter_decision.reason} {reason}"
+        elif news_filter_decision.trade_action == "REDUCE_RISK":
+            reason = f"{news_filter_decision.client_message} {news_filter_decision.reason} {reason}"
 
         risk_notes = [
             "Phase 6 strategy analysis only.",
@@ -123,10 +129,10 @@ class XAUUSDStrategyEngine:
         if regime_context.regime == "RANGING":
             risk_notes.append("Ranging regime: stronger confluence is required and confidence is reduced.")
         risk_notes.extend(confluence_score.warnings)
-        if news_context.trade_action == "BLOCK":
-            risk_notes.append("News risk BLOCK active: strategy action forced to WAIT.")
-        elif news_context.trade_action == "REDUCE_RISK":
-            risk_notes.append("News risk REDUCE_RISK active: strategy confidence capped for analysis.")
+        if news_filter_decision.blocked:
+            risk_notes.append("News filter blocked strategy output: action forced to WAIT.")
+        elif news_filter_decision.trade_action == "REDUCE_RISK":
+            risk_notes.append("News filter REDUCE_RISK active: strategy confidence reduced for analysis.")
 
         technical_summary = self.reason_builder.build_technical_summary(
             {
@@ -135,6 +141,7 @@ class XAUUSDStrategyEngine:
                 "liquidity_context": liquidity_context,
                 "smc_context": smc_context,
                 "regime_context": regime_context,
+                "news_filter_decision": news_filter_decision,
             },
             confluence_score,
         )
@@ -180,6 +187,7 @@ class XAUUSDStrategyEngine:
                     "simulation_only": news_context.simulation_only,
                     "live_execution_enabled": news_context.live_execution_enabled,
                 },
+                "news_filter_decision": news_filter_decision.model_dump(mode="json"),
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,

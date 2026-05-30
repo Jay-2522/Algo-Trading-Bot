@@ -60,6 +60,8 @@ REQUIRED_GET_ROUTES = {
     "/news/calendar",
     "/news/upcoming-events",
     "/news/risk-context",
+    "/news/filter/status",
+    "/news/filter/current/xauusd",
     "/news/readiness",
     "/operational-intelligence/status",
     "/orchestration/status",

@@ -84,6 +84,32 @@ async def get_news_risk_context() -> dict:
     return news_intelligence_service.get_news_risk_context().model_dump(mode="json")
 
 
+@router.get("/filter/status")
+async def get_news_filter_status() -> dict:
+    return {
+        "status": "OPERATIONAL",
+        "filter_ready": True,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "external_api_calls_enabled": False,
+    }
+
+
+@router.post("/filter/evaluate")
+async def evaluate_news_filter(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    payload = payload or {}
+    decision = news_intelligence_service.evaluate_filter(
+        symbol=payload.get("symbol", "XAUUSD"),
+        news_context=payload.get("news_context"),
+    )
+    return decision.model_dump(mode="json")
+
+
+@router.get("/filter/current/xauusd")
+async def get_current_xauusd_news_filter() -> dict:
+    return news_intelligence_service.evaluate_filter(symbol="XAUUSD").model_dump(mode="json")
+
+
 @router.get("/upcoming")
 async def get_upcoming_events() -> list[dict]:
     return [event.model_dump(mode="json") for event in calendar_service.get_upcoming_events()]

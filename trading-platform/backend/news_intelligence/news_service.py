@@ -4,6 +4,10 @@ from uuid import uuid4
 from backend.news_intelligence.economic_calendar_store import EconomicCalendarStore
 from backend.news_intelligence.event_classifier import EventClassifier
 from backend.news_intelligence.forex_factory_adapter import ForexFactoryAdapter
+from backend.news_intelligence.macro_bias_engine import MacroBiasEngine
+from backend.news_intelligence.macro_context_store import MacroContextStore
+from backend.news_intelligence.macro_models import MacroInstrumentContext, XAUUSDMacroBiasContext
+from backend.news_intelligence.macro_strategy_filter import MacroStrategyFilter
 from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent, NewsIntelligenceStatus, NewsRiskContext
 from backend.news_intelligence.news_risk_engine import NewsRiskEngine
 from backend.news_intelligence.news_strategy_filter import NewsStrategyFilter
@@ -23,6 +27,9 @@ class NewsService:
         calendar_store: EconomicCalendarStore | None = None,
         window_engine: NewsWindowEngine | None = None,
         strategy_filter: NewsStrategyFilter | None = None,
+        macro_bias_engine: MacroBiasEngine | None = None,
+        macro_context_store: MacroContextStore | None = None,
+        macro_strategy_filter: MacroStrategyFilter | None = None,
     ) -> None:
         self.classifier = classifier or EventClassifier()
         self.risk_engine = risk_engine or NewsRiskEngine()
@@ -33,6 +40,9 @@ class NewsService:
         self.calendar_store = calendar_store or EconomicCalendarStore()
         self.window_engine = window_engine or NewsWindowEngine()
         self.strategy_filter = strategy_filter or NewsStrategyFilter()
+        self.macro_bias_engine = macro_bias_engine or MacroBiasEngine()
+        self.macro_context_store = macro_context_store or MacroContextStore()
+        self.macro_strategy_filter = macro_strategy_filter or MacroStrategyFilter()
 
     def get_status(self) -> NewsIntelligenceStatus:
         return NewsIntelligenceStatus(
@@ -99,3 +109,19 @@ class NewsService:
             symbol=symbol,
             news_context=news_context or self.get_news_risk_context(),
         )
+
+    def update_macro_context(self, symbol: str, current_value: float | None, previous_value: float | None) -> MacroInstrumentContext:
+        context = self.macro_bias_engine.build_instrument_context(symbol, current_value, previous_value)
+        return self.macro_context_store.update_instrument_context(context)
+
+    def list_macro_contexts(self) -> list[MacroInstrumentContext]:
+        return self.macro_context_store.get_all_contexts()
+
+    def get_xauusd_macro_bias(self) -> XAUUSDMacroBiasContext:
+        return self.macro_bias_engine.build_xauusd_macro_bias(
+            dxy_context=self.macro_context_store.get_instrument_context("DXY"),
+            us10y_context=self.macro_context_store.get_instrument_context("US10Y"),
+        )
+
+    def evaluate_xauusd_macro_bias(self, action: str = "WAIT") -> XAUUSDMacroBiasContext:
+        return self.macro_strategy_filter.evaluate_xauusd(action, self.get_xauusd_macro_bias())

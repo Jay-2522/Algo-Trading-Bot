@@ -60,6 +60,8 @@ class XAUUSDStrategyEngine:
             symbol=normalized_symbol,
             news_context=news_context,
         )
+        preliminary_action = self._preliminary_action(liquidity_context, smc_context)
+        macro_context = self.news_service.evaluate_xauusd_macro_bias(action=preliminary_action)
         confluence_score = self.confluence_engine.score(
             session_context=session_context,
             indicator_context=indicator_context,
@@ -67,6 +69,7 @@ class XAUUSDStrategyEngine:
             smc_context=smc_context,
             regime_context=regime_context,
             news_filter_decision=news_filter_decision,
+            macro_context=macro_context,
         )
         confidence = confluence_score.confidence
         action = "WAIT"
@@ -117,6 +120,10 @@ class XAUUSDStrategyEngine:
             reason = f"WAIT: active news risk filter block. {news_filter_decision.client_message} {news_filter_decision.reason} {reason}"
         elif news_filter_decision.trade_action == "REDUCE_RISK":
             reason = f"{news_filter_decision.client_message} {news_filter_decision.reason} {reason}"
+        if macro_context.macro_alignment == "CONFLICTING":
+            reason = f"Macro conflict detected. {macro_context.reason} {reason}"
+        elif macro_context.macro_alignment == "ALIGNED":
+            reason = f"{macro_context.reason} {reason}"
 
         risk_notes = [
             "Phase 6 strategy analysis only.",
@@ -133,6 +140,10 @@ class XAUUSDStrategyEngine:
             risk_notes.append("News filter blocked strategy output: action forced to WAIT.")
         elif news_filter_decision.trade_action == "REDUCE_RISK":
             risk_notes.append("News filter REDUCE_RISK active: strategy confidence reduced for analysis.")
+        if macro_context.macro_alignment == "CONFLICTING":
+            risk_notes.append("Macro conflict reduced confidence and degraded trade quality.")
+        elif macro_context.macro_alignment == "NEUTRAL":
+            risk_notes.append("Mixed DXY/US10Y macro context reduced confidence.")
 
         technical_summary = self.reason_builder.build_technical_summary(
             {
@@ -142,6 +153,7 @@ class XAUUSDStrategyEngine:
                 "smc_context": smc_context,
                 "regime_context": regime_context,
                 "news_filter_decision": news_filter_decision,
+                "macro_context": macro_context,
             },
             confluence_score,
         )
@@ -188,6 +200,9 @@ class XAUUSDStrategyEngine:
                     "live_execution_enabled": news_context.live_execution_enabled,
                 },
                 "news_filter_decision": news_filter_decision.model_dump(mode="json"),
+                "macro_context": macro_context.model_dump(mode="json"),
+                "macro_alignment": macro_context.macro_alignment,
+                "macro_confidence_adjustment": macro_context.confidence_adjustment,
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,
@@ -211,6 +226,33 @@ class XAUUSDStrategyEngine:
             and regime_context.risk_mode != "NO_TRADE"
             and confluence_score.confidence >= 70.0
         )
+
+    def _preliminary_action(self, liquidity_context, smc_context) -> str:
+        if (
+            liquidity_context.sweep_direction == "SELL_SIDE_SWEEP"
+            and (smc_context.bos_direction == "BULLISH_BOS" or smc_context.choch_direction == "BULLISH_CHOCH")
+            and (
+                (smc_context.active_fvg_detected is True and smc_context.fvg_direction == "BULLISH")
+                or (
+                    smc_context.active_order_block_detected is True
+                    and smc_context.order_block_direction == "BULLISH"
+                )
+            )
+        ):
+            return "BUY"
+        if (
+            liquidity_context.sweep_direction == "BUY_SIDE_SWEEP"
+            and (smc_context.bos_direction == "BEARISH_BOS" or smc_context.choch_direction == "BEARISH_CHOCH")
+            and (
+                (smc_context.active_fvg_detected is True and smc_context.fvg_direction == "BEARISH")
+                or (
+                    smc_context.active_order_block_detected is True
+                    and smc_context.order_block_direction == "BEARISH"
+                )
+            )
+        ):
+            return "SELL"
+        return "WAIT"
 
     def _sell_conditions(self, liquidity_context, smc_context, regime_context, confluence_score) -> bool:
         return (

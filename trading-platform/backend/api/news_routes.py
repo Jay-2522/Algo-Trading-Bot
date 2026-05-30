@@ -110,6 +110,46 @@ async def get_current_xauusd_news_filter() -> dict:
     return news_intelligence_service.evaluate_filter(symbol="XAUUSD").model_dump(mode="json")
 
 
+@router.get("/macro/status")
+async def get_macro_status() -> dict:
+    return {
+        "status": "OPERATIONAL",
+        "macro_engine_ready": True,
+        "supported_instruments": ["DXY", "US10Y"],
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "external_api_calls_enabled": False,
+    }
+
+
+@router.post("/macro/context")
+async def update_macro_context(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    context = news_intelligence_service.update_macro_context(
+        symbol=payload.get("symbol", "UNKNOWN"),
+        current_value=payload.get("current_value"),
+        previous_value=payload.get("previous_value"),
+    )
+    return context.model_dump(mode="json")
+
+
+@router.get("/macro/context")
+async def get_macro_context() -> list[dict]:
+    return [context.model_dump(mode="json") for context in news_intelligence_service.list_macro_contexts()]
+
+
+@router.get("/macro/xauusd-bias")
+async def get_xauusd_macro_bias() -> dict:
+    return news_intelligence_service.get_xauusd_macro_bias().model_dump(mode="json")
+
+
+@router.post("/macro/xauusd-bias/evaluate")
+async def evaluate_xauusd_macro_bias(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    payload = payload or {}
+    return news_intelligence_service.evaluate_xauusd_macro_bias(
+        action=payload.get("action", "WAIT"),
+    ).model_dump(mode="json")
+
+
 @router.get("/upcoming")
 async def get_upcoming_events() -> list[dict]:
     return [event.model_dump(mode="json") for event in calendar_service.get_upcoming_events()]

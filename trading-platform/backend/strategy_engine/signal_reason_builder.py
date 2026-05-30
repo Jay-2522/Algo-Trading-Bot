@@ -20,11 +20,19 @@ class SignalReasonBuilder:
         smc = contexts["smc_context"]
         regime = contexts["regime_context"]
         news = contexts.get("news_filter_decision")
+        macro = contexts.get("macro_context")
         news_text = ""
         if news is not None:
             news_text = (
                 f" news_action={self._get(news, 'trade_action', 'ALLOW')} "
                 f"news_blocked={self._get(news, 'blocked', False)};"
+            )
+        macro_text = ""
+        if macro is not None:
+            macro_text = (
+                f" macro_bias={self._get(macro, 'gold_bias', 'UNKNOWN')} "
+                f"macro_alignment={self._get(macro, 'macro_alignment', 'UNKNOWN')} "
+                f"macro_adjustment={self._get(macro, 'confidence_adjustment', 0.0)};"
             )
         return (
             f"sweep={self._get(liquidity, 'sweep_direction', 'NONE')}; "
@@ -36,6 +44,7 @@ class SignalReasonBuilder:
             f"quality={self._get(smc, 'order_block_quality', 'NONE')}; "
             f"regime={self._get(regime, 'regime', 'UNCLEAR')} tradeability={self._get(regime, 'tradeability', 'AVOID')}; "
             f"{news_text} "
+            f"{macro_text} "
             f"confidence={self._get(score_breakdown, 'confidence', 0.0)}; "
             f"risk_mode={self._get(score_breakdown, 'risk_mode', 'NO_TRADE')}."
         )

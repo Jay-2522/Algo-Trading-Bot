@@ -137,6 +137,11 @@ News Intelligence API examples:
 - `GET http://127.0.0.1:8000/news/filter/status`
 - `POST http://127.0.0.1:8000/news/filter/evaluate`
 - `GET http://127.0.0.1:8000/news/filter/current/xauusd`
+- `GET http://127.0.0.1:8000/news/macro/status`
+- `POST http://127.0.0.1:8000/news/macro/context`
+- `GET http://127.0.0.1:8000/news/macro/context`
+- `GET http://127.0.0.1:8000/news/macro/xauusd-bias`
+- `POST http://127.0.0.1:8000/news/macro/xauusd-bias/evaluate`
 - `GET http://127.0.0.1:8000/news/upcoming`
 - `GET http://127.0.0.1:8000/news/high-impact`
 - `GET http://127.0.0.1:8000/news/risk-status/XAUUSD`
@@ -1143,6 +1148,18 @@ python tests/phase7_day3_verification.py
 ```
 
 Phase 7 Day 3 adds the News Risk Filter and Strategy Blocking Engine. Routes under `/news/filter` evaluate current or supplied news context, block XAUUSD analysis during high-impact and extreme USD news windows, reduce confidence before medium-risk events, and pause during post-news stabilization. This remains strategy filtering only and adds no live feeds, scraping, API calls, or execution path.
+
+## Run Phase 7 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase7_day1_verification.py
+python tests/phase7_day2_verification.py
+python tests/phase7_day3_verification.py
+python tests/phase7_day4_verification.py
+```
+
+Phase 7 Day 4 adds the DXY and US10Y Macro Bias Engine. Routes under `/news/macro` accept manual DXY and US10Y values, infer direction and momentum, derive XAUUSD gold macro bias, and evaluate whether macro context aligns with BUY/SELL candidates. This remains macro analysis only with no live feeds, scraping, API calls, or execution path.
 
 ## MT5 Safety Boundary
 

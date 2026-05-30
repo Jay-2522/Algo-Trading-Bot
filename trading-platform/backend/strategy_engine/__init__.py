@@ -1,5 +1,6 @@
 """Strategy engine foundation package."""
 
+from backend.strategy_engine.confluence_score_engine import ConfluenceScoreEngine
 from backend.strategy_engine.indicator_context_builder import IndicatorContextBuilder
 from backend.strategy_engine.bos_choch_detector import BosChochDetector
 from backend.strategy_engine.fvg_detector import FairValueGapDetector
@@ -11,6 +12,7 @@ from backend.strategy_engine.market_session_service import MarketSessionService
 from backend.strategy_engine.regime_quality_scorer import RegimeQualityScorer
 from backend.strategy_engine.smc_structure_detector import SMCStructureDetector
 from backend.strategy_engine.strategy_models import (
+    ConfluenceScoreBreakdown,
     IndicatorContext,
     FairValueGap,
     LiquiditySweepContext,
@@ -19,6 +21,7 @@ from backend.strategy_engine.strategy_models import (
     SMCStructureContext,
     XAUUSDStrategySignal,
 )
+from backend.strategy_engine.signal_reason_builder import SignalReasonBuilder
 from backend.strategy_engine.strategy_service import StrategyService
 from backend.strategy_engine.structure_strength_scorer import StructureStrengthScorer
 from backend.strategy_engine.sweep_strength_scorer import SweepStrengthScorer
@@ -27,6 +30,8 @@ from backend.strategy_engine.xauusd_strategy_engine import XAUUSDStrategyEngine
 
 __all__ = [
     "BosChochDetector",
+    "ConfluenceScoreBreakdown",
+    "ConfluenceScoreEngine",
     "FairValueGap",
     "FairValueGapDetector",
     "FVGQualityScorer",
@@ -40,6 +45,7 @@ __all__ = [
     "MarketRegimeContext",
     "MarketRegimeDetector",
     "RegimeQualityScorer",
+    "SignalReasonBuilder",
     "SMCStructureContext",
     "SMCStructureDetector",
     "StrategyService",

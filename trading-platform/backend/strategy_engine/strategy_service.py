@@ -93,6 +93,8 @@ class StrategyService:
                 "order_block_quality_scoring": True,
                 "market_regime_detection": True,
                 "regime_quality_scoring": True,
+                "confluence_confidence_scoring": True,
+                "client_signal_reasoning": True,
                 "risk_safe_signal_output": True,
             },
             "execution_allowed": False,
@@ -171,6 +173,24 @@ class StrategyService:
             session_context=session_context,
         )
         return regime_context.model_dump(mode="json")
+
+    def analyze_xauusd_confluence(self, candles: list | None = None) -> Dict[str, Any]:
+        """Return final XAUUSD confluence scoring without generating execution intent."""
+
+        signal = self.xauusd_engine.analyze(symbol="XAUUSD", candles=candles)
+        return {
+            "symbol": signal.symbol,
+            "action": signal.action,
+            "confluence_breakdown": signal.confluence_score.model_dump(mode="json"),
+            "confidence": signal.confidence,
+            "trade_quality": signal.trade_quality,
+            "aligned_confirmations": signal.aligned_confirmations,
+            "missing_confirmations": signal.missing_confirmations,
+            "risk_mode": signal.confluence_score.risk_mode,
+            "client_summary": signal.client_summary,
+            "technical_summary": signal.technical_summary,
+            "execution_allowed": signal.execution_allowed,
+        }
 
     def list_signals(self, limit: int = 100):
         """Return stored analysis signals."""

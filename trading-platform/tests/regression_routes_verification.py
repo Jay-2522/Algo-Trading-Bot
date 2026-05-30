@@ -10,6 +10,7 @@ REQUIRED_GET_ROUTES = {
     "/health",
     "/status",
     "/market-data/timeframes",
+    "/strategy/confluence/xauusd",
     "/strategy/fvg/xauusd",
     "/strategy/liquidity/xauusd",
     "/strategy/order-block/xauusd",

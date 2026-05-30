@@ -28,6 +28,7 @@ MarketRegime = Literal[
 ]
 Tradeability = Literal["HIGH", "MEDIUM", "LOW", "AVOID"]
 RiskMode = Literal["NORMAL", "REDUCED_RISK", "NO_TRADE"]
+TradeQuality = Literal["A_PLUS", "A", "B", "C", "NO_TRADE"]
 
 
 def utc_now() -> datetime:
@@ -189,6 +190,23 @@ class MarketRegimeContext(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
+class ConfluenceScoreBreakdown(BaseModel):
+    session_score: float = 0.0
+    indicator_score: float = 0.0
+    liquidity_score: float = 0.0
+    structure_score: float = 0.0
+    fvg_score: float = 0.0
+    order_block_score: float = 0.0
+    regime_score: float = 0.0
+    total_score: float = 0.0
+    confidence: float = 0.0
+    trade_quality: TradeQuality = "NO_TRADE"
+    missing_confirmations: list[str] = Field(default_factory=list)
+    aligned_confirmations: list[str] = Field(default_factory=list)
+    risk_mode: RiskMode = "NO_TRADE"
+    warnings: list[str] = Field(default_factory=list)
+
+
 class XAUUSDStrategySignal(BaseModel):
     signal_id: str
     symbol: str
@@ -200,6 +218,12 @@ class XAUUSDStrategySignal(BaseModel):
     liquidity_context: LiquiditySweepContext
     smc_context: SMCStructureContext
     regime_context: MarketRegimeContext
+    confluence_score: ConfluenceScoreBreakdown
+    trade_quality: TradeQuality = "NO_TRADE"
+    aligned_confirmations: list[str] = Field(default_factory=list)
+    missing_confirmations: list[str] = Field(default_factory=list)
+    client_summary: str = ""
+    technical_summary: str = ""
     risk_notes: list[str] = Field(default_factory=list)
     execution_allowed: bool = False
     reason: str

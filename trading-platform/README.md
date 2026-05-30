@@ -126,6 +126,10 @@ AI Decision Engine API examples:
 News Intelligence API examples:
 
 - `GET http://127.0.0.1:8000/news/status`
+- `GET http://127.0.0.1:8000/news/supported-sources`
+- `GET http://127.0.0.1:8000/news/supported-events`
+- `GET http://127.0.0.1:8000/news/calendar-placeholder`
+- `GET http://127.0.0.1:8000/news/readiness`
 - `GET http://127.0.0.1:8000/news/upcoming`
 - `GET http://127.0.0.1:8000/news/high-impact`
 - `GET http://127.0.0.1:8000/news/risk-status/XAUUSD`
@@ -1101,6 +1105,16 @@ python tests/phase6_day7_verification.py
 ```
 
 Phase 6 Day 7 adds the final XAUUSD confluence and confidence scoring engine. Backend routes under `/strategy/confluence/xauusd` combine session, indicators, liquidity sweep, BOS/CHOCH, FVG, order block, and market regime into confidence, trade quality, risk mode, aligned confirmations, missing confirmations, client summary, and technical summary. The engine produces BUY/SELL candidates only when directional liquidity, structure, FVG/order-block entry context, acceptable regime, and confidence are aligned, while `execution_allowed=false` remains enforced.
+
+## Run Phase 7 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase6_day7_verification.py
+python tests/phase7_day1_verification.py
+```
+
+Phase 7 Day 1 adds the News Intelligence Foundation. Backend routes under `/news` expose architecture status, supported placeholder sources, supported macro event types, a placeholder calendar, and readiness reporting for Forex Factory, Financial Juice, DXY, and US10Y integrations. This phase makes no external API calls, performs no scraping, uses no API keys, and only adds a non-decision-changing news placeholder to XAUUSD strategy metadata.
 
 ## MT5 Safety Boundary
 

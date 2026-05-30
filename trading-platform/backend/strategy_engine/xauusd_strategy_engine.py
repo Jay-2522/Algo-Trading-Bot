@@ -146,6 +146,12 @@ class XAUUSDStrategyEngine:
                 "strategy": "XAUUSD",
                 "timeframes": ["H1", "H4"],
                 "mode": "analysis_only",
+                "news_context": {
+                    "status": "PENDING_INTEGRATION",
+                    "high_impact_event_active": False,
+                    "news_risk_mode": "UNKNOWN",
+                    "external_feeds_enabled": False,
+                },
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,

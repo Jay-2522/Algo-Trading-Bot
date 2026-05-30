@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from backend.news_intelligence.news_service import NewsService
 from backend.strategy_engine.confluence_score_engine import ConfluenceScoreEngine
 from backend.strategy_engine.indicator_context_builder import IndicatorContextBuilder
 from backend.strategy_engine.liquidity_sweep_detector import LiquiditySweepDetector
@@ -22,6 +23,7 @@ class XAUUSDStrategyEngine:
         regime_detector: MarketRegimeDetector | None = None,
         confluence_engine: ConfluenceScoreEngine | None = None,
         reason_builder: SignalReasonBuilder | None = None,
+        news_service: NewsService | None = None,
     ) -> None:
         self.session_service = session_service or MarketSessionService()
         self.indicator_builder = indicator_builder or IndicatorContextBuilder()
@@ -30,6 +32,7 @@ class XAUUSDStrategyEngine:
         self.regime_detector = regime_detector or MarketRegimeDetector()
         self.confluence_engine = confluence_engine or ConfluenceScoreEngine()
         self.reason_builder = reason_builder or SignalReasonBuilder()
+        self.news_service = news_service or NewsService()
 
     def analyze(self, symbol: str = "XAUUSD", candles: list | None = None) -> XAUUSDStrategySignal:
         normalized_symbol = symbol.upper()
@@ -56,6 +59,7 @@ class XAUUSDStrategyEngine:
             smc_context=smc_context,
             regime_context=regime_context,
         )
+        news_context = self.news_service.get_news_risk_context()
         confidence = confluence_score.confidence
         action = "WAIT"
         reason = (
@@ -100,6 +104,14 @@ class XAUUSDStrategyEngine:
                 "with bearish active FVG/order block, acceptable market regime, and sufficient confluence confidence. Execution remains disabled."
             )
 
+        if news_context.trade_action == "BLOCK":
+            action = "WAIT"
+            confidence = min(confidence, 40.0)
+            reason = f"WAIT: active news risk window blocks strategy candidates. {news_context.reason} {reason}"
+        elif news_context.trade_action == "REDUCE_RISK":
+            confidence = min(confidence, 70.0)
+            reason = f"News reduced-risk mode active. {news_context.reason} {reason}"
+
         risk_notes = [
             "Phase 6 strategy analysis only.",
             "Execution is disabled; signal output cannot place trades.",
@@ -111,6 +123,10 @@ class XAUUSDStrategyEngine:
         if regime_context.regime == "RANGING":
             risk_notes.append("Ranging regime: stronger confluence is required and confidence is reduced.")
         risk_notes.extend(confluence_score.warnings)
+        if news_context.trade_action == "BLOCK":
+            risk_notes.append("News risk BLOCK active: strategy action forced to WAIT.")
+        elif news_context.trade_action == "REDUCE_RISK":
+            risk_notes.append("News risk REDUCE_RISK active: strategy confidence capped for analysis.")
 
         technical_summary = self.reason_builder.build_technical_summary(
             {
@@ -148,9 +164,21 @@ class XAUUSDStrategyEngine:
                 "mode": "analysis_only",
                 "news_context": {
                     "status": "PENDING_INTEGRATION",
-                    "high_impact_event_active": False,
-                    "news_risk_mode": "UNKNOWN",
+                    "adapter_status": "MANUAL_FOREX_FACTORY_READY",
+                    "high_impact_event_active": news_context.high_impact_event_active,
+                    "risk_level": news_context.risk_level,
+                    "trade_action": news_context.trade_action,
+                    "news_risk_mode": (
+                        news_context.trade_action
+                        if news_context.active_events or news_context.upcoming_events
+                        else "UNKNOWN"
+                    ),
+                    "reason": news_context.reason,
+                    "upcoming_events_count": len(news_context.upcoming_events),
+                    "active_events_count": len(news_context.active_events),
                     "external_feeds_enabled": False,
+                    "simulation_only": news_context.simulation_only,
+                    "live_execution_enabled": news_context.live_execution_enabled,
                 },
                 "simulation_only": True,
                 "live_execution_enabled": False,

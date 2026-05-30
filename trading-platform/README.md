@@ -130,6 +130,10 @@ News Intelligence API examples:
 - `GET http://127.0.0.1:8000/news/supported-events`
 - `GET http://127.0.0.1:8000/news/calendar-placeholder`
 - `GET http://127.0.0.1:8000/news/readiness`
+- `POST http://127.0.0.1:8000/news/forex-factory/ingest`
+- `GET http://127.0.0.1:8000/news/calendar`
+- `GET http://127.0.0.1:8000/news/upcoming-events`
+- `GET http://127.0.0.1:8000/news/risk-context`
 - `GET http://127.0.0.1:8000/news/upcoming`
 - `GET http://127.0.0.1:8000/news/high-impact`
 - `GET http://127.0.0.1:8000/news/risk-status/XAUUSD`
@@ -1115,6 +1119,16 @@ python tests/phase7_day1_verification.py
 ```
 
 Phase 7 Day 1 adds the News Intelligence Foundation. Backend routes under `/news` expose architecture status, supported placeholder sources, supported macro event types, a placeholder calendar, and readiness reporting for Forex Factory, Financial Juice, DXY, and US10Y integrations. This phase makes no external API calls, performs no scraping, uses no API keys, and only adds a non-decision-changing news placeholder to XAUUSD strategy metadata.
+
+## Run Phase 7 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase7_day1_verification.py
+python tests/phase7_day2_verification.py
+```
+
+Phase 7 Day 2 adds the Forex Factory economic calendar integration foundation. The system accepts manual Forex Factory-style event payloads through `/news/forex-factory/ingest`, normalizes them into economic calendar events, classifies CPI/NFP/FOMC/PMI risk, applies pre-news and post-news windows, and exposes `/news/calendar`, `/news/upcoming-events`, and `/news/risk-context`. No live fetching, scraping, API keys, or broker execution are introduced.
 
 ## MT5 Safety Boundary
 

@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from backend.news_intelligence.economic_calendar_store import EconomicCalendarStore
 from backend.news_intelligence.event_classifier import EventClassifier
-from backend.news_intelligence.models import NewsEvent, NewsIntelligenceStatus
+from backend.news_intelligence.forex_factory_adapter import ForexFactoryAdapter
+from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent, NewsIntelligenceStatus, NewsRiskContext
 from backend.news_intelligence.news_risk_engine import NewsRiskEngine
+from backend.news_intelligence.news_window_engine import NewsWindowEngine
 
 
 class NewsService:
@@ -15,9 +18,18 @@ class NewsService:
         self,
         classifier: EventClassifier | None = None,
         risk_engine: NewsRiskEngine | None = None,
+        forex_factory_adapter: ForexFactoryAdapter | None = None,
+        calendar_store: EconomicCalendarStore | None = None,
+        window_engine: NewsWindowEngine | None = None,
     ) -> None:
         self.classifier = classifier or EventClassifier()
         self.risk_engine = risk_engine or NewsRiskEngine()
+        self.forex_factory_adapter = forex_factory_adapter or ForexFactoryAdapter(
+            classifier=self.classifier,
+            risk_engine=self.risk_engine,
+        )
+        self.calendar_store = calendar_store or EconomicCalendarStore()
+        self.window_engine = window_engine or NewsWindowEngine()
 
     def get_status(self) -> NewsIntelligenceStatus:
         return NewsIntelligenceStatus(
@@ -32,7 +44,7 @@ class NewsService:
         )
 
     def get_supported_sources(self) -> list[str]:
-        return list(self.SUPPORTED_SOURCES)
+        return ["FOREX_FACTORY", *self.SUPPORTED_SOURCES]
 
     def get_supported_events(self) -> list[str]:
         return list(self.classifier.SUPPORTED_CATEGORIES)
@@ -62,3 +74,19 @@ class NewsService:
             )
             events.append(self.risk_engine.evaluate(event))
         return events
+
+    def ingest_forex_factory_events(self, raw_events: list[dict]) -> list[EconomicCalendarEvent]:
+        normalized = self.forex_factory_adapter.normalize_events(raw_events)
+        windowed = [self.window_engine.apply_windows(event) for event in normalized]
+        return self.calendar_store.upsert_events(windowed)
+
+    def list_calendar_events(self) -> list[EconomicCalendarEvent]:
+        events = self.calendar_store.list_events()
+        return [self.window_engine.apply_windows(event) for event in events]
+
+    def get_upcoming_events(self) -> list[EconomicCalendarEvent]:
+        events = self.calendar_store.upcoming_events()
+        return [self.window_engine.apply_windows(event) for event in events]
+
+    def get_news_risk_context(self) -> NewsRiskContext:
+        return self.window_engine.build_context(self.calendar_store.list_events())

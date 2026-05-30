@@ -9,13 +9,13 @@ class NewsReadinessService:
             "status": "PENDING_EXTERNAL_INTEGRATIONS",
             "architecture_ready": True,
             "integrations": {
-                "forex_factory": "PENDING",
+                "forex_factory": "MANUAL_INGESTION_READY",
                 "financial_juice": "PENDING",
                 "dxy": "PENDING",
                 "us10y": "PENDING",
             },
             "pending_items": [
-                "Forex Factory integration pending",
+                "Forex Factory live integration pending; manual adapter ready",
                 "Financial Juice integration pending",
                 "DXY integration pending",
                 "US10Y integration pending",

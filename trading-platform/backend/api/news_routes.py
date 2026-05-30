@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException
 
 from backend.news_engine.economic_calendar import EconomicCalendarService
 from backend.news_engine.news_filter_service import NewsFilterService
@@ -53,6 +55,33 @@ async def get_calendar_placeholder() -> list[dict]:
 @router.get("/readiness")
 async def get_news_readiness() -> dict:
     return news_readiness_service.status()
+
+
+@router.post("/forex-factory/ingest")
+async def ingest_forex_factory_events(payload: list[dict[str, Any]] = Body(default_factory=list)) -> dict:
+    events = news_intelligence_service.ingest_forex_factory_events(payload)
+    return {
+        "ingested": len(events),
+        "events": [event.model_dump(mode="json") for event in events],
+        "external_api_calls_enabled": False,
+        "scraping_enabled": False,
+        "simulation_only": True,
+    }
+
+
+@router.get("/calendar")
+async def get_news_calendar() -> list[dict]:
+    return [event.model_dump(mode="json") for event in news_intelligence_service.list_calendar_events()]
+
+
+@router.get("/upcoming-events")
+async def get_news_upcoming_events() -> list[dict]:
+    return [event.model_dump(mode="json") for event in news_intelligence_service.get_upcoming_events()]
+
+
+@router.get("/risk-context")
+async def get_news_risk_context() -> dict:
+    return news_intelligence_service.get_news_risk_context().model_dump(mode="json")
 
 
 @router.get("/upcoming")

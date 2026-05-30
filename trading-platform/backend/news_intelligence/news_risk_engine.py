@@ -1,10 +1,15 @@
-from backend.news_intelligence.models import NewsEvent
+from typing import TypeVar
+
+from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent
+
+
+NewsEventLike = TypeVar("NewsEventLike", NewsEvent, EconomicCalendarEvent)
 
 
 class NewsRiskEngine:
     """Evaluate placeholder macro-event risk for future strategy filters."""
 
-    def evaluate(self, event: NewsEvent) -> NewsEvent:
+    def evaluate(self, event: NewsEventLike) -> NewsEventLike:
         category = event.category.upper()
         if category in {"FOMC", "NFP"}:
             event.risk_level = "EXTREME"

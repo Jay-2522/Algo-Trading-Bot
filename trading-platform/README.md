@@ -66,6 +66,7 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/liquidity/XAUUSD`
 - `GET http://127.0.0.1:8000/strategy/structure/XAUUSD`
 - `GET http://127.0.0.1:8000/strategy/order-block/xauusd`
+- `GET http://127.0.0.1:8000/strategy/regime/xauusd`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1070,6 +1071,20 @@ python tests/phase6_day5_verification.py
 ```
 
 Phase 6 Day 5 adds the Institutional Order Block detection engine. Backend routes under `/strategy/order-block/xauusd` expose bullish and bearish order blocks, bounds, midpoint, active/fresh/mitigated/broken state, fill percentage, remaining effectiveness, quality, and alignment with BOS/CHOCH, liquidity sweeps, and FVGs. This remains strategy analysis only; order blocks are confluence confirmation and never enable execution.
+
+## Run Phase 6 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase6_day1_verification.py
+python tests/phase6_day2_verification.py
+python tests/phase6_day3_verification.py
+python tests/phase6_day4_verification.py
+python tests/phase6_day5_verification.py
+python tests/phase6_day6_verification.py
+```
+
+Phase 6 Day 6 adds the Market Regime Detection Engine. Backend routes under `/strategy/regime/xauusd` classify XAUUSD as trending, ranging, high volatility, low volatility, news-volatility placeholder, or unclear, then return trend strength, volatility score, range score, ATR state, EMA alignment, tradeability, risk mode, and confidence. The XAUUSD strategy engine now uses regime context to force `WAIT` in high-volatility, low-volatility, and unclear conditions, reduce confidence during ranges, and reward healthy trending conditions while keeping execution disabled.
 
 ## MT5 Safety Boundary
 

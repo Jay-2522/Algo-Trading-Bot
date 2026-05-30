@@ -139,6 +139,25 @@ async def analyze_xauusd_order_block(payload: dict[str, Any] | None = Body(defau
         service.close()
 
 
+@router.get("/regime/xauusd")
+async def get_xauusd_regime_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_xauusd_regime()
+    finally:
+        service.close()
+
+
+@router.post("/regime/xauusd/analyze")
+async def analyze_xauusd_regime(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_xauusd_regime(candles=candles)
+    finally:
+        service.close()
+
+
 @router.get("/trend/{symbol}")
 async def get_trend_analysis(symbol: str, timeframe: str = Query(default="M15")) -> dict:
     service = StrategyService()

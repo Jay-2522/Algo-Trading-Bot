@@ -13,6 +13,7 @@ REQUIRED_GET_ROUTES = {
     "/strategy/fvg/xauusd",
     "/strategy/liquidity/xauusd",
     "/strategy/order-block/xauusd",
+    "/strategy/regime/xauusd",
     "/strategy/session",
     "/strategy/session-context",
     "/strategy/signals",

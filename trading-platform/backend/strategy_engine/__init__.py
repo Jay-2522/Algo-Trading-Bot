@@ -6,12 +6,15 @@ from backend.strategy_engine.fvg_detector import FairValueGapDetector
 from backend.strategy_engine.fvg_quality_scorer import FVGQualityScorer
 from backend.strategy_engine.liquidity_level_builder import LiquidityLevelBuilder
 from backend.strategy_engine.liquidity_sweep_detector import LiquiditySweepDetector
+from backend.strategy_engine.market_regime_detector import MarketRegimeDetector
 from backend.strategy_engine.market_session_service import MarketSessionService
+from backend.strategy_engine.regime_quality_scorer import RegimeQualityScorer
 from backend.strategy_engine.smc_structure_detector import SMCStructureDetector
 from backend.strategy_engine.strategy_models import (
     IndicatorContext,
     FairValueGap,
     LiquiditySweepContext,
+    MarketRegimeContext,
     MarketSessionContext,
     SMCStructureContext,
     XAUUSDStrategySignal,
@@ -34,6 +37,9 @@ __all__ = [
     "LiquiditySweepDetector",
     "MarketSessionContext",
     "MarketSessionService",
+    "MarketRegimeContext",
+    "MarketRegimeDetector",
+    "RegimeQualityScorer",
     "SMCStructureContext",
     "SMCStructureDetector",
     "StrategyService",

@@ -18,6 +18,16 @@ StructureQuality = Literal["HIGH", "MEDIUM", "LOW", "NONE"]
 StrategyAction = Literal["BUY", "SELL", "WAIT"]
 FVGDirection = Literal["BULLISH", "BEARISH"]
 OrderBlockDirection = Literal["BULLISH", "BEARISH"]
+MarketRegime = Literal[
+    "TRENDING",
+    "RANGING",
+    "HIGH_VOLATILITY",
+    "LOW_VOLATILITY",
+    "NEWS_VOLATILITY_PLACEHOLDER",
+    "UNCLEAR",
+]
+Tradeability = Literal["HIGH", "MEDIUM", "LOW", "AVOID"]
+RiskMode = Literal["NORMAL", "REDUCED_RISK", "NO_TRADE"]
 
 
 def utc_now() -> datetime:
@@ -163,6 +173,22 @@ class OrderBlock(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class MarketRegimeContext(BaseModel):
+    symbol: str
+    regime: MarketRegime = "UNCLEAR"
+    trend_strength: float = 0.0
+    volatility_score: float = 0.0
+    range_score: float = 0.0
+    atr_state: VolatilityState = "NORMAL"
+    ema_alignment: TrendBias = "NEUTRAL"
+    session_alignment: bool = False
+    tradeability: Tradeability = "AVOID"
+    risk_mode: RiskMode = "NO_TRADE"
+    confidence: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
 class XAUUSDStrategySignal(BaseModel):
     signal_id: str
     symbol: str
@@ -173,6 +199,7 @@ class XAUUSDStrategySignal(BaseModel):
     indicator_context: IndicatorContext
     liquidity_context: LiquiditySweepContext
     smc_context: SMCStructureContext
+    regime_context: MarketRegimeContext
     risk_notes: list[str] = Field(default_factory=list)
     execution_allowed: bool = False
     reason: str

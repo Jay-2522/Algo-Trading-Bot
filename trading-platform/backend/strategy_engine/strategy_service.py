@@ -91,6 +91,8 @@ class StrategyService:
                 "fvg_quality_scoring": True,
                 "order_block_detection": True,
                 "order_block_quality_scoring": True,
+                "market_regime_detection": True,
+                "regime_quality_scoring": True,
                 "risk_safe_signal_output": True,
             },
             "execution_allowed": False,
@@ -156,6 +158,19 @@ class StrategyService:
             "order_block_alignment_reason": structure_context.order_block_alignment_reason,
             "warnings": structure_context.warnings,
         }
+
+    def analyze_xauusd_regime(self, candles: list | None = None) -> Dict[str, Any]:
+        """Return XAUUSD market regime context without generating execution intent."""
+
+        session_context = self.xauusd_engine.session_service.get_session_context()
+        indicator_context = self.xauusd_engine.indicator_builder.build_context("XAUUSD", "H1", candles)
+        regime_context = self.xauusd_engine.regime_detector.detect(
+            symbol="XAUUSD",
+            candles=candles,
+            indicator_context=indicator_context,
+            session_context=session_context,
+        )
+        return regime_context.model_dump(mode="json")
 
     def list_signals(self, limit: int = 100):
         """Return stored analysis signals."""

@@ -188,7 +188,8 @@ def verify_strategy_integration() -> bool:
             and signal.execution_allowed is False
             and signal.liquidity_context.sweep_direction == "BUY_SIDE_SWEEP"
             and signal.liquidity_context.rejection_detected is True
-            and "Future SMC confirmation" in signal.reason
+            and "Structure bos=" in signal.reason
+            and "Waiting because" in signal.reason
         )
         return show("Strategy engine consumes improved liquidity context without issuing trade signals", passed)
     except Exception as exc:
@@ -250,6 +251,10 @@ def verify_preserved_routes() -> bool:
             "/strategy/signals",
             "/strategy/signals/{signal_id}",
             "/strategy/session-context",
+            "/strategy/structure/xauusd",
+            "/strategy/structure/xauusd/analyze",
+            "/strategy/fvg/xauusd",
+            "/strategy/fvg/xauusd/analyze",
         }
         missing = sorted(REQUIRED_GET_ROUTES - registered_get_routes)
         missing += sorted(expected_day1 - all_route_paths)

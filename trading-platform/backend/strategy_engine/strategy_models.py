@@ -12,7 +12,11 @@ SweepDirection = Literal["BUY_SIDE_SWEEP", "SELL_SIDE_SWEEP", "NONE"]
 SweepQuality = Literal["HIGH", "MEDIUM", "LOW", "NONE"]
 RejectionCandleType = Literal["PIN_BAR", "ENGULFING", "STRONG_CLOSE_BACK_INSIDE", "NONE"]
 StructureBias = Literal["BULLISH", "BEARISH", "NEUTRAL"]
+BosDirection = Literal["BULLISH_BOS", "BEARISH_BOS", "NONE"]
+ChochDirection = Literal["BULLISH_CHOCH", "BEARISH_CHOCH", "NONE"]
+StructureQuality = Literal["HIGH", "MEDIUM", "LOW", "NONE"]
 StrategyAction = Literal["BUY", "SELL", "WAIT"]
+FVGDirection = Literal["BULLISH", "BEARISH"]
 
 
 def utc_now() -> datetime:
@@ -74,14 +78,57 @@ class LiquiditySweepContext(BaseModel):
 
 class SMCStructureContext(BaseModel):
     symbol: str
+    swing_highs: list[dict[str, Any]] = Field(default_factory=list)
+    swing_lows: list[dict[str, Any]] = Field(default_factory=list)
+    latest_swing_high: dict[str, Any] | None = None
+    latest_swing_low: dict[str, Any] | None = None
     bos_detected: bool = False
     choch_detected: bool = False
     fvg_detected: bool = False
     order_block_detected: bool = False
+    bos_direction: BosDirection = "NONE"
+    choch_direction: ChochDirection = "NONE"
+    structure_shift_detected: bool = False
+    break_level: float | None = None
+    break_price: float | None = None
+    break_candle_time: str | None = None
+    post_sweep_confirmation: bool = False
+    structure_strength: float = 0.0
+    structure_quality: StructureQuality = "NONE"
+    confirmation_reason: str = "No BOS or CHOCH confirmation detected."
+    fair_value_gaps: list["FairValueGap"] = Field(default_factory=list)
+    latest_fvg: "FairValueGap | None" = None
+    bullish_fvg_detected: bool = False
+    bearish_fvg_detected: bool = False
+    active_fvg_detected: bool = False
+    fvg_direction: FVGDirection | Literal["NONE"] = "NONE"
+    fvg_quality: StructureQuality = "NONE"
+    fvg_confidence: float = 0.0
+    fvg_alignment_reason: str = "No active FVG alignment detected."
     structure_bias: StructureBias = "NEUTRAL"
     confidence: float = 0.0
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=utc_now)
+
+
+class FairValueGap(BaseModel):
+    fvg_id: str
+    symbol: str
+    direction: FVGDirection
+    start_time: str
+    end_time: str
+    upper_bound: float
+    lower_bound: float
+    midpoint: float
+    size: float
+    fill_percentage: float = 0.0
+    mitigated: bool = False
+    active: bool = True
+    displacement_strength: float = 0.0
+    quality: StructureQuality = "NONE"
+    aligned_with_structure: bool = False
+    aligned_with_liquidity: bool = False
+    warnings: list[str] = Field(default_factory=list)
 
 
 class XAUUSDStrategySignal(BaseModel):

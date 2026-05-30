@@ -27,7 +27,12 @@ class XAUUSDStrategyEngine:
         session_context = self.session_service.get_session_context()
         indicator_context = self.indicator_builder.build_context(normalized_symbol, "H1", candles)
         liquidity_context = self.liquidity_detector.detect(normalized_symbol, candles)
-        smc_context = self.smc_detector.detect(normalized_symbol, candles)
+        smc_context = self.smc_detector.detect(
+            normalized_symbol,
+            candles,
+            liquidity_context=liquidity_context,
+            session_context=session_context,
+        )
 
         confidence = self._confidence(session_context, indicator_context, liquidity_context, smc_context)
         action = "WAIT"
@@ -37,15 +42,27 @@ class XAUUSDStrategyEngine:
             f"level={liquidity_context.active_sweep_level or 'NONE'}, "
             f"quality={liquidity_context.sweep_quality}, "
             f"confidence={liquidity_context.confidence}. "
-            "Future SMC confirmation is still required before any directional signal."
+            f"Structure bos={smc_context.bos_direction}, "
+            f"choch={smc_context.choch_direction}, "
+            f"post_sweep_confirmation={smc_context.post_sweep_confirmation}. "
+            f"FVG direction={smc_context.fvg_direction}, "
+            f"quality={smc_context.fvg_quality}, "
+            f"aligned={smc_context.latest_fvg.aligned_with_structure if smc_context.latest_fvg else False}. "
+            "Waiting because liquidity, market structure, and active FVG confirmation are not fully aligned."
         )
 
         if self._buy_conditions(session_context, indicator_context, liquidity_context, smc_context):
             action = "BUY"
-            reason = "Bullish trend, sell-side sweep, bullish structure, high-quality session, and RSI filter aligned."
+            reason = (
+                "BUY candidate only: sell-side liquidity sweep has bullish BOS/CHOCH confirmation "
+                "and a bullish active FVG during a high-quality session. Execution remains disabled."
+            )
         elif self._sell_conditions(session_context, indicator_context, liquidity_context, smc_context):
             action = "SELL"
-            reason = "Bearish trend, buy-side sweep, bearish structure, high-quality session, and RSI filter aligned."
+            reason = (
+                "SELL candidate only: buy-side liquidity sweep has bearish BOS/CHOCH confirmation "
+                "and a bearish active FVG during a high-quality session. Execution remains disabled."
+            )
 
         return XAUUSDStrategySignal(
             signal_id=f"xauusd-{uuid4().hex}",
@@ -87,24 +104,28 @@ class XAUUSDStrategyEngine:
         if liquidity_context.sweep_direction != "NONE":
             score += (liquidity_context.confidence / 100.0) * 25.0
         if smc_context.structure_bias != "NEUTRAL":
-            score += smc_context.confidence * 20.0
+            score += (smc_context.confidence / 100.0) * 20.0
+        if smc_context.active_fvg_detected:
+            score += (smc_context.fvg_confidence / 100.0) * 10.0
 
         return round(min(score, 100.0), 2)
 
     def _buy_conditions(self, session_context, indicator_context, liquidity_context, smc_context) -> bool:
         return (
-            indicator_context.trend_bias == "BULLISH"
-            and liquidity_context.sweep_direction == "SELL_SIDE_SWEEP"
-            and smc_context.structure_bias == "BULLISH"
+            liquidity_context.sweep_direction == "SELL_SIDE_SWEEP"
+            and (smc_context.bos_direction == "BULLISH_BOS" or smc_context.choch_direction == "BULLISH_CHOCH")
+            and smc_context.post_sweep_confirmation is True
+            and smc_context.active_fvg_detected is True
+            and smc_context.fvg_direction == "BULLISH"
             and session_context.session_quality == "HIGH"
-            and (indicator_context.rsi is None or indicator_context.rsi < 70)
         )
 
     def _sell_conditions(self, session_context, indicator_context, liquidity_context, smc_context) -> bool:
         return (
-            indicator_context.trend_bias == "BEARISH"
-            and liquidity_context.sweep_direction == "BUY_SIDE_SWEEP"
-            and smc_context.structure_bias == "BEARISH"
+            liquidity_context.sweep_direction == "BUY_SIDE_SWEEP"
+            and (smc_context.bos_direction == "BEARISH_BOS" or smc_context.choch_direction == "BEARISH_CHOCH")
+            and smc_context.post_sweep_confirmation is True
+            and smc_context.active_fvg_detected is True
+            and smc_context.fvg_direction == "BEARISH"
             and session_context.session_quality == "HIGH"
-            and (indicator_context.rsi is None or indicator_context.rsi > 30)
         )

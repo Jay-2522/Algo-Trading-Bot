@@ -4,6 +4,8 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "strategy", "route": "/strategy/session"},
     {"name": "xauusd_strategy_engine", "route": "/strategy/status"},
     {"name": "xauusd_liquidity_sweeps", "route": "/strategy/liquidity/xauusd"},
+    {"name": "xauusd_bos_choch_structure", "route": "/strategy/structure/xauusd"},
+    {"name": "xauusd_fair_value_gaps", "route": "/strategy/fvg/xauusd"},
     {"name": "risk", "route": "/risk/status"},
     {"name": "execution", "route": "/execution/status"},
     {"name": "execution_queue", "route": "/execution-queue/status"},

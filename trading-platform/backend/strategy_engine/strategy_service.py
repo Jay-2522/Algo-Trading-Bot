@@ -84,7 +84,11 @@ class StrategyService:
                 "liquidity_level_builder": True,
                 "liquidity_sweep_detection": True,
                 "sweep_strength_scoring": True,
-                "smc_structure_placeholders": True,
+                "swing_point_detection": True,
+                "bos_choch_detection": True,
+                "structure_strength_scoring": True,
+                "fair_value_gap_detection": True,
+                "fvg_quality_scoring": True,
                 "risk_safe_signal_output": True,
             },
             "execution_allowed": False,
@@ -104,6 +108,32 @@ class StrategyService:
         """Return XAUUSD liquidity sweep context without generating execution intent."""
 
         return self.xauusd_engine.liquidity_detector.detect(symbol="XAUUSD", candles=candles)
+
+    def analyze_xauusd_structure(self, candles: list | None = None):
+        """Return XAUUSD BOS/CHOCH structure context without generating execution intent."""
+
+        liquidity_context = self.xauusd_engine.liquidity_detector.detect(symbol="XAUUSD", candles=candles)
+        return self.xauusd_engine.smc_detector.detect(
+            symbol="XAUUSD",
+            candles=candles,
+            liquidity_context=liquidity_context,
+        )
+
+    def analyze_xauusd_fvg(self, candles: list | None = None) -> Dict[str, Any]:
+        """Return XAUUSD FVG context without generating execution intent."""
+
+        structure_context = self.analyze_xauusd_structure(candles=candles)
+        return {
+            "symbol": "XAUUSD",
+            "fair_value_gaps": [fvg.model_dump(mode="json") for fvg in structure_context.fair_value_gaps],
+            "latest_fvg": structure_context.latest_fvg.model_dump(mode="json") if structure_context.latest_fvg else None,
+            "active_fvg_detected": structure_context.active_fvg_detected,
+            "fvg_direction": structure_context.fvg_direction,
+            "fvg_quality": structure_context.fvg_quality,
+            "fvg_confidence": structure_context.fvg_confidence,
+            "fvg_alignment_reason": structure_context.fvg_alignment_reason,
+            "warnings": structure_context.warnings,
+        }
 
     def list_signals(self, limit: int = 100):
         """Return stored analysis signals."""

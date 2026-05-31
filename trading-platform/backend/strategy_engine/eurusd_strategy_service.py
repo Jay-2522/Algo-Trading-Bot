@@ -15,3 +15,6 @@ class EURUSDStrategyService:
 
     def indicator_context(self, candles: list | None = None):
         return self.engine.build_indicator_context(candles=candles)
+
+    def liquidity_context(self, candles: list | None = None):
+        return self.engine.build_liquidity_context(candles=candles)

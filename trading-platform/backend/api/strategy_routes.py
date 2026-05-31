@@ -43,6 +43,17 @@ async def analyze_eurusd() -> dict:
         service.close()
 
 
+@router.post("/analyze/eurusd")
+async def analyze_eurusd_with_payload(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        signal = service.analyze_eurusd(candles=candles)
+        return signal.model_dump(mode="json")
+    finally:
+        service.close()
+
+
 @router.get("/eurusd/session-context")
 async def get_eurusd_session_context() -> dict:
     service = StrategyService()
@@ -57,6 +68,25 @@ async def get_eurusd_indicator_context() -> dict:
     service = StrategyService()
     try:
         return service.get_eurusd_indicator_context().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.get("/eurusd/liquidity")
+async def get_eurusd_liquidity_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_eurusd_liquidity().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.post("/eurusd/liquidity/analyze")
+async def analyze_eurusd_liquidity(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_eurusd_liquidity(candles=candles).model_dump(mode="json")
     finally:
         service.close()
 

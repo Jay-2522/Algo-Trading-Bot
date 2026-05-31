@@ -88,6 +88,32 @@ class LiquiditySweepContext(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
+class EURUSDLiquidityContext(BaseModel):
+    symbol: str = "EURUSD"
+    asian_high: float | None = None
+    asian_low: float | None = None
+    previous_day_high: float | None = None
+    previous_day_low: float | None = None
+    equal_highs: list[dict[str, Any]] = Field(default_factory=list)
+    equal_lows: list[dict[str, Any]] = Field(default_factory=list)
+    liquidity_pools: list[dict[str, Any]] = Field(default_factory=list)
+    swept_asian_high: bool = False
+    swept_asian_low: bool = False
+    swept_previous_high: bool = False
+    swept_previous_low: bool = False
+    active_sweep_level: str | None = None
+    sweep_price: float | None = None
+    rejection_detected: bool = False
+    rejection_candle_type: RejectionCandleType = "NONE"
+    sweep_strength: float = 0.0
+    sweep_quality: SweepQuality = "NONE"
+    session_alignment: bool = False
+    sweep_direction: SweepDirection = "NONE"
+    confidence: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
 class SMCStructureContext(BaseModel):
     symbol: str
     swing_highs: list[dict[str, Any]] = Field(default_factory=list)
@@ -245,6 +271,7 @@ class EURUSDStrategySignal(BaseModel):
     trend_bias: TrendBias = "NEUTRAL"
     session_context: MarketSessionContext
     indicator_context: IndicatorContext
+    liquidity_context: EURUSDLiquidityContext | None = None
     execution_allowed: bool = False
     reason: str
     timestamp: datetime = Field(default_factory=utc_now)

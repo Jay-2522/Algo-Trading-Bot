@@ -129,6 +129,11 @@ class StrategyService:
 
         return self.eurusd_service.indicator_context(candles=candles)
 
+    def analyze_eurusd_liquidity(self, candles: list | None = None):
+        """Return Phase 8 EURUSD liquidity context."""
+
+        return self.eurusd_service.liquidity_context(candles=candles)
+
     def analyze_xauusd_liquidity(self, candles: list | None = None):
         """Return XAUUSD liquidity sweep context without generating execution intent."""
 

@@ -148,6 +148,25 @@ async def analyze_eurusd_order_block(payload: dict[str, Any] | None = Body(defau
         service.close()
 
 
+@router.get("/eurusd/regime")
+async def get_eurusd_regime_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_eurusd_regime().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.post("/eurusd/regime/analyze")
+async def analyze_eurusd_regime(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_eurusd_regime(candles=candles).model_dump(mode="json")
+    finally:
+        service.close()
+
+
 @router.get("/signals")
 async def list_strategy_signals(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
     service = StrategyService()

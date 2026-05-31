@@ -46,3 +46,12 @@ class EURUSDStrategyService:
             liquidity_context=liquidity_context,
             fvg_context=fvg_context,
         )
+
+    def regime_context(self, candles: list | None = None):
+        session_context = self.engine.build_session_context()
+        indicator_context = self.engine.build_indicator_context(candles=candles)
+        return self.engine.build_regime_context(
+            candles=candles,
+            indicator_context=indicator_context,
+            session_context=session_context,
+        )

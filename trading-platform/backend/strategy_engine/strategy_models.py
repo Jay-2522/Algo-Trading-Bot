@@ -209,6 +209,22 @@ class EURUSDOrderBlockContext(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
+class EURUSDRegimeContext(BaseModel):
+    symbol: str = "EURUSD"
+    regime: MarketRegime = "UNCLEAR"
+    trend_strength: float = 0.0
+    volatility_score: float = 0.0
+    range_score: float = 0.0
+    atr_state: VolatilityState = "NORMAL"
+    ema_alignment: TrendBias = "NEUTRAL"
+    session_alignment: bool = False
+    tradeability: Tradeability = "AVOID"
+    risk_mode: RiskMode = "NO_TRADE"
+    confidence: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
 class SMCStructureContext(BaseModel):
     symbol: str
     swing_highs: list[dict[str, Any]] = Field(default_factory=list)
@@ -370,6 +386,7 @@ class EURUSDStrategySignal(BaseModel):
     structure_context: EURUSDStructureContext | None = None
     fvg_context: EURUSDFVGContext | None = None
     order_block_context: EURUSDOrderBlockContext | None = None
+    regime_context: EURUSDRegimeContext | None = None
     execution_allowed: bool = False
     reason: str
     timestamp: datetime = Field(default_factory=utc_now)

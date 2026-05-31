@@ -1,5 +1,6 @@
 from typing import Any, Dict
 
+from backend.strategy_engine.eurusd_strategy_service import EURUSDStrategyService
 from backend.market_data.market_data_service import MarketDataService
 from backend.strategy_engine.liquidity_detector import LiquidityDetector
 from backend.strategy_engine.market_session_service import MarketSessionService
@@ -23,6 +24,7 @@ class StrategyService:
         structure_analyzer: StructureAnalyzer | None = None,
         session_manager: SessionManager | None = None,
         xauusd_engine: XAUUSDStrategyEngine | None = None,
+        eurusd_service: EURUSDStrategyService | None = None,
         signal_store: StrategySignalStore | None = None,
         market_session_service: MarketSessionService | None = None,
     ) -> None:
@@ -32,6 +34,7 @@ class StrategyService:
         self.structure_analyzer = structure_analyzer or StructureAnalyzer()
         self.session_manager = session_manager or SessionManager()
         self.xauusd_engine = xauusd_engine or XAUUSDStrategyEngine()
+        self.eurusd_service = eurusd_service or EURUSDStrategyService()
         self.signal_store = signal_store or strategy_signal_store
         self.market_session_service = market_session_service or MarketSessionService()
 
@@ -109,6 +112,22 @@ class StrategyService:
 
         signal = self.xauusd_engine.analyze(symbol="XAUUSD", candles=candles)
         return self.signal_store.store_signal(signal)
+
+    def analyze_eurusd(self, candles: list | None = None):
+        """Analyze EURUSD and store the read-only strategy signal."""
+
+        signal = self.eurusd_service.analyze(candles=candles)
+        return self.signal_store.store_signal(signal)
+
+    def get_eurusd_session_context(self):
+        """Return current Phase 8 EURUSD session context."""
+
+        return self.eurusd_service.session_context()
+
+    def get_eurusd_indicator_context(self, candles: list | None = None):
+        """Return Phase 8 EURUSD indicator context."""
+
+        return self.eurusd_service.indicator_context(candles=candles)
 
     def analyze_xauusd_liquidity(self, candles: list | None = None):
         """Return XAUUSD liquidity sweep context without generating execution intent."""

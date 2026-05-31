@@ -235,3 +235,20 @@ class XAUUSDStrategySignal(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         self.execution_allowed = False
+
+
+class EURUSDStrategySignal(BaseModel):
+    signal_id: str
+    symbol: str
+    action: StrategyAction = "WAIT"
+    confidence: float = 0.0
+    trend_bias: TrendBias = "NEUTRAL"
+    session_context: MarketSessionContext
+    indicator_context: IndicatorContext
+    execution_allowed: bool = False
+    reason: str
+    timestamp: datetime = Field(default_factory=utc_now)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    def model_post_init(self, __context: Any) -> None:
+        self.execution_allowed = False

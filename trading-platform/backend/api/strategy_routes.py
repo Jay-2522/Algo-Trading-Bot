@@ -33,6 +33,34 @@ async def analyze_xauusd(payload: dict[str, Any] | None = Body(default=None)) ->
         service.close()
 
 
+@router.get("/analyze/eurusd")
+async def analyze_eurusd() -> dict:
+    service = StrategyService()
+    try:
+        signal = service.analyze_eurusd()
+        return signal.model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.get("/eurusd/session-context")
+async def get_eurusd_session_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.get_eurusd_session_context().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.get("/eurusd/indicator-context")
+async def get_eurusd_indicator_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.get_eurusd_indicator_context().model_dump(mode="json")
+    finally:
+        service.close()
+
+
 @router.get("/signals")
 async def list_strategy_signals(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
     service = StrategyService()

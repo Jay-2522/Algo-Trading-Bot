@@ -68,6 +68,9 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/order-block/xauusd`
 - `GET http://127.0.0.1:8000/strategy/regime/xauusd`
 - `GET http://127.0.0.1:8000/strategy/confluence/xauusd`
+- `GET http://127.0.0.1:8000/strategy/analyze/eurusd`
+- `GET http://127.0.0.1:8000/strategy/eurusd/session-context`
+- `GET http://127.0.0.1:8000/strategy/eurusd/indicator-context`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1214,6 +1217,16 @@ python tests/phase7_day7_verification.py
 ```
 
 Phase 7 Day 7 adds the News Intelligence Command Center and Readiness Engine. Routes under `/news/command-center`, `/news/health`, `/news/readiness-dashboard`, and `/news/phase7/status` expose economic calendar, headline, macro, unified risk, health, readiness, and strategy news state in one operational visibility layer. Final Phase 7 status is `PHASE_7_READY` and `COMPLETE`, with no live feeds, scraping, API calls, or execution path.
+
+## Run Phase 8 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase7_day7_verification.py
+python tests/phase8_day1_verification.py
+```
+
+Phase 8 Day 1 adds the EURUSD strategy foundation while preserving XAUUSD as the primary strategy engine. Routes under `/strategy/analyze/eurusd`, `/strategy/eurusd/session-context`, and `/strategy/eurusd/indicator-context` expose analysis-only EURUSD signal, session, and indicator context. EURUSD returns `WAIT` until future confluence layers are added, with `execution_allowed=false`, `simulation_only=true`, and no broker connectivity.
 
 ## MT5 Safety Boundary
 

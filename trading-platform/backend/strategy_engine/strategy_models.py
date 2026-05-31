@@ -344,6 +344,25 @@ class ConfluenceScoreBreakdown(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class EURUSDConfluenceScore(BaseModel):
+    session_score: float = 0.0
+    indicator_score: float = 0.0
+    liquidity_score: float = 0.0
+    structure_score: float = 0.0
+    fvg_score: float = 0.0
+    order_block_score: float = 0.0
+    regime_score: float = 0.0
+    news_score: float = 0.0
+    macro_score: float = 0.0
+    total_score: float = 0.0
+    confidence: float = 0.0
+    trade_quality: TradeQuality = "NO_TRADE"
+    aligned_confirmations: list[str] = Field(default_factory=list)
+    missing_confirmations: list[str] = Field(default_factory=list)
+    risk_mode: RiskMode = "NO_TRADE"
+    warnings: list[str] = Field(default_factory=list)
+
+
 class XAUUSDStrategySignal(BaseModel):
     signal_id: str
     symbol: str
@@ -387,6 +406,14 @@ class EURUSDStrategySignal(BaseModel):
     fvg_context: EURUSDFVGContext | None = None
     order_block_context: EURUSDOrderBlockContext | None = None
     regime_context: EURUSDRegimeContext | None = None
+    news_context: dict[str, Any] = Field(default_factory=dict)
+    macro_context: dict[str, Any] = Field(default_factory=dict)
+    confluence_score: EURUSDConfluenceScore | None = None
+    trade_quality: TradeQuality = "NO_TRADE"
+    aligned_confirmations: list[str] = Field(default_factory=list)
+    missing_confirmations: list[str] = Field(default_factory=list)
+    client_summary: str = ""
+    technical_summary: str = ""
     execution_allowed: bool = False
     reason: str
     timestamp: datetime = Field(default_factory=utc_now)

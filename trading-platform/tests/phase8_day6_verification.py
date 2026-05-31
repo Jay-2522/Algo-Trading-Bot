@@ -150,7 +150,7 @@ def verify_routes_and_strategy() -> bool:
             and payload["execution_allowed"] is False
             and "regime_context" in payload
             and payload["regime_context"]["regime"] == "HIGH_VOLATILITY"
-            and payload["metadata"]["phase"] == "PHASE_8_DAY_6"
+            and payload["metadata"]["phase"] in {"PHASE_8_DAY_6", "PHASE_8_DAY_7"}
             and payload["metadata"]["regime_engine_integrated"] is True
             and payload["metadata"]["simulation_only"] is True
             and payload["metadata"]["live_execution_enabled"] is False

@@ -55,3 +55,21 @@ class EURUSDStrategyService:
             indicator_context=indicator_context,
             session_context=session_context,
         )
+
+    def confluence_context(self, candles: list | None = None):
+        signal = self.engine.analyze(candles=candles)
+        return {
+            "symbol": signal.symbol,
+            "action": signal.action,
+            "confluence_score": signal.confluence_score.model_dump(mode="json") if signal.confluence_score else None,
+            "confidence": signal.confidence,
+            "trade_quality": signal.trade_quality,
+            "aligned_confirmations": signal.aligned_confirmations,
+            "missing_confirmations": signal.missing_confirmations,
+            "risk_mode": signal.confluence_score.risk_mode if signal.confluence_score else "NO_TRADE",
+            "client_summary": signal.client_summary,
+            "technical_summary": signal.technical_summary,
+            "execution_allowed": signal.execution_allowed,
+            "simulation_only": signal.metadata.get("simulation_only", True),
+            "live_execution_enabled": signal.metadata.get("live_execution_enabled", False),
+        }

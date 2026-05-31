@@ -160,7 +160,7 @@ def verify_routes_and_strategy() -> bool:
             and payload["execution_allowed"] is False
             and "order_block_context" in payload
             and payload["order_block_context"]["order_block_direction"] == "BULLISH"
-            and payload["metadata"]["phase"] in {"PHASE_8_DAY_5", "PHASE_8_DAY_6"}
+            and payload["metadata"]["phase"] in {"PHASE_8_DAY_5", "PHASE_8_DAY_6", "PHASE_8_DAY_7"}
             and payload["metadata"]["order_block_engine_integrated"] is True
             and payload["metadata"]["simulation_only"] is True
             and payload["metadata"]["live_execution_enabled"] is False

@@ -76,6 +76,7 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/eurusd/fvg`
 - `GET http://127.0.0.1:8000/strategy/eurusd/order-block`
 - `GET http://127.0.0.1:8000/strategy/eurusd/regime`
+- `GET http://127.0.0.1:8000/strategy/eurusd/confluence`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1292,6 +1293,21 @@ python tests/phase8_day6_verification.py
 ```
 
 Phase 8 Day 6 adds the EURUSD Market Regime detection engine. The engine classifies trending, ranging, high-volatility, low-volatility, and unclear EURUSD conditions with FX-scaled ATR/EMA/range logic, tradeability scoring, risk mode mapping, and strategy metadata integration. EURUSD remains analysis-only and WAIT-only until the final EURUSD confluence layer is integrated.
+
+## Run Phase 8 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase8_day1_verification.py
+python tests/phase8_day2_verification.py
+python tests/phase8_day3_verification.py
+python tests/phase8_day4_verification.py
+python tests/phase8_day5_verification.py
+python tests/phase8_day6_verification.py
+python tests/phase8_day7_verification.py
+```
+
+Phase 8 Day 7 completes the EURUSD strategy intelligence layer with final confluence and confidence scoring. The engine combines session, indicator, liquidity, BOS/CHOCH, FVG, order block, regime, news, and DXY macro placeholders into action, confidence, trade quality, risk mode, client summary, and technical summary. EURUSD remains analysis-only with `execution_allowed=false`.
 
 ## MT5 Safety Boundary
 

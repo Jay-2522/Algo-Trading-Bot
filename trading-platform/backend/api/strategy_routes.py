@@ -167,6 +167,25 @@ async def analyze_eurusd_regime(payload: dict[str, Any] | None = Body(default=No
         service.close()
 
 
+@router.get("/eurusd/confluence")
+async def get_eurusd_confluence_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_eurusd_confluence()
+    finally:
+        service.close()
+
+
+@router.post("/eurusd/confluence/analyze")
+async def analyze_eurusd_confluence(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_eurusd_confluence(candles=candles)
+    finally:
+        service.close()
+
+
 @router.get("/signals")
 async def list_strategy_signals(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
     service = StrategyService()

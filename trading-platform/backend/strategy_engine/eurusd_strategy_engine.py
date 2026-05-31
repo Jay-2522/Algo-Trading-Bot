@@ -1,9 +1,16 @@
 from uuid import uuid4
 
 from backend.strategy_engine.eurusd_liquidity_engine import EURUSDLiquidityEngine
+from backend.strategy_engine.eurusd_structure_engine import EURUSDStructureEngine
 from backend.strategy_engine.indicator_context_builder import IndicatorContextBuilder
 from backend.strategy_engine.market_session_service import MarketSessionService
-from backend.strategy_engine.strategy_models import EURUSDLiquidityContext, EURUSDStrategySignal, IndicatorContext, MarketSessionContext
+from backend.strategy_engine.strategy_models import (
+    EURUSDLiquidityContext,
+    EURUSDStrategySignal,
+    EURUSDStructureContext,
+    IndicatorContext,
+    MarketSessionContext,
+)
 
 
 class EURUSDStrategyEngine:
@@ -14,19 +21,23 @@ class EURUSDStrategyEngine:
         session_service: MarketSessionService | None = None,
         indicator_builder: IndicatorContextBuilder | None = None,
         liquidity_engine: EURUSDLiquidityEngine | None = None,
+        structure_engine: EURUSDStructureEngine | None = None,
     ) -> None:
         self.session_service = session_service or MarketSessionService()
         self.indicator_builder = indicator_builder or IndicatorContextBuilder()
         self.liquidity_engine = liquidity_engine or EURUSDLiquidityEngine(session_service=self.session_service)
+        self.structure_engine = structure_engine or EURUSDStructureEngine(session_service=self.session_service)
 
     def analyze(self, candles: list | None = None) -> EURUSDStrategySignal:
         session_context = self.build_session_context()
         indicator_context = self.build_indicator_context(candles=candles)
         liquidity_context = self.build_liquidity_context(candles=candles)
+        structure_context = self.build_structure_context(candles=candles, liquidity_context=liquidity_context)
         return self.generate_signal(
             session_context=session_context,
             indicator_context=indicator_context,
             liquidity_context=liquidity_context,
+            structure_context=structure_context,
         )
 
     def build_session_context(self) -> MarketSessionContext:
@@ -46,11 +57,22 @@ class EURUSDStrategyEngine:
     def build_liquidity_context(self, candles: list | None = None) -> EURUSDLiquidityContext:
         return self.liquidity_engine.detect(candles=candles)
 
+    def build_structure_context(
+        self,
+        candles: list | None = None,
+        liquidity_context: EURUSDLiquidityContext | None = None,
+    ) -> EURUSDStructureContext:
+        return self.structure_engine.detect(
+            candles=candles,
+            liquidity_context=liquidity_context or self.build_liquidity_context(candles=candles),
+        )
+
     def generate_signal(
         self,
         session_context: MarketSessionContext,
         indicator_context: IndicatorContext,
         liquidity_context: EURUSDLiquidityContext,
+        structure_context: EURUSDStructureContext,
     ) -> EURUSDStrategySignal:
         return EURUSDStrategySignal(
             signal_id=f"eurusd-{uuid4().hex}",
@@ -61,24 +83,31 @@ class EURUSDStrategyEngine:
             session_context=session_context,
             indicator_context=indicator_context,
             liquidity_context=liquidity_context,
+            structure_context=structure_context,
             execution_allowed=False,
             reason=(
-                "Phase 8 Day 2 EURUSD liquidity layer established. "
+                "Phase 8 Day 3 EURUSD structure layer established. "
                 f"Sweep direction={liquidity_context.sweep_direction}, "
                 f"active level={liquidity_context.active_sweep_level or 'NONE'}, "
                 f"quality={liquidity_context.sweep_quality}, "
-                f"confidence={liquidity_context.confidence}. "
-                "EURUSD structure and confluence layers are not yet integrated."
+                f"liquidity confidence={liquidity_context.confidence}. "
+                f"BOS={structure_context.bos_direction}, "
+                f"CHOCH={structure_context.choch_direction}, "
+                f"post_sweep_confirmation={structure_context.post_sweep_confirmation}, "
+                f"structure_quality={structure_context.structure_quality}. "
+                "EURUSD FVG, order block, regime, and confluence layers are not yet integrated."
             ),
             metadata={
                 "instrument": "EURUSD",
-                "phase": "PHASE_8_DAY_2",
+                "phase": "PHASE_8_DAY_3",
                 "mode": "analysis_only",
                 "session_ready": True,
                 "indicator_context_ready": True,
                 "liquidity_engine_integrated": True,
                 "eurusd_liquidity_tolerance": self.liquidity_engine.tolerance,
-                "smc_engine_integrated": False,
+                "structure_engine_integrated": True,
+                "eurusd_structure_tolerance": self.structure_engine.tolerance,
+                "smc_engine_integrated": True,
                 "news_intelligence_ready": True,
                 "simulation_only": True,
                 "live_execution_enabled": False,

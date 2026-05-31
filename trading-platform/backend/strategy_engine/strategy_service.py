@@ -134,6 +134,11 @@ class StrategyService:
 
         return self.eurusd_service.liquidity_context(candles=candles)
 
+    def analyze_eurusd_structure(self, candles: list | None = None):
+        """Return Phase 8 EURUSD BOS/CHOCH structure context."""
+
+        return self.eurusd_service.structure_context(candles=candles)
+
     def analyze_xauusd_liquidity(self, candles: list | None = None):
         """Return XAUUSD liquidity sweep context without generating execution intent."""
 

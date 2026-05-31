@@ -91,6 +91,25 @@ async def analyze_eurusd_liquidity(payload: dict[str, Any] | None = Body(default
         service.close()
 
 
+@router.get("/eurusd/structure")
+async def get_eurusd_structure_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_eurusd_structure().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.post("/eurusd/structure/analyze")
+async def analyze_eurusd_structure(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_eurusd_structure(candles=candles).model_dump(mode="json")
+    finally:
+        service.close()
+
+
 @router.get("/signals")
 async def list_strategy_signals(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
     service = StrategyService()

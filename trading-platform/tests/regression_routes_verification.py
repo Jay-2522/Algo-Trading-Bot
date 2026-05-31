@@ -15,6 +15,7 @@ REQUIRED_GET_ROUTES = {
     "/strategy/eurusd/indicator-context",
     "/strategy/eurusd/liquidity",
     "/strategy/eurusd/session-context",
+    "/strategy/eurusd/structure",
     "/strategy/fvg/xauusd",
     "/strategy/liquidity/xauusd",
     "/strategy/order-block/xauusd",

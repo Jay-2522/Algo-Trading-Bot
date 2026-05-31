@@ -126,7 +126,7 @@ def verify_routes_and_strategy() -> bool:
             and payload["execution_allowed"] is False
             and "liquidity_context" in payload
             and payload["liquidity_context"]["sweep_direction"] == "BUY_SIDE_SWEEP"
-            and payload["metadata"]["phase"] == "PHASE_8_DAY_2"
+            and payload["metadata"]["phase"] in {"PHASE_8_DAY_2", "PHASE_8_DAY_3"}
             and payload["metadata"]["liquidity_engine_integrated"] is True
             and payload["metadata"]["simulation_only"] is True
             and payload["metadata"]["live_execution_enabled"] is False

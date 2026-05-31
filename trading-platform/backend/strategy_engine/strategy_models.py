@@ -114,6 +114,30 @@ class EURUSDLiquidityContext(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
+class EURUSDStructureContext(BaseModel):
+    symbol: str = "EURUSD"
+    swing_highs: list[dict[str, Any]] = Field(default_factory=list)
+    swing_lows: list[dict[str, Any]] = Field(default_factory=list)
+    latest_swing_high: dict[str, Any] | None = None
+    latest_swing_low: dict[str, Any] | None = None
+    bos_detected: bool = False
+    choch_detected: bool = False
+    bos_direction: BosDirection = "NONE"
+    choch_direction: ChochDirection = "NONE"
+    structure_shift_detected: bool = False
+    break_level: float | None = None
+    break_price: float | None = None
+    break_candle_time: str | None = None
+    post_sweep_confirmation: bool = False
+    structure_strength: float = 0.0
+    structure_quality: StructureQuality = "NONE"
+    structure_bias: StructureBias = "NEUTRAL"
+    confirmation_reason: str = "No EURUSD BOS or CHOCH confirmation detected."
+    confidence: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
 class SMCStructureContext(BaseModel):
     symbol: str
     swing_highs: list[dict[str, Any]] = Field(default_factory=list)
@@ -272,6 +296,7 @@ class EURUSDStrategySignal(BaseModel):
     session_context: MarketSessionContext
     indicator_context: IndicatorContext
     liquidity_context: EURUSDLiquidityContext | None = None
+    structure_context: EURUSDStructureContext | None = None
     execution_allowed: bool = False
     reason: str
     timestamp: datetime = Field(default_factory=utc_now)

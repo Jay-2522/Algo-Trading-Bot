@@ -72,6 +72,7 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/eurusd/session-context`
 - `GET http://127.0.0.1:8000/strategy/eurusd/indicator-context`
 - `GET http://127.0.0.1:8000/strategy/eurusd/liquidity`
+- `GET http://127.0.0.1:8000/strategy/eurusd/structure`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1238,6 +1239,17 @@ python tests/phase8_day2_verification.py
 ```
 
 Phase 8 Day 2 adds the EURUSD liquidity sweep engine. The engine detects Asian high/low, previous-day high/low, equal highs/lows, buy-side and sell-side sweeps, rejection back inside liquidity, session alignment, and confidence scoring using EURUSD pip tolerance `0.0002`. EURUSD remains analysis-only and WAIT-only until future structure and confluence layers are integrated.
+
+## Run Phase 8 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase8_day1_verification.py
+python tests/phase8_day2_verification.py
+python tests/phase8_day3_verification.py
+```
+
+Phase 8 Day 3 adds the EURUSD BOS / CHOCH market structure engine. The engine detects swing highs/lows, bullish and bearish BOS, bullish and bearish CHOCH, post-liquidity-sweep confirmation, structure strength, confidence, and quality using EURUSD pip tolerance `0.0002`. EURUSD remains analysis-only and WAIT-only until FVG, order block, regime, and confluence layers are integrated.
 
 ## MT5 Safety Boundary
 

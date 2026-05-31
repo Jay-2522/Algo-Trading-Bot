@@ -62,6 +62,11 @@ class XAUUSDStrategyEngine:
         )
         preliminary_action = self._preliminary_action(liquidity_context, smc_context)
         macro_context = self.news_service.evaluate_xauusd_macro_bias(action=preliminary_action)
+        headline_context = self.news_service.get_headline_risk_context()
+        headline_filter_decision = self.news_service.evaluate_headlines_for_xauusd(
+            action=preliminary_action,
+            headline_context=headline_context,
+        )
         confluence_score = self.confluence_engine.score(
             session_context=session_context,
             indicator_context=indicator_context,
@@ -70,6 +75,7 @@ class XAUUSDStrategyEngine:
             regime_context=regime_context,
             news_filter_decision=news_filter_decision,
             macro_context=macro_context,
+            headline_filter_decision=headline_filter_decision,
         )
         confidence = confluence_score.confidence
         action = "WAIT"
@@ -124,6 +130,11 @@ class XAUUSDStrategyEngine:
             reason = f"Macro conflict detected. {macro_context.reason} {reason}"
         elif macro_context.macro_alignment == "ALIGNED":
             reason = f"{macro_context.reason} {reason}"
+        if headline_filter_decision.blocked:
+            action = "WAIT"
+            reason = f"WAIT: real-time headline risk block. {headline_filter_decision.client_message} {headline_filter_decision.reason} {reason}"
+        elif headline_filter_decision.trade_action in {"REDUCE_RISK", "WAIT_FOR_CONFIRMATION"}:
+            reason = f"{headline_filter_decision.client_message} {headline_filter_decision.reason} {reason}"
 
         risk_notes = [
             "Phase 6 strategy analysis only.",
@@ -144,6 +155,12 @@ class XAUUSDStrategyEngine:
             risk_notes.append("Macro conflict reduced confidence and degraded trade quality.")
         elif macro_context.macro_alignment == "NEUTRAL":
             risk_notes.append("Mixed DXY/US10Y macro context reduced confidence.")
+        if headline_filter_decision.blocked:
+            risk_notes.append("Headline filter blocked strategy output: action forced to WAIT.")
+        elif headline_filter_decision.trade_action == "WAIT_FOR_CONFIRMATION":
+            risk_notes.append("High-risk headline active: confidence capped while confirmation is pending.")
+        elif headline_filter_decision.trade_action == "REDUCE_RISK":
+            risk_notes.append("Headline filter REDUCE_RISK active: strategy confidence reduced for analysis.")
 
         technical_summary = self.reason_builder.build_technical_summary(
             {
@@ -154,6 +171,7 @@ class XAUUSDStrategyEngine:
                 "regime_context": regime_context,
                 "news_filter_decision": news_filter_decision,
                 "macro_context": macro_context,
+                "headline_filter_decision": headline_filter_decision,
             },
             confluence_score,
         )
@@ -172,6 +190,8 @@ class XAUUSDStrategyEngine:
             trade_quality=confluence_score.trade_quality,
             aligned_confirmations=confluence_score.aligned_confirmations,
             missing_confirmations=confluence_score.missing_confirmations,
+            headline_context=headline_context.model_dump(mode="json"),
+            headline_filter_decision=headline_filter_decision.model_dump(mode="json"),
             client_summary="",
             technical_summary=technical_summary,
             risk_notes=risk_notes,
@@ -203,6 +223,8 @@ class XAUUSDStrategyEngine:
                 "macro_context": macro_context.model_dump(mode="json"),
                 "macro_alignment": macro_context.macro_alignment,
                 "macro_confidence_adjustment": macro_context.confidence_adjustment,
+                "headline_context": headline_context.model_dump(mode="json"),
+                "headline_filter_decision": headline_filter_decision.model_dump(mode="json"),
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,

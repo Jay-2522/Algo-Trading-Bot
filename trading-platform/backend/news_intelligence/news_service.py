@@ -3,7 +3,13 @@ from uuid import uuid4
 
 from backend.news_intelligence.economic_calendar_store import EconomicCalendarStore
 from backend.news_intelligence.event_classifier import EventClassifier
+from backend.news_intelligence.financial_juice_adapter import FinancialJuiceAdapter
 from backend.news_intelligence.forex_factory_adapter import ForexFactoryAdapter
+from backend.news_intelligence.headline_classifier import HeadlineClassifier
+from backend.news_intelligence.headline_models import HeadlineEvent, HeadlineRiskContext
+from backend.news_intelligence.headline_risk_engine import HeadlineRiskEngine
+from backend.news_intelligence.headline_store import HeadlineStore
+from backend.news_intelligence.headline_strategy_filter import HeadlineStrategyFilter
 from backend.news_intelligence.macro_bias_engine import MacroBiasEngine
 from backend.news_intelligence.macro_context_store import MacroContextStore
 from backend.news_intelligence.macro_models import MacroInstrumentContext, XAUUSDMacroBiasContext
@@ -17,7 +23,14 @@ from backend.news_intelligence.news_window_engine import NewsWindowEngine
 class NewsService:
     """Architecture-only news intelligence service with placeholder calendar data."""
 
-    SUPPORTED_SOURCES = ["FOREX_FACTORY_PENDING", "FINANCIAL_JUICE_PENDING", "DXY_PENDING", "US10Y_PENDING"]
+    SUPPORTED_SOURCES = [
+        "FOREX_FACTORY_PENDING",
+        "FINANCIAL_JUICE_PENDING",
+        "FINANCIAL_JUICE",
+        "FIRSTSQUAWK_PENDING",
+        "DXY_PENDING",
+        "US10Y_PENDING",
+    ]
 
     def __init__(
         self,
@@ -30,6 +43,11 @@ class NewsService:
         macro_bias_engine: MacroBiasEngine | None = None,
         macro_context_store: MacroContextStore | None = None,
         macro_strategy_filter: MacroStrategyFilter | None = None,
+        headline_classifier: HeadlineClassifier | None = None,
+        headline_risk_engine: HeadlineRiskEngine | None = None,
+        financial_juice_adapter: FinancialJuiceAdapter | None = None,
+        headline_store: HeadlineStore | None = None,
+        headline_strategy_filter: HeadlineStrategyFilter | None = None,
     ) -> None:
         self.classifier = classifier or EventClassifier()
         self.risk_engine = risk_engine or NewsRiskEngine()
@@ -43,6 +61,14 @@ class NewsService:
         self.macro_bias_engine = macro_bias_engine or MacroBiasEngine()
         self.macro_context_store = macro_context_store or MacroContextStore()
         self.macro_strategy_filter = macro_strategy_filter or MacroStrategyFilter()
+        self.headline_classifier = headline_classifier or HeadlineClassifier()
+        self.headline_risk_engine = headline_risk_engine or HeadlineRiskEngine()
+        self.financial_juice_adapter = financial_juice_adapter or FinancialJuiceAdapter(
+            classifier=self.headline_classifier,
+            risk_engine=self.headline_risk_engine,
+        )
+        self.headline_store = headline_store or HeadlineStore()
+        self.headline_strategy_filter = headline_strategy_filter or HeadlineStrategyFilter()
 
     def get_status(self) -> NewsIntelligenceStatus:
         return NewsIntelligenceStatus(
@@ -125,3 +151,23 @@ class NewsService:
 
     def evaluate_xauusd_macro_bias(self, action: str = "WAIT") -> XAUUSDMacroBiasContext:
         return self.macro_strategy_filter.evaluate_xauusd(action, self.get_xauusd_macro_bias())
+
+    def ingest_headlines(self, raw_headlines: list[dict]) -> list[HeadlineEvent]:
+        normalized = self.financial_juice_adapter.normalize_headlines(raw_headlines)
+        return self.headline_store.upsert_headlines(normalized)
+
+    def list_headlines(self) -> list[HeadlineEvent]:
+        return self.headline_store.list_headlines()
+
+    def recent_headlines(self, minutes: int = 60) -> list[HeadlineEvent]:
+        return self.headline_store.recent_headlines(minutes=minutes)
+
+    def get_headline_risk_context(self) -> HeadlineRiskContext:
+        headlines = self.headline_store.active_headlines() or self.headline_store.recent_headlines(minutes=60)
+        return self.headline_risk_engine.build_context(headlines)
+
+    def evaluate_headlines_for_xauusd(self, action: str = "WAIT", headline_context: HeadlineRiskContext | dict | None = None):
+        return self.headline_strategy_filter.evaluate_xauusd(
+            action=action,
+            headline_context=headline_context or self.get_headline_risk_context(),
+        )

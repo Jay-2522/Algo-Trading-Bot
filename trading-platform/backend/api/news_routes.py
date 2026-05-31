@@ -150,6 +150,42 @@ async def evaluate_xauusd_macro_bias(payload: dict[str, Any] | None = Body(defau
     ).model_dump(mode="json")
 
 
+@router.post("/headlines/ingest")
+async def ingest_headlines(payload: list[dict[str, Any]] = Body(default_factory=list)) -> dict:
+    headlines = news_intelligence_service.ingest_headlines(payload)
+    return {
+        "ingested": len(headlines),
+        "headlines": [headline.model_dump(mode="json") for headline in headlines],
+        "external_api_calls_enabled": False,
+        "scraping_enabled": False,
+        "simulation_only": True,
+    }
+
+
+@router.get("/headlines")
+async def get_headlines() -> list[dict]:
+    return [headline.model_dump(mode="json") for headline in news_intelligence_service.list_headlines()]
+
+
+@router.get("/headlines/recent")
+async def get_recent_headlines(minutes: int = 60) -> list[dict]:
+    return [headline.model_dump(mode="json") for headline in news_intelligence_service.recent_headlines(minutes=minutes)]
+
+
+@router.get("/headlines/risk-context")
+async def get_headline_risk_context() -> dict:
+    return news_intelligence_service.get_headline_risk_context().model_dump(mode="json")
+
+
+@router.post("/headlines/evaluate")
+async def evaluate_headlines(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    payload = payload or {}
+    return news_intelligence_service.evaluate_headlines_for_xauusd(
+        action=payload.get("action", "WAIT"),
+        headline_context=payload.get("headline_context"),
+    ).model_dump(mode="json")
+
+
 @router.get("/upcoming")
 async def get_upcoming_events() -> list[dict]:
     return [event.model_dump(mode="json") for event in calendar_service.get_upcoming_events()]

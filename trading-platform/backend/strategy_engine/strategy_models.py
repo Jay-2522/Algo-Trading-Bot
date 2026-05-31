@@ -222,6 +222,8 @@ class XAUUSDStrategySignal(BaseModel):
     trade_quality: TradeQuality = "NO_TRADE"
     aligned_confirmations: list[str] = Field(default_factory=list)
     missing_confirmations: list[str] = Field(default_factory=list)
+    headline_context: dict[str, Any] = Field(default_factory=dict)
+    headline_filter_decision: dict[str, Any] = Field(default_factory=dict)
     client_summary: str = ""
     technical_summary: str = ""
     risk_notes: list[str] = Field(default_factory=list)

@@ -17,6 +17,7 @@ class ConfluenceScoreEngine:
         regime_context: Any,
         news_filter_decision: Any | None = None,
         macro_context: Any | None = None,
+        headline_filter_decision: Any | None = None,
     ) -> ConfluenceScoreBreakdown:
         breakdown = ConfluenceScoreBreakdown()
         aligned: list[str] = []
@@ -53,6 +54,7 @@ class ConfluenceScoreEngine:
             warnings.append("Market regime risk mode is NO_TRADE; confluence is hard-blocked.")
         self._apply_news_decision(breakdown, news_filter_decision, warnings)
         self._apply_macro_context(breakdown, macro_context, warnings)
+        self._apply_headline_decision(breakdown, headline_filter_decision, warnings)
 
         breakdown.aligned_confirmations = aligned
         breakdown.missing_confirmations = missing
@@ -99,6 +101,39 @@ class ConfluenceScoreEngine:
             if breakdown.risk_mode != "NO_TRADE":
                 breakdown.risk_mode = "REDUCED_RISK"
             warnings.append("Macro conflict degraded trade quality by one level.")
+
+    def _apply_headline_decision(
+        self,
+        breakdown: ConfluenceScoreBreakdown,
+        headline_filter_decision: Any | None,
+        warnings: list[str],
+    ) -> None:
+        if headline_filter_decision is None:
+            return
+        if self._get(headline_filter_decision, "blocked", False):
+            cap = self._get(headline_filter_decision, "confidence_cap", 0.0)
+            breakdown.confidence = min(breakdown.confidence, float(cap if cap is not None else 0.0))
+            breakdown.trade_quality = "NO_TRADE"
+            breakdown.risk_mode = "NO_TRADE"
+            warnings.append(self._get(headline_filter_decision, "technical_message", "Headline filter blocked confluence."))
+            return
+        cap = self._get(headline_filter_decision, "confidence_cap", None)
+        if cap is not None:
+            breakdown.confidence = round(min(breakdown.confidence, float(cap)), 2)
+            warnings.append(self._get(headline_filter_decision, "technical_message", "Headline filter capped confluence."))
+        penalty = float(self._get(headline_filter_decision, "confidence_penalty", 0.0) or 0.0)
+        adjustment = float(self._get(headline_filter_decision, "confidence_adjustment", 0.0) or 0.0)
+        if penalty > 0:
+            breakdown.confidence = round(max(0.0, breakdown.confidence - penalty), 2)
+            if breakdown.risk_mode != "NO_TRADE":
+                breakdown.risk_mode = "REDUCED_RISK"
+            warnings.append(self._get(headline_filter_decision, "technical_message", "Headline filter reduced confluence."))
+        if adjustment > 0 and breakdown.risk_mode != "NO_TRADE":
+            breakdown.confidence = round(min(100.0, breakdown.confidence + adjustment), 2)
+            warnings.append(self._get(headline_filter_decision, "technical_message", "Headline filter increased confluence."))
+        breakdown.trade_quality = self._trade_quality(breakdown.confidence)
+        if breakdown.risk_mode == "NO_TRADE":
+            breakdown.trade_quality = "NO_TRADE"
 
     def _degrade_quality(self, quality: str) -> str:
         order = ["A_PLUS", "A", "B", "C", "NO_TRADE"]

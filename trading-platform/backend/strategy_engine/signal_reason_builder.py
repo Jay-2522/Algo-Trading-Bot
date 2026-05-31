@@ -21,6 +21,7 @@ class SignalReasonBuilder:
         regime = contexts["regime_context"]
         news = contexts.get("news_filter_decision")
         macro = contexts.get("macro_context")
+        headline = contexts.get("headline_filter_decision")
         news_text = ""
         if news is not None:
             news_text = (
@@ -34,6 +35,14 @@ class SignalReasonBuilder:
                 f"macro_alignment={self._get(macro, 'macro_alignment', 'UNKNOWN')} "
                 f"macro_adjustment={self._get(macro, 'confidence_adjustment', 0.0)};"
             )
+        headline_text = ""
+        if headline is not None:
+            headline_text = (
+                f" headline_action={self._get(headline, 'trade_action', 'ALLOW')} "
+                f"headline_risk={self._get(headline, 'risk_level', 'LOW')} "
+                f"headline_sentiment={self._get(headline, 'gold_sentiment', 'UNKNOWN')} "
+                f"headline_blocked={self._get(headline, 'blocked', False)};"
+            )
         return (
             f"sweep={self._get(liquidity, 'sweep_direction', 'NONE')}; "
             f"bos={self._get(smc, 'bos_direction', 'NONE')}; "
@@ -45,6 +54,7 @@ class SignalReasonBuilder:
             f"regime={self._get(regime, 'regime', 'UNCLEAR')} tradeability={self._get(regime, 'tradeability', 'AVOID')}; "
             f"{news_text} "
             f"{macro_text} "
+            f"{headline_text} "
             f"confidence={self._get(score_breakdown, 'confidence', 0.0)}; "
             f"risk_mode={self._get(score_breakdown, 'risk_mode', 'NO_TRADE')}."
         )

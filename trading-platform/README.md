@@ -142,6 +142,11 @@ News Intelligence API examples:
 - `GET http://127.0.0.1:8000/news/macro/context`
 - `GET http://127.0.0.1:8000/news/macro/xauusd-bias`
 - `POST http://127.0.0.1:8000/news/macro/xauusd-bias/evaluate`
+- `POST http://127.0.0.1:8000/news/headlines/ingest`
+- `GET http://127.0.0.1:8000/news/headlines`
+- `GET http://127.0.0.1:8000/news/headlines/recent`
+- `GET http://127.0.0.1:8000/news/headlines/risk-context`
+- `POST http://127.0.0.1:8000/news/headlines/evaluate`
 - `GET http://127.0.0.1:8000/news/upcoming`
 - `GET http://127.0.0.1:8000/news/high-impact`
 - `GET http://127.0.0.1:8000/news/risk-status/XAUUSD`
@@ -1160,6 +1165,19 @@ python tests/phase7_day4_verification.py
 ```
 
 Phase 7 Day 4 adds the DXY and US10Y Macro Bias Engine. Routes under `/news/macro` accept manual DXY and US10Y values, infer direction and momentum, derive XAUUSD gold macro bias, and evaluate whether macro context aligns with BUY/SELL candidates. This remains macro analysis only with no live feeds, scraping, API calls, or execution path.
+
+## Run Phase 7 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase7_day1_verification.py
+python tests/phase7_day2_verification.py
+python tests/phase7_day3_verification.py
+python tests/phase7_day4_verification.py
+python tests/phase7_day5_verification.py
+```
+
+Phase 7 Day 5 adds the Financial Juice-style real-time headline intelligence foundation. Routes under `/news/headlines` accept manual headline payloads, normalize and classify Fed, inflation, CPI, NFP, FOMC, geopolitical, DXY, yield, gold, and USD headlines, build headline risk context, and adjust XAUUSD confluence confidence through a headline strategy filter. This remains manual/test-payload analysis only with no live feeds, scraping, API calls, or execution path.
 
 ## MT5 Safety Boundary
 

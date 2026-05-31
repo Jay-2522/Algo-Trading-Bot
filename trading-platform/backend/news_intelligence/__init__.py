@@ -2,7 +2,13 @@
 
 from backend.news_intelligence.event_classifier import EventClassifier
 from backend.news_intelligence.economic_calendar_store import EconomicCalendarStore
+from backend.news_intelligence.financial_juice_adapter import FinancialJuiceAdapter
 from backend.news_intelligence.forex_factory_adapter import ForexFactoryAdapter
+from backend.news_intelligence.headline_classifier import HeadlineClassifier
+from backend.news_intelligence.headline_models import HeadlineEvent, HeadlineFilterDecision, HeadlineRiskContext
+from backend.news_intelligence.headline_risk_engine import HeadlineRiskEngine
+from backend.news_intelligence.headline_store import HeadlineStore
+from backend.news_intelligence.headline_strategy_filter import HeadlineStrategyFilter
 from backend.news_intelligence.macro_bias_engine import MacroBiasEngine
 from backend.news_intelligence.macro_context_store import MacroContextStore
 from backend.news_intelligence.macro_models import MacroInstrumentContext, XAUUSDMacroBiasContext
@@ -20,7 +26,15 @@ __all__ = [
     "EconomicCalendarEvent",
     "EconomicCalendarStore",
     "EventClassifier",
+    "FinancialJuiceAdapter",
     "ForexFactoryAdapter",
+    "HeadlineClassifier",
+    "HeadlineEvent",
+    "HeadlineFilterDecision",
+    "HeadlineRiskContext",
+    "HeadlineRiskEngine",
+    "HeadlineStore",
+    "HeadlineStrategyFilter",
     "MacroBiasEngine",
     "MacroContextStore",
     "MacroInstrumentContext",

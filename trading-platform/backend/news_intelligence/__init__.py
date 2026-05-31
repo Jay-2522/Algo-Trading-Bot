@@ -21,6 +21,9 @@ from backend.news_intelligence.news_block_reason_builder import NewsBlockReasonB
 from backend.news_intelligence.news_risk_engine import NewsRiskEngine
 from backend.news_intelligence.news_service import NewsService
 from backend.news_intelligence.news_window_engine import NewsWindowEngine
+from backend.news_intelligence.news_confidence_adjuster import NewsConfidenceAdjuster
+from backend.news_intelligence.unified_news_models import UnifiedNewsRiskDecision
+from backend.news_intelligence.unified_news_orchestrator import UnifiedNewsOrchestrator
 
 __all__ = [
     "EconomicCalendarEvent",
@@ -49,5 +52,8 @@ __all__ = [
     "NewsRiskEngine",
     "NewsService",
     "NewsWindowEngine",
+    "NewsConfidenceAdjuster",
+    "UnifiedNewsOrchestrator",
+    "UnifiedNewsRiskDecision",
     "XAUUSDMacroBiasContext",
 ]

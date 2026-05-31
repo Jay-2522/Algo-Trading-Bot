@@ -68,6 +68,8 @@ REQUIRED_GET_ROUTES = {
     "/news/headlines",
     "/news/headlines/recent",
     "/news/headlines/risk-context",
+    "/news/unified-risk/status",
+    "/news/unified-risk/xauusd",
     "/news/readiness",
     "/operational-intelligence/status",
     "/orchestration/status",

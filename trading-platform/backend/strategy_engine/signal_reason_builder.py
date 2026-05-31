@@ -22,6 +22,7 @@ class SignalReasonBuilder:
         news = contexts.get("news_filter_decision")
         macro = contexts.get("macro_context")
         headline = contexts.get("headline_filter_decision")
+        unified = contexts.get("unified_news_decision")
         news_text = ""
         if news is not None:
             news_text = (
@@ -43,6 +44,14 @@ class SignalReasonBuilder:
                 f"headline_sentiment={self._get(headline, 'gold_sentiment', 'UNKNOWN')} "
                 f"headline_blocked={self._get(headline, 'blocked', False)};"
             )
+        unified_text = ""
+        if unified is not None:
+            unified_text = (
+                f" unified_news_action={self._get(unified, 'final_trade_action', 'ALLOW')} "
+                f"unified_news_risk={self._get(unified, 'final_risk_level', 'LOW')} "
+                f"unified_news_cap={self._get(unified, 'confidence_cap', None)} "
+                f"unified_news_adjustment={self._get(unified, 'confidence_adjustment', 0.0)};"
+            )
         return (
             f"sweep={self._get(liquidity, 'sweep_direction', 'NONE')}; "
             f"bos={self._get(smc, 'bos_direction', 'NONE')}; "
@@ -55,6 +64,7 @@ class SignalReasonBuilder:
             f"{news_text} "
             f"{macro_text} "
             f"{headline_text} "
+            f"{unified_text} "
             f"confidence={self._get(score_breakdown, 'confidence', 0.0)}; "
             f"risk_mode={self._get(score_breakdown, 'risk_mode', 'NO_TRADE')}."
         )

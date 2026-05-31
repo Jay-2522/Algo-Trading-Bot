@@ -18,6 +18,8 @@ from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent, N
 from backend.news_intelligence.news_risk_engine import NewsRiskEngine
 from backend.news_intelligence.news_strategy_filter import NewsStrategyFilter
 from backend.news_intelligence.news_window_engine import NewsWindowEngine
+from backend.news_intelligence.unified_news_models import UnifiedNewsRiskDecision
+from backend.news_intelligence.unified_news_orchestrator import UnifiedNewsOrchestrator
 
 
 class NewsService:
@@ -48,6 +50,7 @@ class NewsService:
         financial_juice_adapter: FinancialJuiceAdapter | None = None,
         headline_store: HeadlineStore | None = None,
         headline_strategy_filter: HeadlineStrategyFilter | None = None,
+        unified_news_orchestrator: UnifiedNewsOrchestrator | None = None,
     ) -> None:
         self.classifier = classifier or EventClassifier()
         self.risk_engine = risk_engine or NewsRiskEngine()
@@ -69,6 +72,7 @@ class NewsService:
         )
         self.headline_store = headline_store or HeadlineStore()
         self.headline_strategy_filter = headline_strategy_filter or HeadlineStrategyFilter()
+        self.unified_news_orchestrator = unified_news_orchestrator or UnifiedNewsOrchestrator()
 
     def get_status(self) -> NewsIntelligenceStatus:
         return NewsIntelligenceStatus(
@@ -170,4 +174,23 @@ class NewsService:
         return self.headline_strategy_filter.evaluate_xauusd(
             action=action,
             headline_context=headline_context or self.get_headline_risk_context(),
+        )
+
+    def evaluate_unified_xauusd_risk(
+        self,
+        action: str = "WAIT",
+        calendar_context: NewsRiskContext | dict | None = None,
+        news_filter_decision=None,
+        macro_context: XAUUSDMacroBiasContext | dict | None = None,
+        headline_context: HeadlineRiskContext | dict | None = None,
+    ) -> UnifiedNewsRiskDecision:
+        calendar = calendar_context or self.get_news_risk_context()
+        news_decision = news_filter_decision or self.evaluate_filter(symbol="XAUUSD", news_context=calendar)
+        macro = macro_context or self.evaluate_xauusd_macro_bias(action=action)
+        headlines = headline_context or self.get_headline_risk_context()
+        return self.unified_news_orchestrator.evaluate_xauusd(
+            calendar_context=calendar,
+            news_filter_decision=news_decision,
+            macro_context=macro,
+            headline_context=headlines,
         )

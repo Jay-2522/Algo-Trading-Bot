@@ -1,5 +1,6 @@
 from typing import Any
 
+from backend.news_intelligence.news_confidence_adjuster import NewsConfidenceAdjuster
 from backend.strategy_engine.strategy_models import ConfluenceScoreBreakdown
 
 
@@ -7,6 +8,9 @@ class ConfluenceScoreEngine:
     """Combine XAUUSD strategy contexts into one confidence and trade-quality breakdown."""
 
     MAX_RAW_SCORE = 190.0
+
+    def __init__(self, news_confidence_adjuster: NewsConfidenceAdjuster | None = None) -> None:
+        self.news_confidence_adjuster = news_confidence_adjuster or NewsConfidenceAdjuster()
 
     def score(
         self,
@@ -18,6 +22,7 @@ class ConfluenceScoreEngine:
         news_filter_decision: Any | None = None,
         macro_context: Any | None = None,
         headline_filter_decision: Any | None = None,
+        unified_news_decision: Any | None = None,
     ) -> ConfluenceScoreBreakdown:
         breakdown = ConfluenceScoreBreakdown()
         aligned: list[str] = []
@@ -55,6 +60,7 @@ class ConfluenceScoreEngine:
         self._apply_news_decision(breakdown, news_filter_decision, warnings)
         self._apply_macro_context(breakdown, macro_context, warnings)
         self._apply_headline_decision(breakdown, headline_filter_decision, warnings)
+        self._apply_unified_news_decision(breakdown, unified_news_decision, warnings)
 
         breakdown.aligned_confirmations = aligned
         breakdown.missing_confirmations = missing
@@ -134,6 +140,27 @@ class ConfluenceScoreEngine:
         breakdown.trade_quality = self._trade_quality(breakdown.confidence)
         if breakdown.risk_mode == "NO_TRADE":
             breakdown.trade_quality = "NO_TRADE"
+
+    def _apply_unified_news_decision(
+        self,
+        breakdown: ConfluenceScoreBreakdown,
+        unified_news_decision: Any | None,
+        warnings: list[str],
+    ) -> None:
+        if unified_news_decision is None:
+            return
+        before = breakdown.confidence
+        breakdown.confidence = self.news_confidence_adjuster.apply(before, unified_news_decision)
+        action = self._get(unified_news_decision, "final_trade_action", "ALLOW")
+        if action == "BLOCK":
+            breakdown.trade_quality = "NO_TRADE"
+            breakdown.risk_mode = "NO_TRADE"
+        elif action in {"WAIT_FOR_STABILIZATION", "REDUCE_RISK"} and breakdown.risk_mode != "NO_TRADE":
+            breakdown.trade_quality = self._trade_quality(breakdown.confidence)
+            breakdown.risk_mode = "REDUCED_RISK"
+        elif breakdown.risk_mode != "NO_TRADE":
+            breakdown.trade_quality = self._trade_quality(breakdown.confidence)
+        warnings.append(self._get(unified_news_decision, "technical_summary", "Unified news decision applied."))
 
     def _degrade_quality(self, quality: str) -> str:
         order = ["A_PLUS", "A", "B", "C", "NO_TRADE"]

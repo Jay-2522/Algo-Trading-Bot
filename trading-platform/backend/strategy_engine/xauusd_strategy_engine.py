@@ -67,6 +67,13 @@ class XAUUSDStrategyEngine:
             action=preliminary_action,
             headline_context=headline_context,
         )
+        unified_news_decision = self.news_service.evaluate_unified_xauusd_risk(
+            action=preliminary_action,
+            calendar_context=news_context,
+            news_filter_decision=news_filter_decision,
+            macro_context=macro_context,
+            headline_context=headline_context,
+        )
         confluence_score = self.confluence_engine.score(
             session_context=session_context,
             indicator_context=indicator_context,
@@ -76,6 +83,7 @@ class XAUUSDStrategyEngine:
             news_filter_decision=news_filter_decision,
             macro_context=macro_context,
             headline_filter_decision=headline_filter_decision,
+            unified_news_decision=unified_news_decision,
         )
         confidence = confluence_score.confidence
         action = "WAIT"
@@ -135,6 +143,14 @@ class XAUUSDStrategyEngine:
             reason = f"WAIT: real-time headline risk block. {headline_filter_decision.client_message} {headline_filter_decision.reason} {reason}"
         elif headline_filter_decision.trade_action in {"REDUCE_RISK", "WAIT_FOR_CONFIRMATION"}:
             reason = f"{headline_filter_decision.client_message} {headline_filter_decision.reason} {reason}"
+        if unified_news_decision.final_trade_action == "BLOCK":
+            action = "WAIT"
+            reason = f"WAIT: unified news risk block. {unified_news_decision.client_summary} {reason}"
+        elif unified_news_decision.final_trade_action == "WAIT_FOR_STABILIZATION":
+            action = "WAIT"
+            reason = f"WAIT: unified news risk requires post-news stabilization. {unified_news_decision.client_summary} {reason}"
+        elif unified_news_decision.final_trade_action == "REDUCE_RISK":
+            reason = f"{unified_news_decision.client_summary} {reason}"
 
         risk_notes = [
             "Phase 6 strategy analysis only.",
@@ -161,6 +177,12 @@ class XAUUSDStrategyEngine:
             risk_notes.append("High-risk headline active: confidence capped while confirmation is pending.")
         elif headline_filter_decision.trade_action == "REDUCE_RISK":
             risk_notes.append("Headline filter REDUCE_RISK active: strategy confidence reduced for analysis.")
+        if unified_news_decision.final_trade_action == "BLOCK":
+            risk_notes.append("Unified news risk blocked strategy output: action forced to WAIT.")
+        elif unified_news_decision.final_trade_action == "WAIT_FOR_STABILIZATION":
+            risk_notes.append("Unified news risk requires post-news stabilization before signal confidence is trusted.")
+        elif unified_news_decision.final_trade_action == "REDUCE_RISK":
+            risk_notes.append("Unified news risk reduced final confluence confidence.")
 
         technical_summary = self.reason_builder.build_technical_summary(
             {
@@ -172,6 +194,7 @@ class XAUUSDStrategyEngine:
                 "news_filter_decision": news_filter_decision,
                 "macro_context": macro_context,
                 "headline_filter_decision": headline_filter_decision,
+                "unified_news_decision": unified_news_decision,
             },
             confluence_score,
         )
@@ -192,6 +215,7 @@ class XAUUSDStrategyEngine:
             missing_confirmations=confluence_score.missing_confirmations,
             headline_context=headline_context.model_dump(mode="json"),
             headline_filter_decision=headline_filter_decision.model_dump(mode="json"),
+            unified_news_decision=unified_news_decision.model_dump(mode="json"),
             client_summary="",
             technical_summary=technical_summary,
             risk_notes=risk_notes,
@@ -225,6 +249,7 @@ class XAUUSDStrategyEngine:
                 "macro_confidence_adjustment": macro_context.confidence_adjustment,
                 "headline_context": headline_context.model_dump(mode="json"),
                 "headline_filter_decision": headline_filter_decision.model_dump(mode="json"),
+                "unified_news_decision": unified_news_decision.model_dump(mode="json"),
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,

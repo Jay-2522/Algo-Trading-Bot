@@ -186,6 +186,35 @@ async def evaluate_headlines(payload: dict[str, Any] | None = Body(default=None)
     ).model_dump(mode="json")
 
 
+@router.get("/unified-risk/status")
+async def get_unified_news_risk_status() -> dict:
+    return {
+        "status": "OPERATIONAL",
+        "orchestrator_ready": True,
+        "combines": ["calendar_risk", "news_filter", "dxy_us10y_macro", "headline_risk"],
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "external_api_calls_enabled": False,
+    }
+
+
+@router.get("/unified-risk/xauusd")
+async def get_unified_xauusd_news_risk() -> dict:
+    return news_intelligence_service.evaluate_unified_xauusd_risk(action="WAIT").model_dump(mode="json")
+
+
+@router.post("/unified-risk/evaluate")
+async def evaluate_unified_news_risk(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    payload = payload or {}
+    return news_intelligence_service.evaluate_unified_xauusd_risk(
+        action=payload.get("action", "WAIT"),
+        calendar_context=payload.get("calendar_context"),
+        news_filter_decision=payload.get("news_filter_decision"),
+        macro_context=payload.get("macro_context"),
+        headline_context=payload.get("headline_context"),
+    ).model_dump(mode="json")
+
+
 @router.get("/upcoming")
 async def get_upcoming_events() -> list[dict]:
     return [event.model_dump(mode="json") for event in calendar_service.get_upcoming_events()]

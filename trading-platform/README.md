@@ -147,6 +147,9 @@ News Intelligence API examples:
 - `GET http://127.0.0.1:8000/news/headlines/recent`
 - `GET http://127.0.0.1:8000/news/headlines/risk-context`
 - `POST http://127.0.0.1:8000/news/headlines/evaluate`
+- `GET http://127.0.0.1:8000/news/unified-risk/status`
+- `GET http://127.0.0.1:8000/news/unified-risk/xauusd`
+- `POST http://127.0.0.1:8000/news/unified-risk/evaluate`
 - `GET http://127.0.0.1:8000/news/upcoming`
 - `GET http://127.0.0.1:8000/news/high-impact`
 - `GET http://127.0.0.1:8000/news/risk-status/XAUUSD`
@@ -1178,6 +1181,20 @@ python tests/phase7_day5_verification.py
 ```
 
 Phase 7 Day 5 adds the Financial Juice-style real-time headline intelligence foundation. Routes under `/news/headlines` accept manual headline payloads, normalize and classify Fed, inflation, CPI, NFP, FOMC, geopolitical, DXY, yield, gold, and USD headlines, build headline risk context, and adjust XAUUSD confluence confidence through a headline strategy filter. This remains manual/test-payload analysis only with no live feeds, scraping, API calls, or execution path.
+
+## Run Phase 7 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase7_day1_verification.py
+python tests/phase7_day2_verification.py
+python tests/phase7_day3_verification.py
+python tests/phase7_day4_verification.py
+python tests/phase7_day5_verification.py
+python tests/phase7_day6_verification.py
+```
+
+Phase 7 Day 6 adds the Unified News, Macro, and Headline Risk Orchestrator. Routes under `/news/unified-risk` combine economic calendar risk, news filter decisions, DXY/US10Y macro bias, and real-time headline context into one final XAUUSD risk action with confidence caps, confidence adjustments, blocking reasons, supportive reasons, and client/technical summaries. This remains orchestration-only with no live feeds, scraping, API calls, or execution path.
 
 ## MT5 Safety Boundary
 

@@ -13,6 +13,7 @@ REQUIRED_GET_ROUTES = {
     "/strategy/analyze/eurusd",
     "/strategy/confluence/xauusd",
     "/strategy/eurusd/indicator-context",
+    "/strategy/eurusd/fvg",
     "/strategy/eurusd/liquidity",
     "/strategy/eurusd/session-context",
     "/strategy/eurusd/structure",

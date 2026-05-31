@@ -22,3 +22,12 @@ class EURUSDStrategyService:
     def structure_context(self, candles: list | None = None):
         liquidity_context = self.engine.build_liquidity_context(candles=candles)
         return self.engine.build_structure_context(candles=candles, liquidity_context=liquidity_context)
+
+    def fvg_context(self, candles: list | None = None):
+        liquidity_context = self.engine.build_liquidity_context(candles=candles)
+        structure_context = self.engine.build_structure_context(candles=candles, liquidity_context=liquidity_context)
+        return self.engine.build_fvg_context(
+            candles=candles,
+            structure_context=structure_context,
+            liquidity_context=liquidity_context,
+        )

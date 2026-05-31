@@ -160,7 +160,7 @@ def verify_routes_and_strategy() -> bool:
             and payload["execution_allowed"] is False
             and "structure_context" in payload
             and payload["structure_context"]["bos_direction"] == "BULLISH_BOS"
-            and payload["metadata"]["phase"] == "PHASE_8_DAY_3"
+            and payload["metadata"]["phase"] in {"PHASE_8_DAY_3", "PHASE_8_DAY_4"}
             and payload["metadata"]["structure_engine_integrated"] is True
             and payload["metadata"]["simulation_only"] is True
             and payload["metadata"]["live_execution_enabled"] is False

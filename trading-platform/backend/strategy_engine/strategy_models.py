@@ -138,6 +138,41 @@ class EURUSDStructureContext(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
+class EURUSDFairValueGap(BaseModel):
+    fvg_id: str
+    symbol: str = "EURUSD"
+    direction: FVGDirection
+    start_time: str
+    end_time: str
+    upper_bound: float
+    lower_bound: float
+    midpoint: float
+    size: float
+    fill_percentage: float = 0.0
+    mitigated: bool = False
+    active: bool = True
+    displacement_strength: float = 0.0
+    quality: StructureQuality = "NONE"
+    aligned_with_structure: bool = False
+    aligned_with_liquidity: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+
+class EURUSDFVGContext(BaseModel):
+    symbol: str = "EURUSD"
+    fair_value_gaps: list[EURUSDFairValueGap] = Field(default_factory=list)
+    latest_fvg: EURUSDFairValueGap | None = None
+    bullish_fvg_detected: bool = False
+    bearish_fvg_detected: bool = False
+    active_fvg_detected: bool = False
+    fvg_direction: FVGDirection | Literal["NONE"] = "NONE"
+    fvg_quality: StructureQuality = "NONE"
+    fvg_confidence: float = 0.0
+    fvg_alignment_reason: str = "No active EURUSD FVG alignment detected."
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
 class SMCStructureContext(BaseModel):
     symbol: str
     swing_highs: list[dict[str, Any]] = Field(default_factory=list)
@@ -297,6 +332,7 @@ class EURUSDStrategySignal(BaseModel):
     indicator_context: IndicatorContext
     liquidity_context: EURUSDLiquidityContext | None = None
     structure_context: EURUSDStructureContext | None = None
+    fvg_context: EURUSDFVGContext | None = None
     execution_allowed: bool = False
     reason: str
     timestamp: datetime = Field(default_factory=utc_now)

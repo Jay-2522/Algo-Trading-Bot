@@ -110,6 +110,25 @@ async def analyze_eurusd_structure(payload: dict[str, Any] | None = Body(default
         service.close()
 
 
+@router.get("/eurusd/fvg")
+async def get_eurusd_fvg_context() -> dict:
+    service = StrategyService()
+    try:
+        return service.analyze_eurusd_fvg().model_dump(mode="json")
+    finally:
+        service.close()
+
+
+@router.post("/eurusd/fvg/analyze")
+async def analyze_eurusd_fvg(payload: dict[str, Any] | None = Body(default=None)) -> dict:
+    service = StrategyService()
+    try:
+        candles = payload.get("candles") if payload else None
+        return service.analyze_eurusd_fvg(candles=candles).model_dump(mode="json")
+    finally:
+        service.close()
+
+
 @router.get("/signals")
 async def list_strategy_signals(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
     service = StrategyService()

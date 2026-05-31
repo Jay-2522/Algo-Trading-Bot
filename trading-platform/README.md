@@ -79,6 +79,8 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/eurusd/confluence`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/status`
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/evaluate-signal`
+- `POST http://127.0.0.1:8000/strategy-execution-bridge/preview-signal`
+- `POST http://127.0.0.1:8000/strategy-execution-bridge/evaluate-and-preview`
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/xauusd/latest`
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/eurusd/latest`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/decisions`
@@ -1323,6 +1325,16 @@ python tests/phase9_day1_verification.py
 ```
 
 Phase 9 Day 1 adds the Strategy Signal to Execution Intent Bridge. The bridge validates XAUUSD/EURUSD strategy signals, rejects WAIT signals, low confidence, news blocks, no-trade regimes, and `execution_allowed=false`, then can map approved signals into demo intent previews only. No orders are placed, no broker execution is enabled, and queue preview remains guarded by safety checks.
+
+## Run Phase 9 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase9_day1_verification.py
+python tests/phase9_day2_verification.py
+```
+
+Phase 9 Day 2 connects eligible mock strategy signals to bridge-owned queue previews. EURUSD BUY/SELL mock signals can create preview IDs after eligibility and execution risk approval, while WAIT, low-confidence, `execution_allowed=false`, oversized lot, and current XAUUSD policy-blocked signals create no preview and no execution.
 
 ## MT5 Safety Boundary
 

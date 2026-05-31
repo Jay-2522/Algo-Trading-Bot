@@ -49,6 +49,11 @@ class StrategyBridgeDecision(BaseModel):
     mapped_intent: StrategyExecutionIntent | None = None
     queue_preview_id: str | None = None
     risk_decision_id: str | None = None
+    queue_preview_created: bool = False
+    queue_preview_status: Literal["CREATED", "NOT_CREATED", "REJECTED", "FAILED_SAFE"] = "NOT_CREATED"
+    intent_status: Literal["MAPPED", "NOT_MAPPED", "REJECTED"] = "NOT_MAPPED"
+    risk_approved: bool = False
+    queue_error: str | None = None
     bridge_status: BridgeStatus = "FAILED_SAFE"
     simulation_only: bool = True
     demo_execution: bool = True

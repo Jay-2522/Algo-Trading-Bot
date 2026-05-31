@@ -27,6 +27,24 @@ async def evaluate_strategy_signal(payload: dict[str, Any] = Body(default_factor
         service.close()
 
 
+@router.post("/preview-signal", response_model=StrategyBridgeDecision)
+async def preview_strategy_signal(payload: dict[str, Any] = Body(default_factory=dict)) -> StrategyBridgeDecision:
+    service = StrategyExecutionBridgeService()
+    try:
+        return service.create_queue_preview_from_signal(payload)
+    finally:
+        service.close()
+
+
+@router.post("/evaluate-and-preview", response_model=StrategyBridgeDecision)
+async def evaluate_and_preview_strategy_signal(payload: dict[str, Any] = Body(default_factory=dict)) -> StrategyBridgeDecision:
+    service = StrategyExecutionBridgeService()
+    try:
+        return service.evaluate_and_preview_signal(payload)
+    finally:
+        service.close()
+
+
 @router.post("/xauusd/latest", response_model=StrategyBridgeDecision)
 async def bridge_latest_xauusd_signal() -> StrategyBridgeDecision:
     service = StrategyExecutionBridgeService()

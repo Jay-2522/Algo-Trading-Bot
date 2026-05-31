@@ -63,6 +63,8 @@ def verify_models_and_validator() -> bool:
         regime = validator.validate(signal(execution_allowed=True, regime_context={"risk_mode": "NO_TRADE"}))
         passed = (
             "bridge_status" in StrategyBridgeDecision.model_fields
+            and "queue_preview_created" in StrategyBridgeDecision.model_fields
+            and "intent_status" in StrategyBridgeDecision.model_fields
             and "source_signal_id" in StrategyExecutionIntent.model_fields
             and wait[1] == "REJECTED_WAIT_SIGNAL"
             and low[1] == "REJECTED_LOW_CONFIDENCE"
@@ -134,10 +136,13 @@ def verify_service_and_routes() -> bool:
             and wait.json()["bridge_status"] == "REJECTED_WAIT_SIGNAL"
             and wait.json()["eligible"] is False
             and wait.json()["queue_preview_id"] is None
+            and wait.json()["queue_preview_created"] is False
             and low.json()["bridge_status"] == "REJECTED_LOW_CONFIDENCE"
             and low.json()["queue_preview_id"] is None
+            and low.json()["queue_preview_created"] is False
             and disabled.json()["bridge_status"] == "REJECTED_EXECUTION_NOT_ALLOWED"
             and disabled.json()["queue_preview_id"] is None
+            and disabled.json()["queue_preview_created"] is False
             and xauusd.status_code == 200
             and xauusd.json()["eligible"] is False
             and xauusd.json()["queue_preview_id"] is None

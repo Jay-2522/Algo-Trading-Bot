@@ -33,6 +33,7 @@ from backend.api.portfolio_routes import router as portfolio_router
 from backend.api.risk_routes import router as risk_router
 from backend.api.replay_routes import router as replay_router
 from backend.api.strategy_routes import router as strategy_router
+from backend.api.strategy_execution_bridge_routes import router as strategy_execution_bridge_router
 from backend.api.streaming_routes import router as streaming_router
 from backend.api.streaming_routes import websocket_router as streaming_websocket_router
 from backend.api.system_health_routes import router as system_health_router
@@ -102,6 +103,7 @@ app.include_router(execution_confirmation_router)
 app.include_router(execution_dashboard_router)
 app.include_router(execution_risk_router)
 app.include_router(strategy_router)
+app.include_router(strategy_execution_bridge_router)
 app.include_router(risk_router)
 app.include_router(execution_router)
 app.include_router(execution_queue_router)

@@ -29,6 +29,8 @@ REQUIRED_GET_ROUTES = {
     "/strategy/signals",
     "/strategy/status",
     "/strategy/structure/xauusd",
+    "/strategy-execution-bridge/decisions",
+    "/strategy-execution-bridge/status",
     "/risk/status",
     "/risk/config",
     "/execution/status",

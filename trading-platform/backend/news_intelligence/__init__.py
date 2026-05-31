@@ -14,6 +14,9 @@ from backend.news_intelligence.macro_context_store import MacroContextStore
 from backend.news_intelligence.macro_models import MacroInstrumentContext, XAUUSDMacroBiasContext
 from backend.news_intelligence.macro_strategy_filter import MacroStrategyFilter
 from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent, NewsIntelligenceStatus, NewsRiskContext
+from backend.news_intelligence.news_command_center import NewsCommandCenter
+from backend.news_intelligence.news_health_monitor import NewsHealthMonitor
+from backend.news_intelligence.news_readiness_dashboard import NewsReadinessDashboard, Phase7NewsStatus
 from backend.news_intelligence.news_readiness_service import NewsReadinessService
 from backend.news_intelligence.news_filter_models import NewsFilterDecision
 from backend.news_intelligence.news_strategy_filter import NewsStrategyFilter
@@ -47,7 +50,10 @@ __all__ = [
     "NewsFilterDecision",
     "NewsStrategyFilter",
     "NewsBlockReasonBuilder",
+    "NewsCommandCenter",
+    "NewsHealthMonitor",
     "NewsRiskContext",
+    "NewsReadinessDashboard",
     "NewsReadinessService",
     "NewsRiskEngine",
     "NewsService",
@@ -55,5 +61,6 @@ __all__ = [
     "NewsConfidenceAdjuster",
     "UnifiedNewsOrchestrator",
     "UnifiedNewsRiskDecision",
+    "Phase7NewsStatus",
     "XAUUSDMacroBiasContext",
 ]

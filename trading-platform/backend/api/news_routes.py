@@ -57,6 +57,26 @@ async def get_news_readiness() -> dict:
     return news_readiness_service.status()
 
 
+@router.get("/command-center")
+async def get_news_command_center() -> dict:
+    return news_intelligence_service.get_command_center_overview()
+
+
+@router.get("/health")
+async def get_news_health() -> dict:
+    return news_intelligence_service.get_news_health()
+
+
+@router.get("/readiness-dashboard")
+async def get_news_readiness_dashboard() -> dict:
+    return news_intelligence_service.get_readiness_dashboard()
+
+
+@router.get("/phase7/status")
+async def get_phase7_news_status() -> dict:
+    return news_intelligence_service.get_phase7_status().model_dump(mode="json")
+
+
 @router.post("/forex-factory/ingest")
 async def ingest_forex_factory_events(payload: list[dict[str, Any]] = Body(default_factory=list)) -> dict:
     events = news_intelligence_service.ingest_forex_factory_events(payload)

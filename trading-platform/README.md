@@ -126,6 +126,10 @@ AI Decision Engine API examples:
 News Intelligence API examples:
 
 - `GET http://127.0.0.1:8000/news/status`
+- `GET http://127.0.0.1:8000/news/command-center`
+- `GET http://127.0.0.1:8000/news/health`
+- `GET http://127.0.0.1:8000/news/readiness-dashboard`
+- `GET http://127.0.0.1:8000/news/phase7/status`
 - `GET http://127.0.0.1:8000/news/supported-sources`
 - `GET http://127.0.0.1:8000/news/supported-events`
 - `GET http://127.0.0.1:8000/news/calendar-placeholder`
@@ -1195,6 +1199,21 @@ python tests/phase7_day6_verification.py
 ```
 
 Phase 7 Day 6 adds the Unified News, Macro, and Headline Risk Orchestrator. Routes under `/news/unified-risk` combine economic calendar risk, news filter decisions, DXY/US10Y macro bias, and real-time headline context into one final XAUUSD risk action with confidence caps, confidence adjustments, blocking reasons, supportive reasons, and client/technical summaries. This remains orchestration-only with no live feeds, scraping, API calls, or execution path.
+
+## Run Phase 7 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase7_day1_verification.py
+python tests/phase7_day2_verification.py
+python tests/phase7_day3_verification.py
+python tests/phase7_day4_verification.py
+python tests/phase7_day5_verification.py
+python tests/phase7_day6_verification.py
+python tests/phase7_day7_verification.py
+```
+
+Phase 7 Day 7 adds the News Intelligence Command Center and Readiness Engine. Routes under `/news/command-center`, `/news/health`, `/news/readiness-dashboard`, and `/news/phase7/status` expose economic calendar, headline, macro, unified risk, health, readiness, and strategy news state in one operational visibility layer. Final Phase 7 status is `PHASE_7_READY` and `COMPLETE`, with no live feeds, scraping, API calls, or execution path.
 
 ## MT5 Safety Boundary
 

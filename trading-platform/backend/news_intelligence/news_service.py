@@ -15,6 +15,9 @@ from backend.news_intelligence.macro_context_store import MacroContextStore
 from backend.news_intelligence.macro_models import MacroInstrumentContext, XAUUSDMacroBiasContext
 from backend.news_intelligence.macro_strategy_filter import MacroStrategyFilter
 from backend.news_intelligence.models import EconomicCalendarEvent, NewsEvent, NewsIntelligenceStatus, NewsRiskContext
+from backend.news_intelligence.news_command_center import NewsCommandCenter
+from backend.news_intelligence.news_health_monitor import NewsHealthMonitor
+from backend.news_intelligence.news_readiness_dashboard import NewsReadinessDashboard, Phase7NewsStatus
 from backend.news_intelligence.news_risk_engine import NewsRiskEngine
 from backend.news_intelligence.news_strategy_filter import NewsStrategyFilter
 from backend.news_intelligence.news_window_engine import NewsWindowEngine
@@ -51,6 +54,8 @@ class NewsService:
         headline_store: HeadlineStore | None = None,
         headline_strategy_filter: HeadlineStrategyFilter | None = None,
         unified_news_orchestrator: UnifiedNewsOrchestrator | None = None,
+        health_monitor: NewsHealthMonitor | None = None,
+        readiness_dashboard: NewsReadinessDashboard | None = None,
     ) -> None:
         self.classifier = classifier or EventClassifier()
         self.risk_engine = risk_engine or NewsRiskEngine()
@@ -73,6 +78,9 @@ class NewsService:
         self.headline_store = headline_store or HeadlineStore()
         self.headline_strategy_filter = headline_strategy_filter or HeadlineStrategyFilter()
         self.unified_news_orchestrator = unified_news_orchestrator or UnifiedNewsOrchestrator()
+        self.health_monitor = health_monitor or NewsHealthMonitor()
+        self.readiness_dashboard = readiness_dashboard or NewsReadinessDashboard()
+        self.command_center = NewsCommandCenter(self)
 
     def get_status(self) -> NewsIntelligenceStatus:
         return NewsIntelligenceStatus(
@@ -193,4 +201,21 @@ class NewsService:
             news_filter_decision=news_decision,
             macro_context=macro,
             headline_context=headlines,
+        )
+
+    def get_command_center_overview(self) -> dict:
+        return self.command_center.get_overview()
+
+    def get_news_health(self) -> dict:
+        return self.health_monitor.health_summary()
+
+    def get_readiness_dashboard(self) -> dict:
+        return self.readiness_dashboard.readiness()
+
+    def get_phase7_status(self) -> Phase7NewsStatus:
+        health = self.get_news_health()
+        readiness = self.get_readiness_dashboard()
+        return self.readiness_dashboard.phase_status(
+            health_score=health["health_score"],
+            readiness_score=readiness["readiness_score"],
         )

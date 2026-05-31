@@ -74,6 +74,7 @@ class XAUUSDStrategyEngine:
             macro_context=macro_context,
             headline_context=headline_context,
         )
+        news_phase_status = self.news_service.get_phase7_status()
         confluence_score = self.confluence_engine.score(
             session_context=session_context,
             indicator_context=indicator_context,
@@ -250,6 +251,19 @@ class XAUUSDStrategyEngine:
                 "headline_context": headline_context.model_dump(mode="json"),
                 "headline_filter_decision": headline_filter_decision.model_dump(mode="json"),
                 "unified_news_decision": unified_news_decision.model_dump(mode="json"),
+                "news_phase_status": {
+                    "phase": news_phase_status.phase,
+                    "status": news_phase_status.status,
+                    "calendar_ready": news_phase_status.calendar_engine == "READY",
+                    "headline_ready": news_phase_status.headline_engine == "READY",
+                    "macro_ready": news_phase_status.macro_engine == "READY",
+                    "unified_ready": news_phase_status.unified_risk_engine == "READY",
+                    "strategy_integration_ready": news_phase_status.strategy_integration == "READY",
+                    "health_score": news_phase_status.health_score,
+                    "readiness_score": news_phase_status.readiness_score,
+                    "simulation_only": news_phase_status.simulation_only,
+                    "live_execution_enabled": news_phase_status.live_execution_enabled,
+                },
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,

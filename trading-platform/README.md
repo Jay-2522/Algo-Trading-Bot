@@ -74,6 +74,7 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy/eurusd/liquidity`
 - `GET http://127.0.0.1:8000/strategy/eurusd/structure`
 - `GET http://127.0.0.1:8000/strategy/eurusd/fvg`
+- `GET http://127.0.0.1:8000/strategy/eurusd/order-block`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1263,6 +1264,19 @@ python tests/phase8_day4_verification.py
 ```
 
 Phase 8 Day 4 adds the EURUSD Fair Value Gap detection engine. The engine detects bullish and bearish FVGs, bounds, midpoint, fill percentage, active/mitigated state, structure alignment, liquidity alignment, and quality scoring using EURUSD tolerance `0.0002` while ignoring noise gaps below `0.0001`. EURUSD remains analysis-only and WAIT-only until order block, regime, and confluence layers are integrated.
+
+## Run Phase 8 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase8_day1_verification.py
+python tests/phase8_day2_verification.py
+python tests/phase8_day3_verification.py
+python tests/phase8_day4_verification.py
+python tests/phase8_day5_verification.py
+```
+
+Phase 8 Day 5 adds the EURUSD Order Block detection engine. The engine detects bullish and bearish institutional order blocks, active/fresh/mitigated/broken state, fill percentage, structure alignment, liquidity alignment, FVG alignment, and quality scoring using EURUSD tolerance `0.0002` while ignoring tiny origin candles below `0.0001`. EURUSD remains analysis-only and WAIT-only until regime and confluence layers are integrated.
 
 ## MT5 Safety Boundary
 

@@ -144,6 +144,11 @@ class StrategyService:
 
         return self.eurusd_service.fvg_context(candles=candles)
 
+    def analyze_eurusd_order_block(self, candles: list | None = None):
+        """Return Phase 8 EURUSD order block context."""
+
+        return self.eurusd_service.order_block_context(candles=candles)
+
     def analyze_xauusd_liquidity(self, candles: list | None = None):
         """Return XAUUSD liquidity sweep context without generating execution intent."""
 

@@ -48,7 +48,7 @@ def verify_engine_foundation() -> bool:
             and signal.execution_allowed is False
             and signal.confidence <= 20
             and signal.metadata["instrument"] == "EURUSD"
-            and signal.metadata["phase"] in {"PHASE_8_DAY_1", "PHASE_8_DAY_2", "PHASE_8_DAY_3", "PHASE_8_DAY_4"}
+            and signal.metadata["phase"] in {"PHASE_8_DAY_1", "PHASE_8_DAY_2", "PHASE_8_DAY_3", "PHASE_8_DAY_4", "PHASE_8_DAY_5"}
             and signal.metadata["simulation_only"] is True
             and signal.metadata["live_execution_enabled"] is False
             and session.current_session in {"ASIAN", "LONDON", "NEW_YORK", "OVERLAP", "OFF_SESSION"}
@@ -78,7 +78,7 @@ def verify_routes_and_persistence_compatibility() -> bool:
             and payload["action"] == "WAIT"
             and payload["execution_allowed"] is False
             and payload["metadata"]["instrument"] == "EURUSD"
-            and payload["metadata"]["phase"] in {"PHASE_8_DAY_1", "PHASE_8_DAY_2", "PHASE_8_DAY_3", "PHASE_8_DAY_4"}
+            and payload["metadata"]["phase"] in {"PHASE_8_DAY_1", "PHASE_8_DAY_2", "PHASE_8_DAY_3", "PHASE_8_DAY_4", "PHASE_8_DAY_5"}
             and payload["metadata"]["simulation_only"] is True
             and payload["metadata"]["live_execution_enabled"] is False
             and session.status_code == 200

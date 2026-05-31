@@ -173,6 +173,42 @@ class EURUSDFVGContext(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
+class EURUSDOrderBlock(BaseModel):
+    order_block_id: str
+    symbol: str = "EURUSD"
+    direction: OrderBlockDirection
+    creation_time: str
+    upper_bound: float
+    lower_bound: float
+    midpoint: float
+    active: bool = True
+    fresh: bool = True
+    mitigated: bool = False
+    broken: bool = False
+    fill_percentage: float = 0.0
+    strength: float = 0.0
+    quality: StructureQuality = "NONE"
+    aligned_with_structure: bool = False
+    aligned_with_liquidity: bool = False
+    aligned_with_fvg: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+
+class EURUSDOrderBlockContext(BaseModel):
+    symbol: str = "EURUSD"
+    order_blocks: list[EURUSDOrderBlock] = Field(default_factory=list)
+    latest_order_block: EURUSDOrderBlock | None = None
+    bullish_order_block_detected: bool = False
+    bearish_order_block_detected: bool = False
+    active_order_block_detected: bool = False
+    order_block_direction: OrderBlockDirection | Literal["NONE"] = "NONE"
+    order_block_quality: StructureQuality = "NONE"
+    order_block_confidence: float = 0.0
+    order_block_alignment_reason: str = "No active EURUSD order block alignment detected."
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
 class SMCStructureContext(BaseModel):
     symbol: str
     swing_highs: list[dict[str, Any]] = Field(default_factory=list)
@@ -333,6 +369,7 @@ class EURUSDStrategySignal(BaseModel):
     liquidity_context: EURUSDLiquidityContext | None = None
     structure_context: EURUSDStructureContext | None = None
     fvg_context: EURUSDFVGContext | None = None
+    order_block_context: EURUSDOrderBlockContext | None = None
     execution_allowed: bool = False
     reason: str
     timestamp: datetime = Field(default_factory=utc_now)

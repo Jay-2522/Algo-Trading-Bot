@@ -2,12 +2,14 @@ from uuid import uuid4
 
 from backend.strategy_engine.eurusd_fvg_engine import EURUSDFVGEngine
 from backend.strategy_engine.eurusd_liquidity_engine import EURUSDLiquidityEngine
+from backend.strategy_engine.eurusd_order_block_engine import EURUSDOrderBlockEngine
 from backend.strategy_engine.eurusd_structure_engine import EURUSDStructureEngine
 from backend.strategy_engine.indicator_context_builder import IndicatorContextBuilder
 from backend.strategy_engine.market_session_service import MarketSessionService
 from backend.strategy_engine.strategy_models import (
     EURUSDFVGContext,
     EURUSDLiquidityContext,
+    EURUSDOrderBlockContext,
     EURUSDStrategySignal,
     EURUSDStructureContext,
     IndicatorContext,
@@ -25,12 +27,14 @@ class EURUSDStrategyEngine:
         liquidity_engine: EURUSDLiquidityEngine | None = None,
         structure_engine: EURUSDStructureEngine | None = None,
         fvg_engine: EURUSDFVGEngine | None = None,
+        order_block_engine: EURUSDOrderBlockEngine | None = None,
     ) -> None:
         self.session_service = session_service or MarketSessionService()
         self.indicator_builder = indicator_builder or IndicatorContextBuilder()
         self.liquidity_engine = liquidity_engine or EURUSDLiquidityEngine(session_service=self.session_service)
         self.structure_engine = structure_engine or EURUSDStructureEngine(session_service=self.session_service)
         self.fvg_engine = fvg_engine or EURUSDFVGEngine(session_service=self.session_service)
+        self.order_block_engine = order_block_engine or EURUSDOrderBlockEngine(session_service=self.session_service)
 
     def analyze(self, candles: list | None = None) -> EURUSDStrategySignal:
         session_context = self.build_session_context()
@@ -42,12 +46,19 @@ class EURUSDStrategyEngine:
             structure_context=structure_context,
             liquidity_context=liquidity_context,
         )
+        order_block_context = self.build_order_block_context(
+            candles=candles,
+            structure_context=structure_context,
+            liquidity_context=liquidity_context,
+            fvg_context=fvg_context,
+        )
         return self.generate_signal(
             session_context=session_context,
             indicator_context=indicator_context,
             liquidity_context=liquidity_context,
             structure_context=structure_context,
             fvg_context=fvg_context,
+            order_block_context=order_block_context,
         )
 
     def build_session_context(self) -> MarketSessionContext:
@@ -94,6 +105,30 @@ class EURUSDStrategyEngine:
             liquidity_context=resolved_liquidity,
         )
 
+    def build_order_block_context(
+        self,
+        candles: list | None = None,
+        structure_context: EURUSDStructureContext | None = None,
+        liquidity_context: EURUSDLiquidityContext | None = None,
+        fvg_context: EURUSDFVGContext | None = None,
+    ) -> EURUSDOrderBlockContext:
+        resolved_liquidity = liquidity_context or self.build_liquidity_context(candles=candles)
+        resolved_structure = structure_context or self.build_structure_context(
+            candles=candles,
+            liquidity_context=resolved_liquidity,
+        )
+        resolved_fvg = fvg_context or self.build_fvg_context(
+            candles=candles,
+            structure_context=resolved_structure,
+            liquidity_context=resolved_liquidity,
+        )
+        return self.order_block_engine.detect(
+            candles=candles,
+            structure_context=resolved_structure,
+            liquidity_context=resolved_liquidity,
+            fvg_context=resolved_fvg,
+        )
+
     def generate_signal(
         self,
         session_context: MarketSessionContext,
@@ -101,6 +136,7 @@ class EURUSDStrategyEngine:
         liquidity_context: EURUSDLiquidityContext,
         structure_context: EURUSDStructureContext,
         fvg_context: EURUSDFVGContext,
+        order_block_context: EURUSDOrderBlockContext,
     ) -> EURUSDStrategySignal:
         return EURUSDStrategySignal(
             signal_id=f"eurusd-{uuid4().hex}",
@@ -113,9 +149,10 @@ class EURUSDStrategyEngine:
             liquidity_context=liquidity_context,
             structure_context=structure_context,
             fvg_context=fvg_context,
+            order_block_context=order_block_context,
             execution_allowed=False,
             reason=(
-                "Phase 8 Day 4 EURUSD FVG layer established. "
+                "Phase 8 Day 5 EURUSD order block layer established. "
                 f"Sweep direction={liquidity_context.sweep_direction}, "
                 f"active level={liquidity_context.active_sweep_level or 'NONE'}, "
                 f"quality={liquidity_context.sweep_quality}, "
@@ -127,11 +164,15 @@ class EURUSDStrategyEngine:
                 f"FVG direction={fvg_context.fvg_direction}, "
                 f"active_fvg={fvg_context.active_fvg_detected}, "
                 f"fvg_quality={fvg_context.fvg_quality}. "
-                "EURUSD order block, regime, and confluence layers are not yet integrated."
+                f"Order block direction={order_block_context.order_block_direction}, "
+                f"active_ob={order_block_context.active_order_block_detected}, "
+                f"ob_quality={order_block_context.order_block_quality}, "
+                f"ob_confidence={order_block_context.order_block_confidence}. "
+                "EURUSD regime and confluence layers are not yet integrated."
             ),
             metadata={
                 "instrument": "EURUSD",
-                "phase": "PHASE_8_DAY_4",
+                "phase": "PHASE_8_DAY_5",
                 "mode": "analysis_only",
                 "session_ready": True,
                 "indicator_context_ready": True,
@@ -142,6 +183,9 @@ class EURUSDStrategyEngine:
                 "fvg_engine_integrated": True,
                 "eurusd_fvg_tolerance": self.fvg_engine.tolerance,
                 "eurusd_fvg_min_gap_size": self.fvg_engine.min_gap_size,
+                "order_block_engine_integrated": True,
+                "eurusd_order_block_tolerance": self.order_block_engine.tolerance,
+                "eurusd_order_block_min_candle_range": self.order_block_engine.min_candle_range,
                 "smc_engine_integrated": True,
                 "news_intelligence_ready": True,
                 "simulation_only": True,

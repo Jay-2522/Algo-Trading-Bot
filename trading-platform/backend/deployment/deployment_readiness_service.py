@@ -6,6 +6,7 @@ from backend.deployment.deployment_models import DeploymentReadinessStatus
 from backend.deployment.environment_auditor import EnvironmentAuditor
 from backend.deployment.mt5_environment_checker import MT5EnvironmentChecker
 from backend.deployment.vps_readiness_checker import VPSReadinessChecker
+from backend.security.security_readiness_service import SecurityReadinessService
 
 
 class DeploymentReadinessService:
@@ -18,12 +19,14 @@ class DeploymentReadinessService:
         vps_checker: VPSReadinessChecker | None = None,
         mt5_checker: MT5EnvironmentChecker | None = None,
         store: DeploymentHealthStore | None = None,
+        security_service: SecurityReadinessService | None = None,
     ) -> None:
         self.project_root = project_root or Path(__file__).resolve().parents[2]
         self.environment_auditor = environment_auditor or EnvironmentAuditor(self.project_root)
         self.vps_checker = vps_checker or VPSReadinessChecker(self.project_root)
         self.mt5_checker = mt5_checker or MT5EnvironmentChecker()
         self.store = store or DeploymentHealthStore()
+        self.security_service = security_service or SecurityReadinessService(self.project_root)
 
     def get_status(self) -> DeploymentReadinessStatus:
         return self.run_full_check()
@@ -53,8 +56,12 @@ class DeploymentReadinessService:
             and (self.project_root / "backend" / "deployment" / "runtime_models.py").exists()
         )
         service_management_ready = self._service_management_ready()
+        security = self.security_service.run_security_check()
+        security_ready = security.status != "BLOCKED"
         blockers = [*environment.blockers, *vps.blockers, *mt5.blockers]
         warnings = [*environment.warnings, *vps.warnings, *mt5.warnings]
+        blockers.extend(security.blockers)
+        warnings.extend(security.warnings)
         if not docker_ready:
             warnings.append("Backend and frontend Dockerfiles are not both present.")
         if not compose_ready:
@@ -67,6 +74,8 @@ class DeploymentReadinessService:
             warnings.append("Runtime manager, health checker, or runtime models are not ready.")
         if not service_management_ready:
             warnings.append("Runtime scripts or VPS service documentation are not ready.")
+        if not security_ready:
+            warnings.append("Security readiness is blocked.")
 
         environment_ready = environment.python_path_ok and not environment.forbidden_live_flags_detected
         vps_ready = vps.os_supported and vps.python_available and vps.required_directories_present
@@ -83,6 +92,7 @@ class DeploymentReadinessService:
             monitoring_ready,
             runtime_ready,
             service_management_ready,
+            security_ready,
             blockers,
             warnings,
         )
@@ -109,6 +119,7 @@ class DeploymentReadinessService:
                 monitoring_ready=monitoring_ready,
                 runtime_ready=runtime_ready,
                 service_management_ready=service_management_ready,
+                security_ready=security_ready,
                 deployment_score=score,
                 blockers=blockers,
                 warnings=warnings,
@@ -135,6 +146,7 @@ class DeploymentReadinessService:
             "health_checks": ["/health", "/status", "/deployment/status", "/deployment/readiness"],
             "docker": ["Dockerfile.backend", "Dockerfile.frontend", "docker-compose.yml", "docker-compose.override.yml"],
             "runtime": ["scripts/runtime_status.ps1", "scripts/vps_healthcheck.ps1", "docs/vps-runtime-guide.md"],
+            "security": ["/security/status", "/security/secrets-audit", "docs/security-hardening-guide.md"],
         }
 
     def get_blockers(self) -> dict[str, Any]:
@@ -172,6 +184,7 @@ class DeploymentReadinessService:
         monitoring_ready: bool,
         runtime_ready: bool,
         service_management_ready: bool,
+        security_ready: bool,
         blockers: list[str],
         warnings: list[str],
     ) -> int:
@@ -187,6 +200,7 @@ class DeploymentReadinessService:
         score += 5 if monitoring_ready else 0
         score += 5 if runtime_ready else 0
         score += 5 if service_management_ready else 0
+        score += 5 if security_ready else 0
         score -= min(30, len(blockers) * 15)
         score -= min(15, len(warnings) * 3)
         return max(0, min(100, score))

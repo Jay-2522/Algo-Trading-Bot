@@ -69,6 +69,7 @@ class DeploymentReadinessStatus(BaseModel):
     monitoring_ready: bool = False
     runtime_ready: bool = False
     service_management_ready: bool = False
+    security_ready: bool = False
     deployment_score: int = 0
     blockers: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

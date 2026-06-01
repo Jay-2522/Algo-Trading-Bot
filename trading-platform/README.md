@@ -110,6 +110,9 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/deployment/checklist`
 - `GET http://127.0.0.1:8000/deployment/blockers`
 - `GET http://127.0.0.1:8000/deployment/warnings`
+- `GET http://127.0.0.1:8000/security/status`
+- `GET http://127.0.0.1:8000/security/secrets-audit`
+- `GET http://127.0.0.1:8000/security/access-policy`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1477,6 +1480,21 @@ npm run build
 ```
 
 Phase 10 Day 4 adds read-only VPS runtime and service-management visibility. Backend routes under `/deployment/runtime` report backend/frontend health, runtime status, MT5 demo notes, and runtime audit events. Manual scripts under `scripts/` start or check services; the API never kills or restarts processes.
+
+## Run Phase 10 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase10_day1_verification.py
+python tests/phase10_day2_verification.py
+python tests/phase10_day3_verification.py
+python tests/phase10_day4_verification.py
+python tests/phase10_day5_verification.py
+cd frontend
+npm run build
+```
+
+Phase 10 Day 5 adds security readiness, secrets auditing, route access classification, config redaction, security audit events, and `/security` endpoints. Deployment readiness now includes `security_ready`. This is a foundation only: admin routes are classified for future protection, real secrets are not added, and live/broker execution remain disabled.
 
 ## MT5 Safety Boundary
 

@@ -33,6 +33,7 @@ from backend.api.phase3_readiness_routes import router as phase3_readiness_route
 from backend.api.portfolio_routes import router as portfolio_router
 from backend.api.risk_routes import router as risk_router
 from backend.api.replay_routes import router as replay_router
+from backend.api.security_routes import router as security_router
 from backend.api.strategy_routes import router as strategy_router
 from backend.api.strategy_execution_bridge_routes import router as strategy_execution_bridge_router
 from backend.api.streaming_routes import router as streaming_router
@@ -124,6 +125,7 @@ app.include_router(phase3_readiness_router)
 app.include_router(portfolio_router)
 app.include_router(backtesting_router)
 app.include_router(replay_router)
+app.include_router(security_router)
 app.include_router(broker_compatibility_router)
 app.include_router(tradingview_webhook_router)
 app.include_router(streaming_router)

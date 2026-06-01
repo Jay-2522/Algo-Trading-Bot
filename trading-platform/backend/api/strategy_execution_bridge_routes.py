@@ -3,6 +3,12 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from backend.strategy_execution_bridge.bridge_models import StrategyBridgeDecision
+from backend.strategy_execution_bridge.demo_approval_models import (
+    DemoExecutionApprovalDecision,
+    DemoExecutionApprovalRequest,
+    DemoExecutionCandidate,
+)
+from backend.strategy_execution_bridge.demo_execution_approval_service import DemoExecutionApprovalService
 from backend.strategy_execution_bridge.strategy_execution_bridge_service import StrategyExecutionBridgeService
 
 
@@ -82,3 +88,44 @@ async def get_bridge_decision(decision_id: str) -> StrategyBridgeDecision:
         return decision
     finally:
         service.close()
+
+
+@router.get("/demo-approval/status")
+async def get_demo_approval_status() -> dict[str, Any]:
+    return DemoExecutionApprovalService().get_status()
+
+
+@router.post("/demo-approval/approve", response_model=DemoExecutionApprovalDecision)
+async def approve_demo_execution_candidate(payload: DemoExecutionApprovalRequest) -> DemoExecutionApprovalDecision:
+    return DemoExecutionApprovalService().approve_decision(payload)
+
+
+@router.get("/demo-approval/approvals", response_model=list[DemoExecutionApprovalDecision])
+async def list_demo_approvals(limit: int = Query(default=100, ge=1, le=1000)) -> list[DemoExecutionApprovalDecision]:
+    return DemoExecutionApprovalService().list_approvals(limit)
+
+
+@router.get("/demo-approval/history", response_model=list[DemoExecutionApprovalDecision])
+async def list_demo_approval_history(limit: int = Query(default=100, ge=1, le=1000)) -> list[DemoExecutionApprovalDecision]:
+    return DemoExecutionApprovalService().list_approvals(limit)
+
+
+@router.get("/demo-approval/candidates", response_model=list[DemoExecutionCandidate])
+async def list_demo_candidates(limit: int = Query(default=100, ge=1, le=1000)) -> list[DemoExecutionCandidate]:
+    return DemoExecutionApprovalService().list_candidates(limit)
+
+
+@router.get("/demo-approval/approvals/{approval_id}", response_model=DemoExecutionApprovalDecision)
+async def get_demo_approval(approval_id: str) -> DemoExecutionApprovalDecision:
+    approval = DemoExecutionApprovalService().get_approval(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Demo execution approval not found.")
+    return approval
+
+
+@router.get("/demo-approval/candidates/{candidate_id}", response_model=DemoExecutionCandidate)
+async def get_demo_candidate(candidate_id: str) -> DemoExecutionCandidate:
+    candidate = DemoExecutionApprovalService().get_candidate(candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Demo execution candidate not found.")
+    return candidate

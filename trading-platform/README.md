@@ -84,6 +84,11 @@ Strategy API examples:
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/xauusd/latest`
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/eurusd/latest`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/decisions`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/status`
+- `POST http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/approve`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/approvals`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/history`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/candidates`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1335,6 +1340,17 @@ python tests/phase9_day2_verification.py
 ```
 
 Phase 9 Day 2 connects eligible mock strategy signals to bridge-owned queue previews. EURUSD BUY/SELL mock signals can create preview IDs after eligibility and execution risk approval, while WAIT, low-confidence, `execution_allowed=false`, oversized lot, and current XAUUSD policy-blocked signals create no preview and no execution.
+
+## Run Phase 9 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase9_day1_verification.py
+python tests/phase9_day2_verification.py
+python tests/phase9_day3_verification.py
+```
+
+Phase 9 Day 3 adds the queue preview to demo execution approval flow. Fresh, risk-approved queue previews can become demo execution candidates only after explicit `confirm_demo_approval=true`; unconfirmed, stale, duplicate, rejected, and risk-rejected previews are blocked. Candidates still require final execution confirmation later, and no demo executor is called.
 
 ## MT5 Safety Boundary
 

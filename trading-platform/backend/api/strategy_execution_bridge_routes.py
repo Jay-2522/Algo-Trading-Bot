@@ -10,6 +10,8 @@ from backend.strategy_execution_bridge.demo_approval_models import (
 )
 from backend.strategy_execution_bridge.demo_execution_approval_service import DemoExecutionApprovalService
 from backend.strategy_execution_bridge.end_to_end_demo_flow import EndToEndDemoFlowResult, EndToEndDemoFlowService
+from backend.strategy_execution_bridge.execution_operations_center import ExecutionOperationsCenter
+from backend.strategy_execution_bridge.execution_operations_models import ExecutionOperationsOverview, ExecutionPipelineEvent
 from backend.strategy_execution_bridge.final_demo_execution_models import (
     FinalDemoExecutionDecision,
     FinalDemoExecutionRequest,
@@ -206,3 +208,47 @@ async def get_end_to_end_demo_flow(flow_id: str) -> EndToEndDemoFlowResult:
         return flow
     finally:
         service.close()
+
+
+@router.get("/operations/status")
+async def get_execution_operations_status() -> dict[str, Any]:
+    return ExecutionOperationsCenter().get_status()
+
+
+@router.get("/operations/overview", response_model=ExecutionOperationsOverview)
+async def get_execution_operations_overview() -> ExecutionOperationsOverview:
+    return ExecutionOperationsCenter().get_overview()
+
+
+@router.get("/operations/pipeline-events", response_model=list[ExecutionPipelineEvent])
+async def get_execution_operations_pipeline_events(limit: int = Query(default=100, ge=1, le=1000)) -> list[ExecutionPipelineEvent]:
+    return ExecutionOperationsCenter().get_pipeline_events(limit)
+
+
+@router.get("/operations/recent-executions")
+async def get_execution_operations_recent_executions(limit: int = Query(default=100, ge=1, le=1000)) -> dict[str, Any]:
+    return ExecutionOperationsCenter().get_recent_executions(limit)
+
+
+@router.get("/operations/recent-rejections", response_model=list[ExecutionPipelineEvent])
+async def get_execution_operations_recent_rejections(limit: int = Query(default=100, ge=1, le=1000)) -> list[ExecutionPipelineEvent]:
+    return ExecutionOperationsCenter().get_recent_rejections(limit)
+
+
+@router.get("/operations/readiness")
+async def get_execution_operations_readiness() -> dict[str, Any]:
+    return ExecutionOperationsCenter().get_readiness()
+
+
+@router.get("/operations/health")
+async def get_execution_operations_health() -> dict[str, Any]:
+    center = ExecutionOperationsCenter()
+    return {
+        "health_score": center.get_health_score(),
+        "status": center.get_overview().status,
+        "pipeline_ready": center.get_overview().pipeline_ready,
+        "simulation_only": True,
+        "demo_execution": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }

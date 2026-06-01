@@ -34,6 +34,7 @@ class StrategyExecutionBridgeService:
             "mode": "STRATEGY_TO_EXECUTION_INTENT_BRIDGE",
             "queue_preview_only": True,
             "queue_preview_adapter_ready": True,
+            "end_to_end_demo_flow_ready": True,
             "min_confidence": self.validator.MIN_CONFIDENCE,
             "simulation_only": True,
             "demo_execution": True,

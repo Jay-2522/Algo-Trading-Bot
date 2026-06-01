@@ -95,6 +95,7 @@ class FinalDemoExecutionService:
                 reason=request_model.reason,
             )
             result = self.demo_execution_service.executor.execute_demo_order(queue_item, demo_request)
+            result = self.demo_execution_service.result_store.store_result(result)
             mapped_status = self._map_demo_result_status(result.status)
             approved_for_execution = mapped_status in {"DEMO_EXECUTION_SENT", "DEMO_FILLED", "DEMO_REJECTED"}
             reasons = list(result.rejection_reasons)

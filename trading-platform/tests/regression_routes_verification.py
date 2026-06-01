@@ -34,6 +34,8 @@ REQUIRED_GET_ROUTES = {
     "/strategy-execution-bridge/demo-approval/candidates",
     "/strategy-execution-bridge/demo-approval/history",
     "/strategy-execution-bridge/demo-approval/status",
+    "/strategy-execution-bridge/e2e/flows",
+    "/strategy-execution-bridge/e2e/status",
     "/strategy-execution-bridge/final-demo-execution/executions",
     "/strategy-execution-bridge/final-demo-execution/status",
     "/strategy-execution-bridge/status",

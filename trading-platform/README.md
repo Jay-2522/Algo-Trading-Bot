@@ -92,6 +92,10 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/final-demo-execution/status`
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/final-demo-execution/execute`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/final-demo-execution/executions`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/e2e/status`
+- `POST http://127.0.0.1:8000/strategy-execution-bridge/e2e/mock-eurusd-demo`
+- `POST http://127.0.0.1:8000/strategy-execution-bridge/e2e/run-signal`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/e2e/flows`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1366,6 +1370,19 @@ python tests/phase9_day4_verification.py
 ```
 
 Phase 9 Day 4 connects approved demo execution candidates to the existing guarded MT5 demo executor path. Final execution requires `confirm_demo_execution=true`, reruns execution risk, blocks stale/duplicate/unapproved candidates, and uses only the existing guarded demo executor. No live execution path is added.
+
+## Run Phase 9 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase9_day1_verification.py
+python tests/phase9_day2_verification.py
+python tests/phase9_day3_verification.py
+python tests/phase9_day4_verification.py
+python tests/phase9_day5_verification.py
+```
+
+Phase 9 Day 5 adds an end-to-end demo flow verifier. It proves the safe chain from strategy signal through bridge validation, risk evaluation, queue preview, demo approval, final confirmation, guarded MT5 demo execution, execution result capture, confirmation tracking, and flow audit storage. The flow remains demo-only and live execution stays disabled.
 
 ## MT5 Safety Boundary
 

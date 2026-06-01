@@ -9,6 +9,7 @@ from backend.strategy_execution_bridge.demo_approval_models import (
     DemoExecutionCandidate,
 )
 from backend.strategy_execution_bridge.demo_execution_approval_service import DemoExecutionApprovalService
+from backend.strategy_execution_bridge.end_to_end_demo_flow import EndToEndDemoFlowResult, EndToEndDemoFlowService
 from backend.strategy_execution_bridge.final_demo_execution_models import (
     FinalDemoExecutionDecision,
     FinalDemoExecutionRequest,
@@ -157,3 +158,51 @@ async def get_final_demo_execution(final_execution_id: str) -> FinalDemoExecutio
     if execution is None:
         raise HTTPException(status_code=404, detail="Final demo execution decision not found.")
     return execution
+
+
+@router.get("/e2e/status")
+async def get_end_to_end_demo_flow_status() -> dict[str, Any]:
+    service = EndToEndDemoFlowService()
+    try:
+        return service.get_status()
+    finally:
+        service.close()
+
+
+@router.post("/e2e/mock-eurusd-demo", response_model=EndToEndDemoFlowResult)
+async def run_mock_eurusd_end_to_end_demo_flow() -> EndToEndDemoFlowResult:
+    service = EndToEndDemoFlowService()
+    try:
+        return service.run_mock_eurusd_demo_flow()
+    finally:
+        service.close()
+
+
+@router.post("/e2e/run-signal", response_model=EndToEndDemoFlowResult)
+async def run_signal_end_to_end_demo_flow(payload: dict[str, Any] = Body(default_factory=dict)) -> EndToEndDemoFlowResult:
+    service = EndToEndDemoFlowService()
+    try:
+        return service.run_from_signal(payload)
+    finally:
+        service.close()
+
+
+@router.get("/e2e/flows", response_model=list[EndToEndDemoFlowResult])
+async def list_end_to_end_demo_flows(limit: int = Query(default=100, ge=1, le=1000)) -> list[EndToEndDemoFlowResult]:
+    service = EndToEndDemoFlowService()
+    try:
+        return service.list_flows(limit)
+    finally:
+        service.close()
+
+
+@router.get("/e2e/flows/{flow_id}", response_model=EndToEndDemoFlowResult)
+async def get_end_to_end_demo_flow(flow_id: str) -> EndToEndDemoFlowResult:
+    service = EndToEndDemoFlowService()
+    try:
+        flow = service.get_flow(flow_id)
+        if flow is None:
+            raise HTTPException(status_code=404, detail="End-to-end demo flow not found.")
+        return flow
+    finally:
+        service.close()

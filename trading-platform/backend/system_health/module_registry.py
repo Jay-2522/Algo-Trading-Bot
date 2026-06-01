@@ -13,6 +13,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "execution_queue", "route": "/execution-queue/status"},
     {"name": "mt5", "route": "/mt5/status"},
     {"name": "monitoring", "route": "/monitoring/status"},
+    {"name": "production_monitoring_health", "route": "/monitoring/health"},
     {"name": "control_center", "route": "/control-center/status"},
     {"name": "mt5_demo_execution_bridge", "route": "/demo-execution/status"},
     {"name": "execution_risk_enforcement", "route": "/execution-risk/status"},

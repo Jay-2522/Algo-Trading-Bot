@@ -1451,6 +1451,19 @@ npm run build
 
 Phase 10 Day 2 adds Docker packaging for backend and frontend with `Dockerfile.backend`, `Dockerfile.frontend`, `docker-compose.yml`, `docker-compose.override.yml`, `.dockerignore`, safe environment templates, and Docker helper scripts. Deployment readiness now reports Docker, Compose, and environment-template readiness while preserving simulation/demo-only defaults.
 
+## Run Phase 10 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase10_day1_verification.py
+python tests/phase10_day2_verification.py
+python tests/phase10_day3_verification.py
+cd frontend
+npm run build
+```
+
+Phase 10 Day 3 adds production logging and monitoring. Backend routes under `/monitoring` now expose platform health, system metrics, process status, API route counts, MT5 demo environment status, and read-only log views. Logs write to `logs/platform.log` with 10 MB rotation and 5 backups. Monitoring remains observability-only and does not enable live execution.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

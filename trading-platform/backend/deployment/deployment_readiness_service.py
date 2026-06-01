@@ -42,6 +42,11 @@ class DeploymentReadinessService:
             and (self.project_root / ".dockerignore").exists()
         )
         env_templates_ready = environment.env_templates_ready
+        monitoring_ready = (
+            (self.project_root / "backend" / "monitoring" / "logging_config.py").exists()
+            and (self.project_root / "logs").exists()
+            and (self.project_root / "backend" / "api" / "monitoring_routes.py").exists()
+        )
         blockers = [*environment.blockers, *vps.blockers, *mt5.blockers]
         warnings = [*environment.warnings, *vps.warnings, *mt5.warnings]
         if not docker_ready:
@@ -50,6 +55,8 @@ class DeploymentReadinessService:
             warnings.append("Docker Compose files or .dockerignore are not ready.")
         if not env_templates_ready:
             warnings.append("Environment templates are not ready.")
+        if not monitoring_ready:
+            warnings.append("Monitoring logging config, logs directory, or monitoring routes are not ready.")
 
         environment_ready = environment.python_path_ok and not environment.forbidden_live_flags_detected
         vps_ready = vps.os_supported and vps.python_available and vps.required_directories_present
@@ -63,6 +70,7 @@ class DeploymentReadinessService:
             docker_ready,
             compose_ready,
             env_templates_ready,
+            monitoring_ready,
             blockers,
             warnings,
         )
@@ -86,6 +94,7 @@ class DeploymentReadinessService:
                 docker_ready=docker_ready,
                 compose_ready=compose_ready,
                 env_templates_ready=env_templates_ready,
+                monitoring_ready=monitoring_ready,
                 deployment_score=score,
                 blockers=blockers,
                 warnings=warnings,
@@ -145,6 +154,7 @@ class DeploymentReadinessService:
         docker_ready: bool,
         compose_ready: bool,
         env_templates_ready: bool,
+        monitoring_ready: bool,
         blockers: list[str],
         warnings: list[str],
     ) -> int:
@@ -157,6 +167,7 @@ class DeploymentReadinessService:
         score += 10 if docker_ready else 0
         score += 10 if compose_ready else 0
         score += 5 if env_templates_ready else 0
+        score += 5 if monitoring_ready else 0
         score -= min(30, len(blockers) * 15)
         score -= min(15, len(warnings) * 3)
         return max(0, min(100, score))

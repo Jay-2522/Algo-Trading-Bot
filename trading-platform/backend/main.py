@@ -44,9 +44,11 @@ from backend.api.trading_loop_routes import router as trading_loop_router
 from backend.api.trading_loop_routes import trading_loop_service
 from backend.api.trade_journal_routes import router as trade_journal_router
 from backend.config.settings import get_settings
+from backend.monitoring.logging_config import configure_logging
 from backend.utils.logger import get_logger
 
 
+configure_logging()
 settings = get_settings()
 logger = get_logger(__name__)
 

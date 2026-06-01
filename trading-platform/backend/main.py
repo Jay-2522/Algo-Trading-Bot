@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from backend.api.ai_routes import router as ai_router
 from backend.api.account_routing_routes import router as account_routing_router
 from backend.api.backtesting_routes import router as backtesting_router
+from backend.api.backup_routes import router as backup_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.client_acceptance_routes import router as client_acceptance_router
 from backend.api.control_center_routes import router as control_center_router
@@ -124,6 +125,7 @@ app.include_router(orchestration_router)
 app.include_router(phase3_readiness_router)
 app.include_router(portfolio_router)
 app.include_router(backtesting_router)
+app.include_router(backup_router)
 app.include_router(replay_router)
 app.include_router(security_router)
 app.include_router(broker_compatibility_router)

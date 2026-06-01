@@ -1496,6 +1496,17 @@ npm run build
 
 Phase 10 Day 5 adds security readiness, secrets auditing, route access classification, config redaction, security audit events, and `/security` endpoints. Deployment readiness now includes `security_ready`. This is a foundation only: admin routes are classified for future protection, real secrets are not added, and live/broker execution remain disabled.
 
+## Run Phase 10 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase10_day6_verification.py
+cd frontend
+npm run build
+```
+
+Phase 10 Day 6 adds backup, recovery, rollback, and incident-response readiness. Backend routes under `/backup` expose readiness score, backup strategy, recovery runbook, rollback guidance, and incident-response guidance. Operator scripts `scripts/backup_status.ps1` and `scripts/recovery_check.ps1` provide read-only checks. This phase is operational resilience only and keeps live/broker execution disabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

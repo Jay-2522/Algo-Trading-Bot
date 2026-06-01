@@ -1464,6 +1464,20 @@ npm run build
 
 Phase 10 Day 3 adds production logging and monitoring. Backend routes under `/monitoring` now expose platform health, system metrics, process status, API route counts, MT5 demo environment status, and read-only log views. Logs write to `logs/platform.log` with 10 MB rotation and 5 backups. Monitoring remains observability-only and does not enable live execution.
 
+## Run Phase 10 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase10_day1_verification.py
+python tests/phase10_day2_verification.py
+python tests/phase10_day3_verification.py
+python tests/phase10_day4_verification.py
+cd frontend
+npm run build
+```
+
+Phase 10 Day 4 adds read-only VPS runtime and service-management visibility. Backend routes under `/deployment/runtime` report backend/frontend health, runtime status, MT5 demo notes, and runtime audit events. Manual scripts under `scripts/` start or check services; the API never kills or restarts processes.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

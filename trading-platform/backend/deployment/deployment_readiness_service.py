@@ -47,6 +47,12 @@ class DeploymentReadinessService:
             and (self.project_root / "logs").exists()
             and (self.project_root / "backend" / "api" / "monitoring_routes.py").exists()
         )
+        runtime_ready = (
+            (self.project_root / "backend" / "deployment" / "runtime_manager.py").exists()
+            and (self.project_root / "backend" / "deployment" / "service_health_checker.py").exists()
+            and (self.project_root / "backend" / "deployment" / "runtime_models.py").exists()
+        )
+        service_management_ready = self._service_management_ready()
         blockers = [*environment.blockers, *vps.blockers, *mt5.blockers]
         warnings = [*environment.warnings, *vps.warnings, *mt5.warnings]
         if not docker_ready:
@@ -57,6 +63,10 @@ class DeploymentReadinessService:
             warnings.append("Environment templates are not ready.")
         if not monitoring_ready:
             warnings.append("Monitoring logging config, logs directory, or monitoring routes are not ready.")
+        if not runtime_ready:
+            warnings.append("Runtime manager, health checker, or runtime models are not ready.")
+        if not service_management_ready:
+            warnings.append("Runtime scripts or VPS service documentation are not ready.")
 
         environment_ready = environment.python_path_ok and not environment.forbidden_live_flags_detected
         vps_ready = vps.os_supported and vps.python_available and vps.required_directories_present
@@ -71,6 +81,8 @@ class DeploymentReadinessService:
             compose_ready,
             env_templates_ready,
             monitoring_ready,
+            runtime_ready,
+            service_management_ready,
             blockers,
             warnings,
         )
@@ -95,6 +107,8 @@ class DeploymentReadinessService:
                 compose_ready=compose_ready,
                 env_templates_ready=env_templates_ready,
                 monitoring_ready=monitoring_ready,
+                runtime_ready=runtime_ready,
+                service_management_ready=service_management_ready,
                 deployment_score=score,
                 blockers=blockers,
                 warnings=warnings,
@@ -120,6 +134,7 @@ class DeploymentReadinessService:
             ],
             "health_checks": ["/health", "/status", "/deployment/status", "/deployment/readiness"],
             "docker": ["Dockerfile.backend", "Dockerfile.frontend", "docker-compose.yml", "docker-compose.override.yml"],
+            "runtime": ["scripts/runtime_status.ps1", "scripts/vps_healthcheck.ps1", "docs/vps-runtime-guide.md"],
         }
 
     def get_blockers(self) -> dict[str, Any]:
@@ -155,6 +170,8 @@ class DeploymentReadinessService:
         compose_ready: bool,
         env_templates_ready: bool,
         monitoring_ready: bool,
+        runtime_ready: bool,
+        service_management_ready: bool,
         blockers: list[str],
         warnings: list[str],
     ) -> int:
@@ -168,6 +185,25 @@ class DeploymentReadinessService:
         score += 10 if compose_ready else 0
         score += 5 if env_templates_ready else 0
         score += 5 if monitoring_ready else 0
+        score += 5 if runtime_ready else 0
+        score += 5 if service_management_ready else 0
         score -= min(30, len(blockers) * 15)
         score -= min(15, len(warnings) * 3)
         return max(0, min(100, score))
+
+    def _service_management_ready(self) -> bool:
+        scripts = [
+            "runtime_status.ps1",
+            "restart_backend.ps1",
+            "restart_frontend.ps1",
+            "restart_all.ps1",
+            "vps_healthcheck.ps1",
+        ]
+        docs = [
+            "vps-runtime-guide.md",
+            "windows-vps-service-guide.md",
+            "linux-vps-service-guide.md",
+        ]
+        return all((self.project_root / "scripts" / script).exists() for script in scripts) and all(
+            (self.project_root / "docs" / doc).exists() for doc in docs
+        )

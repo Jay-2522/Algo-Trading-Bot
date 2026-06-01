@@ -23,6 +23,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "vps_runtime_management", "route": "/deployment/runtime/status"},
     {"name": "security_readiness", "route": "/security/status"},
     {"name": "backup_recovery_readiness", "route": "/backup/status"},
+    {"name": "production_readiness_certification", "route": "/production-readiness/status"},
     {"name": "multi_account_mt5_demo_routing", "route": "/multi-account-execution/status"},
     {"name": "demo_trade_copier", "route": "/trade-copier/status"},
     {"name": "database", "route": "/database/status"},

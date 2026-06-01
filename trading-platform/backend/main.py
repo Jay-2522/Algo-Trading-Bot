@@ -32,6 +32,7 @@ from backend.api.operational_intelligence_routes import router as operational_in
 from backend.api.orchestration_routes import router as orchestration_router
 from backend.api.phase3_readiness_routes import router as phase3_readiness_router
 from backend.api.portfolio_routes import router as portfolio_router
+from backend.api.production_readiness_routes import router as production_readiness_router
 from backend.api.risk_routes import router as risk_router
 from backend.api.replay_routes import router as replay_router
 from backend.api.security_routes import router as security_router
@@ -124,6 +125,7 @@ app.include_router(operational_intelligence_router)
 app.include_router(orchestration_router)
 app.include_router(phase3_readiness_router)
 app.include_router(portfolio_router)
+app.include_router(production_readiness_router)
 app.include_router(backtesting_router)
 app.include_router(backup_router)
 app.include_router(replay_router)

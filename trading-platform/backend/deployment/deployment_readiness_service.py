@@ -147,6 +147,12 @@ class DeploymentReadinessService:
             "docker": ["Dockerfile.backend", "Dockerfile.frontend", "docker-compose.yml", "docker-compose.override.yml"],
             "runtime": ["scripts/runtime_status.ps1", "scripts/vps_healthcheck.ps1", "docs/vps-runtime-guide.md"],
             "security": ["/security/status", "/security/secrets-audit", "docs/security-hardening-guide.md"],
+            "backup": ["/backup/status", "docs/backup-strategy.md", "docs/recovery-runbook.md"],
+            "production_certification": [
+                "/production-readiness/status",
+                "/production-readiness/report",
+                "docs/production-readiness-report.md",
+            ],
         }
 
     def get_blockers(self) -> dict[str, Any]:

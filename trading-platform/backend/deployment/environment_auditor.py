@@ -25,12 +25,15 @@ class EnvironmentAuditor:
             self.project_root / ".env",
             self.project_root / ".env.local",
             self.project_root / "frontend" / ".env.local",
+            self.project_root / ".env.example",
+            self.project_root / ".env.production.example",
         ]
         env_file_present = any(path.exists() for path in env_files)
         env_values = self._load_env_files(env_files)
         api_base_url_configured = bool(env_values.get("NEXT_PUBLIC_API_BASE_URL") or os.getenv("NEXT_PUBLIC_API_BASE_URL"))
         node_environment = os.getenv("NODE_ENV") or env_values.get("NODE_ENV") or "development"
         forbidden_live_flags = self._forbidden_live_flags(env_values)
+        env_templates_ready = (self.project_root / ".env.example").exists() and (self.project_root / ".env.production.example").exists()
 
         if not env_file_present:
             warnings.append(".env or .env.local is not present; create one before VPS deployment.")
@@ -49,6 +52,7 @@ class EnvironmentAuditor:
             python_path_ok=python_path_ok,
             node_environment=node_environment,
             required_variables_present=env_file_present and api_base_url_configured,
+            env_templates_ready=env_templates_ready,
             forbidden_live_flags_detected=bool(forbidden_live_flags),
             simulation_only=True,
             live_execution_enabled=False,

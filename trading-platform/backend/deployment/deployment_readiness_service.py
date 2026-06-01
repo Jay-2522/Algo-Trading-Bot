@@ -35,13 +35,37 @@ class DeploymentReadinessService:
 
         logging_ready = (self.project_root / "logs").exists()
         health_checks_ready = True
+        docker_ready = (self.project_root / "Dockerfile.backend").exists() and (self.project_root / "Dockerfile.frontend").exists()
+        compose_ready = (
+            (self.project_root / "docker-compose.yml").exists()
+            and (self.project_root / "docker-compose.override.yml").exists()
+            and (self.project_root / ".dockerignore").exists()
+        )
+        env_templates_ready = environment.env_templates_ready
         blockers = [*environment.blockers, *vps.blockers, *mt5.blockers]
         warnings = [*environment.warnings, *vps.warnings, *mt5.warnings]
+        if not docker_ready:
+            warnings.append("Backend and frontend Dockerfiles are not both present.")
+        if not compose_ready:
+            warnings.append("Docker Compose files or .dockerignore are not ready.")
+        if not env_templates_ready:
+            warnings.append("Environment templates are not ready.")
 
         environment_ready = environment.python_path_ok and not environment.forbidden_live_flags_detected
         vps_ready = vps.os_supported and vps.python_available and vps.required_directories_present
         mt5_environment_ready = mt5.mt5_ready_for_demo
-        score = self._score(environment_ready, vps_ready, mt5_environment_ready, logging_ready, health_checks_ready, blockers, warnings)
+        score = self._score(
+            environment_ready,
+            vps_ready,
+            mt5_environment_ready,
+            logging_ready,
+            health_checks_ready,
+            docker_ready,
+            compose_ready,
+            env_templates_ready,
+            blockers,
+            warnings,
+        )
         if blockers or score < 70:
             status = "BLOCKED"
         elif score == 100:
@@ -59,6 +83,9 @@ class DeploymentReadinessService:
                 mt5_environment_ready=mt5_environment_ready,
                 logging_ready=logging_ready,
                 health_checks_ready=health_checks_ready,
+                docker_ready=docker_ready,
+                compose_ready=compose_ready,
+                env_templates_ready=env_templates_ready,
                 deployment_score=score,
                 blockers=blockers,
                 warnings=warnings,
@@ -83,6 +110,7 @@ class DeploymentReadinessService:
                 "broker_execution_enabled=false",
             ],
             "health_checks": ["/health", "/status", "/deployment/status", "/deployment/readiness"],
+            "docker": ["Dockerfile.backend", "Dockerfile.frontend", "docker-compose.yml", "docker-compose.override.yml"],
         }
 
     def get_blockers(self) -> dict[str, Any]:
@@ -114,15 +142,21 @@ class DeploymentReadinessService:
         mt5_ready: bool,
         logging_ready: bool,
         health_ready: bool,
+        docker_ready: bool,
+        compose_ready: bool,
+        env_templates_ready: bool,
         blockers: list[str],
         warnings: list[str],
     ) -> int:
         score = 0
-        score += 25 if environment_ready else 0
-        score += 25 if vps_ready else 0
-        score += 20 if mt5_ready else 10
-        score += 15 if logging_ready else 0
-        score += 15 if health_ready else 0
+        score += 20 if environment_ready else 0
+        score += 20 if vps_ready else 0
+        score += 15 if mt5_ready else 8
+        score += 10 if logging_ready else 0
+        score += 10 if health_ready else 0
+        score += 10 if docker_ready else 0
+        score += 10 if compose_ready else 0
+        score += 5 if env_templates_ready else 0
         score -= min(30, len(blockers) * 15)
         score -= min(15, len(warnings) * 3)
         return max(0, min(100, score))

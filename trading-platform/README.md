@@ -1439,6 +1439,18 @@ npm run build
 
 Phase 10 Day 1 starts VPS deployment hardening. Backend routes under `/deployment` audit environment readiness, VPS prerequisites, MT5 demo environment readiness, blockers, warnings, and the deployment checklist. Startup scripts are provided under `scripts/`, and `docs/deployment-readiness-checklist.md` captures the Mumbai VPS, Python, Node, MT5 demo, ports, logs, and safety-flag checklist. This phase does not enable live trading.
 
+## Run Phase 10 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase10_day1_verification.py
+python tests/phase10_day2_verification.py
+cd frontend
+npm run build
+```
+
+Phase 10 Day 2 adds Docker packaging for backend and frontend with `Dockerfile.backend`, `Dockerfile.frontend`, `docker-compose.yml`, `docker-compose.override.yml`, `.dockerignore`, safe environment templates, and Docker helper scripts. Deployment readiness now reports Docker, Compose, and environment-template readiness while preserving simulation/demo-only defaults.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

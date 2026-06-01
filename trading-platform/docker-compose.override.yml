@@ -1,0 +1,23 @@
+services:
+  backend:
+    environment:
+      ENVIRONMENT: development
+      SIMULATION_ONLY: "true"
+      DEMO_EXECUTION: "true"
+      LIVE_EXECUTION_ENABLED: "false"
+      BROKER_EXECUTION_ENABLED: "false"
+    volumes:
+      - ./backend:/app/backend
+      - ./logs:/app/logs
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      LIVE_EXECUTION_ENABLED: "false"
+      BROKER_EXECUTION_ENABLED: "false"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev"]

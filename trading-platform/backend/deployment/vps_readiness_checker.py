@@ -25,7 +25,15 @@ class VPSReadinessChecker:
             "start_all_dev.ps1",
             "check_deployment_readiness.ps1",
         ]
+        docker_script_names = [
+            "docker_build.ps1",
+            "docker_up.ps1",
+            "docker_down.ps1",
+            "docker_logs.ps1",
+            "docker_healthcheck.ps1",
+        ]
         startup_scripts_present = scripts_dir.exists() and all((scripts_dir / name).exists() for name in script_names)
+        docker_scripts_present = scripts_dir.exists() and all((scripts_dir / name).exists() for name in docker_script_names)
 
         if not os_supported:
             blockers.append("Deployment target OS should be Windows VPS for MT5 or Linux for API-only services.")
@@ -37,6 +45,8 @@ class VPSReadinessChecker:
             warnings.append("Recommended backend/frontend/logs/docs directories are not all present.")
         if not startup_scripts_present:
             warnings.append("Deployment startup scripts are not all present yet.")
+        if not docker_scripts_present:
+            warnings.append("Docker helper scripts are not all present yet.")
 
         return VPSEnvironmentCheck(
             os_supported=os_supported,
@@ -45,6 +55,7 @@ class VPSReadinessChecker:
             ports_available=True,
             required_directories_present=required_dirs,
             startup_scripts_present=startup_scripts_present,
+            docker_scripts_present=docker_scripts_present,
             recommended_region="Mumbai",
             latency_target_ms="<10ms ideal",
             warnings=warnings,

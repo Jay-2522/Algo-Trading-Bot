@@ -17,6 +17,7 @@ class EnvironmentAuditResult(BaseModel):
     python_path_ok: bool = False
     node_environment: str = "unknown"
     required_variables_present: bool = False
+    env_templates_ready: bool = False
     forbidden_live_flags_detected: bool = False
     simulation_only: bool = True
     live_execution_enabled: bool = False
@@ -37,6 +38,7 @@ class VPSEnvironmentCheck(BaseModel):
     ports_available: bool = True
     required_directories_present: bool = False
     startup_scripts_present: bool = False
+    docker_scripts_present: bool = False
     recommended_region: str = "Mumbai"
     latency_target_ms: str = "<10ms ideal"
     warnings: list[str] = Field(default_factory=list)
@@ -61,6 +63,9 @@ class DeploymentReadinessStatus(BaseModel):
     mt5_environment_ready: bool = False
     logging_ready: bool = False
     health_checks_ready: bool = False
+    docker_ready: bool = False
+    compose_ready: bool = False
+    env_templates_ready: bool = False
     deployment_score: int = 0
     blockers: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

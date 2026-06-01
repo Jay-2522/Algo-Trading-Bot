@@ -18,6 +18,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "execution_risk_enforcement", "route": "/execution-risk/status"},
     {"name": "execution_confirmation_tracking", "route": "/execution-confirmation/status"},
     {"name": "execution_operations_dashboard", "route": "/execution-dashboard/status"},
+    {"name": "deployment_readiness", "route": "/deployment/status"},
     {"name": "multi_account_mt5_demo_routing", "route": "/multi-account-execution/status"},
     {"name": "demo_trade_copier", "route": "/trade-copier/status"},
     {"name": "database", "route": "/database/status"},

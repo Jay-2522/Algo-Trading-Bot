@@ -105,6 +105,11 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/operations/recent-rejections`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/operations/readiness`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/operations/health`
+- `GET http://127.0.0.1:8000/deployment/status`
+- `GET http://127.0.0.1:8000/deployment/readiness`
+- `GET http://127.0.0.1:8000/deployment/checklist`
+- `GET http://127.0.0.1:8000/deployment/blockers`
+- `GET http://127.0.0.1:8000/deployment/warnings`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1421,6 +1426,18 @@ python tests/phase9_day7_verification.py
 ```
 
 Phase 9 Day 7 completes the execution operations control center. Backend routes under `/strategy-execution-bridge/operations` expose pipeline status, overview counts, pipeline events, recent executions, recent rejections, readiness, and health score. The center is monitoring-only and keeps live and broker execution disabled.
+
+## Run Phase 10 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase9_day7_verification.py
+python tests/phase10_day1_verification.py
+cd frontend
+npm run build
+```
+
+Phase 10 Day 1 starts VPS deployment hardening. Backend routes under `/deployment` audit environment readiness, VPS prerequisites, MT5 demo environment readiness, blockers, warnings, and the deployment checklist. Startup scripts are provided under `scripts/`, and `docs/deployment-readiness-checklist.md` captures the Mumbai VPS, Python, Node, MT5 demo, ports, logs, and safety-flag checklist. This phase does not enable live trading.
 
 ## MT5 Safety Boundary
 

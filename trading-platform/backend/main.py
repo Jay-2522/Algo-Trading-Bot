@@ -15,6 +15,7 @@ from backend.api.dashboard_routes import router as dashboard_router
 from backend.api.database_routes import router as database_router
 from backend.api.demo_execution_routes import router as demo_execution_router
 from backend.api.demo_mode_routes import router as demo_mode_router
+from backend.api.deployment_routes import router as deployment_router
 from backend.api.execution_confirmation_routes import router as execution_confirmation_router
 from backend.api.execution_dashboard_routes import router as execution_dashboard_router
 from backend.api.execution_risk_routes import router as execution_risk_router
@@ -99,6 +100,7 @@ app.include_router(control_center_router)
 app.include_router(dashboard_router)
 app.include_router(demo_execution_router)
 app.include_router(demo_mode_router)
+app.include_router(deployment_router)
 app.include_router(execution_confirmation_router)
 app.include_router(execution_dashboard_router)
 app.include_router(execution_risk_router)

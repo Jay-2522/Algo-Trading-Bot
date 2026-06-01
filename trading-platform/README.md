@@ -96,6 +96,8 @@ Strategy API examples:
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/e2e/mock-eurusd-demo`
 - `POST http://127.0.0.1:8000/strategy-execution-bridge/e2e/run-signal`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/e2e/flows`
+- `GET http://127.0.0.1:8000/trade-copier/execution-results`
+- `POST http://127.0.0.1:8000/trade-copier/distribute-execution`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1383,6 +1385,20 @@ python tests/phase9_day5_verification.py
 ```
 
 Phase 9 Day 5 adds an end-to-end demo flow verifier. It proves the safe chain from strategy signal through bridge validation, risk evaluation, queue preview, demo approval, final confirmation, guarded MT5 demo execution, execution result capture, confirmation tracking, and flow audit storage. The flow remains demo-only and live execution stays disabled.
+
+## Run Phase 9 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase9_day1_verification.py
+python tests/phase9_day2_verification.py
+python tests/phase9_day3_verification.py
+python tests/phase9_day4_verification.py
+python tests/phase9_day5_verification.py
+python tests/phase9_day6_verification.py
+```
+
+Phase 9 Day 6 connects guarded demo execution records to the existing multi-account trade copier coordination layer. EURUSD demo executions can create copy batches for `STARTRADER_DEMO_1`, `FXPRO_DEMO_1`, and `VANTAGE_DEMO_1`; duplicate protection, execution risk checks, max `0.01` lot limits, and demo-only safety flags remain active.
 
 ## MT5 Safety Boundary
 

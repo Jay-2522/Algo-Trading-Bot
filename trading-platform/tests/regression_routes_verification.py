@@ -48,6 +48,7 @@ REQUIRED_GET_ROUTES = {
     "/multi-account-execution/status",
     "/trade-copier/status",
     "/trade-copier/batches",
+    "/trade-copier/execution-results",
     "/monitoring/status",
     "/client-acceptance/status",
     "/control-center/status",

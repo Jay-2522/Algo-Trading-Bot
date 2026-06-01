@@ -38,6 +38,8 @@ class TradeCopierService:
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
             "duplicate_guard_enabled": True,
+            "strategy_execution_bridge_enabled": True,
+            "copier_execution_bridge_ready": True,
         }
 
     def preview_copy(self, signal_payload: dict[str, Any]) -> TradeCopyBatch:
@@ -62,6 +64,11 @@ class TradeCopierService:
 
     def get_batch(self, copy_batch_id: str) -> TradeCopyBatch | None:
         return self.tracker.get_batch(copy_batch_id)
+
+    def distribute_execution(self, execution: Any):
+        from backend.trade_copier.copier_execution_bridge import CopierExecutionBridge
+
+        return CopierExecutionBridge(trade_copier_service=self).distribute_execution(execution)
 
     def _apply_duplicate_guard(self, batch: TradeCopyBatch, mark_new: bool) -> None:
         for result in batch.account_copy_results:

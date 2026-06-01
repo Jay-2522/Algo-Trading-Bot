@@ -46,6 +46,8 @@ class FinalDemoExecutionDecision(BaseModel):
     rejection_reasons: list[str] = Field(default_factory=list)
     risk_decision_id: str | None = None
     demo_execution_result_id: str | None = None
+    copier_execution_id: str | None = None
+    copy_batch_id: str | None = None
     mt5_retcode: int | str | None = None
     mt5_order: int | str | None = None
     mt5_deal: int | str | None = None

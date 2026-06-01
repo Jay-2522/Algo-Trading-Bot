@@ -11,6 +11,7 @@ from backend.strategy_execution_bridge.final_demo_execution_models import (
     FinalDemoExecutionRequest,
 )
 from backend.strategy_execution_bridge.final_demo_execution_store import FinalDemoExecutionStore
+from backend.trade_copier.copier_execution_bridge import CopierExecutionBridge
 
 
 class FinalDemoExecutionService:
@@ -26,12 +27,14 @@ class FinalDemoExecutionService:
         guard: FinalDemoExecutionGuard | None = None,
         risk_evaluator: ExecutionRiskEvaluator | None = None,
         demo_execution_service: DemoExecutionService | None = None,
+        copier_bridge: CopierExecutionBridge | None = None,
     ) -> None:
         self.approval_store = approval_store or DemoExecutionApprovalStore()
         self.store = store or FinalDemoExecutionStore()
         self.guard = guard or FinalDemoExecutionGuard()
         self.risk_evaluator = risk_evaluator or ExecutionRiskEvaluator()
         self.demo_execution_service = demo_execution_service or DemoExecutionService()
+        self.copier_bridge = copier_bridge or CopierExecutionBridge()
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -113,6 +116,10 @@ class FinalDemoExecutionService:
                 mt5_order=result.mt5_order,
                 mt5_deal=result.mt5_deal,
             )
+            if mapped_status == "DEMO_FILLED":
+                copy_result = self.copier_bridge.distribute_execution(decision)
+                decision.copier_execution_id = copy_result.copier_execution_id
+                decision.copy_batch_id = copy_result.copy_batch_id
             return self.store.store_decision(decision)
         except Exception as exc:
             return self.store.store_decision(

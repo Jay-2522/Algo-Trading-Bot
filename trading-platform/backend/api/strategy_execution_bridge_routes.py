@@ -9,6 +9,11 @@ from backend.strategy_execution_bridge.demo_approval_models import (
     DemoExecutionCandidate,
 )
 from backend.strategy_execution_bridge.demo_execution_approval_service import DemoExecutionApprovalService
+from backend.strategy_execution_bridge.final_demo_execution_models import (
+    FinalDemoExecutionDecision,
+    FinalDemoExecutionRequest,
+)
+from backend.strategy_execution_bridge.final_demo_execution_service import FinalDemoExecutionService
 from backend.strategy_execution_bridge.strategy_execution_bridge_service import StrategyExecutionBridgeService
 
 
@@ -129,3 +134,26 @@ async def get_demo_candidate(candidate_id: str) -> DemoExecutionCandidate:
     if candidate is None:
         raise HTTPException(status_code=404, detail="Demo execution candidate not found.")
     return candidate
+
+
+@router.get("/final-demo-execution/status")
+async def get_final_demo_execution_status() -> dict[str, Any]:
+    return FinalDemoExecutionService().get_status()
+
+
+@router.post("/final-demo-execution/execute", response_model=FinalDemoExecutionDecision)
+async def execute_final_demo_candidate(payload: FinalDemoExecutionRequest) -> FinalDemoExecutionDecision:
+    return FinalDemoExecutionService().execute_candidate(payload)
+
+
+@router.get("/final-demo-execution/executions", response_model=list[FinalDemoExecutionDecision])
+async def list_final_demo_executions(limit: int = Query(default=100, ge=1, le=1000)) -> list[FinalDemoExecutionDecision]:
+    return FinalDemoExecutionService().list_executions(limit)
+
+
+@router.get("/final-demo-execution/executions/{final_execution_id}", response_model=FinalDemoExecutionDecision)
+async def get_final_demo_execution(final_execution_id: str) -> FinalDemoExecutionDecision:
+    execution = FinalDemoExecutionService().get_execution(final_execution_id)
+    if execution is None:
+        raise HTTPException(status_code=404, detail="Final demo execution decision not found.")
+    return execution

@@ -89,6 +89,9 @@ Strategy API examples:
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/approvals`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/history`
 - `GET http://127.0.0.1:8000/strategy-execution-bridge/demo-approval/candidates`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/final-demo-execution/status`
+- `POST http://127.0.0.1:8000/strategy-execution-bridge/final-demo-execution/execute`
+- `GET http://127.0.0.1:8000/strategy-execution-bridge/final-demo-execution/executions`
 - `GET http://127.0.0.1:8000/strategy/session`
 - `GET http://127.0.0.1:8000/strategy/snapshot/XAUUSD`
 
@@ -1351,6 +1354,18 @@ python tests/phase9_day3_verification.py
 ```
 
 Phase 9 Day 3 adds the queue preview to demo execution approval flow. Fresh, risk-approved queue previews can become demo execution candidates only after explicit `confirm_demo_approval=true`; unconfirmed, stale, duplicate, rejected, and risk-rejected previews are blocked. Candidates still require final execution confirmation later, and no demo executor is called.
+
+## Run Phase 9 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase9_day1_verification.py
+python tests/phase9_day2_verification.py
+python tests/phase9_day3_verification.py
+python tests/phase9_day4_verification.py
+```
+
+Phase 9 Day 4 connects approved demo execution candidates to the existing guarded MT5 demo executor path. Final execution requires `confirm_demo_execution=true`, reruns execution risk, blocks stale/duplicate/unapproved candidates, and uses only the existing guarded demo executor. No live execution path is added.
 
 ## MT5 Safety Boundary
 

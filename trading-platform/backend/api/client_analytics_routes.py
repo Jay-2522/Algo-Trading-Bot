@@ -13,6 +13,8 @@ from backend.client_analytics.client_analytics_service import ClientAnalyticsSer
 from backend.client_analytics.export_service import ExportService
 from backend.client_analytics.report_builder import ReportBuilder
 from backend.client_analytics.report_models import ClientReport
+from backend.client_analytics.strategy_analytics_service import StrategyAnalyticsService
+from backend.client_analytics.strategy_models import StrategyPerformanceSummary
 
 
 router = APIRouter(prefix="/client-analytics", tags=["Client Analytics"])
@@ -20,6 +22,7 @@ client_analytics_service = ClientAnalyticsService()
 account_analytics_service = AccountAnalyticsService()
 report_builder = ReportBuilder(client_analytics_service)
 export_service = ExportService(report_builder)
+strategy_analytics_service = StrategyAnalyticsService()
 
 
 @router.get("/status")
@@ -80,6 +83,49 @@ async def get_client_analytics_account_sync_status() -> dict:
 @router.get("/accounts/{account_id}", response_model=AccountAnalyticsSummary | None)
 async def get_client_analytics_account(account_id: str) -> AccountAnalyticsSummary | None:
     return account_analytics_service.get_account(account_id)
+
+
+@router.get("/strategy/status")
+async def get_client_strategy_status() -> dict:
+    return {
+        "status": "OPERATIONAL",
+        "supported_symbols": ["XAUUSD", "EURUSD", "NIFTY50"],
+        "nifty50_status": "PENDING IMPLEMENTATION",
+        "simulation_only": True,
+        "demo_execution": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }
+
+
+@router.get("/strategy/overview")
+async def get_client_strategy_overview() -> dict:
+    return strategy_analytics_service.get_strategy_overview()
+
+
+@router.get("/strategy/performance", response_model=list[StrategyPerformanceSummary])
+async def get_client_strategy_performance() -> list[StrategyPerformanceSummary]:
+    return strategy_analytics_service.get_all_strategy_performance()
+
+
+@router.get("/strategy/performance/{symbol}", response_model=StrategyPerformanceSummary)
+async def get_client_strategy_symbol_performance(symbol: str) -> StrategyPerformanceSummary:
+    return strategy_analytics_service.get_symbol_performance(symbol)
+
+
+@router.get("/strategy/rankings")
+async def get_client_strategy_rankings() -> list[dict]:
+    return strategy_analytics_service.get_rankings()
+
+
+@router.get("/strategy/session-efficiency")
+async def get_client_strategy_session_efficiency() -> list[dict]:
+    return strategy_analytics_service.get_session_efficiency()
+
+
+@router.get("/strategy/comparison")
+async def get_client_strategy_comparison() -> dict:
+    return strategy_analytics_service.get_comparative_analysis()
 
 
 @router.get("/reports/status")

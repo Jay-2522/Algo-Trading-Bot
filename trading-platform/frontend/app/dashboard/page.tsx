@@ -1,7 +1,8 @@
+import { ClientAnalyticsSection } from "@/components/client-analytics/ClientAnalyticsSection";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
 export const dynamic = "force-dynamic";
 
 export default function DashboardPage() {
-  return <DashboardShell />;
+  return <DashboardShell analyticsSection={<ClientAnalyticsSection />} />;
 }

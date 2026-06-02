@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AutoRefreshControl } from "./AutoRefreshControl";
@@ -145,7 +146,7 @@ function statusTone(value: string | boolean | null | undefined): "good" | "info"
   return "info";
 }
 
-export function DashboardShell() {
+export function DashboardShell({ analyticsSection }: { analyticsSection?: React.ReactNode }) {
   const { bundle, loading, isPaused, lastUpdated, refresh, togglePause } = useTraderDashboardData(10000);
   const exposure = bundle.portfolioExposure ?? bundle.portfolioOverview?.exposure_summary ?? null;
   const pnl = bundle.portfolioPnlSummary ?? bundle.portfolioOverview?.pnl_summary ?? null;
@@ -221,6 +222,8 @@ export function DashboardShell() {
             </article>
           ))}
         </section>
+
+        {analyticsSection}
 
         <section className="grid gap-4 xl:grid-cols-[1.25fr_0.85fr]">
           <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">

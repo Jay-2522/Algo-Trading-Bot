@@ -1561,6 +1561,20 @@ npm run build
 
 Phase 11 Day 3 adds a read-only trade journal and execution history section to the dashboard. It shows the lifecycle from strategy signal through bridge validation, risk check, queue preview, approval, demo execution, copier result, confirmation, and final status. Empty states are shown when no real demo execution history exists, and no fake trades or profits are displayed.
 
+## Run Phase 11 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day1_verification.py
+python tests/phase11_day2_verification.py
+python tests/phase11_day3_verification.py
+python tests/phase11_day4_verification.py
+cd frontend
+npm run build
+```
+
+Phase 11 Day 4 adds client reporting and exports. Backend report routes under `/client-analytics/reports` generate daily, weekly, symbol, risk, trade journal, JSON, and CSV reports from recorded demo analytics only. The dashboard now includes a reports section with summary cards, export controls, and a printable report preview. Empty reports stay honest and no fake PnL is generated.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

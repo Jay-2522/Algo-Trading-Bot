@@ -149,9 +149,11 @@ function statusTone(value: string | boolean | null | undefined): "good" | "info"
 export function DashboardShell({
   analyticsSection,
   tradeJournalSection,
+  reportsSection,
 }: {
   analyticsSection?: React.ReactNode;
   tradeJournalSection?: React.ReactNode;
+  reportsSection?: React.ReactNode;
 }) {
   const { bundle, loading, isPaused, lastUpdated, refresh, togglePause } = useTraderDashboardData(10000);
   const exposure = bundle.portfolioExposure ?? bundle.portfolioOverview?.exposure_summary ?? null;
@@ -231,6 +233,7 @@ export function DashboardShell({
 
         {analyticsSection}
         {tradeJournalSection}
+        {reportsSection}
 
         <section className="grid gap-4 xl:grid-cols-[1.25fr_0.85fr]">
           <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">

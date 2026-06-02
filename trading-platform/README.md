@@ -1524,6 +1524,18 @@ npm run build
 
 Phase 10 Day 7 completes production readiness certification for demo VPS deployment. Backend routes under `/production-readiness` aggregate deployment, monitoring, security, backup, execution, strategy, and VPS readiness into a final score, recommendations, blockers, and go-live assessment. This is a certification layer only and does not enable live trading or broker execution.
 
+## Run Phase 11 Day 1 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase10_day7_verification.py
+python tests/phase11_day1_verification.py
+cd frontend
+npm run build
+```
+
+Phase 11 Day 1 starts client analytics, reporting, and business intelligence. Backend routes under `/client-analytics` expose dashboard overview, symbol summaries, session summaries, risk analytics, and latest snapshots. The analytics collector reads existing stores where available and returns safe empty data otherwise. PnL, win rate, and profit factor remain zero unless real PnL data exists; NIFTY50 is placeholder-only.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

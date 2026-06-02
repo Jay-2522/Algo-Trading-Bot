@@ -15,6 +15,7 @@ MODULE_REGISTRY: list[dict] = [
     {"name": "monitoring", "route": "/monitoring/status"},
     {"name": "production_monitoring_health", "route": "/monitoring/health"},
     {"name": "control_center", "route": "/control-center/status"},
+    {"name": "client_analytics", "route": "/client-analytics/status"},
     {"name": "mt5_demo_execution_bridge", "route": "/demo-execution/status"},
     {"name": "execution_risk_enforcement", "route": "/execution-risk/status"},
     {"name": "execution_confirmation_tracking", "route": "/execution-confirmation/status"},

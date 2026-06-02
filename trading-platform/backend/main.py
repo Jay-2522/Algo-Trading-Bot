@@ -11,6 +11,7 @@ from backend.api.backtesting_routes import router as backtesting_router
 from backend.api.backup_routes import router as backup_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.client_acceptance_routes import router as client_acceptance_router
+from backend.api.client_analytics_routes import router as client_analytics_router
 from backend.api.control_center_routes import router as control_center_router
 from backend.api.dashboard_routes import router as dashboard_router
 from backend.api.database_routes import router as database_router
@@ -101,6 +102,7 @@ async def system_status() -> Dict[str, str]:
 app.include_router(market_data_router)
 app.include_router(account_routing_router)
 app.include_router(client_acceptance_router)
+app.include_router(client_analytics_router)
 app.include_router(control_center_router)
 app.include_router(dashboard_router)
 app.include_router(demo_execution_router)

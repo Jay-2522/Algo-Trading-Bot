@@ -1,6 +1,7 @@
 import { AccountAnalyticsSection } from "@/components/account-analytics/AccountAnalyticsSection";
 import { ClientAnalyticsSection } from "@/components/client-analytics/ClientAnalyticsSection";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { ExecutiveDashboardSection } from "@/components/executive-dashboard/ExecutiveDashboardSection";
 import { ClientReportsSection } from "@/components/reports/ClientReportsSection";
 import { StrategyIntelligenceSection } from "@/components/strategy-intelligence/StrategyIntelligenceSection";
 import { TradeJournalSection } from "@/components/trade-journal/TradeJournalSection";
@@ -12,6 +13,7 @@ export default function DashboardPage() {
     <DashboardShell
       accountAnalyticsSection={<AccountAnalyticsSection />}
       analyticsSection={<ClientAnalyticsSection />}
+      executiveDashboardSection={<ExecutiveDashboardSection />}
       reportsSection={<ClientReportsSection />}
       strategyIntelligenceSection={<StrategyIntelligenceSection />}
       tradeJournalSection={<TradeJournalSection />}

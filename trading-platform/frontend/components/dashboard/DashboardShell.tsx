@@ -147,12 +147,14 @@ function statusTone(value: string | boolean | null | undefined): "good" | "info"
 }
 
 export function DashboardShell({
+  executiveDashboardSection,
   analyticsSection,
   accountAnalyticsSection,
   strategyIntelligenceSection,
   tradeJournalSection,
   reportsSection,
 }: {
+  executiveDashboardSection?: React.ReactNode;
   analyticsSection?: React.ReactNode;
   accountAnalyticsSection?: React.ReactNode;
   strategyIntelligenceSection?: React.ReactNode;
@@ -235,6 +237,7 @@ export function DashboardShell({
           ))}
         </section>
 
+        {executiveDashboardSection}
         {analyticsSection}
         {strategyIntelligenceSection}
         {accountAnalyticsSection}

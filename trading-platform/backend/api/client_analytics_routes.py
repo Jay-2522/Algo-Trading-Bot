@@ -10,6 +10,8 @@ from backend.client_analytics.analytics_models import (
     SymbolPerformanceSummary,
 )
 from backend.client_analytics.client_analytics_service import ClientAnalyticsService
+from backend.client_analytics.executive_dashboard_service import ExecutiveDashboardService
+from backend.client_analytics.executive_models import ExecutiveDashboardSummary, ExecutiveSystemHealth
 from backend.client_analytics.export_service import ExportService
 from backend.client_analytics.report_builder import ReportBuilder
 from backend.client_analytics.report_models import ClientReport
@@ -23,6 +25,7 @@ account_analytics_service = AccountAnalyticsService()
 report_builder = ReportBuilder(client_analytics_service)
 export_service = ExportService(report_builder)
 strategy_analytics_service = StrategyAnalyticsService()
+executive_dashboard_service = ExecutiveDashboardService()
 
 
 @router.get("/status")
@@ -126,6 +129,36 @@ async def get_client_strategy_session_efficiency() -> list[dict]:
 @router.get("/strategy/comparison")
 async def get_client_strategy_comparison() -> dict:
     return strategy_analytics_service.get_comparative_analysis()
+
+
+@router.get("/executive/status")
+async def get_executive_dashboard_status() -> dict:
+    return executive_dashboard_service.get_status()
+
+
+@router.get("/executive/summary", response_model=ExecutiveDashboardSummary)
+async def get_executive_dashboard_summary() -> ExecutiveDashboardSummary:
+    return executive_dashboard_service.get_summary()
+
+
+@router.get("/executive/readiness")
+async def get_executive_readiness_matrix() -> dict:
+    return executive_dashboard_service.get_readiness_matrix()
+
+
+@router.get("/executive/instruments")
+async def get_executive_instrument_readiness() -> dict:
+    return executive_dashboard_service.get_instrument_readiness()
+
+
+@router.get("/executive/system-health", response_model=ExecutiveSystemHealth)
+async def get_executive_system_health() -> ExecutiveSystemHealth:
+    return executive_dashboard_service.get_system_health()
+
+
+@router.get("/executive/completion")
+async def get_executive_completion_report() -> dict:
+    return executive_dashboard_service.get_completion_report()
 
 
 @router.get("/reports/status")

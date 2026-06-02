@@ -1536,6 +1536,31 @@ npm run build
 
 Phase 11 Day 1 starts client analytics, reporting, and business intelligence. Backend routes under `/client-analytics` expose dashboard overview, symbol summaries, session summaries, risk analytics, and latest snapshots. The analytics collector reads existing stores where available and returns safe empty data otherwise. PnL, win rate, and profit factor remain zero unless real PnL data exists; NIFTY50 is placeholder-only.
 
+## Run Phase 11 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day1_verification.py
+python tests/phase11_day2_verification.py
+cd frontend
+npm run build
+```
+
+Phase 11 Day 2 connects the client analytics backend into the frontend dashboard. The new `/dashboard` analytics section shows overview cards, symbol performance, session performance, risk analytics, and an honest empty state. NIFTY50 is displayed as a placeholder pending Indian broker integration, and the UI keeps simulation/demo-only safety labels visible.
+
+## Run Phase 11 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day1_verification.py
+python tests/phase11_day2_verification.py
+python tests/phase11_day3_verification.py
+cd frontend
+npm run build
+```
+
+Phase 11 Day 3 adds a read-only trade journal and execution history section to the dashboard. It shows the lifecycle from strategy signal through bridge validation, risk check, queue preview, approval, demo execution, copier result, confirmation, and final status. Empty states are shown when no real demo execution history exists, and no fake trades or profits are displayed.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

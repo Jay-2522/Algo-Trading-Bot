@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
+from backend.client_analytics.account_analytics_service import AccountAnalyticsService
+from backend.client_analytics.account_models import AccountAnalyticsSummary
 from backend.client_analytics.analytics_models import (
     ClientAnalyticsOverview,
     RiskAnalyticsSummary,
@@ -15,6 +17,7 @@ from backend.client_analytics.report_models import ClientReport
 
 router = APIRouter(prefix="/client-analytics", tags=["Client Analytics"])
 client_analytics_service = ClientAnalyticsService()
+account_analytics_service = AccountAnalyticsService()
 report_builder = ReportBuilder(client_analytics_service)
 export_service = ExportService(report_builder)
 
@@ -52,6 +55,31 @@ async def get_client_analytics_risk() -> RiskAnalyticsSummary:
 @router.get("/snapshots/latest", response_model=ClientAnalyticsOverview)
 async def get_client_analytics_latest_snapshot() -> ClientAnalyticsOverview:
     return client_analytics_service.get_latest_snapshot()
+
+
+@router.get("/accounts", response_model=list[AccountAnalyticsSummary])
+async def get_client_analytics_accounts() -> list[AccountAnalyticsSummary]:
+    return account_analytics_service.get_accounts()
+
+
+@router.get("/accounts/master", response_model=AccountAnalyticsSummary)
+async def get_client_analytics_master_account() -> AccountAnalyticsSummary:
+    return account_analytics_service.get_master_account()
+
+
+@router.get("/accounts/copiers", response_model=list[AccountAnalyticsSummary])
+async def get_client_analytics_copier_accounts() -> list[AccountAnalyticsSummary]:
+    return account_analytics_service.get_copier_accounts()
+
+
+@router.get("/accounts/sync-status")
+async def get_client_analytics_account_sync_status() -> dict:
+    return account_analytics_service.get_sync_status()
+
+
+@router.get("/accounts/{account_id}", response_model=AccountAnalyticsSummary | None)
+async def get_client_analytics_account(account_id: str) -> AccountAnalyticsSummary | None:
+    return account_analytics_service.get_account(account_id)
 
 
 @router.get("/reports/status")

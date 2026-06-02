@@ -1575,6 +1575,21 @@ npm run build
 
 Phase 11 Day 4 adds client reporting and exports. Backend report routes under `/client-analytics/reports` generate daily, weekly, symbol, risk, trade journal, JSON, and CSV reports from recorded demo analytics only. The dashboard now includes a reports section with summary cards, export controls, and a printable report preview. Empty reports stay honest and no fake PnL is generated.
 
+## Run Phase 11 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day1_verification.py
+python tests/phase11_day2_verification.py
+python tests/phase11_day3_verification.py
+python tests/phase11_day4_verification.py
+python tests/phase11_day5_verification.py
+cd frontend
+npm run build
+```
+
+Phase 11 Day 5 adds account-level analytics and multi-account reporting. Backend routes under `/client-analytics/accounts` summarize the master demo account and three copier demo accounts, including copier synchronization status, copied trade counts, and safety flags. The dashboard now includes account overview cards, account performance cards, copier sync monitoring, and a no-activity empty state. PnL remains zero unless real account-level data exists.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

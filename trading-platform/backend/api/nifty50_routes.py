@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from backend.nifty50.indian_broker_registry import IndianBrokerRegistry
 from backend.nifty50.nifty_market_data_service import NIFTYMarketDataService
+from backend.nifty50.nifty_market_data_models import NIFTYCandle, NIFTYMarketDataHealth, NIFTYTick
 from backend.nifty50.nifty_models import NIFTY50Instrument, NIFTY50MarketDataSnapshot, NIFTY50ReadinessStatus
 from backend.nifty50.nifty_readiness_service import NIFTYReadinessService
 from backend.nifty50.nifty_strategy_models import (
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/nifty50", tags=["NIFTY50"])
 broker_registry = IndianBrokerRegistry()
 market_data_service = NIFTYMarketDataService(broker_registry=broker_registry)
 readiness_service = NIFTYReadinessService(broker_registry=broker_registry)
-strategy_service = NIFTYStrategyService()
+strategy_service = NIFTYStrategyService(market_data_service=market_data_service)
 
 
 @router.get("/status")
@@ -52,6 +53,41 @@ async def get_nifty50_session() -> dict:
 @router.get("/market-data/snapshot", response_model=NIFTY50MarketDataSnapshot)
 async def get_nifty50_market_data_snapshot() -> NIFTY50MarketDataSnapshot:
     return market_data_service.get_snapshot()
+
+
+@router.get("/market-data/status")
+async def get_nifty50_market_data_status() -> dict:
+    return market_data_service.get_status()
+
+
+@router.get("/market-data/health", response_model=NIFTYMarketDataHealth)
+async def get_nifty50_market_data_health() -> NIFTYMarketDataHealth:
+    return market_data_service.get_health()
+
+
+@router.get("/market-data/timeframes")
+async def get_nifty50_market_data_timeframes() -> dict:
+    return {
+        "supported_timeframes": market_data_service.get_supported_timeframes(),
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }
+
+
+@router.get("/market-data/latest")
+async def get_nifty50_market_data_latest() -> dict:
+    return market_data_service.get_latest()
+
+
+@router.post("/market-data/ingest-candle")
+async def ingest_nifty50_candle(candle: NIFTYCandle) -> dict:
+    return market_data_service.ingest_candle(candle)
+
+
+@router.post("/market-data/ingest-tick")
+async def ingest_nifty50_tick(tick: NIFTYTick) -> dict:
+    return market_data_service.ingest_tick(tick)
 
 
 @router.get("/readiness", response_model=NIFTY50ReadinessStatus)
@@ -99,6 +135,45 @@ async def get_nifty50_strategy_order_block() -> NIFTYOrderBlockContext:
 @router.get("/strategy/snapshot", response_model=NIFTYStrategySnapshot)
 async def get_nifty50_strategy_snapshot() -> NIFTYStrategySnapshot:
     return strategy_service.get_snapshot()
+
+
+@router.get("/strategy/regime")
+async def get_nifty50_strategy_regime() -> dict:
+    snapshot = strategy_service.get_snapshot()
+    return {
+        "symbol": snapshot.symbol,
+        "regime": snapshot.regime,
+        "placeholder": snapshot.placeholder,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }
+
+
+@router.get("/strategy/confidence")
+async def get_nifty50_strategy_confidence() -> dict:
+    snapshot = strategy_service.get_snapshot()
+    return {
+        "symbol": snapshot.symbol,
+        "confidence": snapshot.confidence,
+        "placeholder": snapshot.placeholder,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }
+
+
+@router.get("/strategy/bias")
+async def get_nifty50_strategy_bias() -> dict:
+    snapshot = strategy_service.get_snapshot()
+    return {
+        "symbol": snapshot.symbol,
+        "strategy_bias": snapshot.strategy_bias,
+        "placeholder": snapshot.placeholder,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }
 
 
 @router.post("/strategy/analyze", response_model=NIFTYStrategySnapshot)

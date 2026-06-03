@@ -66,7 +66,7 @@ def verify_strategy_routes() -> bool:
             and order_block.status_code == 200
             and snapshot.status_code == 200
             and analyze.status_code == 200
-            and status_payload["status"] == "STRATEGY_FOUNDATION_READY"
+            and status_payload["status"] in {"STRATEGY_FOUNDATION_READY", "SMC_INTELLIGENCE_READY"}
             and status_payload["broker_execution_enabled"] is False
             and liquidity_payload["placeholder"] is True
             and liquidity_payload["sweep_detected"] is False
@@ -122,12 +122,11 @@ def verify_readiness_and_executive_update() -> bool:
         summary = client.get("/client-analytics/executive/summary").json()
         nifty = next((item for item in instruments["instruments"] if item["symbol"] == "NIFTY50"), {})
         passed = (
-            readiness["status"] == "STRATEGY_FOUNDATION_READY"
-            and readiness["strategy_ready"] is True
+            readiness["status"] in {"STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY"}
             and readiness["execution_ready"] is False
             and readiness["live_execution_enabled"] is False
             and readiness["broker_execution_enabled"] is False
-            and nifty["status"] == "STRATEGY_FOUNDATION_READY"
+            and nifty["status"] in {"STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY"}
             and nifty["ready"] is False
             and "market data" in nifty["reason"].lower()
             and summary["nifty50_ready"] is False

@@ -1648,6 +1648,35 @@ npm run build
 
 Phase 12 Day 2 adds the NIFTY50 strategy foundation. Backend routes under `/nifty50/strategy` expose liquidity, structure, FVG, order block, snapshot, and analyze endpoints. Outputs remain placeholder-only with no fake NIFTY50 prices, no sweeps, no BOS/CHOCH, no FVG, no order blocks, neutral bias, unknown regime, and confidence 0 until real market data integration exists.
 
+## Run Phase 12 Day 3 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day7_verification.py
+python tests/phase12_day1_verification.py
+python tests/phase12_day2_verification.py
+python tests/phase12_day3_verification.py
+cd frontend
+npm run build
+```
+
+Phase 12 Day 3 adds manual NIFTY50 market-data ingestion. Backend routes under `/nifty50/market-data` support candle ingestion, tick ingestion, validation, health, supported timeframes, latest snapshot generation, and strategy-service data awareness. This is manual ingestion only: no broker APIs, credentials, live feeds, execution, or order placement are enabled.
+
+## Run Phase 12 Day 4 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day7_verification.py
+python tests/phase12_day1_verification.py
+python tests/phase12_day2_verification.py
+python tests/phase12_day3_verification.py
+python tests/phase12_day4_verification.py
+cd frontend
+npm run build
+```
+
+Phase 12 Day 4 adds NIFTY50 SMC detection over manually ingested candles: swings, BOS, CHOCH, liquidity sweeps, fair value gaps, order blocks, regime classification, strategy bias, and deterministic confidence scoring. It remains detection-only with no broker APIs, no live trading, and no execution.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

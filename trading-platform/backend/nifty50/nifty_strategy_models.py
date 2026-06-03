@@ -23,10 +23,13 @@ class NIFTYLiquidityContext(BaseModel):
 
 
 class NIFTYStructureContext(BaseModel):
-    swing_highs: list[float] = Field(default_factory=list)
-    swing_lows: list[float] = Field(default_factory=list)
+    swing_highs: list[dict] = Field(default_factory=list)
+    swing_lows: list[dict] = Field(default_factory=list)
     bos_detected: bool = False
     choch_detected: bool = False
+    bos_direction: str = "NONE"
+    choch_direction: str = "NONE"
+    bos_break_price: float | None = None
     structure_bias: str = "NEUTRAL"
     structure_strength: float = 0.0
     placeholder: bool = True

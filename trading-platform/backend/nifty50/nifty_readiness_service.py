@@ -9,23 +9,22 @@ class NIFTYReadinessService:
     def get_blockers(self) -> list[str]:
         return [
             "Indian broker not selected",
-            "Live/paper market data not connected",
             "Execution not implemented",
-            "NIFTY strategy requires market data validation",
+            "NIFTY execution analytics integration incomplete",
         ]
 
     def get_warnings(self) -> list[str]:
         return [
             "No broker API credentials should be configured in this phase.",
-            "Market data snapshot is placeholder-only and contains no generated NIFTY50 price values.",
+            "Market data ingestion is manual-only; no live broker feed is connected.",
             "Broker execution remains disabled.",
         ]
 
     def get_status(self) -> NIFTY50ReadinessStatus:
         return NIFTY50ReadinessStatus(
-            status="STRATEGY_FOUNDATION_READY",
+            status="SMC_INTELLIGENCE_READY",
             broker_architecture_ready=True,
-            market_data_ready=False,
+            market_data_ready=True,
             strategy_ready=True,
             execution_ready=False,
             analytics_ready=True,
@@ -38,7 +37,6 @@ class NIFTYReadinessService:
     def get_next_steps(self) -> list[str]:
         return [
             "Select Dhan, Angel One, or another supported broker candidate.",
-            "Add sandbox/manual market data ingestion.",
-            "Connect sandbox/manual candles for NIFTY50 strategy validation.",
+            "Use manual candle/tick ingestion to validate NIFTY50 strategy context.",
             "Add paper/demo execution validation after strategy readiness.",
         ]

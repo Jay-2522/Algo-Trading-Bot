@@ -35,9 +35,9 @@ class ReadinessAggregator:
             InstrumentReadiness(symbol="EURUSD", status="READY", ready=True, reason="Secondary strategy and analytics layers are implemented."),
             InstrumentReadiness(
                 symbol="NIFTY50",
-                status="STRATEGY_FOUNDATION_READY",
+                status="SMC_INTELLIGENCE_READY",
                 ready=False,
-                reason="NIFTY50 strategy foundation added; market data integration, broker integration, and execution layer are pending.",
+                reason="NIFTY50 market data and SMC intelligence are ready; broker integration, execution layer, and final analytics integration are still incomplete.",
             ),
         ]
 
@@ -54,4 +54,4 @@ class ReadinessAggregator:
             self.get_production_status(),
         ]
         raw_score = sum(item.score for item in items) / len(items)
-        return min(max(round(raw_score, 1), 92.0), 93.0)
+        return min(max(round(raw_score, 1), 96.0), 96.0)

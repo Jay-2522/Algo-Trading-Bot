@@ -89,9 +89,9 @@ export const emptyInstruments: InstrumentReadiness[] = [
   { symbol: "EURUSD", status: "READY", ready: true, reason: "Secondary strategy and analytics layers are implemented." },
   {
     symbol: "NIFTY50",
-    status: "FOUNDATION READY / BROKER PENDING",
+    status: "STRATEGY FOUNDATION READY / BROKER PENDING",
     ready: false,
-    reason: "NIFTY50 broker and market data foundation added; broker selection and strategy/execution layers pending.",
+    reason: "NIFTY50 strategy foundation added; market data integration, broker integration, and execution layer are pending.",
   },
 ];
 

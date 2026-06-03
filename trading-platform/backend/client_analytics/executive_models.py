@@ -8,7 +8,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-ReadinessState = Literal["READY", "WARNING", "PENDING", "PENDING_IMPLEMENTATION", "FOUNDATION_READY"]
+ReadinessState = Literal["READY", "WARNING", "PENDING", "PENDING_IMPLEMENTATION", "FOUNDATION_READY", "STRATEGY_FOUNDATION_READY"]
 
 
 class ExecutiveDashboardSummary(BaseModel):
@@ -36,7 +36,7 @@ class ExecutiveDashboardSummary(BaseModel):
         self.demo_execution = True
         self.live_execution_enabled = False
         self.broker_execution_enabled = False
-        self.overall_completion_percentage = min(float(self.overall_completion_percentage), 92.0)
+        self.overall_completion_percentage = min(float(self.overall_completion_percentage), 93.0)
 
 
 class ReadinessItem(BaseModel):

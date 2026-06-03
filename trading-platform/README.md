@@ -1635,6 +1635,19 @@ npm run build
 
 Phase 12 Day 1 adds the NIFTY50 broker architecture and market data foundation. Backend routes under `/nifty50` expose instrument metadata, Indian broker candidates, recommended broker guidance, NSE session context, placeholder market data snapshots, readiness, and blockers. NIFTY50 moves to `FOUNDATION_READY / BROKER_PENDING` in executive readiness, but `nifty50_ready` remains false and no fake NIFTY50 prices, broker API calls, or execution paths are added.
 
+## Run Phase 12 Day 2 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day7_verification.py
+python tests/phase12_day1_verification.py
+python tests/phase12_day2_verification.py
+cd frontend
+npm run build
+```
+
+Phase 12 Day 2 adds the NIFTY50 strategy foundation. Backend routes under `/nifty50/strategy` expose liquidity, structure, FVG, order block, snapshot, and analyze endpoints. Outputs remain placeholder-only with no fake NIFTY50 prices, no sweeps, no BOS/CHOCH, no FVG, no order blocks, neutral bias, unknown regime, and confidence 0 until real market data integration exists.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

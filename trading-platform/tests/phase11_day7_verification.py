@@ -66,7 +66,7 @@ def verify_executive_routes() -> bool:
             and summary_payload["broker_execution_enabled"] is False
             and summary_payload["overall_completion_percentage"] < 100
             and summary_payload["nifty50_ready"] is False
-            and nifty["status"] in {"PENDING_IMPLEMENTATION", "FOUNDATION_READY"}
+            and nifty["status"] in {"PENDING_IMPLEMENTATION", "FOUNDATION_READY", "STRATEGY_FOUNDATION_READY"}
             and nifty["ready"] is False
             and completion_payload["overall_completion_percentage"] < 100
         )
@@ -100,7 +100,7 @@ def verify_dashboard_ui() -> bool:
             and "Monitoring" in api
             and "Security" in api
             and "Production" in api
-            and ("PENDING IMPLEMENTATION" in api or "FOUNDATION READY / BROKER PENDING" in api)
+            and ("PENDING IMPLEMENTATION" in api or "FOUNDATION READY / BROKER PENDING" in api or "STRATEGY FOUNDATION READY / BROKER PENDING" in api)
             and "Instrument Readiness" in instruments
             and "System Health" in health
             and "Production Readiness" in production

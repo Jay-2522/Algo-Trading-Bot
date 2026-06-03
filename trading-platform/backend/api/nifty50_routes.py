@@ -4,6 +4,14 @@ from backend.nifty50.indian_broker_registry import IndianBrokerRegistry
 from backend.nifty50.nifty_market_data_service import NIFTYMarketDataService
 from backend.nifty50.nifty_models import NIFTY50Instrument, NIFTY50MarketDataSnapshot, NIFTY50ReadinessStatus
 from backend.nifty50.nifty_readiness_service import NIFTYReadinessService
+from backend.nifty50.nifty_strategy_models import (
+    NIFTYFVGContext,
+    NIFTYLiquidityContext,
+    NIFTYOrderBlockContext,
+    NIFTYStrategySnapshot,
+    NIFTYStructureContext,
+)
+from backend.nifty50.nifty_strategy_service import NIFTYStrategyService
 
 
 router = APIRouter(prefix="/nifty50", tags=["NIFTY50"])
@@ -11,6 +19,7 @@ router = APIRouter(prefix="/nifty50", tags=["NIFTY50"])
 broker_registry = IndianBrokerRegistry()
 market_data_service = NIFTYMarketDataService(broker_registry=broker_registry)
 readiness_service = NIFTYReadinessService(broker_registry=broker_registry)
+strategy_service = NIFTYStrategyService()
 
 
 @router.get("/status")
@@ -60,3 +69,38 @@ async def get_nifty50_blockers() -> dict:
         "live_execution_enabled": False,
         "broker_execution_enabled": False,
     }
+
+
+@router.get("/strategy/status")
+async def get_nifty50_strategy_status() -> dict:
+    return strategy_service.get_status()
+
+
+@router.get("/strategy/liquidity", response_model=NIFTYLiquidityContext)
+async def get_nifty50_strategy_liquidity() -> NIFTYLiquidityContext:
+    return strategy_service.liquidity_service.get_snapshot()
+
+
+@router.get("/strategy/structure", response_model=NIFTYStructureContext)
+async def get_nifty50_strategy_structure() -> NIFTYStructureContext:
+    return strategy_service.structure_service.get_snapshot()
+
+
+@router.get("/strategy/fvg", response_model=NIFTYFVGContext)
+async def get_nifty50_strategy_fvg() -> NIFTYFVGContext:
+    return strategy_service.fvg_service.get_snapshot()
+
+
+@router.get("/strategy/order-block", response_model=NIFTYOrderBlockContext)
+async def get_nifty50_strategy_order_block() -> NIFTYOrderBlockContext:
+    return strategy_service.order_block_service.get_snapshot()
+
+
+@router.get("/strategy/snapshot", response_model=NIFTYStrategySnapshot)
+async def get_nifty50_strategy_snapshot() -> NIFTYStrategySnapshot:
+    return strategy_service.get_snapshot()
+
+
+@router.post("/strategy/analyze", response_model=NIFTYStrategySnapshot)
+async def analyze_nifty50_strategy() -> NIFTYStrategySnapshot:
+    return strategy_service.analyze()

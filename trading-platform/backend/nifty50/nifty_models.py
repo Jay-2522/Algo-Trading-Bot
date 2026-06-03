@@ -8,7 +8,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-ReadinessStatus = Literal["FOUNDATION_READY", "PENDING_BROKER_SELECTION", "BLOCKED", "READY_FOR_STRATEGY_LAYER"]
+ReadinessStatus = Literal["FOUNDATION_READY", "STRATEGY_FOUNDATION_READY", "PENDING_BROKER_SELECTION", "BLOCKED", "READY_FOR_STRATEGY_LAYER"]
 
 
 class NIFTY50Instrument(BaseModel):
@@ -19,8 +19,8 @@ class NIFTY50Instrument(BaseModel):
     tick_size: float = 0.05
     currency: str = "INR"
     trading_session: str = "NSE_EQUITY"
-    status: str = "FOUNDATION_READY"
-    warnings: list[str] = Field(default_factory=lambda: ["Live market data is not connected.", "NIFTY50 strategy layer is pending."])
+    status: str = "STRATEGY_FOUNDATION_READY"
+    warnings: list[str] = Field(default_factory=lambda: ["Live market data is not connected.", "NIFTY50 execution layer is pending."])
 
 
 class IndianBrokerCandidate(BaseModel):

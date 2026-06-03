@@ -87,7 +87,12 @@ export const emptyReadinessItems: ReadinessItem[] = [
 export const emptyInstruments: InstrumentReadiness[] = [
   { symbol: "XAUUSD", status: "READY", ready: true, reason: "Primary strategy and analytics layers are implemented." },
   { symbol: "EURUSD", status: "READY", ready: true, reason: "Secondary strategy and analytics layers are implemented." },
-  { symbol: "NIFTY50", status: "PENDING IMPLEMENTATION", ready: false, reason: "NIFTY50 production strategy layer is not complete yet." },
+  {
+    symbol: "NIFTY50",
+    status: "FOUNDATION READY / BROKER PENDING",
+    ready: false,
+    reason: "NIFTY50 broker and market data foundation added; broker selection and strategy/execution layers pending.",
+  },
 ];
 
 export const emptySystemHealth: SystemHealth = {

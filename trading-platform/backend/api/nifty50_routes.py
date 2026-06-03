@@ -1,0 +1,62 @@
+from fastapi import APIRouter
+
+from backend.nifty50.indian_broker_registry import IndianBrokerRegistry
+from backend.nifty50.nifty_market_data_service import NIFTYMarketDataService
+from backend.nifty50.nifty_models import NIFTY50Instrument, NIFTY50MarketDataSnapshot, NIFTY50ReadinessStatus
+from backend.nifty50.nifty_readiness_service import NIFTYReadinessService
+
+
+router = APIRouter(prefix="/nifty50", tags=["NIFTY50"])
+
+broker_registry = IndianBrokerRegistry()
+market_data_service = NIFTYMarketDataService(broker_registry=broker_registry)
+readiness_service = NIFTYReadinessService(broker_registry=broker_registry)
+
+
+@router.get("/status")
+async def get_nifty50_status() -> dict:
+    status = market_data_service.get_status()
+    status["readiness"] = readiness_service.get_status().model_dump(mode="json")
+    return status
+
+
+@router.get("/instrument", response_model=NIFTY50Instrument)
+async def get_nifty50_instrument() -> NIFTY50Instrument:
+    return market_data_service.get_instrument()
+
+
+@router.get("/brokers")
+async def get_nifty50_brokers() -> list[dict]:
+    return market_data_service.get_broker_candidates()
+
+
+@router.get("/brokers/recommended")
+async def get_nifty50_recommended_brokers() -> dict:
+    return broker_registry.get_recommended_broker()
+
+
+@router.get("/session")
+async def get_nifty50_session() -> dict:
+    return market_data_service.get_session_context()
+
+
+@router.get("/market-data/snapshot", response_model=NIFTY50MarketDataSnapshot)
+async def get_nifty50_market_data_snapshot() -> NIFTY50MarketDataSnapshot:
+    return market_data_service.get_snapshot()
+
+
+@router.get("/readiness", response_model=NIFTY50ReadinessStatus)
+async def get_nifty50_readiness() -> NIFTY50ReadinessStatus:
+    return readiness_service.get_status()
+
+
+@router.get("/blockers")
+async def get_nifty50_blockers() -> dict:
+    return {
+        "blockers": readiness_service.get_blockers(),
+        "warnings": readiness_service.get_warnings(),
+        "next_steps": readiness_service.get_next_steps(),
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }

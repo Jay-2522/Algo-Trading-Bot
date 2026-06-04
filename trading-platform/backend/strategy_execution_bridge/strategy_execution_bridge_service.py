@@ -33,6 +33,8 @@ class StrategyExecutionBridgeService:
             "status": "OPERATIONAL",
             "mode": "STRATEGY_TO_EXECUTION_INTENT_BRIDGE",
             "queue_preview_only": True,
+            "preview_only": True,
+            "execution_allowed": False,
             "queue_preview_adapter_ready": True,
             "end_to_end_demo_flow_ready": True,
             "min_confidence": self.validator.MIN_CONFIDENCE,

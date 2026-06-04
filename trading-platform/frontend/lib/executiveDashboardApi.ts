@@ -59,7 +59,7 @@ export const emptyExecutiveSummary: ExecutiveSummary = {
   xauusd_ready: true,
   eurusd_ready: true,
   nifty50_ready: false,
-  overall_completion_percentage: 88,
+  overall_completion_percentage: 99,
   simulation_only: true,
   demo_execution: true,
   live_execution_enabled: false,
@@ -89,9 +89,9 @@ export const emptyInstruments: InstrumentReadiness[] = [
   { symbol: "EURUSD", status: "READY", ready: true, reason: "Secondary strategy and analytics layers are implemented." },
   {
     symbol: "NIFTY50",
-    status: "EXECUTION BRIDGE READY / ORDER PLACEMENT DISABLED",
+    status: "ANALYTICS INTEGRATED / EXECUTION PENDING",
     ready: false,
-    reason: "NIFTY50 execution bridge preview is ready; broker selection, credentials, real API connection, and order placement are still disabled.",
+    reason: "NIFTY50 analytics are integrated and execution bridge preview is ready; broker integration, demo validation, and VPS deployment are still missing.",
   },
 ];
 

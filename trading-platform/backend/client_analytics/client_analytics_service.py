@@ -10,6 +10,7 @@ from backend.client_analytics.analytics_models import (
 )
 from backend.client_analytics.analytics_store import AnalyticsStore
 from backend.client_analytics.performance_calculator import PerformanceCalculator
+from backend.nifty50.nifty_analytics_service import NIFTYAnalyticsService
 
 
 class ClientAnalyticsService:
@@ -23,16 +24,18 @@ class ClientAnalyticsService:
         collector: AnalyticsDataCollector | None = None,
         calculator: PerformanceCalculator | None = None,
         store: AnalyticsStore | None = None,
+        nifty_analytics: NIFTYAnalyticsService | None = None,
     ) -> None:
         self.collector = collector or AnalyticsDataCollector()
         self.calculator = calculator or PerformanceCalculator()
         self.store = store or AnalyticsStore()
+        self.nifty_analytics = nifty_analytics or NIFTYAnalyticsService()
 
     def get_status(self) -> dict[str, Any]:
         return {
             "status": "OPERATIONAL",
             "supported_symbols": self.SUPPORTED_SYMBOLS,
-            "nifty50_status": "PLACEHOLDER_ONLY",
+            "nifty50_status": "ANALYTICS_INTEGRATED",
             "analytics_mode": "READ_ONLY_NO_FAKE_PNL",
             "simulation_only": True,
             "demo_execution": True,
@@ -83,7 +86,7 @@ class ClientAnalyticsService:
     def get_symbol_performance(self, symbol: str, data: dict[str, list[Any]] | None = None) -> SymbolPerformanceSummary:
         normalized = symbol.upper()
         if normalized == "NIFTY50":
-            return SymbolPerformanceSummary(symbol="NIFTY50")
+            return self.nifty_analytics.get_symbol_summary()
         return self.calculator.summarize_symbol(normalized, data or self.collector.collect_all())
 
     def get_all_symbol_performance(self, data: dict[str, list[Any]] | None = None) -> list[SymbolPerformanceSummary]:

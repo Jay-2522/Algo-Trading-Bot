@@ -171,13 +171,13 @@ def verify_readiness_and_executive_update() -> bool:
         summary = client.get("/client-analytics/executive/summary").json()
         nifty = next((item for item in instruments["instruments"] if item["symbol"] == "NIFTY50"), {})
         passed = (
-            readiness["status"] in {"MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY"}
+            readiness["status"] in {"MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY", "ANALYTICS_INTEGRATED"}
             and readiness["market_data_ready"] is True
             and readiness["strategy_ready"] in {False, True}
             and readiness["execution_ready"] is False
             and readiness["live_execution_enabled"] is False
             and readiness["broker_execution_enabled"] is False
-            and nifty["status"] in {"MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY"}
+            and nifty["status"] in {"MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY", "ANALYTICS_INTEGRATED"}
             and nifty["ready"] is False
             and summary["nifty50_ready"] is False
             and 93 <= summary["overall_completion_percentage"] < 100

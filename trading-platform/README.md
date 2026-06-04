@@ -1621,7 +1621,7 @@ cd frontend
 npm run build
 ```
 
-Phase 11 Day 7 adds the executive command center and client acceptance dashboard. Backend routes under `/client-analytics/executive` aggregate analytics, reporting, accounts, copier, strategy, deployment, monitoring, security, production, and instrument readiness. The dashboard now includes executive summary, readiness matrix, instrument readiness, system health, and production safety state panels. NIFTY50 remains `PENDING_IMPLEMENTATION`, and completion is intentionally below 100%.
+Phase 11 Day 7 adds the executive command center and client acceptance dashboard. Backend routes under `/client-analytics/executive` aggregate analytics, reporting, accounts, copier, strategy, deployment, monitoring, security, production, and instrument readiness. The dashboard now includes executive summary, readiness matrix, instrument readiness, system health, and production safety state panels. NIFTY50 is now `ANALYTICS_INTEGRATED`, and completion is intentionally below 100%.
 
 ## Run Phase 12 Day 1 Verification
 
@@ -1709,6 +1709,24 @@ npm run build
 ```
 
 Phase 12 Day 6 adds the NIFTY50 execution bridge preparation layer. Backend routes under `/nifty50/execution` create preview-only execution intents, generate order previews, expose intent/preview history, and record audit events. Broker-specific mapping remains placeholder-only and no broker API calls or order placement are enabled.
+
+## Run Phase 12 Day 7 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day7_verification.py
+python tests/phase12_day1_verification.py
+python tests/phase12_day2_verification.py
+python tests/phase12_day3_verification.py
+python tests/phase12_day4_verification.py
+python tests/phase12_day5_verification.py
+python tests/phase12_day6_verification.py
+python tests/phase12_day7_verification.py
+cd frontend
+npm run build
+```
+
+Phase 12 Day 7 integrates NIFTY50 into analytics, reports, account analytics metadata, strategy intelligence, and the executive dashboard. The platform now presents XAUUSD, EURUSD, and NIFTY50 across client-facing analytics. NIFTY50 is `ANALYTICS_INTEGRATED` with `SMC_INTELLIGENCE_READY`, project completion is 99%, and execution remains disabled because broker integration, demo validation, and VPS deployment are still pending.
 
 ## MT5 Safety Boundary
 

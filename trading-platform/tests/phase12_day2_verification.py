@@ -122,11 +122,11 @@ def verify_readiness_and_executive_update() -> bool:
         summary = client.get("/client-analytics/executive/summary").json()
         nifty = next((item for item in instruments["instruments"] if item["symbol"] == "NIFTY50"), {})
         passed = (
-            readiness["status"] in {"STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY"}
+            readiness["status"] in {"STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY", "ANALYTICS_INTEGRATED"}
             and readiness["execution_ready"] is False
             and readiness["live_execution_enabled"] is False
             and readiness["broker_execution_enabled"] is False
-            and nifty["status"] in {"STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY"}
+            and nifty["status"] in {"STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY", "EXECUTION_BRIDGE_READY", "ANALYTICS_INTEGRATED"}
             and nifty["ready"] is False
             and (
                 "market data" in nifty["reason"].lower()

@@ -93,7 +93,8 @@ async def get_client_strategy_status() -> dict:
     return {
         "status": "OPERATIONAL",
         "supported_symbols": ["XAUUSD", "EURUSD", "NIFTY50"],
-        "nifty50_status": "PENDING IMPLEMENTATION",
+        "nifty50_status": "SMC_INTELLIGENCE_READY",
+        "nifty50_analytics_status": "ANALYTICS_INTEGRATED",
         "simulation_only": True,
         "demo_execution": True,
         "live_execution_enabled": False,

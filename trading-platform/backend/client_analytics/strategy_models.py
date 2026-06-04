@@ -8,7 +8,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-Quality = Literal["HIGH", "MEDIUM", "LOW", "NONE", "PLACEHOLDER"]
+Quality = Literal["HIGH", "MEDIUM", "LOW", "NONE", "PLACEHOLDER", "SMC_INTELLIGENCE_READY", "ANALYTICS_INTEGRATED"]
 
 
 class StrategyPerformanceSummary(BaseModel):

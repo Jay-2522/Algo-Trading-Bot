@@ -75,6 +75,8 @@ class AccountAnalyticsService:
         return {
             "synchronization_status": status,
             "copier_health": status,
+            "supported_symbols": ["XAUUSD", "EURUSD", "NIFTY50"],
+            "nifty50_status": "ANALYTICS_INTEGRATED",
             "last_sync_time": self._last_sync_time(),
             "execution_consistency": "NO_COPIER_ACTIVITY" if status in {"PENDING", "UNKNOWN"} else status,
             "simulation_only": True,
@@ -87,6 +89,8 @@ class AccountAnalyticsService:
         accounts = self.get_accounts()
         return {
             "accounts": accounts,
+            "supported_symbols": ["XAUUSD", "EURUSD", "NIFTY50"],
+            "nifty50_status": "ANALYTICS_INTEGRATED",
             "total_accounts": len(accounts),
             "active_copiers": len([account for account in accounts if account.account_type == "COPIER"]),
             "total_executions": sum(account.total_executions for account in accounts),

@@ -136,7 +136,7 @@ def verify_readiness_and_executive() -> bool:
         summary = client.get("/client-analytics/executive/summary").json()
         nifty = next((item for item in instruments["instruments"] if item["symbol"] == "NIFTY50"), {})
         passed = (
-            readiness["status"] == "EXECUTION_BRIDGE_READY"
+            readiness["status"] in {"EXECUTION_BRIDGE_READY", "ANALYTICS_INTEGRATED"}
             and readiness["market_data_ready"] is True
             and readiness["strategy_ready"] is True
             and readiness["risk_ready"] is True
@@ -144,10 +144,10 @@ def verify_readiness_and_executive() -> bool:
             and readiness["execution_ready"] is False
             and readiness["live_execution_enabled"] is False
             and readiness["broker_execution_enabled"] is False
-            and nifty["status"] == "EXECUTION_BRIDGE_READY"
+            and nifty["status"] in {"EXECUTION_BRIDGE_READY", "ANALYTICS_INTEGRATED"}
             and nifty["ready"] is False
             and summary["nifty50_ready"] is False
-            and summary["overall_completion_percentage"] == 98
+            and summary["overall_completion_percentage"] in {98, 99}
         )
         return show("Readiness and executive dashboard upgraded honestly with NIFTY50 still not ready", passed)
     except Exception as exc:

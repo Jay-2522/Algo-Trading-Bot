@@ -4,13 +4,13 @@ export function StrategyComparisonGrid({ strategies }: { strategies: StrategyPer
   return (
     <section className="grid gap-3 lg:grid-cols-3">
       {strategies.map((strategy) => {
-        const pending = strategy.symbol === "NIFTY50";
+        const nifty = strategy.symbol === "NIFTY50";
         return (
           <article className="rounded-2xl border border-white/10 bg-white/[0.04] p-4" key={strategy.symbol}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h3 className="text-xl font-black text-white">{strategy.symbol}</h3>
-              <span className={`rounded-full border px-2.5 py-1 text-[0.56rem] font-black uppercase tracking-[0.1em] ${pending ? "border-amber-300/25 bg-amber-300/10 text-amber-100" : "border-cyan-300/20 bg-cyan-300/10 text-cyan-100"}`}>
-                {pending ? "PENDING IMPLEMENTATION" : "ACTIVE ANALYTICS"}
+              <span className={`rounded-full border px-2.5 py-1 text-[0.56rem] font-black uppercase tracking-[0.1em] ${nifty ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100" : "border-cyan-300/20 bg-cyan-300/10 text-cyan-100"}`}>
+                {nifty ? "SMC INTELLIGENCE READY" : "ACTIVE ANALYTICS"}
               </span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">

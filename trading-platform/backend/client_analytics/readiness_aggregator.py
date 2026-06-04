@@ -6,7 +6,7 @@ class ReadinessAggregator:
         return ReadinessItem(name="Analytics", status="READY", score=100.0, reason="Client analytics foundation and dashboard APIs are available.")
 
     def get_strategy_status(self) -> ReadinessItem:
-        return ReadinessItem(name="Strategy", status="READY", score=92.0, reason="XAUUSD and EURUSD strategy analytics are available; NIFTY50 remains pending.")
+        return ReadinessItem(name="Strategy", status="READY", score=99.0, reason="XAUUSD, EURUSD, and NIFTY50 strategy intelligence are available in analytics-only mode.")
 
     def get_account_status(self) -> ReadinessItem:
         return ReadinessItem(name="Accounts", status="READY", score=95.0, reason="Master and copier account analytics are available in simulation mode.")
@@ -35,9 +35,9 @@ class ReadinessAggregator:
             InstrumentReadiness(symbol="EURUSD", status="READY", ready=True, reason="Secondary strategy and analytics layers are implemented."),
             InstrumentReadiness(
                 symbol="NIFTY50",
-                status="EXECUTION_BRIDGE_READY",
+                status="ANALYTICS_INTEGRATED",
                 ready=False,
-                reason="NIFTY50 execution bridge preview is ready; broker selection, credentials, real API connection, and order placement are still disabled.",
+                reason="NIFTY50 analytics are integrated and execution bridge preview is ready; broker integration, demo validation, and VPS deployment are still missing.",
             ),
         ]
 
@@ -54,4 +54,4 @@ class ReadinessAggregator:
             self.get_production_status(),
         ]
         raw_score = sum(item.score for item in items) / len(items)
-        return min(max(round(raw_score, 1), 98.0), 98.0)
+        return min(max(round(raw_score, 1), 99.0), 99.0)

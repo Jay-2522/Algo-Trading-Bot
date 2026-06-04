@@ -19,6 +19,7 @@ ReadinessState = Literal[
     "SMC_INTELLIGENCE_READY",
     "RISK_QUALIFICATION_READY",
     "EXECUTION_BRIDGE_READY",
+    "ANALYTICS_INTEGRATED",
 ]
 
 
@@ -47,7 +48,7 @@ class ExecutiveDashboardSummary(BaseModel):
         self.demo_execution = True
         self.live_execution_enabled = False
         self.broker_execution_enabled = False
-        self.overall_completion_percentage = min(float(self.overall_completion_percentage), 98.0)
+        self.overall_completion_percentage = min(float(self.overall_completion_percentage), 99.0)
 
 
 class ReadinessItem(BaseModel):

@@ -3,7 +3,7 @@ export function StrategyRankingPanel({ rankings }: { rankings: Array<Record<stri
     rank: index + 1,
     symbol,
     strategy_score: 0,
-    placeholder: symbol === "NIFTY50",
+    placeholder: false,
   }));
 
   return (
@@ -15,7 +15,7 @@ export function StrategyRankingPanel({ rankings }: { rankings: Array<Record<stri
           <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3" key={String(item.symbol)}>
             <div>
               <strong className="text-white">#{Number(item.rank || 0)} {String(item.symbol)}</strong>
-              <p className="mt-1 text-xs text-slate-400">{item.placeholder ? "PENDING IMPLEMENTATION" : "Ranked by strategy score"}</p>
+              <p className="mt-1 text-xs text-slate-400">{String(item.symbol) === "NIFTY50" ? "SMC intelligence ready" : "Ranked by strategy score"}</p>
             </div>
             <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[0.6rem] font-black uppercase tracking-[0.12em] text-cyan-100">
               {Number(item.strategy_score || 0).toFixed(2)}

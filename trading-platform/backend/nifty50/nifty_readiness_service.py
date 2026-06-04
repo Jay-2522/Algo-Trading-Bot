@@ -9,11 +9,10 @@ class NIFTYReadinessService:
     def get_blockers(self) -> list[str]:
         return [
             "Indian broker not selected",
-            "Order placement disabled",
             "Broker integration missing",
-            "Broker credentials missing",
-            "Real broker API not connected",
-            "Analytics integration pending",
+            "Demo validation missing",
+            "VPS deployment missing",
+            "Order placement disabled",
         ]
 
     def get_warnings(self) -> list[str]:
@@ -25,7 +24,7 @@ class NIFTYReadinessService:
 
     def get_status(self) -> NIFTY50ReadinessStatus:
         return NIFTY50ReadinessStatus(
-            status="EXECUTION_BRIDGE_READY",
+            status="ANALYTICS_INTEGRATED",
             broker_architecture_ready=True,
             market_data_ready=True,
             strategy_ready=True,
@@ -41,9 +40,8 @@ class NIFTYReadinessService:
 
     def get_next_steps(self) -> list[str]:
         return [
-            "Select Dhan, Angel One, or another supported broker candidate.",
-            "Use manual candle/tick ingestion to validate NIFTY50 strategy context.",
-            "Add NIFTY50 analytics integration.",
-            "Select broker and configure credentials only in a future approved phase.",
+            "Complete approved Indian broker integration in a future phase.",
+            "Run demo validation after broker sandbox or demo connectivity is approved.",
+            "Deploy and validate the platform on the production VPS.",
             "Keep order placement disabled until explicit execution-layer approval.",
         ]

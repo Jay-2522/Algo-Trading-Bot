@@ -3,6 +3,7 @@ from typing import Any
 from backend.client_analytics.analytics_data_collector import AnalyticsDataCollector
 from backend.client_analytics.comparative_analytics import ComparativeAnalytics
 from backend.client_analytics.strategy_models import StrategyPerformanceSummary
+from backend.nifty50.nifty_analytics_service import NIFTYAnalyticsService
 
 
 class StrategyAnalyticsService:
@@ -15,9 +16,11 @@ class StrategyAnalyticsService:
         self,
         collector: AnalyticsDataCollector | None = None,
         comparative: ComparativeAnalytics | None = None,
+        nifty_analytics: NIFTYAnalyticsService | None = None,
     ) -> None:
         self.collector = collector or AnalyticsDataCollector()
         self.comparative = comparative or ComparativeAnalytics()
+        self.nifty_analytics = nifty_analytics or NIFTYAnalyticsService()
 
     def get_strategy_overview(self) -> dict[str, Any]:
         summaries = self.get_all_strategy_performance()
@@ -45,9 +48,9 @@ class StrategyAnalyticsService:
         if normalized == "NIFTY50":
             return StrategyPerformanceSummary(
                 symbol="NIFTY50",
-                confidence_quality="PLACEHOLDER",
+                confidence_quality="SMC_INTELLIGENCE_READY",
                 execution_quality="PLACEHOLDER",
-                risk_quality="PLACEHOLDER",
+                risk_quality="ANALYTICS_INTEGRATED",
             )
         data = self.collector.collect_all()
         signals = [signal for signal in data["strategy_signals"] if self._symbol(signal) == normalized]
@@ -105,7 +108,8 @@ class StrategyAnalyticsService:
             "execution_efficiency": self.comparative.compare_execution_efficiency(summaries),
             "risk_efficiency": self.comparative.compare_risk_efficiency(summaries),
             "session_efficiency": self.comparative.compare_session_efficiency(summaries),
-            "nifty50_status": "PENDING IMPLEMENTATION",
+            "nifty50_status": "ANALYTICS_INTEGRATED",
+            "nifty50_strategy_status": self.nifty_analytics.get_strategy_status(),
             "simulation_only": True,
             "demo_execution": True,
             "live_execution_enabled": False,

@@ -115,7 +115,7 @@ def verify_executive_update() -> bool:
         completion = client.get("/client-analytics/executive/completion").json()
         nifty = next((item for item in instruments["instruments"] if item["symbol"] == "NIFTY50"), {})
         passed = (
-            nifty["status"] in {"FOUNDATION_READY", "STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY"}
+            nifty["status"] in {"FOUNDATION_READY", "STRATEGY_FOUNDATION_READY", "MARKET_DATA_READY", "SMC_INTELLIGENCE_READY", "RISK_QUALIFICATION_READY"}
             and nifty["ready"] is False
             and "broker" in nifty["reason"].lower()
             and summary["nifty50_ready"] is False

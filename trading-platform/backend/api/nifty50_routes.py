@@ -5,6 +5,8 @@ from backend.nifty50.nifty_market_data_service import NIFTYMarketDataService
 from backend.nifty50.nifty_market_data_models import NIFTYCandle, NIFTYMarketDataHealth, NIFTYTick
 from backend.nifty50.nifty_models import NIFTY50Instrument, NIFTY50MarketDataSnapshot, NIFTY50ReadinessStatus
 from backend.nifty50.nifty_readiness_service import NIFTYReadinessService
+from backend.nifty50.nifty_risk_engine import NIFTYRiskEngine
+from backend.nifty50.nifty_risk_models import NIFTYRiskDecision, NIFTYTradeCandidate
 from backend.nifty50.nifty_strategy_models import (
     NIFTYFVGContext,
     NIFTYLiquidityContext,
@@ -13,6 +15,8 @@ from backend.nifty50.nifty_strategy_models import (
     NIFTYStructureContext,
 )
 from backend.nifty50.nifty_strategy_service import NIFTYStrategyService
+from backend.nifty50.nifty_trade_decision_store import NIFTYTradeDecisionStore
+from backend.nifty50.nifty_trade_qualifier import NIFTYTradeQualifier
 
 
 router = APIRouter(prefix="/nifty50", tags=["NIFTY50"])
@@ -21,6 +25,9 @@ broker_registry = IndianBrokerRegistry()
 market_data_service = NIFTYMarketDataService(broker_registry=broker_registry)
 readiness_service = NIFTYReadinessService(broker_registry=broker_registry)
 strategy_service = NIFTYStrategyService(market_data_service=market_data_service)
+decision_store = NIFTYTradeDecisionStore()
+risk_engine = NIFTYRiskEngine()
+trade_qualifier = NIFTYTradeQualifier(risk_engine=risk_engine, decision_store=decision_store)
 
 
 @router.get("/status")
@@ -179,3 +186,42 @@ async def get_nifty50_strategy_bias() -> dict:
 @router.post("/strategy/analyze", response_model=NIFTYStrategySnapshot)
 async def analyze_nifty50_strategy() -> NIFTYStrategySnapshot:
     return strategy_service.analyze()
+
+
+@router.get("/risk/status")
+async def get_nifty50_risk_status() -> dict:
+    return {
+        "status": "RISK_QUALIFICATION_READY",
+        "symbol": "NIFTY50",
+        "risk_ready": True,
+        "execution_allowed": False,
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+    }
+
+
+@router.post("/risk/evaluate", response_model=NIFTYRiskDecision)
+async def evaluate_nifty50_risk() -> NIFTYRiskDecision:
+    decision = risk_engine.evaluate(strategy_service.analyze())
+    return decision_store.store_decision(decision)
+
+
+@router.get("/risk/decisions", response_model=list[NIFTYRiskDecision])
+async def list_nifty50_risk_decisions() -> list[NIFTYRiskDecision]:
+    return decision_store.list_decisions()
+
+
+@router.get("/risk/decisions/{decision_id}", response_model=NIFTYRiskDecision | None)
+async def get_nifty50_risk_decision(decision_id: str) -> NIFTYRiskDecision | None:
+    return decision_store.get_decision(decision_id)
+
+
+@router.post("/trade/qualify", response_model=NIFTYTradeCandidate)
+async def qualify_nifty50_trade() -> NIFTYTradeCandidate:
+    return trade_qualifier.qualify(strategy_service.analyze())
+
+
+@router.get("/trade/candidates", response_model=list[NIFTYTradeCandidate])
+async def list_nifty50_trade_candidates() -> list[NIFTYTradeCandidate]:
+    return decision_store.list_candidates()

@@ -10,7 +10,9 @@ class NIFTYReadinessService:
         return [
             "Indian broker not selected",
             "Execution not implemented",
-            "NIFTY execution analytics integration incomplete",
+            "Execution bridge missing",
+            "Broker integration missing",
+            "Analytics integration pending",
         ]
 
     def get_warnings(self) -> list[str]:
@@ -22,10 +24,11 @@ class NIFTYReadinessService:
 
     def get_status(self) -> NIFTY50ReadinessStatus:
         return NIFTY50ReadinessStatus(
-            status="SMC_INTELLIGENCE_READY",
+            status="RISK_QUALIFICATION_READY",
             broker_architecture_ready=True,
             market_data_ready=True,
             strategy_ready=True,
+            risk_ready=True,
             execution_ready=False,
             analytics_ready=True,
             selected_broker=None,
@@ -38,5 +41,6 @@ class NIFTYReadinessService:
         return [
             "Select Dhan, Angel One, or another supported broker candidate.",
             "Use manual candle/tick ingestion to validate NIFTY50 strategy context.",
-            "Add paper/demo execution validation after strategy readiness.",
+            "Add NIFTY50 analytics integration.",
+            "Add paper/demo execution validation only after explicit execution-layer approval.",
         ]

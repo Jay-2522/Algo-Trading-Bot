@@ -1677,6 +1677,22 @@ npm run build
 
 Phase 12 Day 4 adds NIFTY50 SMC detection over manually ingested candles: swings, BOS, CHOCH, liquidity sweeps, fair value gaps, order blocks, regime classification, strategy bias, and deterministic confidence scoring. It remains detection-only with no broker APIs, no live trading, and no execution.
 
+## Run Phase 12 Day 5 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day7_verification.py
+python tests/phase12_day1_verification.py
+python tests/phase12_day2_verification.py
+python tests/phase12_day3_verification.py
+python tests/phase12_day4_verification.py
+python tests/phase12_day5_verification.py
+cd frontend
+npm run build
+```
+
+Phase 12 Day 5 adds NIFTY50 risk qualification. Backend routes under `/nifty50/risk` and `/nifty50/trade` evaluate risk decisions, store decision history, qualify BUY/SELL/WAIT candidates, and list candidates. Execution remains disabled for every result.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

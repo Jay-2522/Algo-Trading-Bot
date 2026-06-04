@@ -61,8 +61,8 @@ class ExecutiveDashboardService:
             "instruments": [item.model_dump(mode="json") for item in self.aggregator.get_instrument_status()],
             "xauusd_status": "READY",
             "eurusd_status": "READY",
-            "nifty50_status": "SMC_INTELLIGENCE_READY",
-            "nifty50_readiness_detail": "EXECUTION_ANALYTICS_PENDING",
+            "nifty50_status": "RISK_QUALIFICATION_READY",
+            "nifty50_readiness_detail": "EXECUTION_BRIDGE_ANALYTICS_PENDING",
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -92,6 +92,7 @@ class ExecutiveDashboardService:
                 "NIFTY50 Strategy Foundation",
                 "NIFTY50 Market Data Integration",
                 "NIFTY50 SMC Intelligence",
+                "NIFTY50 Risk Qualification",
             ],
             "pending": [
                 "NIFTY50 Broker Selection",

@@ -28,24 +28,10 @@ async def get_trade_journal_status() -> dict:
 
 @router.post("/add-test-entry", response_model=JournalEntry)
 async def add_test_entry(entry: JournalEntry | None = Body(default=None)) -> JournalEntry:
+    if entry is None:
+        raise HTTPException(status_code=400, detail="Explicit journal entry payload required. No default fake trade is generated.")
     try:
-        simulated_entry = entry or JournalEntry(
-            symbol="XAUUSD",
-            side="BUY",
-            timeframe="M15",
-            entry_price=2330.0,
-            stop_loss=2325.0,
-            take_profit=2340.0,
-            exit_price=2340.0,
-            pnl=100.0,
-            rr=2.0,
-            outcome="WIN",
-            strategy_name="DAY14_TEST_STRATEGY",
-            session_name="LONDON",
-            execution_quality=98.0,
-            notes="Swagger-created analytics-only verification entry.",
-        )
-        return journal_service.add_entry(simulated_entry)
+        return journal_service.add_entry(entry)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

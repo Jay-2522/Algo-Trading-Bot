@@ -42,6 +42,7 @@ class ExecutionOperationsCenter:
             "health_score": overview.health_score,
             "monitoring_only": True,
             "safe_manual_controls_only": True,
+            "execution_allowed": False,
             "simulation_only": True,
             "demo_execution": True,
             "live_execution_enabled": False,

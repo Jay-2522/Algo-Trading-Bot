@@ -29,7 +29,7 @@ async def get_trade_journal_status() -> dict:
 @router.post("/add-test-entry", response_model=JournalEntry)
 async def add_test_entry(entry: JournalEntry | None = Body(default=None)) -> JournalEntry:
     if entry is None:
-        raise HTTPException(status_code=400, detail="Explicit journal entry payload required. No default fake trade is generated.")
+        raise HTTPException(status_code=400, detail="Explicit journal entry payload required. No default demo trade is generated.")
     try:
         return journal_service.add_entry(entry)
     except ValueError as exc:

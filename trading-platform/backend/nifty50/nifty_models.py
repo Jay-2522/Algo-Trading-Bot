@@ -14,6 +14,7 @@ ReadinessStatus = Literal[
     "MARKET_DATA_READY",
     "SMC_INTELLIGENCE_READY",
     "RISK_QUALIFICATION_READY",
+    "EXECUTION_BRIDGE_READY",
     "PENDING_BROKER_SELECTION",
     "BLOCKED",
     "READY_FOR_STRATEGY_LAYER",
@@ -64,6 +65,7 @@ class NIFTY50ReadinessStatus(BaseModel):
     market_data_ready: bool = False
     strategy_ready: bool = False
     risk_ready: bool = False
+    execution_bridge_ready: bool = False
     execution_ready: bool = False
     analytics_ready: bool = True
     selected_broker: str | None = None

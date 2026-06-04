@@ -9,9 +9,10 @@ class NIFTYReadinessService:
     def get_blockers(self) -> list[str]:
         return [
             "Indian broker not selected",
-            "Execution not implemented",
-            "Execution bridge missing",
+            "Order placement disabled",
             "Broker integration missing",
+            "Broker credentials missing",
+            "Real broker API not connected",
             "Analytics integration pending",
         ]
 
@@ -24,11 +25,12 @@ class NIFTYReadinessService:
 
     def get_status(self) -> NIFTY50ReadinessStatus:
         return NIFTY50ReadinessStatus(
-            status="RISK_QUALIFICATION_READY",
+            status="EXECUTION_BRIDGE_READY",
             broker_architecture_ready=True,
             market_data_ready=True,
             strategy_ready=True,
             risk_ready=True,
+            execution_bridge_ready=True,
             execution_ready=False,
             analytics_ready=True,
             selected_broker=None,
@@ -42,5 +44,6 @@ class NIFTYReadinessService:
             "Select Dhan, Angel One, or another supported broker candidate.",
             "Use manual candle/tick ingestion to validate NIFTY50 strategy context.",
             "Add NIFTY50 analytics integration.",
-            "Add paper/demo execution validation only after explicit execution-layer approval.",
+            "Select broker and configure credentials only in a future approved phase.",
+            "Keep order placement disabled until explicit execution-layer approval.",
         ]

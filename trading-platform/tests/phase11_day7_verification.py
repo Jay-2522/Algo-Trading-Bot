@@ -73,6 +73,7 @@ def verify_executive_routes() -> bool:
                 "MARKET_DATA_READY",
                 "SMC_INTELLIGENCE_READY",
                 "RISK_QUALIFICATION_READY",
+                "EXECUTION_BRIDGE_READY",
             }
             and nifty["ready"] is False
             and completion_payload["overall_completion_percentage"] < 100
@@ -114,6 +115,7 @@ def verify_dashboard_ui() -> bool:
                 or "MARKET DATA READY / STRATEGY PENDING" in api
                 or "SMC INTELLIGENCE READY / EXECUTION PENDING" in api
                 or "RISK QUALIFICATION READY / EXECUTION PENDING" in api
+                or "EXECUTION BRIDGE READY / ORDER PLACEMENT DISABLED" in api
             )
             and "Instrument Readiness" in instruments
             and "System Health" in health

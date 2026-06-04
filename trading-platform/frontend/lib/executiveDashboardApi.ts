@@ -89,9 +89,9 @@ export const emptyInstruments: InstrumentReadiness[] = [
   { symbol: "EURUSD", status: "READY", ready: true, reason: "Secondary strategy and analytics layers are implemented." },
   {
     symbol: "NIFTY50",
-    status: "RISK QUALIFICATION READY / EXECUTION PENDING",
+    status: "EXECUTION BRIDGE READY / ORDER PLACEMENT DISABLED",
     ready: false,
-    reason: "NIFTY50 risk qualification is ready; broker integration, execution bridge, and final analytics integration are still incomplete.",
+    reason: "NIFTY50 execution bridge preview is ready; broker selection, credentials, real API connection, and order placement are still disabled.",
   },
 ];
 

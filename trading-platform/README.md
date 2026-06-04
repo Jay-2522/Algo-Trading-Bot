@@ -1693,6 +1693,23 @@ npm run build
 
 Phase 12 Day 5 adds NIFTY50 risk qualification. Backend routes under `/nifty50/risk` and `/nifty50/trade` evaluate risk decisions, store decision history, qualify BUY/SELL/WAIT candidates, and list candidates. Execution remains disabled for every result.
 
+## Run Phase 12 Day 6 Verification
+
+```powershell
+python tests/regression_routes_verification.py
+python tests/phase11_day7_verification.py
+python tests/phase12_day1_verification.py
+python tests/phase12_day2_verification.py
+python tests/phase12_day3_verification.py
+python tests/phase12_day4_verification.py
+python tests/phase12_day5_verification.py
+python tests/phase12_day6_verification.py
+cd frontend
+npm run build
+```
+
+Phase 12 Day 6 adds the NIFTY50 execution bridge preparation layer. Backend routes under `/nifty50/execution` create preview-only execution intents, generate order previews, expose intent/preview history, and record audit events. Broker-specific mapping remains placeholder-only and no broker API calls or order placement are enabled.
+
 ## MT5 Safety Boundary
 
 The MT5 foundation remains live-disabled by default. Read-only connection checks, account info, symbol info, and latest ticks are available broadly; demo order placement is allowed only through the guarded Phase 5 demo executor, only for verified demo accounts, only for EURUSD market orders, and only up to `0.01` lot. Live account execution remains disabled.

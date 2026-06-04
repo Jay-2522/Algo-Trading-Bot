@@ -1,6 +1,9 @@
 from fastapi import APIRouter
 
 from backend.nifty50.indian_broker_registry import IndianBrokerRegistry
+from backend.nifty50.nifty_execution_bridge import NIFTYExecutionBridge
+from backend.nifty50.nifty_execution_models import NIFTYExecutionAuditEvent, NIFTYExecutionIntent, NIFTYOrderPreview
+from backend.nifty50.nifty_order_mapper import NIFTYOrderMapper
 from backend.nifty50.nifty_market_data_service import NIFTYMarketDataService
 from backend.nifty50.nifty_market_data_models import NIFTYCandle, NIFTYMarketDataHealth, NIFTYTick
 from backend.nifty50.nifty_models import NIFTY50Instrument, NIFTY50MarketDataSnapshot, NIFTY50ReadinessStatus
@@ -28,6 +31,8 @@ strategy_service = NIFTYStrategyService(market_data_service=market_data_service)
 decision_store = NIFTYTradeDecisionStore()
 risk_engine = NIFTYRiskEngine()
 trade_qualifier = NIFTYTradeQualifier(risk_engine=risk_engine, decision_store=decision_store)
+execution_bridge = NIFTYExecutionBridge()
+order_mapper = NIFTYOrderMapper()
 
 
 @router.get("/status")
@@ -225,3 +230,46 @@ async def qualify_nifty50_trade() -> NIFTYTradeCandidate:
 @router.get("/trade/candidates", response_model=list[NIFTYTradeCandidate])
 async def list_nifty50_trade_candidates() -> list[NIFTYTradeCandidate]:
     return decision_store.list_candidates()
+
+
+@router.get("/execution/status")
+async def get_nifty50_execution_status() -> dict:
+    return execution_bridge.get_status()
+
+
+@router.post("/execution/create-intent", response_model=NIFTYExecutionIntent)
+async def create_nifty50_execution_intent() -> NIFTYExecutionIntent:
+    candidate = trade_qualifier.qualify(strategy_service.analyze())
+    return execution_bridge.create_intent_from_candidate(candidate)
+
+
+@router.post("/execution/preview-order", response_model=NIFTYOrderPreview)
+async def preview_nifty50_order() -> NIFTYOrderPreview:
+    candidate = trade_qualifier.qualify(strategy_service.analyze())
+    intent = execution_bridge.create_intent_from_candidate(candidate)
+    return execution_bridge.preview_order(intent)
+
+
+@router.get("/execution/intents", response_model=list[NIFTYExecutionIntent])
+async def list_nifty50_execution_intents() -> list[NIFTYExecutionIntent]:
+    return execution_bridge.store.list_intents()
+
+
+@router.get("/execution/intents/{intent_id}", response_model=NIFTYExecutionIntent | None)
+async def get_nifty50_execution_intent(intent_id: str) -> NIFTYExecutionIntent | None:
+    return execution_bridge.store.get_intent(intent_id)
+
+
+@router.get("/execution/previews", response_model=list[NIFTYOrderPreview])
+async def list_nifty50_execution_previews() -> list[NIFTYOrderPreview]:
+    return execution_bridge.list_previews()
+
+
+@router.get("/execution/previews/{preview_id}", response_model=NIFTYOrderPreview | None)
+async def get_nifty50_execution_preview(preview_id: str) -> NIFTYOrderPreview | None:
+    return execution_bridge.get_preview(preview_id)
+
+
+@router.get("/execution/audit-events", response_model=list[NIFTYExecutionAuditEvent])
+async def list_nifty50_execution_audit_events() -> list[NIFTYExecutionAuditEvent]:
+    return execution_bridge.store.list_audit_events()

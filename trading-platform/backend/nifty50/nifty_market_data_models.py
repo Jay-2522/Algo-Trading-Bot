@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def utc_now() -> datetime:
@@ -8,8 +8,8 @@ def utc_now() -> datetime:
 
 
 class NIFTYCandle(BaseModel):
-    symbol: str = "NIFTY50"
-    timeframe: str = "M15"
+    symbol: str
+    timeframe: str
     timestamp: datetime = Field(default_factory=utc_now)
     open: float
     high: float
@@ -17,6 +17,13 @@ class NIFTYCandle(BaseModel):
     close: float
     volume: int = 0
     placeholder: bool = False
+
+    @field_validator("symbol", "timeframe")
+    @classmethod
+    def require_non_empty_text(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Field must be provided.")
+        return value.strip().upper()
 
 
 class NIFTYTick(BaseModel):

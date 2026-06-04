@@ -37,7 +37,7 @@ class NIFTYExecutionBridge:
             strategy_confidence=candidate.confidence,
             risk_decision_id=candidate.risk_decision_id,
         )
-        self.store.store_intent(intent)
+        intent = self.store.store_intent(intent)
         self.store.store_audit_event(
             NIFTYExecutionAuditEvent(
                 stage="CREATE_INTENT",

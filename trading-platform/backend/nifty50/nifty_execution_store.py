@@ -8,6 +8,16 @@ class NIFTYExecutionStore:
         self._audit_events: list[NIFTYExecutionAuditEvent] = []
 
     def store_intent(self, intent: NIFTYExecutionIntent) -> NIFTYExecutionIntent:
+        for existing in reversed(self._intents):
+            if (
+                existing.symbol == intent.symbol
+                and existing.action == intent.action
+                and existing.quantity == intent.quantity
+                and existing.broker_id == intent.broker_id
+                and existing.execution_allowed is False
+                and intent.execution_allowed is False
+            ):
+                return existing
         self._intents.append(intent)
         return intent
 

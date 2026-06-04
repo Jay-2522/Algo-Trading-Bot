@@ -6,6 +6,10 @@ class NIFTYMarketDataValidator:
         errors: list[str] = []
         if candle.symbol.upper() != "NIFTY50":
             errors.append("Only NIFTY50 candles are accepted.")
+        if candle.timeframe.upper() not in {"M1", "M5", "M15", "H1", "H4", "D1"}:
+            errors.append("Unsupported NIFTY50 timeframe.")
+        if min(candle.open, candle.high, candle.low, candle.close) <= 0:
+            errors.append("Candle prices must be positive.")
         if candle.high < candle.low:
             errors.append("Candle high must be greater than or equal to low.")
         if not candle.low <= candle.open <= candle.high:

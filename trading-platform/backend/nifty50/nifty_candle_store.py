@@ -8,11 +8,25 @@ class NIFTYCandleStore:
         self.invalid_candles = 0
 
     def add_candle(self, candle: NIFTYCandle) -> NIFTYCandle:
+        for index, existing in enumerate(self._candles):
+            if (
+                existing.symbol.upper() == candle.symbol.upper()
+                and existing.timeframe.upper() == candle.timeframe.upper()
+                and existing.timestamp == candle.timestamp
+            ):
+                self._candles[index] = candle
+                self._candles.sort(key=lambda item: item.timestamp)
+                return candle
         self._candles.append(candle)
         self._candles.sort(key=lambda item: item.timestamp)
         return candle
 
     def add_tick(self, tick: NIFTYTick) -> NIFTYTick:
+        for index, existing in enumerate(self._ticks):
+            if existing.symbol.upper() == tick.symbol.upper() and existing.timestamp == tick.timestamp:
+                self._ticks[index] = tick
+                self._ticks.sort(key=lambda item: item.timestamp)
+                return tick
         self._ticks.append(tick)
         self._ticks.sort(key=lambda item: item.timestamp)
         return tick

@@ -25,11 +25,11 @@ export function SessionPerformancePanel({ sessions }: { sessions: SessionPerform
         {sessions.map((session) => (
           <div className="grid gap-2 border-b border-white/10 bg-white/[0.025] p-3 text-sm last:border-b-0 md:grid-cols-6" key={session.session}>
             <strong className="break-words text-white">{labelFor(session.session)}</strong>
-            <span className="break-words text-slate-300">Signals {session.total_signals}</span>
+            <span className="break-words text-slate-300">Demo signals {session.total_signals}</span>
             <span className="break-words text-slate-300">Demo {session.demo_executions}</span>
-            <span className="break-words text-slate-300">Win {Number(session.win_rate || 0).toFixed(2)}%</span>
-            <span className="break-words text-slate-300">P&L {money(session.net_pnl)}</span>
-            <span className="break-words text-slate-300">Conf {Number(session.avg_confidence || 0).toFixed(2)}</span>
+            <span className="break-words text-slate-300">Demo win {Number(session.win_rate || 0).toFixed(2)}%</span>
+            <span className="break-words text-slate-300">Demo P&L {money(session.net_pnl)}</span>
+            <span className="break-words text-slate-300">Demo conf {Number(session.avg_confidence || 0).toFixed(2)}</span>
           </div>
         ))}
       </div>

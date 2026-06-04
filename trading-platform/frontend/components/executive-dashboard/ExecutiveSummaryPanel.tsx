@@ -18,7 +18,10 @@ export function ExecutiveSummaryPanel({ summary }: { summary: ExecutiveSummary }
       <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-emerald-100/70">Executive Summary</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
         <h3 className="text-xl font-black text-white">Client Acceptance View</h3>
-        <strong className="text-3xl font-black text-emerald-100">{Math.round(summary.overall_completion_percentage)}%</strong>
+        <div className="text-right">
+          <strong className="block text-3xl font-black text-emerald-100">{Math.round(summary.overall_completion_percentage)}%</strong>
+          <span className="text-xs uppercase tracking-[0.16em] text-emerald-100/60">Derived readiness score</span>
+        </div>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>

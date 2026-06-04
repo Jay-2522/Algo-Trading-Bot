@@ -14,14 +14,14 @@ function formatMoney(value: number): string {
 
 export function AnalyticsOverviewCards({ overview }: { overview: ClientAnalyticsOverview }) {
   const cards = [
-    ["Total Signals", formatNumber(overview.total_signals), "Strategy ideas observed"],
-    ["Demo Executions", formatNumber(overview.total_demo_executions), overview.total_demo_executions ? "Demo activity only" : "No completed demo trades yet"],
-    ["Copy Batches", formatNumber(overview.total_copy_batches), "Trade copier batches"],
-    ["Risk Blocks", formatNumber(overview.total_risk_blocks), "Capital protection events"],
-    ["News Blocks", formatNumber(overview.total_news_blocks), "News filter blocks"],
-    ["Win Rate", formatPercent(overview.win_rate), "Calculated from real PnL only"],
-    ["Net P&L", formatMoney(overview.net_pnl), "No fake profit display"],
-    ["Max Drawdown", formatMoney(overview.max_drawdown), "Observed drawdown"],
+    ["Demo Signals", formatNumber(overview.total_signals), "Source: /client-analytics/overview"],
+    ["Demo Executions", formatNumber(overview.total_demo_executions), overview.total_demo_executions ? "Recorded demo activity only" : "No completed demo trades yet"],
+    ["Demo Copy Batches", formatNumber(overview.total_copy_batches), "Recorded copier batches only"],
+    ["Risk Blocks", formatNumber(overview.total_risk_blocks), "Derived risk engine events"],
+    ["News Blocks", formatNumber(overview.total_news_blocks), "Derived news filter events"],
+    ["Demo Win Rate", formatPercent(overview.win_rate), "Calculated from completed demo P&L only"],
+    ["Demo Net P&L", formatMoney(overview.net_pnl), "Recorded demo P&L only"],
+    ["Demo Max Drawdown", formatMoney(overview.max_drawdown), "Recorded demo drawdown only"],
   ];
 
   return (

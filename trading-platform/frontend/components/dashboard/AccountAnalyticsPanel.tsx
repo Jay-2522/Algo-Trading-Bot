@@ -18,7 +18,7 @@ export function AccountAnalyticsPanel({ accounts }: { accounts: PortfolioAccount
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[0.68rem] uppercase tracking-[0.22em] text-slate-500">Account Analytics</p>
-          <h3 className="mt-1 break-words text-xl font-black text-white">Broker Account Cards</h3>
+          <h3 className="mt-1 break-words text-xl font-black text-white">Simulated Account Cards</h3>
         </div>
         <StatusBadge label={`${accounts.filter((account) => account.enabled).length} enabled`} tone="good" />
       </div>
@@ -38,11 +38,11 @@ export function AccountAnalyticsPanel({ accounts }: { accounts: PortfolioAccount
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3">
-                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">Balance</p>
+                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">Simulated Balance</p>
                   <strong className="mt-1 block text-sm text-white">{formatMoney(account.balance)}</strong>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3">
-                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">Equity</p>
+                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">Simulated Equity</p>
                   <strong className="mt-1 block text-sm text-white">{formatMoney(account.equity)}</strong>
                 </div>
               </div>

@@ -10,9 +10,9 @@ function money(value: unknown): string {
 
 export function ReportSummaryCards({ report }: { report: ClientReport }) {
   const cards = [
-    ["Daily Report", numberValue(report.summary.total_signals), "Signals in current report"],
+    ["Daily Report", numberValue(report.summary.total_signals), "Demo signals in current report"],
     ["Weekly Report", numberValue(report.summary.total_demo_executions), "Demo executions recorded"],
-    ["Symbol Report", money(report.summary.net_pnl), "Real P&L only"],
+    ["Symbol Report", money(report.summary.net_pnl), "Recorded demo P&L only"],
     ["Risk Report", numberValue(report.risk_summary.blocked), "Risk blocks recorded"],
   ];
 

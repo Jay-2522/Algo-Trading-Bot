@@ -14,7 +14,6 @@ type TraderBundle = {
   portfolioAccounts: PortfolioAccountSummaryData[];
   portfolioExposure: PortfolioExposureSummaryData | null;
   portfolioPnlSummary: Record<string, unknown> | null;
-  openPositions: Array<Record<string, unknown>>;
   recentTrades: Array<Record<string, unknown>>;
   tradePerformance: Record<string, unknown> | null;
   tradeRiskAnalytics: Record<string, unknown> | null;
@@ -29,7 +28,6 @@ const emptyTraderBundle: TraderBundle = {
   portfolioAccounts: [],
   portfolioExposure: null,
   portfolioPnlSummary: null,
-  openPositions: [],
   recentTrades: [],
   tradePerformance: null,
   tradeRiskAnalytics: null,
@@ -68,7 +66,6 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       portfolioAccounts: fetchJson<PortfolioAccountSummaryData[]>("/portfolio/accounts"),
       portfolioExposure: fetchJson<PortfolioExposureSummaryData>("/portfolio/exposure"),
       portfolioPnlSummary: fetchJson<Record<string, unknown>>("/portfolio/pnl-summary"),
-      openPositions: fetchJson<Array<Record<string, unknown>>>("/mt5/positions"),
       recentTrades: fetchJson<Array<Record<string, unknown>>>("/trade-journal/recent?limit=8"),
       tradePerformance: fetchJson<Record<string, unknown>>("/trade-journal/overall-performance"),
       tradeRiskAnalytics: fetchJson<Record<string, unknown>>("/trade-journal/risk-analytics"),
@@ -137,6 +134,12 @@ function todayPnl(trades: Array<Record<string, unknown>>, fallback: number): num
   return trades.length ? total : fallback;
 }
 
+function isLegacyFakeTrade(trade: Record<string, unknown>): boolean {
+  const strategyName = readText(trade, ["strategy_name"], "").toUpperCase();
+  const notes = readText(trade, ["notes"], "").toUpperCase();
+  return strategyName.includes("DAY14_TEST_STRATEGY") || notes.includes("SWAGGER-CREATED ANALYTICS-ONLY VERIFICATION ENTRY");
+}
+
 function statusTone(value: string | boolean | null | undefined): "good" | "info" | "warning" | "danger" | "muted" {
   const text = String(value ?? "").toUpperCase();
   if (text.includes("READY") || text.includes("HEALTHY") || text.includes("CONNECTED") || value === true) return "good";
@@ -165,26 +168,29 @@ export function DashboardShell({
   const exposure = bundle.portfolioExposure ?? bundle.portfolioOverview?.exposure_summary ?? null;
   const pnl = bundle.portfolioPnlSummary ?? bundle.portfolioOverview?.pnl_summary ?? null;
   const accounts = bundle.portfolioAccounts.length ? bundle.portfolioAccounts : bundle.portfolioOverview?.accounts ?? [];
-  const recentTrades = bundle.recentTrades.slice(0, 5);
-  const openPositions = bundle.openPositions.slice(0, 5);
+  const recentTrades = bundle.recentTrades
+    .filter((trade) => readText(trade, ["outcome"], "OPEN").toUpperCase() !== "OPEN")
+    .filter((trade) => !isLegacyFakeTrade(trade))
+    .slice(0, 5);
+  const hasCompletedDemoTrades = recentTrades.length > 0;
   const signals = bundle.signals.slice(0, 4);
 
   const balance = exposure?.total_simulated_balance ?? accounts.reduce((sum, account) => sum + account.balance, 0);
   const equity = exposure?.total_simulated_equity ?? accounts.reduce((sum, account) => sum + account.equity, 0);
-  const dailyPnl = todayPnl(recentTrades, readNumber(pnl, ["net_pnl"], 0));
+  const dailyPnl = hasCompletedDemoTrades ? todayPnl(recentTrades, readNumber(pnl, ["net_pnl"], 0)) : 0;
   const connectionStatus = bundle.status?.dashboard_ready ? "Connected" : loading ? "Connecting" : "Review";
   const botStatus = bundle.status?.system_status ?? "Checking";
   const risk = bundle.tradeRiskAnalytics;
 
   const topCards = useMemo(
     () => [
-      { label: "Account Balance", value: money(balance), detail: `${accounts.length || 0} accounts`, tone: "info" as const },
-      { label: "Equity", value: money(equity), detail: "Current account value", tone: "good" as const },
-      { label: "Daily P&L", value: signedMoney(dailyPnl), detail: "Today", tone: dailyPnl >= 0 ? ("good" as const) : ("danger" as const) },
-      { label: "Open Positions", value: String(openPositions.length), detail: openPositions.length ? "Active trades" : "No active trades", tone: "info" as const },
-      { label: "AI Signals", value: String(signals.length), detail: signals.length ? "Recent ideas" : "Waiting for setup", tone: "info" as const },
+      { label: "Simulated Balance", value: money(balance), detail: "Derived from /portfolio/exposure simulated account summaries", tone: "info" as const },
+      { label: "Simulated Equity", value: money(equity), detail: "Derived from /portfolio/exposure simulated account summaries", tone: "good" as const },
+      { label: "Demo P&L", value: signedMoney(dailyPnl), detail: "Derived from completed demo journal records only", tone: dailyPnl >= 0 ? ("good" as const) : ("danger" as const) },
+      { label: "Broker Positions", value: "Hidden", detail: "Live broker positions are not shown on the client dashboard", tone: "muted" as const },
+      { label: "AI Signals", value: String(signals.length), detail: "Demo analysis events from /webhooks/events", tone: "info" as const },
     ],
-    [accounts.length, balance, dailyPnl, equity, openPositions.length, signals.length],
+    [balance, dailyPnl, equity, signals.length],
   );
 
   return (
@@ -199,7 +205,7 @@ export function DashboardShell({
               <h1 className="mt-2 max-w-4xl text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl lg:text-5xl">
                 Portfolio & AI Trading
               </h1>
-              <p className="mt-2 text-sm text-slate-300 sm:text-base">Balance, trades, signals, risk, and connection status.</p>
+              <p className="mt-2 text-sm text-slate-300 sm:text-base">Simulated balances, demo trade records, analysis signals, derived risk, and connection status.</p>
             </div>
             <AutoRefreshControl
               isPaused={isPaused}
@@ -229,7 +235,7 @@ export function DashboardShell({
             <article className="min-h-32 rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl" key={card.label}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="break-words text-[0.68rem] uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
-                <StatusBadge label={card.tone === "good" ? "OK" : card.tone === "danger" ? "Down" : "Live"} tone={card.tone} />
+                <StatusBadge label={card.tone === "good" ? "Demo" : card.tone === "danger" ? "Review" : card.tone === "muted" ? "Hidden" : "Info"} tone={card.tone} />
               </div>
               <strong className="mt-3 block break-words text-2xl font-black leading-tight text-white">{card.value}</strong>
               <p className="mt-2 break-words text-xs leading-5 text-slate-400">{card.detail}</p>
@@ -248,33 +254,18 @@ export function DashboardShell({
           <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">Open Positions</p>
-                <h2 className="mt-1 text-xl font-bold text-white">Current Trades</h2>
+                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">Broker Positions</p>
+                <h2 className="mt-1 text-xl font-bold text-white">Live Position Data Hidden</h2>
               </div>
-              <StatusBadge label={`${openPositions.length} open`} tone={openPositions.length ? "info" : "good"} />
+              <StatusBadge label="Hidden" tone="muted" />
             </div>
 
-            {openPositions.length ? (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
-                {openPositions.map((position, index) => (
-                  <div className="grid gap-2 border-b border-white/10 bg-white/[0.025] p-3 text-sm last:border-b-0 md:grid-cols-6" key={`${readText(position, ["ticket"], String(index))}-${index}`}>
-                    <span className="break-words font-bold text-white">{readText(position, ["symbol"], "N/A")}</span>
-                    <span className="break-words text-cyan-100">{readText(position, ["type"], "Trade")}</span>
-                    <span className="break-words text-slate-300">{readText(position, ["volume"], "0")} lots</span>
-                    <span className="break-words text-slate-300">{readText(position, ["price_open"], "0")}</span>
-                    <span className="break-words text-slate-400">SL {readText(position, ["sl"], "-")}</span>
-                    <span className={readNumber(position, ["profit"], 0) >= 0 ? "break-words text-emerald-100" : "break-words text-rose-100"}>
-                      {signedMoney(readNumber(position, ["profit"], 0))}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-700 bg-white/[0.03] p-5">
-                <strong className="text-sm text-slate-100">No open positions</strong>
-                <p className="mt-2 text-sm leading-relaxed text-slate-400">The bot is connected and waiting for a qualified setup.</p>
-              </div>
-            )}
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-700 bg-white/[0.03] p-5">
+              <strong className="text-sm text-slate-100">No live broker position values are displayed here.</strong>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                Client-visible trading activity will populate from completed demo execution records, not live broker position snapshots.
+              </p>
+            </div>
           </section>
 
           <section className="min-w-0 rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
@@ -310,10 +301,10 @@ export function DashboardShell({
 
         <section className="grid gap-4 xl:grid-cols-3">
           <section className="rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
-            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-slate-500">Recent Trades</p>
+            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-slate-500">Demo Trades</p>
             <h2 className="mt-1 text-xl font-bold text-white">Trade History</h2>
             <div className="mt-4 space-y-3">
-              {recentTrades.length ? recentTrades.map((trade, index) => (
+              {hasCompletedDemoTrades ? recentTrades.map((trade, index) => (
                 <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3" key={`${readText(trade, ["journal_id"], String(index))}-${index}`}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <strong className="text-sm text-white">{readText(trade, ["symbol"], "Trade")} {readText(trade, ["side"], "")}</strong>
@@ -322,27 +313,37 @@ export function DashboardShell({
                   <p className="mt-2 text-xs text-slate-400">{signedMoney(readNumber(trade, ["pnl"], 0))} / RR {readText(trade, ["rr"], "0")} / {formatRelativeTime(readText(trade, ["timestamp"], ""))}</p>
                 </div>
               )) : (
-                <div className="rounded-2xl border border-dashed border-slate-700 bg-white/[0.03] p-4 text-sm text-slate-400">No completed trades yet.</div>
+                <div className="rounded-2xl border border-dashed border-slate-700 bg-white/[0.03] p-4 text-sm leading-6 text-slate-400">
+                  <strong className="block text-slate-200">No completed demo trades yet.</strong>
+                  Performance will populate after real demo execution records are available.
+                </div>
               )}
             </div>
           </section>
 
           <section className="rounded-3xl border border-emerald-300/15 bg-emerald-300/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <p className="text-[0.68rem] uppercase tracking-[0.22em] text-emerald-100/70">Performance</p>
-            <h2 className="mt-1 text-xl font-bold text-white">Trading Results</h2>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {[
-                ["Trades", readText(bundle.tradePerformance, ["total_trades"], "0")],
-                ["Win Rate", `${readText(bundle.tradePerformance, ["win_rate"], "0")}%`],
-                ["Net P&L", signedMoney(readNumber(bundle.tradePerformance, ["net_profit"], dailyPnl))],
-                ["Best Trade", signedMoney(readNumber(bundle.tradePerformance, ["best_trade"], 0))],
-              ].map(([label, value]) => (
-                <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" key={label}>
-                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                  <strong className="mt-1 block break-words text-lg text-white">{value}</strong>
-                </div>
-              ))}
-            </div>
+            <h2 className="mt-1 text-xl font-bold text-white">Demo Performance</h2>
+            {hasCompletedDemoTrades ? (
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {[
+                  ["Trades", readText(bundle.tradePerformance, ["total_trades"], "0")],
+                  ["Win Rate", `${readText(bundle.tradePerformance, ["win_rate"], "0")}%`],
+                  ["Net P&L", signedMoney(readNumber(bundle.tradePerformance, ["net_profit"], dailyPnl))],
+                  ["Best Trade", signedMoney(readNumber(bundle.tradePerformance, ["best_trade"], 0))],
+                ].map(([label, value]) => (
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" key={label}>
+                    <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                    <strong className="mt-1 block break-words text-lg text-white">{value}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-emerald-200/20 bg-slate-950/35 p-4 text-sm leading-6 text-emerald-50/80">
+                <strong className="block text-white">No completed demo trades yet.</strong>
+                Performance will populate after real demo execution records are available.
+              </div>
+            )}
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
@@ -351,8 +352,8 @@ export function DashboardShell({
             <div className="mt-4 grid gap-3">
               {[
                 ["Risk Level", readText(risk, ["active_risk_level"], "LOW"), statusTone(readText(risk, ["active_risk_level"], "LOW"))],
-                ["Drawdown", `${readText(risk, ["daily_drawdown_percent"], "0")}%`, "good"],
-                ["Exposure", `${readText(risk, ["current_exposure_percent"], "0")}%`, "good"],
+                ["Demo Drawdown", `${readText(risk, ["daily_drawdown_percent"], "0")}%`, "good"],
+                ["Demo Exposure", `${readText(risk, ["current_exposure_percent"], "0")}%`, "good"],
                 ["Live Trading", bundle.status?.live_execution_enabled ? "Enabled" : "Disabled", "warning"],
               ].map(([label, value, tone]) => (
                 <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3" key={label}>

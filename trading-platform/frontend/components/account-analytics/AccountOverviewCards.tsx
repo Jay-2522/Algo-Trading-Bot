@@ -11,20 +11,21 @@ export function AccountOverviewCards({ accounts, sync }: { accounts: AccountAnal
   const totalExecutions = accounts.reduce((sum, account) => sum + account.total_executions, 0);
   const totalCopiedTrades = accounts.reduce((sum, account) => sum + account.total_copied_trades, 0);
   const cards = [
-    ["Total Accounts", accounts.length],
-    ["Active Copiers", activeCopiers],
-    ["Sync Status", sync.synchronization_status],
-    ["Last Sync", lastSync(sync.last_sync_time)],
-    ["Total Executions", totalExecutions],
-    ["Total Copied Trades", totalCopiedTrades],
+    ["Demo Accounts", accounts.length, "Source: /client-analytics/accounts"],
+    ["Demo Copiers", activeCopiers, "Source: /client-analytics/accounts"],
+    ["Sync Status", sync.synchronization_status, "Source: /client-analytics/accounts/sync-status"],
+    ["Last Sync", lastSync(sync.last_sync_time), "Recorded copier sync only"],
+    ["Demo Executions", totalExecutions, "Completed demo records only"],
+    ["Copied Demo Trades", totalCopiedTrades, "Recorded copier demo activity only"],
   ];
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-      {cards.map(([label, value]) => (
+      {cards.map(([label, value, detail]) => (
         <article className="min-h-28 rounded-2xl border border-white/10 bg-slate-950/45 p-4 shadow-xl shadow-black/15" key={label}>
           <p className="text-[0.64rem] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
           <strong className="mt-3 block break-words text-xl font-black text-white">{value}</strong>
+          <p className="mt-2 break-words text-xs leading-5 text-slate-400">{detail}</p>
         </article>
       ))}
     </div>

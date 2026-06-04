@@ -15,6 +15,7 @@ export function SystemReadinessCards({ items }: { items: ReadinessItem[] }) {
           <p className="text-[0.62rem] font-black uppercase tracking-[0.16em] opacity-70">{item.name}</p>
           <strong className="mt-3 block break-words text-lg">{item.status.replaceAll("_", " ")}</strong>
           <p className="mt-2 text-sm font-black text-white">{Math.round(item.score)}%</p>
+          <p className="mt-1 text-[0.6rem] uppercase tracking-[0.1em] opacity-70">Readiness score</p>
         </article>
       ))}
     </div>

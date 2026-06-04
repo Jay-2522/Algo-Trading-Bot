@@ -21,11 +21,11 @@ export function AccountPerformanceGrid({ accounts }: { accounts: AccountAnalytic
 
           <div className="mt-4 grid grid-cols-2 gap-2">
             {[
-              ["Executions", account.total_executions],
-              ["Copied", account.total_copied_trades],
-              ["Win Rate", `${Number(account.win_rate || 0).toFixed(2)}%`],
-              ["Net P&L", money(account.net_pnl)],
-              ["Drawdown", money(account.max_drawdown)],
+              ["Demo Executions", account.total_executions],
+              ["Copied Demo Trades", account.total_copied_trades],
+              ["Demo Win Rate", `${Number(account.win_rate || 0).toFixed(2)}%`],
+              ["Demo Net P&L", money(account.net_pnl)],
+              ["Demo Drawdown", money(account.max_drawdown)],
               ["Live", account.live_execution_enabled ? "Enabled" : "Disabled"],
             ].map(([label, value]) => (
               <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3" key={label}>

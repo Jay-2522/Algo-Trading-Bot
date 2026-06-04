@@ -15,9 +15,9 @@ export function SessionEfficiencyPanel({ sessions }: { sessions: Array<Record<st
         {visible.map((item) => (
           <div className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm md:grid-cols-4" key={String(item.session)}>
             <strong className="text-white">{String(item.session).replaceAll("_", " ")}</strong>
-            <span className="text-slate-300">Signals {Number(item.signals || 0)}</span>
-            <span className="text-slate-300">Risk {Number(item.risk_pass_rate || 0).toFixed(2)}%</span>
-            <span className="text-slate-300">Score {Number(item.efficiency_score || 0).toFixed(2)}%</span>
+            <span className="text-slate-300">Demo signals {Number(item.signals || 0)}</span>
+            <span className="text-slate-300">Demo risk {Number(item.risk_pass_rate || 0).toFixed(2)}%</span>
+            <span className="text-slate-300">Derived score {Number(item.efficiency_score || 0).toFixed(2)}%</span>
           </div>
         ))}
       </div>

@@ -31,14 +31,14 @@ export function SymbolPerformanceGrid({ symbols }: { symbols: SymbolPerformanceS
 
             <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
               {[
-                ["Signals", symbol.total_signals],
+                ["Demo Signals", symbol.total_signals],
                 ["BUY", symbol.buy_signals],
                 ["SELL", symbol.sell_signals],
                 ["WAIT", symbol.wait_signals],
                 ["Demo Executions", symbol.demo_executions],
-                ["Win Rate", `${Number(symbol.win_rate || 0).toFixed(2)}%`],
-                ["Net P&L", money(symbol.net_pnl)],
-                ["Avg Confidence", Number(symbol.avg_confidence || 0).toFixed(2)],
+                ["Demo Win Rate", `${Number(symbol.win_rate || 0).toFixed(2)}%`],
+                ["Demo Net P&L", money(symbol.net_pnl)],
+                ["Avg Demo Confidence", Number(symbol.avg_confidence || 0).toFixed(2)],
               ].map(([label, value]) => (
                 <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3" key={label}>
                   <p className="break-words text-[0.62rem] uppercase tracking-[0.12em] text-slate-500">{label}</p>

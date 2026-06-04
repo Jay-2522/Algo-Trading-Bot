@@ -9,13 +9,13 @@ export function StrategyRankingPanel({ rankings }: { rankings: Array<Record<stri
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
       <p className="text-[0.68rem] font-bold uppercase tracking-[0.2em] text-slate-500">Rankings</p>
-      <h3 className="mt-1 text-xl font-black text-white">Comparative Ranking</h3>
+      <h3 className="mt-1 text-xl font-black text-white">Comparative Analysis Ranking</h3>
       <div className="mt-4 space-y-2">
         {visible.map((item) => (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3" key={String(item.symbol)}>
             <div>
               <strong className="text-white">#{Number(item.rank || 0)} {String(item.symbol)}</strong>
-              <p className="mt-1 text-xs text-slate-400">{String(item.symbol) === "NIFTY50" ? "SMC intelligence ready" : "Ranked by strategy score"}</p>
+              <p className="mt-1 text-xs text-slate-400">{String(item.symbol) === "NIFTY50" ? "SMC intelligence ready" : "Ranked by derived strategy score"}</p>
             </div>
             <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[0.6rem] font-black uppercase tracking-[0.12em] text-cyan-100">
               {Number(item.strategy_score || 0).toFixed(2)}

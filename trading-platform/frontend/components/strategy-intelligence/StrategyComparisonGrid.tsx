@@ -15,11 +15,11 @@ export function StrategyComparisonGrid({ strategies }: { strategies: StrategyPer
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               {[
-                ["Signals", strategy.total_signals],
-                ["Confidence", strategy.confidence_quality],
-                ["Execution", strategy.execution_quality],
-                ["Risk", strategy.risk_quality],
-                ["Score", Number(strategy.strategy_score || 0).toFixed(2)],
+                ["Demo Signals", strategy.total_signals],
+                ["Analysis Confidence", strategy.confidence_quality],
+                ["Demo Execution", strategy.execution_quality],
+                ["Demo Risk", strategy.risk_quality],
+                ["Derived Score", Number(strategy.strategy_score || 0).toFixed(2)],
               ].map(([label, value]) => (
                 <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3" key={label}>
                   <p className="text-[0.6rem] uppercase tracking-[0.11em] text-slate-500">{label}</p>

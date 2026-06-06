@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body
 
 from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
 from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
+from backend.mt5_demo.demo_order_preflight_service import DemoOrderPreflightService
 from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
@@ -31,6 +32,13 @@ execution_gate_service = MT5ExecutionGateValidationService(
 demo_order_dry_run_service = DemoOrderDryRunService(
     authorization_service=demo_order_authorization_service,
     execution_gate_service=execution_gate_service,
+)
+demo_order_preflight_service = DemoOrderPreflightService(
+    authorization_service=demo_order_authorization_service,
+    dry_run_service=demo_order_dry_run_service,
+    risk_qualification_service=risk_qualification_service,
+    execution_gate_service=execution_gate_service,
+    market_data_service=market_data_service,
 )
 
 
@@ -250,6 +258,26 @@ async def get_latest_demo_order_dry_run() -> dict:
 @router.get("/demo-order-dry-run/history")
 async def get_demo_order_dry_run_history(limit: int = 100) -> list[dict]:
     return demo_order_dry_run_service.list_history(limit)
+
+
+@router.get("/preflight/status")
+async def get_demo_order_preflight_status() -> dict:
+    return demo_order_preflight_service.get_status()
+
+
+@router.post("/preflight/run")
+async def run_demo_order_preflight(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return demo_order_preflight_service.run_preflight(payload)
+
+
+@router.get("/preflight/latest")
+async def get_latest_demo_order_preflight() -> dict:
+    return demo_order_preflight_service.get_latest()
+
+
+@router.get("/preflight/history")
+async def get_demo_order_preflight_history(limit: int = 100) -> list[dict]:
+    return demo_order_preflight_service.list_history(limit)
 
 
 @router.post("/order-send")

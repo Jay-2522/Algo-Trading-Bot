@@ -7,6 +7,7 @@ from backend.mt5_demo.demo_execution_readiness_service import DemoExecutionReadi
 from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
 from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
 from backend.mt5_demo.demo_order_preflight_service import DemoOrderPreflightService
+from backend.mt5_demo.demo_trade_test_plan_service import DemoTradeTestPlanService
 from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
@@ -59,6 +60,7 @@ demo_execution_readiness_service = DemoExecutionReadinessService(
     preflight_service=demo_order_preflight_service,
     simulator_service=demo_execution_simulator_service,
 )
+demo_trade_test_plan_service = DemoTradeTestPlanService()
 
 
 @router.get("/status")
@@ -337,6 +339,26 @@ async def get_latest_demo_execution_readiness_audit() -> dict:
 @router.get("/readiness/history")
 async def get_demo_execution_readiness_history(limit: int = 100) -> list[dict]:
     return demo_execution_readiness_service.get_audit_history(limit)
+
+
+@router.get("/test-plan/status")
+async def get_demo_trade_test_plan_status() -> dict:
+    return demo_trade_test_plan_service.get_status()
+
+
+@router.post("/test-plan/generate")
+async def generate_demo_trade_test_plan() -> dict:
+    return demo_trade_test_plan_service.generate_test_plan()
+
+
+@router.get("/test-plan/latest")
+async def get_latest_demo_trade_test_plan() -> dict:
+    return demo_trade_test_plan_service.get_latest_test_plan()
+
+
+@router.get("/test-plan/history")
+async def get_demo_trade_test_plan_history(limit: int = 100) -> list[dict]:
+    return demo_trade_test_plan_service.get_test_plan_history(limit)
 
 
 @router.post("/order-send")

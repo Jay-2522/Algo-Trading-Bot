@@ -15,6 +15,7 @@ from backend.client_analytics.executive_models import ExecutiveDashboardSummary,
 from backend.client_analytics.export_service import ExportService
 from backend.client_analytics.report_builder import ReportBuilder
 from backend.client_analytics.report_models import ClientReport
+from backend.client_analytics.reporting_engine_service import ReportingEngineService
 from backend.client_analytics.strategy_analytics_service import StrategyAnalyticsService
 from backend.client_analytics.strategy_models import StrategyPerformanceSummary
 
@@ -26,6 +27,7 @@ report_builder = ReportBuilder(client_analytics_service)
 export_service = ExportService(report_builder)
 strategy_analytics_service = StrategyAnalyticsService()
 executive_dashboard_service = ExecutiveDashboardService()
+reporting_engine_service = ReportingEngineService()
 
 
 @router.get("/status")
@@ -132,6 +134,31 @@ async def get_client_strategy_comparison() -> dict:
     return strategy_analytics_service.get_comparative_analysis()
 
 
+@router.get("/strategy-dashboard/status")
+async def get_strategy_dashboard_status() -> dict:
+    return strategy_analytics_service.get_strategy_dashboard_status()
+
+
+@router.get("/strategy-dashboard/overview")
+async def get_strategy_dashboard_overview() -> dict:
+    return strategy_analytics_service.get_strategy_dashboard_overview()
+
+
+@router.get("/strategy-dashboard/symbols")
+async def get_strategy_dashboard_symbols() -> list[dict]:
+    return strategy_analytics_service.get_strategy_dashboard_symbols()
+
+
+@router.get("/strategy-dashboard/rejections")
+async def get_strategy_dashboard_rejections() -> dict:
+    return strategy_analytics_service.get_strategy_dashboard_rejections()
+
+
+@router.get("/strategy-dashboard/performance")
+async def get_strategy_dashboard_performance() -> dict:
+    return strategy_analytics_service.get_strategy_dashboard_performance()
+
+
 @router.get("/executive/status")
 async def get_executive_dashboard_status() -> dict:
     return executive_dashboard_service.get_status()
@@ -209,3 +236,38 @@ async def export_client_report_json() -> dict:
 @router.get("/reports/export/csv", response_class=PlainTextResponse)
 async def export_client_report_csv() -> str:
     return export_service.export_csv()
+
+
+@router.get("/reports-v2/status")
+async def get_reports_v2_status() -> dict:
+    return reporting_engine_service.get_status()
+
+
+@router.get("/reports-v2/daily")
+async def get_reports_v2_daily() -> dict:
+    return reporting_engine_service.build_daily_report()
+
+
+@router.get("/reports-v2/weekly")
+async def get_reports_v2_weekly() -> dict:
+    return reporting_engine_service.build_weekly_report()
+
+
+@router.get("/reports-v2/monthly")
+async def get_reports_v2_monthly() -> dict:
+    return reporting_engine_service.build_monthly_report()
+
+
+@router.get("/reports-v2/symbol/{symbol}")
+async def get_reports_v2_symbol(symbol: str) -> dict:
+    return reporting_engine_service.build_symbol_report(symbol)
+
+
+@router.get("/reports-v2/export/json")
+async def export_reports_v2_json() -> dict:
+    return reporting_engine_service.export_json()
+
+
+@router.get("/reports-v2/export/csv", response_class=PlainTextResponse)
+async def export_reports_v2_csv() -> str:
+    return reporting_engine_service.export_csv()

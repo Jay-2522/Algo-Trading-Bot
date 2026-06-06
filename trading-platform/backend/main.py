@@ -47,6 +47,7 @@ from backend.api.streaming_routes import router as streaming_router
 from backend.api.streaming_routes import websocket_router as streaming_websocket_router
 from backend.api.system_health_routes import router as system_health_router
 from backend.api.trade_copier_routes import router as trade_copier_router
+from backend.api.trade_journal_persistence_routes import router as trade_journal_persistence_router
 from backend.api.tradingview_webhook_routes import router as tradingview_webhook_router
 from backend.api.trading_loop_routes import router as trading_loop_router
 from backend.api.trading_loop_routes import trading_loop_service
@@ -146,6 +147,7 @@ app.include_router(streaming_router)
 app.include_router(streaming_websocket_router)
 app.include_router(trading_loop_router)
 app.include_router(trade_journal_router)
+app.include_router(trade_journal_persistence_router)
 app.include_router(system_health_router)
 app.include_router(institutional_router)
 

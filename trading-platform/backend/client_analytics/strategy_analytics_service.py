@@ -4,6 +4,7 @@ from backend.client_analytics.analytics_data_collector import AnalyticsDataColle
 from backend.client_analytics.comparative_analytics import ComparativeAnalytics
 from backend.client_analytics.strategy_models import StrategyPerformanceSummary
 from backend.nifty50.nifty_analytics_service import NIFTYAnalyticsService
+from backend.trade_journal.persistent_trade_journal_service import PersistentTradeJournalService
 
 
 class StrategyAnalyticsService:
@@ -17,10 +18,12 @@ class StrategyAnalyticsService:
         collector: AnalyticsDataCollector | None = None,
         comparative: ComparativeAnalytics | None = None,
         nifty_analytics: NIFTYAnalyticsService | None = None,
+        persistent_journal: PersistentTradeJournalService | None = None,
     ) -> None:
         self.collector = collector or AnalyticsDataCollector()
         self.comparative = comparative or ComparativeAnalytics()
         self.nifty_analytics = nifty_analytics or NIFTYAnalyticsService()
+        self.persistent_journal = persistent_journal or PersistentTradeJournalService()
 
     def get_strategy_overview(self) -> dict[str, Any]:
         summaries = self.get_all_strategy_performance()
@@ -116,6 +119,91 @@ class StrategyAnalyticsService:
             "broker_execution_enabled": False,
         }
 
+    def get_strategy_dashboard_status(self) -> dict[str, Any]:
+        summary = self.persistent_journal.get_summary()
+        return {
+            "status": "READY",
+            "classification": "DEMO_DERIVED_EMPTY" if summary["total_trades"] == 0 else "DEMO_DERIVED",
+            "data_source": "persistent_trade_journal",
+            "placeholder_only": summary["total_trades"] == 0,
+            "message": "No completed demo trades yet." if summary["total_trades"] == 0 else "Strategy dashboard derived from recorded trade journal data.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
+    def get_strategy_dashboard_overview(self) -> dict[str, Any]:
+        trades = self.persistent_journal.list_trades(limit=100000)
+        signals = self.collector.collect_all().get("strategy_signals", [])
+        closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
+        sent = [trade for trade in trades if trade.get("status") == "SENT"]
+        open_trades = [trade for trade in trades if trade.get("status") == "OPEN"]
+        rejected = [trade for trade in trades if trade.get("status") == "REJECTED"]
+        pnl_values = [float(trade.get("profit_loss") or 0) for trade in closed]
+        rr_values = [float(trade.get("risk_reward_ratio") or 0) for trade in trades if trade.get("risk_reward_ratio") is not None]
+        wins = [trade for trade in closed if trade.get("result") == "WIN"]
+        return {
+            "total_signals": len(signals),
+            "signals_wait": len([signal for signal in signals if str(getattr(signal, "action", "")).upper() == "WAIT"]),
+            "signals_buy": len([signal for signal in signals if str(getattr(signal, "action", "")).upper() == "BUY"]),
+            "signals_sell": len([signal for signal in signals if str(getattr(signal, "action", "")).upper() == "SELL"]),
+            "risk_rejections": 0,
+            "execution_gate_rejections": len(rejected),
+            "approved_demo_trades": len([trade for trade in trades if trade.get("status") in {"PLANNED", "SENT", "OPEN", "CLOSED"}]),
+            "sent_demo_orders": len(sent),
+            "open_demo_trades": len(open_trades),
+            "closed_demo_trades": len(closed),
+            "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
+            "net_pnl": round(sum(pnl_values), 2) if pnl_values else 0.0,
+            "avg_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
+            "best_trade": self._trade_extreme(closed, best=True),
+            "worst_trade": self._trade_extreme(closed, best=False),
+            "classification": "DEMO_DERIVED_EMPTY" if not trades else "DEMO_DERIVED",
+            "empty_state": not trades,
+            "message": "No completed demo trades yet." if not closed else "Performance is derived from recorded closed demo trades.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
+    def get_strategy_dashboard_symbols(self) -> list[dict[str, Any]]:
+        trades = self.persistent_journal.list_trades(limit=100000)
+        symbols = sorted({str(trade.get("symbol", "")).upper() for trade in trades if trade.get("symbol")}) or ["EURUSD", "XAUUSD", "NIFTY50"]
+        return [self._symbol_dashboard_summary(symbol, trades) for symbol in symbols]
+
+    def get_strategy_dashboard_rejections(self) -> dict[str, Any]:
+        rejected = [trade for trade in self.persistent_journal.list_trades(limit=100000) if trade.get("status") == "REJECTED"]
+        return {
+            "risk_rejections": 0,
+            "execution_gate_rejections": len(rejected),
+            "rejections": rejected,
+            "empty_state": len(rejected) == 0,
+            "message": "No execution gate rejections recorded yet.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
+    def get_strategy_dashboard_performance(self) -> dict[str, Any]:
+        overview = self.get_strategy_dashboard_overview()
+        return {
+            "closed_demo_trades": overview["closed_demo_trades"],
+            "win_rate": overview["win_rate"],
+            "net_pnl": overview["net_pnl"],
+            "avg_rr": overview["avg_rr"],
+            "best_trade": overview["best_trade"],
+            "worst_trade": overview["worst_trade"],
+            "empty_state": overview["closed_demo_trades"] == 0,
+            "message": "No completed demo trades yet." if overview["closed_demo_trades"] == 0 else "Performance derived from closed demo trades.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
     def _symbol(self, item: Any) -> str | None:
         value = getattr(item, "symbol", None) or getattr(item, "canonical_symbol", None) or getattr(item, "source_symbol", None)
         return str(value).upper() if value else None
@@ -138,3 +226,27 @@ class StrategyAnalyticsService:
     def _session_efficiency(self, symbol: str, data: dict[str, list[Any]]) -> float:
         signals = [signal for signal in data["strategy_signals"] if self._symbol(signal) == symbol and self._session(signal) in self.SESSIONS]
         return round(min(100, len(signals) * 10), 2) if signals else 0.0
+
+    def _trade_extreme(self, trades: list[dict[str, Any]], best: bool) -> dict[str, Any] | None:
+        with_pnl = [trade for trade in trades if trade.get("profit_loss") is not None]
+        if not with_pnl:
+            return None
+        return sorted(with_pnl, key=lambda trade: float(trade.get("profit_loss") or 0), reverse=best)[0]
+
+    def _symbol_dashboard_summary(self, symbol: str, trades: list[dict[str, Any]]) -> dict[str, Any]:
+        symbol_trades = [trade for trade in trades if str(trade.get("symbol", "")).upper() == symbol]
+        closed = [trade for trade in symbol_trades if trade.get("status") == "CLOSED"]
+        wins = [trade for trade in closed if trade.get("result") == "WIN"]
+        pnl_values = [float(trade.get("profit_loss") or 0) for trade in closed]
+        return {
+            "symbol": symbol,
+            "total_trades": len(symbol_trades),
+            "closed_demo_trades": len(closed),
+            "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
+            "net_pnl": round(sum(pnl_values), 2) if pnl_values else 0.0,
+            "empty_state": len(symbol_trades) == 0,
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }

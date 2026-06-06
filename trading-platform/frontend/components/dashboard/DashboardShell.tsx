@@ -174,6 +174,7 @@ export function DashboardShell({
   executiveDashboardSection,
   analyticsSection,
   accountAnalyticsSection,
+  platformFoundationSection,
   strategyIntelligenceSection,
   tradeJournalSection,
   reportsSection,
@@ -181,6 +182,7 @@ export function DashboardShell({
   executiveDashboardSection?: React.ReactNode;
   analyticsSection?: React.ReactNode;
   accountAnalyticsSection?: React.ReactNode;
+  platformFoundationSection?: React.ReactNode;
   strategyIntelligenceSection?: React.ReactNode;
   tradeJournalSection?: React.ReactNode;
   reportsSection?: React.ReactNode;
@@ -302,6 +304,7 @@ export function DashboardShell({
         </section>
 
         {executiveDashboardSection}
+        {platformFoundationSection}
         {analyticsSection}
         {strategyIntelligenceSection}
         {accountAnalyticsSection}

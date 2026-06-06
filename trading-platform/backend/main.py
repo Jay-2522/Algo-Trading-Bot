@@ -28,6 +28,7 @@ from backend.api.institutional_routes import router as institutional_router
 from backend.api.market_data_routes import router as market_data_router
 from backend.api.monitoring_routes import router as monitoring_router
 from backend.api.mt5_routes import router as mt5_router
+from backend.api.mt5_demo_routes import router as mt5_demo_router
 from backend.api.multi_account_execution_routes import router as multi_account_execution_router
 from backend.api.news_routes import router as news_router
 from backend.api.nifty50_routes import router as nifty50_router
@@ -120,6 +121,7 @@ app.include_router(risk_router)
 app.include_router(execution_router)
 app.include_router(execution_queue_router)
 app.include_router(mt5_router)
+app.include_router(mt5_demo_router)
 app.include_router(multi_account_execution_router)
 app.include_router(trade_copier_router)
 app.include_router(monitoring_router)

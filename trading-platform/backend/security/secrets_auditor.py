@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -67,17 +68,22 @@ class SecretsAuditor:
 
     def _scan_for_real_secrets(self) -> list[str]:
         locations: list[str] = []
-        for path in self.project_root.rglob("*"):
-            if not path.is_file() or self._excluded(path):
-                continue
-            if path.name not in self.SCANNED_NAMES:
-                continue
-            if path.name in {".env", ".env.local", ".env.production"}:
-                continue
-            for key, value in self._env_pairs(path).items():
-                if not self._looks_sensitive(key, value):
+        for root, dirs, files in os.walk(self.project_root):
+            dirs[:] = [directory for directory in dirs if directory not in self.EXCLUDED_DIRS]
+            for filename in files:
+                path = Path(root) / filename
+                if path.name not in self.SCANNED_NAMES:
                     continue
-                locations.append(f"{path.relative_to(self.project_root).as_posix()}:{key}=********")
+                if path.name in {".env", ".env.local", ".env.production"}:
+                    continue
+                try:
+                    pairs = self._env_pairs(path)
+                except OSError:
+                    continue
+                for key, value in pairs.items():
+                    if not self._looks_sensitive(key, value):
+                        continue
+                    locations.append(f"{path.relative_to(self.project_root).as_posix()}:{key}=********")
         return locations
 
     def _env_pairs(self, path: Path) -> dict[str, str]:

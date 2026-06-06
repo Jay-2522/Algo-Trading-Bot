@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body
 
 from backend.mt5_demo.demo_execution_simulator_service import DemoExecutionSimulatorService
 from backend.mt5_demo.demo_execution_readiness_service import DemoExecutionReadinessService
+from backend.mt5_demo.demo_final_approval_service import DemoFinalApprovalService
 from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
 from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
 from backend.mt5_demo.demo_order_preflight_service import DemoOrderPreflightService
@@ -61,6 +62,19 @@ demo_execution_readiness_service = DemoExecutionReadinessService(
     simulator_service=demo_execution_simulator_service,
 )
 demo_trade_test_plan_service = DemoTradeTestPlanService()
+demo_final_approval_service = DemoFinalApprovalService(
+    mt5_demo_service=service,
+    market_data_service=market_data_service,
+    strategy_feed_adapter=strategy_feed_adapter,
+    risk_qualification_service=risk_qualification_service,
+    execution_gate_service=execution_gate_service,
+    authorization_service=demo_order_authorization_service,
+    dry_run_service=demo_order_dry_run_service,
+    preflight_service=demo_order_preflight_service,
+    simulator_service=demo_execution_simulator_service,
+    readiness_service=demo_execution_readiness_service,
+    test_plan_service=demo_trade_test_plan_service,
+)
 
 
 @router.get("/status")
@@ -359,6 +373,31 @@ async def get_latest_demo_trade_test_plan() -> dict:
 @router.get("/test-plan/history")
 async def get_demo_trade_test_plan_history(limit: int = 100) -> list[dict]:
     return demo_trade_test_plan_service.get_test_plan_history(limit)
+
+
+@router.get("/final-demo-approval/status")
+async def get_final_demo_approval_status() -> dict:
+    return demo_final_approval_service.get_status()
+
+
+@router.post("/final-demo-approval/run-review")
+async def run_final_demo_approval_review() -> dict:
+    return demo_final_approval_service.run_final_approval_review()
+
+
+@router.get("/final-demo-approval/latest")
+async def get_latest_final_demo_approval() -> dict:
+    return demo_final_approval_service.get_latest_approval()
+
+
+@router.get("/final-demo-approval/history")
+async def get_final_demo_approval_history(limit: int = 100) -> list[dict]:
+    return demo_final_approval_service.get_approval_history(limit)
+
+
+@router.post("/final-demo-approval/revoke")
+async def revoke_final_demo_approval() -> dict:
+    return demo_final_approval_service.revoke_final_approval()
 
 
 @router.post("/order-send")

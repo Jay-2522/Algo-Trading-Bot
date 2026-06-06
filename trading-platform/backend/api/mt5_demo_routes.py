@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Body
 
 from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
+from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
 from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
@@ -26,6 +27,10 @@ execution_gate_service = MT5ExecutionGateValidationService(
     risk_qualification_service=risk_qualification_service,
     market_snapshot_service=market_snapshot_service,
     backfill_service=historical_backfill_service,
+)
+demo_order_dry_run_service = DemoOrderDryRunService(
+    authorization_service=demo_order_authorization_service,
+    execution_gate_service=execution_gate_service,
 )
 
 
@@ -225,6 +230,26 @@ async def revoke_demo_order_authorization() -> dict:
 @router.get("/demo-authorization/checklist")
 async def get_demo_order_authorization_checklist() -> dict:
     return demo_order_authorization_service.get_checklist()
+
+
+@router.get("/demo-order-dry-run/status")
+async def get_demo_order_dry_run_status() -> dict:
+    return demo_order_dry_run_service.get_status()
+
+
+@router.post("/demo-order-dry-run/create")
+async def create_demo_order_dry_run(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return demo_order_dry_run_service.create_dry_run(payload)
+
+
+@router.get("/demo-order-dry-run/latest")
+async def get_latest_demo_order_dry_run() -> dict:
+    return demo_order_dry_run_service.get_latest()
+
+
+@router.get("/demo-order-dry-run/history")
+async def get_demo_order_dry_run_history(limit: int = 100) -> list[dict]:
+    return demo_order_dry_run_service.list_history(limit)
 
 
 @router.post("/order-send")

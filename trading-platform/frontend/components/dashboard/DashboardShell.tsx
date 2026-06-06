@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AutoRefreshControl } from "./AutoRefreshControl";
 import { StatusBadge } from "./StatusBadge";
-import type { DashboardStatus, PortfolioAccountSummaryData, PortfolioExposureSummaryData, PortfolioOverviewData } from "@/lib/dashboard-api";
+import type { DashboardStatus, Mt5MarketOverviewData, Mt5SymbolOverviewData, PortfolioAccountSummaryData, PortfolioExposureSummaryData, PortfolioOverviewData } from "@/lib/dashboard-api";
 import { formatRelativeTime, readNumber, readText } from "@/lib/dashboard-formatters";
 
 type TraderBundle = {
@@ -17,6 +17,7 @@ type TraderBundle = {
   recentTrades: Array<Record<string, unknown>>;
   tradePerformance: Record<string, unknown> | null;
   tradeRiskAnalytics: Record<string, unknown> | null;
+  mt5MarketOverview: Mt5MarketOverviewData | null;
   signals: Array<Record<string, unknown>>;
 };
 
@@ -31,6 +32,7 @@ const emptyTraderBundle: TraderBundle = {
   recentTrades: [],
   tradePerformance: null,
   tradeRiskAnalytics: null,
+  mt5MarketOverview: null,
   signals: [],
 };
 
@@ -69,6 +71,7 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       recentTrades: fetchJson<Array<Record<string, unknown>>>("/trade-journal/recent?limit=8"),
       tradePerformance: fetchJson<Record<string, unknown>>("/trade-journal/overall-performance"),
       tradeRiskAnalytics: fetchJson<Record<string, unknown>>("/trade-journal/risk-analytics"),
+      mt5MarketOverview: fetchJson<Mt5MarketOverviewData>("/mt5-demo/overview"),
       signals: fetchJson<Array<Record<string, unknown>>>("/webhooks/events?limit=4"),
     };
 
@@ -134,6 +137,24 @@ function todayPnl(trades: Array<Record<string, unknown>>, fallback: number): num
   return trades.length ? total : fallback;
 }
 
+function marketValue(value: number | null | undefined, digits = 5): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "Unavailable";
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+function freshnessTone(value: string | undefined): "good" | "info" | "warning" | "danger" | "muted" {
+  if (value === "READY") return "good";
+  if (value === "STALE") return "warning";
+  if (value === "OFFLINE") return "danger";
+  return "muted";
+}
+
+function symbolOverview(overview: Mt5MarketOverviewData | null, symbol: string): Mt5SymbolOverviewData | null {
+  return overview?.symbols?.[symbol] ?? null;
+}
+
 function isLegacyFakeTrade(trade: Record<string, unknown>): boolean {
   const strategyName = readText(trade, ["strategy_name"], "").toUpperCase();
   const notes = readText(trade, ["notes"], "").toUpperCase();
@@ -181,6 +202,30 @@ export function DashboardShell({
   const connectionStatus = bundle.status?.dashboard_ready ? "Connected" : loading ? "Connecting" : "Review";
   const botStatus = bundle.status?.system_status ?? "Checking";
   const risk = bundle.tradeRiskAnalytics;
+  const eurusdMarket = symbolOverview(bundle.mt5MarketOverview, "EURUSD");
+  const xauusdMarket = symbolOverview(bundle.mt5MarketOverview, "XAUUSD");
+  const marketCards = [
+    {
+      label: "EURUSD Demo Bid",
+      value: marketValue(eurusdMarket?.bid),
+      detail: `Spread ${marketValue(eurusdMarket?.spread)} / freshness ${eurusdMarket?.freshness ?? "OFFLINE"}`,
+      tone: freshnessTone(eurusdMarket?.freshness),
+    },
+    {
+      label: "XAUUSD Demo Bid",
+      value: marketValue(xauusdMarket?.bid, 2),
+      detail: xauusdMarket?.bid
+        ? `Spread ${marketValue(xauusdMarket.spread, 2)} / freshness ${xauusdMarket.freshness}`
+        : `Availability ${xauusdMarket?.availability_status ?? "UNAVAILABLE"} / ${xauusdMarket?.tick_status ?? "NO_TICK"}`,
+      tone: freshnessTone(xauusdMarket?.freshness),
+    },
+    {
+      label: "Market Freshness",
+      value: bundle.mt5MarketOverview?.status ?? "OFFLINE",
+      detail: `MT5 demo source / last update ${formatRelativeTime(bundle.mt5MarketOverview?.last_update ?? "")}`,
+      tone: freshnessTone(bundle.mt5MarketOverview?.status),
+    },
+  ];
 
   const topCards = useMemo(
     () => [
@@ -227,6 +272,19 @@ export function DashboardShell({
               <p className="text-xs uppercase tracking-[0.22em] text-emerald-100/70">{label}</p>
               <strong className="mt-2 block text-lg text-emerald-100">{value}</strong>
             </div>
+          ))}
+        </section>
+
+        <section className="grid gap-3 md:grid-cols-3">
+          {marketCards.map((card) => (
+            <article className="min-h-28 rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.06] p-4 shadow-2xl shadow-black/20 backdrop-blur-xl" key={card.label}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="break-words text-[0.68rem] uppercase tracking-[0.18em] text-cyan-100/70">{card.label}</p>
+                <StatusBadge label={card.tone === "good" ? "Fresh" : card.tone === "warning" ? "Stale" : card.tone === "danger" ? "Offline" : "Review"} tone={card.tone} />
+              </div>
+              <strong className="mt-3 block break-words text-2xl font-black leading-tight text-white">{card.value}</strong>
+              <p className="mt-2 break-words text-xs leading-5 text-cyan-50/70">{card.detail}</p>
+            </article>
           ))}
         </section>
 

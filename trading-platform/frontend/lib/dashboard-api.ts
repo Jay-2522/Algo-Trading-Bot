@@ -201,6 +201,38 @@ export type ExecutionDashboardStatusData = {
   timestamp?: string;
 };
 
+export type Mt5SymbolOverviewData = {
+  symbol: string;
+  bid: number | null;
+  ask: number | null;
+  spread: number | null;
+  tick_status: string;
+  tick_message?: string | null;
+  tick_timestamp?: string | null;
+  latest_candle_timestamps: Record<string, string | null>;
+  freshest_timestamp?: string | null;
+  freshness: "READY" | "STALE" | "OFFLINE" | string;
+  availability_status: string;
+  source: string;
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+  broker_execution_enabled: boolean;
+  execution_allowed: boolean;
+};
+
+export type Mt5MarketOverviewData = {
+  symbols: Record<string, Mt5SymbolOverviewData>;
+  eurusd?: Mt5SymbolOverviewData;
+  xauusd?: Mt5SymbolOverviewData;
+  last_update: string;
+  status: string;
+  source: string;
+  simulation_only: boolean;
+  live_execution_enabled: boolean;
+  broker_execution_enabled: boolean;
+  execution_allowed: boolean;
+};
+
 export type DashboardBundle = {
   status: DashboardStatus | null;
   overview: DashboardOverview | null;
@@ -246,6 +278,7 @@ export type DashboardBundle = {
   executionDashboardOverview: ExecutionDashboardOverviewData | null;
   executionDashboardCards: ExecutionDashboardCardData[];
   executionDashboardSummary: ExecutionDashboardSummaryData | null;
+  mt5MarketOverview: Mt5MarketOverviewData | null;
   openPositions: Array<Record<string, unknown>>;
   recentTrades: Array<Record<string, unknown>>;
   tradePerformance: Record<string, unknown> | null;
@@ -298,6 +331,7 @@ const endpoints = {
   executionDashboardOverview: "/execution-dashboard/overview",
   executionDashboardCards: "/execution-dashboard/cards",
   executionDashboardSummary: "/execution-dashboard/summary",
+  mt5MarketOverview: "/mt5-demo/overview",
   openPositions: "/mt5/positions",
   recentTrades: "/trade-journal/recent?limit=8",
   tradePerformance: "/trade-journal/overall-performance",
@@ -388,6 +422,7 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     fetchJson<ExecutionDashboardOverviewData>(endpoints.executionDashboardOverview),
     fetchJson<ExecutionDashboardCardData[]>(endpoints.executionDashboardCards),
     fetchJson<ExecutionDashboardSummaryData>(endpoints.executionDashboardSummary),
+    fetchJson<Mt5MarketOverviewData>(endpoints.mt5MarketOverview),
     fetchJson<Array<Record<string, unknown>>>(endpoints.openPositions),
     fetchJson<Array<Record<string, unknown>>>(endpoints.recentTrades),
     fetchJson<Record<string, unknown>>(endpoints.tradePerformance),
@@ -439,6 +474,7 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     executionDashboardOverview,
     executionDashboardCards,
     executionDashboardSummary,
+    mt5MarketOverview,
     openPositions,
     recentTrades,
     tradePerformance,
@@ -493,6 +529,7 @@ export async function fetchDashboardBundle(): Promise<DashboardBundle> {
     executionDashboardOverview: executionDashboardOverview.status === "fulfilled" ? executionDashboardOverview.value : null,
     executionDashboardCards: executionDashboardCards.status === "fulfilled" ? executionDashboardCards.value : [],
     executionDashboardSummary: executionDashboardSummary.status === "fulfilled" ? executionDashboardSummary.value : null,
+    mt5MarketOverview: mt5MarketOverview.status === "fulfilled" ? mt5MarketOverview.value : null,
     openPositions: openPositions.status === "fulfilled" ? openPositions.value : [],
     recentTrades: recentTrades.status === "fulfilled" ? recentTrades.value : [],
     tradePerformance: tradePerformance.status === "fulfilled" ? tradePerformance.value : null,

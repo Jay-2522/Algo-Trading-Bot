@@ -57,6 +57,7 @@ REQUIRED_GET_ROUTES = {
     "/mt5-demo/symbols",
     "/mt5-demo/health",
     "/mt5-demo/market-watch",
+    "/mt5-demo/overview",
     "/mt5-demo/market-data/status",
     "/mt5-demo/market-data/tick/{symbol}",
     "/mt5-demo/market-data/candles/{symbol}/{timeframe}",

@@ -49,6 +49,7 @@ const emptyBundle: DashboardBundle = {
   executionDashboardOverview: null,
   executionDashboardCards: [],
   executionDashboardSummary: null,
+  mt5MarketOverview: null,
   openPositions: [],
   recentTrades: [],
   tradePerformance: null,

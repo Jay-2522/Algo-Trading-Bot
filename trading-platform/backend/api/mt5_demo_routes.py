@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
 
@@ -7,6 +8,7 @@ from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
 service = MT5DemoService()
 market_data_service = MT5MarketDataService()
+market_snapshot_service = MarketSnapshotService(market_data_service=market_data_service)
 
 
 @router.get("/status")
@@ -32,6 +34,11 @@ async def get_mt5_demo_health() -> dict:
 @router.get("/market-watch")
 async def get_mt5_demo_market_watch() -> dict:
     return service.get_market_watch()
+
+
+@router.get("/overview")
+async def get_mt5_demo_overview() -> dict:
+    return market_snapshot_service.get_overview()
 
 
 @router.get("/market-data/status")

@@ -51,7 +51,7 @@ class DemoExecutionReadinessService:
     def run_readiness_audit(self) -> dict[str, Any]:
         mt5_status = self.mt5_demo_service.get_status()
         market_status = self.market_data_service.get_market_data_status()
-        historical_status = self.historical_backfill_service.get_status()
+        historical_status = self._historical_readiness_status()
         strategy_feed = self.strategy_feed_adapter.build_strategy_feed("EURUSD")
         strategy_consumption = self.strategy_consumption_service.get_status()
         risk_status = self.risk_qualification_service.get_status()
@@ -64,7 +64,7 @@ class DemoExecutionReadinessService:
         component_scores = {
             "mt5_connection": self._score(mt5_status.get("status") == "CONNECTED"),
             "market_data": self._score(market_status.get("status") == "READY"),
-            "historical_data": self._score(historical_status.get("status") in {"READY", "OK", "HISTORY_READY"}),
+            "historical_data": self._score(historical_status.get("status") == "READY"),
             "strategy_feed": self._score(strategy_feed.get("feed_ready") is True or strategy_feed.get("status") in {"READY", "OK"}),
             "strategy_consumption": self._score(strategy_consumption.get("status") == "STRATEGY_CONSUMPTION_READY"),
             "risk_qualification": self._score(risk_status.get("status") == "RISK_QUALIFICATION_READY"),
@@ -158,7 +158,7 @@ class DemoExecutionReadinessService:
             blockers.append("DEMO_ACCOUNT_OFFLINE")
         if market_status.get("status") != "READY":
             blockers.append("MARKET_DATA_STALE")
-        if historical_status.get("status") not in {"READY", "OK", "HISTORY_READY"}:
+        if historical_status.get("status") != "READY":
             blockers.append("HISTORICAL_DATA_UNAVAILABLE")
         if not (strategy_feed.get("feed_ready") is True or strategy_feed.get("status") in {"READY", "OK"}):
             blockers.append("STRATEGY_FEED_UNAVAILABLE")
@@ -174,3 +174,23 @@ class DemoExecutionReadinessService:
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _historical_readiness_status(self) -> dict[str, Any]:
+        eurusd = self.historical_backfill_service.summarize_backfill("EURUSD", "H1")
+        xauusd = self.historical_backfill_service.summarize_backfill("XAUUSD", "H1")
+        summaries = [eurusd, xauusd]
+        ready = all(
+            item.get("status") == "OK"
+            and int(item.get("returned_count") or 0) > 0
+            and (item.get("validation") or {}).get("valid") is True
+            for item in summaries
+        )
+        return {
+            "status": "READY" if ready else "UNAVAILABLE",
+            "summaries": summaries,
+            "simulation_only": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
+            "timestamp": self._timestamp(),
+        }

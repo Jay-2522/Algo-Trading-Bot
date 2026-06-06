@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Body
 
 from backend.mt5_demo.demo_execution_simulator_service import DemoExecutionSimulatorService
+from backend.mt5_demo.demo_execution_readiness_service import DemoExecutionReadinessService
 from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
 from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
 from backend.mt5_demo.demo_order_preflight_service import DemoOrderPreflightService
@@ -43,6 +44,20 @@ demo_order_preflight_service = DemoOrderPreflightService(
 )
 demo_execution_simulator_service = DemoExecutionSimulatorService(
     preflight_service=demo_order_preflight_service,
+)
+demo_execution_readiness_service = DemoExecutionReadinessService(
+    mt5_demo_service=service,
+    market_data_service=market_data_service,
+    market_snapshot_service=market_snapshot_service,
+    historical_backfill_service=historical_backfill_service,
+    strategy_feed_adapter=strategy_feed_adapter,
+    strategy_consumption_service=strategy_consumption_service,
+    risk_qualification_service=risk_qualification_service,
+    execution_gate_service=execution_gate_service,
+    authorization_service=demo_order_authorization_service,
+    dry_run_service=demo_order_dry_run_service,
+    preflight_service=demo_order_preflight_service,
+    simulator_service=demo_execution_simulator_service,
 )
 
 
@@ -302,6 +317,26 @@ async def get_latest_demo_execution_simulation() -> dict:
 @router.get("/execution-simulator/history")
 async def get_demo_execution_simulation_history(limit: int = 100) -> list[dict]:
     return demo_execution_simulator_service.list_history(limit)
+
+
+@router.get("/readiness/status")
+async def get_demo_execution_readiness_status() -> dict:
+    return demo_execution_readiness_service.get_status()
+
+
+@router.post("/readiness/run-audit")
+async def run_demo_execution_readiness_audit() -> dict:
+    return demo_execution_readiness_service.run_readiness_audit()
+
+
+@router.get("/readiness/latest")
+async def get_latest_demo_execution_readiness_audit() -> dict:
+    return demo_execution_readiness_service.get_latest_audit()
+
+
+@router.get("/readiness/history")
+async def get_demo_execution_readiness_history(limit: int = 100) -> list[dict]:
+    return demo_execution_readiness_service.get_audit_history(limit)
 
 
 @router.post("/order-send")

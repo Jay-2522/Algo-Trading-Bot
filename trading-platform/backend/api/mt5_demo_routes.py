@@ -2,13 +2,17 @@ from fastapi import APIRouter
 
 from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
+from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
+from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
 
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
 service = MT5DemoService()
 market_data_service = MT5MarketDataService()
 market_snapshot_service = MarketSnapshotService(market_data_service=market_data_service)
+historical_backfill_service = MT5HistoricalBackfillService(market_data_service=market_data_service)
+strategy_feed_adapter = MT5StrategyFeedAdapter(backfill_service=historical_backfill_service)
 
 
 @router.get("/status")
@@ -59,6 +63,54 @@ async def get_mt5_demo_symbol_candles(symbol: str, timeframe: str, count: int = 
 @router.get("/market-data/spread/{symbol}")
 async def get_mt5_demo_symbol_spread(symbol: str) -> dict:
     return market_data_service.get_symbol_spread(symbol)
+
+
+@router.get("/history/status")
+async def get_mt5_demo_history_status() -> dict:
+    return historical_backfill_service.get_status()
+
+
+@router.get("/history/{symbol}/{timeframe}")
+async def get_mt5_demo_history(symbol: str, timeframe: str, count: int = 500) -> dict:
+    return historical_backfill_service.fetch_history(symbol, timeframe, count)
+
+
+@router.get("/history/{symbol}/{timeframe}/summary")
+async def get_mt5_demo_history_summary(symbol: str, timeframe: str) -> dict:
+    return historical_backfill_service.summarize_backfill(symbol, timeframe)
+
+
+@router.get("/history/{symbol}/{timeframe}/validate")
+async def validate_mt5_demo_history(symbol: str, timeframe: str, count: int = 500) -> dict:
+    history = historical_backfill_service.fetch_history(symbol, timeframe, count)
+    return {
+        "symbol": history.get("symbol"),
+        "timeframe": history.get("timeframe"),
+        "requested_count": history.get("requested_count"),
+        "returned_count": history.get("returned_count"),
+        "validation": history.get("validation"),
+        "status": history.get("status"),
+        "source": "MT5_DEMO",
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+        "execution_allowed": False,
+    }
+
+
+@router.get("/strategy-feed/{symbol}")
+async def get_mt5_demo_strategy_feed(symbol: str) -> dict:
+    return strategy_feed_adapter.build_strategy_feed(symbol)
+
+
+@router.get("/strategy-feed/{symbol}/htf")
+async def get_mt5_demo_strategy_feed_htf(symbol: str) -> dict:
+    return strategy_feed_adapter.get_htf_context(symbol)
+
+
+@router.get("/strategy-feed/{symbol}/ltf")
+async def get_mt5_demo_strategy_feed_ltf(symbol: str) -> dict:
+    return strategy_feed_adapter.get_ltf_context(symbol)
 
 
 @router.post("/order-send")

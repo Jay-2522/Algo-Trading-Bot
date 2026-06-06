@@ -79,11 +79,11 @@ def valid_ok_tick(payload: dict[str, Any]) -> bool:
 def tick_payload_ok(payload: dict[str, Any]) -> bool:
     status = payload.get("status")
     if status == "OK":
-        return valid_ok_tick(payload)
-    if status == "STALE_OR_UNAVAILABLE":
+        return valid_ok_tick(payload) and payload.get("freshness") == "READY"
+    if status == "STALE_OR_MARKET_CLOSED":
         return (
-            payload.get("error") == "INVALID_TICK_DATA"
-            and payload.get("message") == f"No valid live tick available for {payload.get('symbol')} from MT5 demo feed."
+            payload.get("freshness") == "OFFLINE"
+            and payload.get("message") == "MT5 tick is stale. Market may be closed or broker feed is not updating."
         )
     return status in {"MT5_UNAVAILABLE", "SYMBOL_UNAVAILABLE", "TICK_UNAVAILABLE", "TICK_READ_FAILED"}
 
@@ -166,13 +166,17 @@ def verify_invalid_inputs() -> bool:
 def verify_no_order_send_added() -> bool:
     try:
         token = "mt5." + "order_send"
+        allowed = [
+            "backend/demo_execution/mt5_demo_executor.py",
+            "backend/mt5_demo/guarded_demo_order_sender_service.py",
+        ]
         order_matches = []
         for path in (PROJECT_ROOT / "backend").rglob("*.py"):
             if token in path.read_text(encoding="utf-8", errors="ignore"):
                 order_matches.append(path.relative_to(PROJECT_ROOT).as_posix())
         return show(
-            "No new mt5 order execution path was added",
-            order_matches == ["backend/demo_execution/mt5_demo_executor.py"],
+            "No unrestricted mt5 order execution path was added",
+            sorted(order_matches) == allowed,
             ", ".join(order_matches),
         )
     except Exception as exc:

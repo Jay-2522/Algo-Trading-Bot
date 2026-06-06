@@ -56,16 +56,18 @@ class MT5MarketDataService:
             bid = float(getattr(tick, "bid", 0.0) or 0.0)
             ask = float(getattr(tick, "ask", 0.0) or 0.0)
             raw_timestamp = int(getattr(tick, "time", 0) or 0)
-            if bid <= 0 or ask <= 0 or raw_timestamp <= 0:
-                return self._stale_tick_payload(normalized, bid, ask, raw_timestamp)
             spread = round(ask - bid, 6)
             timestamp = self._epoch_to_iso(raw_timestamp)
+            freshness = self._tick_freshness(timestamp if raw_timestamp > 0 else None)
+            if bid <= 0 or ask <= 0 or spread <= 0 or raw_timestamp <= 0 or freshness != "READY":
+                return self._stale_tick_payload(normalized, bid, ask, raw_timestamp, freshness)
             return {
                 "symbol": normalized,
                 "bid": bid,
                 "ask": ask,
                 "spread": spread,
                 "timestamp": timestamp,
+                "freshness": freshness,
                 "source": "MT5_DEMO",
                 "status": "OK",
                 "simulation_only": True,
@@ -134,6 +136,7 @@ class MT5MarketDataService:
             "ask": tick.get("ask"),
             "spread": tick.get("spread"),
             "timestamp": tick.get("timestamp", self._timestamp()),
+            "freshness": tick.get("freshness", "OFFLINE"),
             "source": "MT5_DEMO",
             "status": tick.get("status", "UNAVAILABLE"),
             "error": tick.get("error"),
@@ -228,6 +231,7 @@ class MT5MarketDataService:
             "ask": None,
             "spread": None,
             "timestamp": self._timestamp(),
+            "freshness": "OFFLINE",
             "source": "MT5_DEMO",
             "status": status,
             "error": True,
@@ -238,17 +242,18 @@ class MT5MarketDataService:
             "execution_allowed": False,
         }
 
-    def _stale_tick_payload(self, symbol: str, bid: float, ask: float, raw_timestamp: int) -> dict[str, Any]:
+    def _stale_tick_payload(self, symbol: str, bid: float, ask: float, raw_timestamp: int, freshness: str | None = None) -> dict[str, Any]:
         return {
             "symbol": symbol,
             "bid": bid,
             "ask": ask,
             "spread": round(ask - bid, 6) if bid > 0 and ask > 0 else None,
             "timestamp": self._epoch_to_iso(raw_timestamp) if raw_timestamp > 0 else None,
+            "freshness": "OFFLINE",
             "source": "MT5_DEMO",
-            "status": "STALE_OR_UNAVAILABLE",
-            "error": "INVALID_TICK_DATA",
-            "message": f"No valid live tick available for {symbol} from MT5 demo feed.",
+            "status": "STALE_OR_MARKET_CLOSED",
+            "error": "STALE_TICK",
+            "message": "MT5 tick is stale. Market may be closed or broker feed is not updating.",
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -293,3 +298,17 @@ class MT5MarketDataService:
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _tick_freshness(self, timestamp: str | None) -> str:
+        if not timestamp:
+            return "OFFLINE"
+        try:
+            parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).astimezone(timezone.utc)
+        except ValueError:
+            return "OFFLINE"
+        age_seconds = (datetime.now(timezone.utc) - parsed).total_seconds()
+        if age_seconds <= 5 * 60:
+            return "READY"
+        if age_seconds <= 30 * 60:
+            return "STALE"
+        return "OFFLINE"

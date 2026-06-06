@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body
 
+from backend.mt5_demo.demo_execution_simulator_service import DemoExecutionSimulatorService
 from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
 from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
 from backend.mt5_demo.demo_order_preflight_service import DemoOrderPreflightService
@@ -39,6 +40,9 @@ demo_order_preflight_service = DemoOrderPreflightService(
     risk_qualification_service=risk_qualification_service,
     execution_gate_service=execution_gate_service,
     market_data_service=market_data_service,
+)
+demo_execution_simulator_service = DemoExecutionSimulatorService(
+    preflight_service=demo_order_preflight_service,
 )
 
 
@@ -278,6 +282,26 @@ async def get_latest_demo_order_preflight() -> dict:
 @router.get("/preflight/history")
 async def get_demo_order_preflight_history(limit: int = 100) -> list[dict]:
     return demo_order_preflight_service.list_history(limit)
+
+
+@router.get("/execution-simulator/status")
+async def get_demo_execution_simulator_status() -> dict:
+    return demo_execution_simulator_service.get_status()
+
+
+@router.post("/execution-simulator/run")
+async def run_demo_execution_simulation(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return demo_execution_simulator_service.simulate_execution(payload)
+
+
+@router.get("/execution-simulator/latest")
+async def get_latest_demo_execution_simulation() -> dict:
+    return demo_execution_simulator_service.get_latest()
+
+
+@router.get("/execution-simulator/history")
+async def get_demo_execution_simulation_history(limit: int = 100) -> list[dict]:
+    return demo_execution_simulator_service.list_history(limit)
 
 
 @router.post("/order-send")

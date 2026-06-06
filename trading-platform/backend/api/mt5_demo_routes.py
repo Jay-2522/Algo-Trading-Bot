@@ -1,10 +1,12 @@
 from fastapi import APIRouter
 
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
+from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
 
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
 service = MT5DemoService()
+market_data_service = MT5MarketDataService()
 
 
 @router.get("/status")
@@ -30,6 +32,26 @@ async def get_mt5_demo_health() -> dict:
 @router.get("/market-watch")
 async def get_mt5_demo_market_watch() -> dict:
     return service.get_market_watch()
+
+
+@router.get("/market-data/status")
+async def get_mt5_demo_market_data_status() -> dict:
+    return market_data_service.get_market_data_status()
+
+
+@router.get("/market-data/tick/{symbol}")
+async def get_mt5_demo_symbol_tick(symbol: str) -> dict:
+    return market_data_service.get_symbol_tick(symbol)
+
+
+@router.get("/market-data/candles/{symbol}/{timeframe}")
+async def get_mt5_demo_symbol_candles(symbol: str, timeframe: str, count: int = 50) -> dict:
+    return market_data_service.get_symbol_candles(symbol, timeframe, count)
+
+
+@router.get("/market-data/spread/{symbol}")
+async def get_mt5_demo_symbol_spread(symbol: str) -> dict:
+    return market_data_service.get_symbol_spread(symbol)
 
 
 @router.post("/order-send")

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Query
 from backend.demo_validation.e2e_demo_validation_service import E2EDemoValidationService
 from backend.demo_validation.eurusd_demo_validation_service import EURUSDDemoValidationService
 from backend.demo_validation.nifty50_demo_validation_service import NIFTY50DemoValidationService
+from backend.demo_validation.soak_test_readiness_service import SoakTestReadinessService
 from backend.demo_validation.xauusd_demo_validation_service import XAUUSDDemoValidationService
 
 
@@ -41,6 +42,42 @@ async def get_e2e_demo_validation_history(limit: int = Query(default=50, ge=1, l
     service = E2EDemoValidationService()
     try:
         return service.history(limit)
+    finally:
+        service.close()
+
+
+@router.get("/soak/status")
+async def get_soak_test_status() -> dict:
+    service = SoakTestReadinessService()
+    try:
+        return service.get_status()
+    finally:
+        service.close()
+
+
+@router.get("/soak/readiness")
+async def get_soak_test_readiness() -> dict:
+    service = SoakTestReadinessService()
+    try:
+        return service.get_readiness()
+    finally:
+        service.close()
+
+
+@router.get("/soak/checklist")
+async def get_soak_test_checklist() -> dict:
+    service = SoakTestReadinessService()
+    try:
+        return service.get_checklist()
+    finally:
+        service.close()
+
+
+@router.post("/soak/preflight")
+async def run_soak_test_preflight() -> dict:
+    service = SoakTestReadinessService()
+    try:
+        return service.run_preflight()
     finally:
         service.close()
 

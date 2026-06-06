@@ -10,6 +10,7 @@ from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthoriza
 from backend.mt5_demo.demo_order_dry_run_service import DemoOrderDryRunService
 from backend.mt5_demo.demo_order_preflight_service import DemoOrderPreflightService
 from backend.mt5_demo.demo_trade_test_plan_service import DemoTradeTestPlanService
+from backend.mt5_demo.guarded_demo_order_sender_service import GuardedDemoOrderSenderService
 from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
@@ -84,6 +85,15 @@ demo_approval_workflow_service = DemoApprovalWorkflowService(
     readiness_service=demo_execution_readiness_service,
     test_plan_service=demo_trade_test_plan_service,
     final_approval_service=demo_final_approval_service,
+)
+guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
+    mt5_demo_service=service,
+    approval_workflow_service=demo_approval_workflow_service,
+    final_approval_service=demo_final_approval_service,
+    dry_run_service=demo_order_dry_run_service,
+    preflight_service=demo_order_preflight_service,
+    simulator_service=demo_execution_simulator_service,
+    readiness_service=demo_execution_readiness_service,
 )
 
 
@@ -428,6 +438,31 @@ async def get_latest_demo_approval_workflow() -> dict:
 @router.get("/demo-approval-workflow/history")
 async def get_demo_approval_workflow_history(limit: int = 100) -> list[dict]:
     return demo_approval_workflow_service.list_history(limit)
+
+
+@router.get("/guarded-demo-order/status")
+async def get_guarded_demo_order_status() -> dict:
+    return guarded_demo_order_sender_service.get_status()
+
+
+@router.post("/guarded-demo-order/prepare")
+async def prepare_guarded_demo_order(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return guarded_demo_order_sender_service.prepare_order(payload)
+
+
+@router.post("/guarded-demo-order/send")
+async def send_guarded_demo_order(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return guarded_demo_order_sender_service.send_order(payload)
+
+
+@router.get("/guarded-demo-order/latest")
+async def get_latest_guarded_demo_order() -> dict:
+    return guarded_demo_order_sender_service.get_latest()
+
+
+@router.get("/guarded-demo-order/history")
+async def get_guarded_demo_order_history(limit: int = 100) -> list[dict]:
+    return guarded_demo_order_sender_service.list_history(limit)
 
 
 @router.post("/order-send")

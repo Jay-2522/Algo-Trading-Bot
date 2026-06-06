@@ -2,11 +2,20 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+try:
+    import MetaTrader5 as mt5
+except Exception as exc:  # pragma: no cover - depends on local MT5 installation
+    mt5 = None
+    MT5_IMPORT_ERROR = exc
+else:
+    MT5_IMPORT_ERROR = None
+
 
 class GuardedDemoOrderSenderService:
     """Guarded Phase 17 sender boundary. Verification paths never send orders."""
 
     allowed_symbols = {"EURUSD", "XAUUSD"}
+    runtime_symbols = {"EURUSD"}
     allowed_actions = {"BUY", "SELL"}
     max_demo_lot = 0.01
 
@@ -89,16 +98,8 @@ class GuardedDemoOrderSenderService:
             self._history.append(result)
             return result
 
-        # Phase 17 Day 1 does not add a new MT5 submission point. A later manual phase can
-        # connect this guarded boundary to the existing demo executor after operator review.
-        result = self._result(
-            "DEMO_ORDER_REJECTED",
-            payload,
-            ["GUARDED_RUNTIME_SENDER_NOT_ENABLED_IN_PHASE_17_DAY_1"],
-            "Guarded sender prepared, but runtime MT5 submission is not enabled today.",
-            demo_order_attempted=True,
-        )
         self._demo_send_attempted = True
+        result = self._send_to_mt5(payload)
         self._history.append(result)
         return result
 
@@ -119,10 +120,12 @@ class GuardedDemoOrderSenderService:
             blockers.append("ENVIRONMENT_MUST_BE_DEMO")
         if symbol not in self.allowed_symbols:
             blockers.append("INVALID_SYMBOL")
+        elif symbol not in self.runtime_symbols:
+            blockers.append("RUNTIME_SYMBOL_NOT_ENABLED")
         if action not in self.allowed_actions:
             blockers.append("INVALID_ACTION")
-        if lot is None or lot <= 0 or lot > self.max_demo_lot:
-            blockers.append("LOT_EXCEEDS_MAX_DEMO_LOT")
+        if lot != self.max_demo_lot:
+            blockers.append("LOT_MUST_BE_EXACTLY_0_01")
         for key in ["entry_price", "stop_loss", "take_profit"]:
             value = self._float_or_none(payload.get(key))
             if value is None or value <= 0:
@@ -158,6 +161,127 @@ class GuardedDemoOrderSenderService:
         if readiness.get("overall_status") != "READY":
             blockers.append("READINESS_NOT_READY")
         return blockers
+
+    def _send_to_mt5(self, payload: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(payload["symbol"]).strip().upper()
+        action = str(payload["action"]).strip().upper()
+        lot = float(payload["lot"])
+        stop_loss = float(payload["stop_loss"])
+        take_profit = float(payload["take_profit"])
+
+        initialized = False
+        try:
+            if mt5 is None:
+                return self._sent_result(
+                    "DEMO_ORDER_REJECTED",
+                    payload,
+                    False,
+                    None,
+                    None,
+                    f"MetaTrader5 package unavailable: {MT5_IMPORT_ERROR}",
+                )
+            initialized = bool(mt5.initialize())
+            if not initialized:
+                return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"MT5 initialize failed: {mt5.last_error()}")
+
+            account = mt5.account_info()
+            demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", None)
+            account_trade_mode = getattr(account, "trade_mode", None) if account else None
+            server = str(getattr(account, "server", "") if account else "")
+            is_demo = account is not None and ("demo" in server.lower() or (demo_mode is not None and account_trade_mode == demo_mode))
+            if not is_demo:
+                return self._sent_result(
+                    "DEMO_ORDER_REJECTED",
+                    payload,
+                    False,
+                    None,
+                    None,
+                    "MT5 account is not confirmed as DEMO.",
+                    account=account,
+                )
+
+            tick = mt5.symbol_info_tick(symbol)
+            if tick is None:
+                return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"No MT5 tick available for {symbol}.", account=account)
+            price = float(getattr(tick, "ask", 0.0) if action == "BUY" else getattr(tick, "bid", 0.0))
+            if price <= 0:
+                return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"No valid {action} price available.", account=account)
+
+            order_request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": symbol,
+                "volume": lot,
+                "type": mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL,
+                "price": price,
+                "sl": stop_loss,
+                "tp": take_profit,
+                "deviation": 20,
+                "magic": 17001,
+                "comment": "PHASE17_SINGLE_DEMO_TEST",
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_IOC,
+            }
+            mt5_result = mt5.order_send(order_request)
+            retcode = getattr(mt5_result, "retcode", None)
+            success_codes = {getattr(mt5, "TRADE_RETCODE_DONE", None), getattr(mt5, "TRADE_RETCODE_PLACED", None)}
+            sent = retcode in {code for code in success_codes if code is not None}
+            return self._sent_result(
+                "DEMO_ORDER_SENT" if sent else "DEMO_ORDER_REJECTED",
+                payload,
+                sent,
+                getattr(mt5_result, "order", None),
+                retcode,
+                str(getattr(mt5_result, "comment", "")),
+                account=account,
+                mt5_result={
+                    "retcode": retcode,
+                    "order": getattr(mt5_result, "order", None),
+                    "deal": getattr(mt5_result, "deal", None),
+                    "comment": str(getattr(mt5_result, "comment", "")),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - depends on terminal state
+            return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"Guarded MT5 send failed safely: {exc}")
+        finally:
+            if initialized:
+                mt5.shutdown()
+
+    def _sent_result(
+        self,
+        status: str,
+        payload: dict[str, Any],
+        mt5_order_sent: bool,
+        ticket: Any,
+        retcode: Any,
+        comment: str,
+        account: Any = None,
+        mt5_result: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "request_id": f"guarded-demo-order-{uuid4()}",
+            "status": status,
+            "mt5_order_sent": mt5_order_sent,
+            "demo_order_attempted": True,
+            "live_order_attempted": False,
+            "ticket": str(ticket) if ticket is not None else "",
+            "retcode": str(retcode) if retcode is not None else "",
+            "comment": comment,
+            "symbol": str(payload.get("symbol") or "").strip().upper(),
+            "action": str(payload.get("action") or "").strip().upper(),
+            "lot": float(payload.get("lot") or 0.0),
+            "sl": self._float_or_none(payload.get("stop_loss")),
+            "tp": self._float_or_none(payload.get("take_profit")),
+            "account_login": str(getattr(account, "login", "")) if account else "",
+            "server": str(getattr(account, "server", "")) if account else "",
+            "environment": "DEMO",
+            "mt5_result": mt5_result or {},
+            "single_trade_limit": 1,
+            "execution_allowed": False,
+            "simulation_only": False,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "timestamp": self._timestamp(),
+        }
 
     def _result(
         self,

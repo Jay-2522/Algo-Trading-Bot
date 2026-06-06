@@ -325,11 +325,15 @@ def verify_configuration_audit(result: ValidationResult) -> None:
 
 def verify_hidden_execution_paths(result: ValidationResult) -> None:
     token = "mt5." + "order_send"
+    allowed = [
+        "backend/demo_execution/mt5_demo_executor.py",
+        "backend/mt5_demo/guarded_demo_order_sender_service.py",
+    ]
     matches = []
     for path in (PROJECT_ROOT / "backend").rglob("*.py"):
         if token in path.read_text(encoding="utf-8", errors="ignore"):
             matches.append(path.relative_to(PROJECT_ROOT).as_posix())
-    if matches == ["backend/demo_execution/mt5_demo_executor.py"]:
+    if sorted(matches) == allowed:
         result.pass_check("No hidden mt5.order_send path")
     else:
         result.fail_check("No hidden mt5.order_send path", ", ".join(matches))

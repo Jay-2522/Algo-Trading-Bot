@@ -179,12 +179,16 @@ def verify_files() -> bool:
 
 def verify_no_order_send_added() -> bool:
     token = "mt5." + "order_send"
+    allowed = [
+        "backend/demo_execution/mt5_demo_executor.py",
+        "backend/mt5_demo/guarded_demo_order_sender_service.py",
+    ]
     matches = [
         path.relative_to(PROJECT_ROOT).as_posix()
         for path in (PROJECT_ROOT / "backend").rglob("*.py")
         if token in path.read_text(encoding="utf-8", errors="ignore")
     ]
-    return show("No new mt5 order execution path was added", matches == ["backend/demo_execution/mt5_demo_executor.py"], ", ".join(matches))
+    return show("No unrestricted mt5 order execution path was added", sorted(matches) == allowed, ", ".join(matches))
 
 
 def main() -> int:

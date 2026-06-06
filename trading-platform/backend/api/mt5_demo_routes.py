@@ -4,7 +4,10 @@ from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
+from backend.mt5_demo.mt5_strategy_consumption_service import MT5StrategyConsumptionService
 from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
+from backend.mt5_demo.mt5_risk_qualification_service import MT5RiskQualificationService
+from backend.mt5_demo.mt5_execution_gate_validation_service import MT5ExecutionGateValidationService
 
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
@@ -13,6 +16,13 @@ market_data_service = MT5MarketDataService()
 market_snapshot_service = MarketSnapshotService(market_data_service=market_data_service)
 historical_backfill_service = MT5HistoricalBackfillService(market_data_service=market_data_service)
 strategy_feed_adapter = MT5StrategyFeedAdapter(backfill_service=historical_backfill_service)
+strategy_consumption_service = MT5StrategyConsumptionService(feed_adapter=strategy_feed_adapter)
+risk_qualification_service = MT5RiskQualificationService(strategy_consumption_service=strategy_consumption_service)
+execution_gate_service = MT5ExecutionGateValidationService(
+    risk_qualification_service=risk_qualification_service,
+    market_snapshot_service=market_snapshot_service,
+    backfill_service=historical_backfill_service,
+)
 
 
 @router.get("/status")
@@ -111,6 +121,86 @@ async def get_mt5_demo_strategy_feed_htf(symbol: str) -> dict:
 @router.get("/strategy-feed/{symbol}/ltf")
 async def get_mt5_demo_strategy_feed_ltf(symbol: str) -> dict:
     return strategy_feed_adapter.get_ltf_context(symbol)
+
+
+@router.get("/strategy-consumption/status")
+async def get_mt5_demo_strategy_consumption_status() -> dict:
+    return strategy_consumption_service.get_status()
+
+
+@router.post("/strategy-consumption/{symbol}/analyze")
+async def analyze_mt5_demo_strategy_consumption(symbol: str) -> dict:
+    return strategy_consumption_service.analyze_symbol_from_mt5_feed(symbol)
+
+
+@router.post("/strategy-consumption/analyze-all")
+async def analyze_all_mt5_demo_strategy_consumption() -> dict:
+    return strategy_consumption_service.analyze_all_symbols_from_mt5_feed()
+
+
+@router.get("/strategy-consumption/{symbol}/latest")
+async def get_latest_mt5_demo_strategy_consumption(symbol: str) -> dict:
+    return strategy_consumption_service.latest(symbol)
+
+
+@router.get("/strategy-consumption/history")
+async def get_mt5_demo_strategy_consumption_history(limit: int = 100) -> list[dict]:
+    return strategy_consumption_service.history(limit)
+
+
+@router.get("/risk-qualification/status")
+async def get_mt5_demo_risk_qualification_status() -> dict:
+    return risk_qualification_service.get_status()
+
+
+@router.post("/risk-qualification/{symbol}/evaluate")
+async def evaluate_mt5_demo_risk_qualification(symbol: str) -> dict:
+    return risk_qualification_service.qualify_symbol_from_mt5_strategy(symbol)
+
+
+@router.post("/risk-qualification/evaluate-all")
+async def evaluate_all_mt5_demo_risk_qualification() -> dict:
+    return risk_qualification_service.qualify_all_symbols_from_mt5_strategy()
+
+
+@router.get("/risk-qualification/{symbol}/latest")
+async def get_latest_mt5_demo_risk_qualification(symbol: str) -> dict:
+    return risk_qualification_service.get_latest_risk_result(symbol)
+
+
+@router.get("/risk-qualification/history")
+async def get_mt5_demo_risk_qualification_history(limit: int = 100) -> list[dict]:
+    return risk_qualification_service.history(limit)
+
+
+@router.get("/execution-gate/status")
+async def get_mt5_demo_execution_gate_status() -> dict:
+    return execution_gate_service.get_status()
+
+
+@router.post("/execution-gate/{symbol}/evaluate")
+async def evaluate_mt5_demo_execution_gate(symbol: str) -> dict:
+    return execution_gate_service.evaluate_symbol(symbol)
+
+
+@router.post("/execution-gate/evaluate-all")
+async def evaluate_all_mt5_demo_execution_gate() -> dict:
+    return execution_gate_service.evaluate_all()
+
+
+@router.get("/execution-gate/{symbol}/latest")
+async def get_latest_mt5_demo_execution_gate(symbol: str) -> dict:
+    return execution_gate_service.latest(symbol)
+
+
+@router.get("/execution-gate/history")
+async def get_mt5_demo_execution_gate_history(limit: int = 100) -> list[dict]:
+    return execution_gate_service.history(limit)
+
+
+@router.get("/pipeline-summary")
+async def get_mt5_demo_pipeline_summary() -> dict:
+    return execution_gate_service.pipeline_summary()
 
 
 @router.post("/order-send")

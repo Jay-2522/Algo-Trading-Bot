@@ -1,5 +1,8 @@
-from fastapi import APIRouter
+from typing import Any
 
+from fastapi import APIRouter, Body
+
+from backend.mt5_demo.demo_order_authorization_service import DemoOrderAuthorizationService
 from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
@@ -12,6 +15,7 @@ from backend.mt5_demo.mt5_execution_gate_validation_service import MT5ExecutionG
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
 service = MT5DemoService()
+demo_order_authorization_service = DemoOrderAuthorizationService()
 market_data_service = MT5MarketDataService()
 market_snapshot_service = MarketSnapshotService(market_data_service=market_data_service)
 historical_backfill_service = MT5HistoricalBackfillService(market_data_service=market_data_service)
@@ -201,6 +205,26 @@ async def get_mt5_demo_execution_gate_history(limit: int = 100) -> list[dict]:
 @router.get("/pipeline-summary")
 async def get_mt5_demo_pipeline_summary() -> dict:
     return execution_gate_service.pipeline_summary()
+
+
+@router.get("/demo-authorization/status")
+async def get_demo_order_authorization_status() -> dict:
+    return demo_order_authorization_service.get_status()
+
+
+@router.post("/demo-authorization/request")
+async def request_demo_order_authorization(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return demo_order_authorization_service.request_demo_authorization(payload)
+
+
+@router.post("/demo-authorization/revoke")
+async def revoke_demo_order_authorization() -> dict:
+    return demo_order_authorization_service.revoke_demo_authorization()
+
+
+@router.get("/demo-authorization/checklist")
+async def get_demo_order_authorization_checklist() -> dict:
+    return demo_order_authorization_service.get_checklist()
 
 
 @router.post("/order-send")

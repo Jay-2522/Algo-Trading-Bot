@@ -142,7 +142,7 @@ class GuardedDemoOrderSenderService:
             blockers.append("LIVE_TRADING_ENABLED")
         if payload.get("broker_execution_enabled") is True:
             blockers.append("PRODUCTION_BROKER_EXECUTION_ENABLED")
-        if self._demo_send_attempted:
+        if self._demo_send_attempted and not self._safe_rejected_send_retry_available():
             blockers.append("SINGLE_DEMO_TRADE_LIMIT_REACHED")
         if account_status.get("status") != "CONNECTED" or account_status.get("environment") != "DEMO":
             blockers.append("MT5_DEMO_ACCOUNT_NOT_VALIDATED")
@@ -207,7 +207,24 @@ class GuardedDemoOrderSenderService:
             if price <= 0:
                 return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"No valid {action} price available.", account=account)
 
-            order_request = {
+            symbol_info = mt5.symbol_info("EURUSD")
+            filling_mode_candidates = self._build_filling_mode_candidates(symbol_info)
+            if not filling_mode_candidates:
+                return self._sent_result(
+                    "DEMO_ORDER_REJECTED",
+                    payload,
+                    False,
+                    0,
+                    None,
+                    "No supported filling mode available for EURUSD.",
+                    account=account,
+                    selected_filling_mode=None,
+                    filling_mode_attempts=[],
+                    final_retcode=None,
+                    final_comment="No supported filling mode available for EURUSD.",
+                )
+
+            base_order_request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": symbol,
                 "volume": lot,
@@ -219,32 +236,90 @@ class GuardedDemoOrderSenderService:
                 "magic": 17001,
                 "comment": "PHASE17_SINGLE_DEMO_TEST",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
             }
-            mt5_result = mt5.order_send(order_request)
-            retcode = getattr(mt5_result, "retcode", None)
+            filling_mode_attempts: list[dict[str, Any]] = []
             success_codes = {getattr(mt5, "TRADE_RETCODE_DONE", None), getattr(mt5, "TRADE_RETCODE_PLACED", None)}
-            sent = retcode in {code for code in success_codes if code is not None}
+            unsupported_filling_retcode = 10030
+            selected_filling_mode = None
+            final_result = None
+            final_retcode = None
+            final_comment = ""
+            sent = False
+
+            for filling_mode in filling_mode_candidates:
+                order_request = dict(base_order_request)
+                order_request["type_filling"] = filling_mode
+                mt5_result = mt5.order_send(order_request)
+                retcode = getattr(mt5_result, "retcode", None)
+                comment = str(getattr(mt5_result, "comment", ""))
+                attempt = {
+                    "mode": filling_mode,
+                    "retcode": retcode,
+                    "comment": comment,
+                    "order": getattr(mt5_result, "order", 0) or 0,
+                    "deal": getattr(mt5_result, "deal", 0) or 0,
+                }
+                filling_mode_attempts.append(attempt)
+                selected_filling_mode = filling_mode
+                final_result = mt5_result
+                final_retcode = retcode
+                final_comment = comment
+                sent = retcode in {code for code in success_codes if code is not None}
+                if sent:
+                    break
+                if retcode != unsupported_filling_retcode or "unsupported filling mode" not in comment.lower():
+                    break
+
+            ticket = getattr(final_result, "order", 0) if final_result is not None else 0
             return self._sent_result(
                 "DEMO_ORDER_SENT" if sent else "DEMO_ORDER_REJECTED",
                 payload,
                 sent,
-                getattr(mt5_result, "order", None),
-                retcode,
-                str(getattr(mt5_result, "comment", "")),
+                ticket or 0,
+                final_retcode,
+                final_comment,
                 account=account,
                 mt5_result={
-                    "retcode": retcode,
-                    "order": getattr(mt5_result, "order", None),
-                    "deal": getattr(mt5_result, "deal", None),
-                    "comment": str(getattr(mt5_result, "comment", "")),
+                    "retcode": final_retcode,
+                    "order": getattr(final_result, "order", 0) if final_result is not None else 0,
+                    "deal": getattr(final_result, "deal", 0) if final_result is not None else 0,
+                    "comment": final_comment,
                 },
+                selected_filling_mode=selected_filling_mode,
+                filling_mode_attempts=filling_mode_attempts,
+                final_retcode=final_retcode,
+                final_comment=final_comment,
             )
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"Guarded MT5 send failed safely: {exc}")
         finally:
             if initialized:
                 mt5.shutdown()
+
+    def _build_filling_mode_candidates(self, symbol_info: Any) -> list[Any]:
+        supported = getattr(symbol_info, "filling_mode", None) if symbol_info is not None else None
+        preferred_modes = [
+            getattr(mt5, "ORDER_FILLING_IOC", None),
+            getattr(mt5, "ORDER_FILLING_FOK", None),
+            getattr(mt5, "ORDER_FILLING_RETURN", None),
+        ]
+        preferred_modes = [mode for mode in preferred_modes if mode is not None]
+        candidates: list[Any] = []
+        if supported is not None:
+            candidates.append(supported)
+        for mode in preferred_modes:
+            if mode not in candidates:
+                candidates.append(mode)
+        return candidates
+
+    def _safe_rejected_send_retry_available(self) -> bool:
+        demo_attempts = sum(1 for item in self._history if item.get("demo_order_attempted") is True)
+        if demo_attempts != 1:
+            return False
+        latest = self.get_latest()
+        attempts = latest.get("filling_mode_attempts") or []
+        created_order_or_deal = any((attempt.get("order") or 0) != 0 or (attempt.get("deal") or 0) != 0 for attempt in attempts)
+        return latest.get("status") == "DEMO_ORDER_REJECTED" and latest.get("mt5_order_sent") is False and str(latest.get("ticket")) == "0" and not created_order_or_deal
 
     def _sent_result(
         self,
@@ -256,6 +331,10 @@ class GuardedDemoOrderSenderService:
         comment: str,
         account: Any = None,
         mt5_result: dict[str, Any] | None = None,
+        selected_filling_mode: Any = None,
+        filling_mode_attempts: list[dict[str, Any]] | None = None,
+        final_retcode: Any = None,
+        final_comment: str | None = None,
     ) -> dict[str, Any]:
         return {
             "request_id": f"guarded-demo-order-{uuid4()}",
@@ -266,6 +345,10 @@ class GuardedDemoOrderSenderService:
             "ticket": str(ticket) if ticket is not None else "",
             "retcode": str(retcode) if retcode is not None else "",
             "comment": comment,
+            "selected_filling_mode": selected_filling_mode,
+            "filling_mode_attempts": filling_mode_attempts or [],
+            "final_retcode": final_retcode,
+            "final_comment": final_comment if final_comment is not None else comment,
             "symbol": str(payload.get("symbol") or "").strip().upper(),
             "action": str(payload.get("action") or "").strip().upper(),
             "lot": float(payload.get("lot") or 0.0),

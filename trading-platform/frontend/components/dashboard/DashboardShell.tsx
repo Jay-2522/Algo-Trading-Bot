@@ -19,6 +19,7 @@ type TraderBundle = {
   tradeRiskAnalytics: Record<string, unknown> | null;
   mt5MarketOverview: Mt5MarketOverviewData | null;
   demoPositionMonitor: Record<string, unknown> | null;
+  persistentTrades: Array<Record<string, unknown>>;
   signals: Array<Record<string, unknown>>;
 };
 
@@ -35,6 +36,7 @@ const emptyTraderBundle: TraderBundle = {
   tradeRiskAnalytics: null,
   mt5MarketOverview: null,
   demoPositionMonitor: null,
+  persistentTrades: [],
   signals: [],
 };
 
@@ -75,6 +77,7 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       tradeRiskAnalytics: fetchJson<Record<string, unknown>>("/trade-journal/risk-analytics"),
       mt5MarketOverview: fetchJson<Mt5MarketOverviewData>("/mt5-demo/overview"),
       demoPositionMonitor: fetchJson<Record<string, unknown>>("/mt5-demo/position-monitor/open"),
+      persistentTrades: fetchJson<Array<Record<string, unknown>>>("/trade-journal/persistence/recent?limit=5"),
       signals: fetchJson<Array<Record<string, unknown>>>("/webhooks/events?limit=4"),
     };
 
@@ -211,6 +214,7 @@ export function DashboardShell({
   const xauusdMarket = symbolOverview(bundle.mt5MarketOverview, "XAUUSD");
   const demoPositions = Array.isArray(bundle.demoPositionMonitor?.positions) ? (bundle.demoPositionMonitor.positions as Array<Record<string, unknown>>) : [];
   const openDemoPosition = demoPositions[0] ?? null;
+  const closedDemoTrade = bundle.persistentTrades.find((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED") ?? null;
   const marketCards = [
     {
       label: "EURUSD Demo Bid",
@@ -323,7 +327,7 @@ export function DashboardShell({
                 <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">DEMO MT5 Monitor</p>
                 <h2 className="mt-1 text-xl font-bold text-white">Open Demo MT5 Position</h2>
               </div>
-              <StatusBadge label={openDemoPosition ? "DEMO OPEN" : "DEMO EMPTY"} tone={openDemoPosition ? "info" : "muted"} />
+              <StatusBadge label={openDemoPosition ? "DEMO OPEN" : closedDemoTrade ? "DEMO CLOSED" : "DEMO EMPTY"} tone={openDemoPosition ? "info" : closedDemoTrade ? "good" : "muted"} />
             </div>
 
             {openDemoPosition ? (
@@ -348,6 +352,27 @@ export function DashboardShell({
                 ))}
                 <p className="sm:col-span-2 text-xs leading-5 text-slate-400">
                   DEMO account only. Source: /mt5-demo/position-monitor/open and persistent trade journal.
+                </p>
+              </div>
+            ) : closedDemoTrade ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ["Ticket", readText(closedDemoTrade, ["mt5_ticket"], "")],
+                  ["Symbol", readText(closedDemoTrade, ["symbol"], "")],
+                  ["Side", readText(closedDemoTrade, ["side"], "")],
+                  ["Lot", readText(closedDemoTrade, ["lot"], "")],
+                  ["Realized P&L", signedMoney(readNumber(closedDemoTrade, ["net_pnl", "profit_loss"], 0))],
+                  ["Result", readText(closedDemoTrade, ["result"], "CLOSED")],
+                  ["Close Time", readText(closedDemoTrade, ["closed_at"], "")],
+                  ["Exit Reason", readText(closedDemoTrade, ["exit_reason"], "UNKNOWN")],
+                ].map(([label, value]) => (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3" key={label}>
+                    <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                    <strong className="mt-1 block break-words text-sm text-white">{value}</strong>
+                  </div>
+                ))}
+                <p className="sm:col-span-2 text-xs leading-5 text-slate-400">
+                  DEMO account only. Closed trade details are from persistent journal records synchronized from MT5 history.
                 </p>
               </div>
             ) : (

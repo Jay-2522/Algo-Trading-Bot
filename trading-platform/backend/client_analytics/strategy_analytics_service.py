@@ -141,6 +141,7 @@ class StrategyAnalyticsService:
         open_trades = [trade for trade in trades if trade.get("status") == "OPEN"]
         rejected = [trade for trade in trades if trade.get("status") == "REJECTED"]
         pnl_values = [float(trade.get("profit_loss") or 0) for trade in closed]
+        realized_values = [float(trade.get("realized_pnl") if trade.get("realized_pnl") is not None else trade.get("profit_loss") or 0) for trade in closed]
         rr_values = [float(trade.get("risk_reward_ratio") or 0) for trade in trades if trade.get("risk_reward_ratio") is not None]
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
         return {
@@ -156,6 +157,7 @@ class StrategyAnalyticsService:
             "closed_demo_trades": len(closed),
             "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
             "net_pnl": round(sum(pnl_values), 2) if pnl_values else 0.0,
+            "realized_pnl": round(sum(realized_values), 2) if realized_values else 0.0,
             "avg_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
             "best_trade": self._trade_extreme(closed, best=True),
             "worst_trade": self._trade_extreme(closed, best=False),
@@ -193,6 +195,7 @@ class StrategyAnalyticsService:
             "closed_demo_trades": overview["closed_demo_trades"],
             "win_rate": overview["win_rate"],
             "net_pnl": overview["net_pnl"],
+            "realized_pnl": overview["realized_pnl"],
             "avg_rr": overview["avg_rr"],
             "best_trade": overview["best_trade"],
             "worst_trade": overview["worst_trade"],

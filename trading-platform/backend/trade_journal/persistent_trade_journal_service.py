@@ -89,7 +89,8 @@ class PersistentTradeJournalService:
         trade["realized_pnl"] = self._number_or_none(payload.get("realized_pnl"))
         trade["swap"] = self._number_or_none(payload.get("swap")) or 0.0
         trade["commission"] = self._number_or_none(payload.get("commission")) or 0.0
-        trade["total_pnl"] = self._number_or_none(payload.get("total_pnl") or payload.get("profit_loss"))
+        trade["total_pnl"] = self._number_or_none(payload.get("total_pnl") or payload.get("net_pnl") or payload.get("profit_loss"))
+        trade["net_pnl"] = self._number_or_none(payload.get("net_pnl") or payload.get("total_pnl") or payload.get("profit_loss"))
         trade["duration_minutes"] = self._number_or_none(payload.get("duration_minutes"))
         trade["exit_reason"] = self._text(payload.get("exit_reason") or "UNKNOWN")
         trade["mt5_ticket"] = ticket
@@ -98,6 +99,53 @@ class PersistentTradeJournalService:
         trade["account_login"] = self._text(payload.get("account_login"))
         trade["server"] = self._text(payload.get("server"))
         return self._upsert_trade(trade)
+
+    def mark_trade_closed_by_ticket(self, ticket: str | int, close_payload: dict[str, Any]) -> dict[str, Any] | None:
+        existing = self.get_trade_by_ticket(ticket)
+        if existing is None:
+            return None
+        return self.record_trade_closed({**existing, **close_payload, "trade_id": existing["trade_id"], "mt5_ticket": existing.get("mt5_ticket")})
+
+    def get_open_trades(self) -> list[dict[str, Any]]:
+        return [trade for trade in self.list_trades(limit=100000) if trade.get("status") == "OPEN"]
+
+    def get_closed_trades(self) -> list[dict[str, Any]]:
+        return [trade for trade in self.list_trades(limit=100000) if trade.get("status") == "CLOSED"]
+
+    def get_trade_by_ticket(self, ticket: str | int) -> dict[str, Any] | None:
+        return self._find_by_mt5_ticket(self._text(ticket))
+
+    def calculate_realized_summary(self) -> dict[str, Any]:
+        trades = self.list_trades(limit=100000)
+        closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
+        wins = [trade for trade in closed if trade.get("result") == "WIN"]
+        losses = [trade for trade in closed if trade.get("result") == "LOSS"]
+        breakeven = [trade for trade in closed if trade.get("result") == "BREAKEVEN"]
+        pnl_values = [float(trade.get("net_pnl") if trade.get("net_pnl") is not None else trade.get("profit_loss") or 0) for trade in closed]
+        win_values = [value for value in pnl_values if value > 0]
+        loss_values = [value for value in pnl_values if value < 0]
+        durations = [float(trade.get("duration_minutes") or 0) for trade in closed if trade.get("duration_minutes") is not None]
+        return {
+            "status": "READY",
+            "total_trades": len(trades),
+            "open_demo_trades": len([trade for trade in trades if trade.get("status") == "OPEN"]),
+            "closed_demo_trades": len(closed),
+            "wins": len(wins),
+            "losses": len(losses),
+            "breakeven": len(breakeven),
+            "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
+            "net_pnl": round(sum(pnl_values), 2) if pnl_values else 0.0,
+            "gross_profit": round(sum(win_values), 2) if win_values else 0.0,
+            "gross_loss": round(sum(loss_values), 2) if loss_values else 0.0,
+            "avg_win": round(sum(win_values) / len(win_values), 2) if win_values else 0.0,
+            "avg_loss": round(sum(loss_values) / len(loss_values), 2) if loss_values else 0.0,
+            "avg_duration_minutes": round(sum(durations) / len(durations), 2) if durations else 0.0,
+            "empty_state": len(closed) == 0,
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
 
     def get_trade(self, trade_id: str) -> dict[str, Any] | None:
         return next((trade for trade in self.list_trades(limit=100000) if trade["trade_id"] == trade_id), None)
@@ -117,6 +165,7 @@ class PersistentTradeJournalService:
         pnl_values = [float(trade.get("profit_loss") or 0) for trade in closed]
         rr_values = [float(trade.get("risk_reward_ratio") or 0) for trade in trades if trade.get("risk_reward_ratio") is not None]
         by_status = {status: len([trade for trade in trades if trade.get("status") == status]) for status in sorted(TRADE_STATUSES)}
+        realized = self.calculate_realized_summary()
         return {
             "status": "READY",
             "total_trades": len(trades),
@@ -125,8 +174,16 @@ class PersistentTradeJournalService:
             "open_demo_trades": by_status.get("OPEN", 0),
             "closed_demo_trades": by_status.get("CLOSED", 0),
             "rejected_trades": by_status.get("REJECTED", 0),
-            "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
-            "net_pnl": round(sum(pnl_values), 2) if pnl_values else 0.0,
+            "wins": realized["wins"],
+            "losses": realized["losses"],
+            "breakeven": realized["breakeven"],
+            "win_rate": realized["win_rate"],
+            "net_pnl": realized["net_pnl"],
+            "gross_profit": realized["gross_profit"],
+            "gross_loss": realized["gross_loss"],
+            "avg_win": realized["avg_win"],
+            "avg_loss": realized["avg_loss"],
+            "avg_duration_minutes": realized["avg_duration_minutes"],
             "avg_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
             "by_status": by_status,
             "empty_state": len(trades) == 0,
@@ -170,6 +227,7 @@ class PersistentTradeJournalService:
             "swap": self._number_or_none(payload.get("swap")),
             "commission": self._number_or_none(payload.get("commission")),
             "total_pnl": self._number_or_none(payload.get("total_pnl")),
+            "net_pnl": self._number_or_none(payload.get("net_pnl")),
             "duration_minutes": self._number_or_none(payload.get("duration_minutes")),
             "exit_reason": self._text(payload.get("exit_reason")),
             "result": self._enum(result, TRADE_RESULTS, "UNKNOWN"),

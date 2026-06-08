@@ -17,6 +17,7 @@ from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfi
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
 from backend.mt5_demo.mt5_demo_position_sync_service import MT5DemoPositionSyncService
 from backend.mt5_demo.mt5_position_monitoring_service import MT5PositionMonitoringService
+from backend.mt5_demo.mt5_trade_close_sync_service import MT5TradeCloseSyncService
 from backend.mt5_demo.mt5_trade_lifecycle_service import MT5TradeLifecycleService
 from backend.mt5_demo.mt5_strategy_consumption_service import MT5StrategyConsumptionService
 from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
@@ -91,6 +92,7 @@ demo_approval_workflow_service = DemoApprovalWorkflowService(
 )
 mt5_demo_position_sync_service = MT5DemoPositionSyncService()
 mt5_trade_lifecycle_service = MT5TradeLifecycleService()
+mt5_trade_close_sync_service = MT5TradeCloseSyncService()
 mt5_position_monitoring_service = MT5PositionMonitoringService(mt5_demo_position_sync_service)
 guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     mt5_demo_service=service,
@@ -544,6 +546,31 @@ async def get_mt5_demo_position_monitor_by_ticket(ticket: str) -> dict:
 @router.post("/position-monitor/sync")
 async def sync_mt5_demo_position_monitor() -> dict:
     return mt5_position_monitoring_service.sync()
+
+
+@router.get("/close-sync/status")
+async def get_mt5_demo_close_sync_status() -> dict:
+    return mt5_trade_close_sync_service.get_status()
+
+
+@router.post("/close-sync/run")
+async def run_mt5_demo_close_sync() -> dict:
+    return mt5_trade_close_sync_service.run()
+
+
+@router.get("/close-sync/latest")
+async def get_latest_mt5_demo_close_sync() -> dict:
+    return mt5_trade_close_sync_service.get_latest()
+
+
+@router.get("/close-sync/history")
+async def get_mt5_demo_close_sync_history(limit: int = 100) -> list[dict]:
+    return mt5_trade_close_sync_service.get_history(limit)
+
+
+@router.get("/close-sync/analytics")
+async def get_mt5_demo_close_sync_analytics() -> dict:
+    return mt5_trade_close_sync_service.get_analytics()
 
 
 @router.post("/order-send")

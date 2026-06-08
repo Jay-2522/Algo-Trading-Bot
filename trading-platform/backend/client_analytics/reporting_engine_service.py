@@ -84,14 +84,19 @@ class ReportingEngineService:
         closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
         pnl_values = [float(trade.get("profit_loss") or 0) for trade in closed]
+        realized_values = [float(trade.get("realized_pnl") if trade.get("realized_pnl") is not None else trade.get("profit_loss") or 0) for trade in closed]
         rr_values = [float(trade.get("risk_reward_ratio") or 0) for trade in trades if trade.get("risk_reward_ratio") is not None]
         summary = {
             "total_trades": len(trades),
             "closed_demo_trades": len(closed),
             "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
             "net_pnl": round(sum(pnl_values), 2) if pnl_values else 0.0,
+            "realized_pnl": round(sum(realized_values), 2) if realized_values else 0.0,
             "avg_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
+            "best_trade": self._trade_extreme(closed, best=True),
+            "worst_trade": self._trade_extreme(closed, best=False),
             "empty_state": len(trades) == 0,
+            "closed_empty_state": len(closed) == 0,
         }
         return {
             "report_id": f"reports_v2_{report_type.lower()}_{period.lower()}",
@@ -134,3 +139,9 @@ class ReportingEngineService:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
+
+    def _trade_extreme(self, trades: list[dict[str, Any]], best: bool) -> dict[str, Any] | None:
+        with_pnl = [trade for trade in trades if trade.get("profit_loss") is not None]
+        if not with_pnl:
+            return None
+        return sorted(with_pnl, key=lambda trade: float(trade.get("profit_loss") or 0), reverse=best)[0]

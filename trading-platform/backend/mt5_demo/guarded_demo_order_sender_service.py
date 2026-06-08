@@ -294,7 +294,9 @@ class GuardedDemoOrderSenderService:
                 final_retcode=final_retcode,
                 final_comment=final_comment,
             )
-            self._persist_trade_journal_result(result, payload, price)
+            warning = self._persist_trade_journal_result(result, payload, price)
+            if warning:
+                result["warnings"] = [*result.get("warnings", []), warning]
             return result
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"Guarded MT5 send failed safely: {exc}")
@@ -327,21 +329,25 @@ class GuardedDemoOrderSenderService:
         created_order_or_deal = any((attempt.get("order") or 0) != 0 or (attempt.get("deal") or 0) != 0 for attempt in attempts)
         return latest.get("status") == "DEMO_ORDER_REJECTED" and latest.get("mt5_order_sent") is False and str(latest.get("ticket")) == "0" and not created_order_or_deal
 
-    def _persist_trade_journal_result(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> None:
-        ticket = self._positive_int(result.get("ticket"))
-        retcode = self._positive_int(result.get("retcode"))
-        attempted = result.get("demo_order_attempted") is True
-        sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True and retcode == 10009 and ticket > 0
-        rejected = result.get("status") == "DEMO_ORDER_REJECTED" and attempted and result.get("mt5_order_sent") is False and retcode is not None
+    def _persist_trade_journal_result(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> str | None:
+        try:
+            ticket = self._positive_int(result.get("ticket"))
+            retcode = self._positive_int(result.get("retcode"))
+            attempted = result.get("demo_order_attempted") is True
+            sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True and retcode == 10009 and ticket > 0
+            rejected = result.get("status") == "DEMO_ORDER_REJECTED" and attempted and result.get("mt5_order_sent") is False and retcode is not None
 
-        if not sent and not rejected:
-            return
+            if not sent and not rejected:
+                return None
 
-        journal_payload = self._journal_payload(result, payload, executed_price)
-        if sent:
-            self.persistent_trade_journal_service.record_order_sent(journal_payload)
-        elif rejected:
-            self.persistent_trade_journal_service.record_order_rejected(journal_payload)
+            journal_payload = self._journal_payload(result, payload, executed_price)
+            if sent:
+                self.persistent_trade_journal_service.record_order_sent(journal_payload)
+            elif rejected:
+                self.persistent_trade_journal_service.record_order_rejected(journal_payload)
+            return None
+        except Exception:
+            return "JOURNAL_PERSISTENCE_FAILED"
 
     def _journal_payload(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> dict[str, Any]:
         ticket = str(result.get("ticket") or "0")

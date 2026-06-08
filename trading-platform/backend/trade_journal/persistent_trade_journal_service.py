@@ -62,6 +62,18 @@ class PersistentTradeJournalService:
         trade["mt5_ticket"] = self._text(payload.get("mt5_ticket") or payload.get("ticket"))
         return self._upsert_trade(trade)
 
+    def record_open_position(self, payload: dict[str, Any]) -> dict[str, Any]:
+        ticket = self._text(payload.get("mt5_ticket") or payload.get("ticket"))
+        existing = self._find_by_mt5_ticket(ticket) if ticket else None
+        payload = {**payload, "trade_id": existing.get("trade_id") if existing else (payload.get("trade_id") or f"mt5_demo_{ticket}")}
+        trade = self._base_record(payload, status="OPEN", result="OPEN")
+        trade["opened_at"] = self._text(payload.get("opened_at")) or utc_now_iso()
+        trade["mt5_ticket"] = ticket
+        trade["mt5_retcode"] = self._text(payload.get("mt5_retcode") or payload.get("retcode"))
+        trade["mt5_comment"] = self._text(payload.get("mt5_comment") or payload.get("comment"))
+        trade["profit_loss"] = self._number_or_none(payload.get("profit_loss")) or 0.0
+        return self._upsert_trade(trade)
+
     def record_trade_closed(self, payload: dict[str, Any]) -> dict[str, Any]:
         trade = self._base_record(payload, status="CLOSED", result=self._closed_result(payload))
         trade["opened_at"] = self._text(payload.get("opened_at"))
@@ -173,6 +185,11 @@ class PersistentTradeJournalService:
         except json.JSONDecodeError:
             return {"trades": []}
         return {"trades": []}
+
+    def _find_by_mt5_ticket(self, ticket: str) -> dict[str, Any] | None:
+        if not ticket:
+            return None
+        return next((trade for trade in self.list_trades(limit=100000) if self._text(trade.get("mt5_ticket")) == ticket), None)
 
     def _write_store(self, store: dict[str, Any]) -> None:
         self.journal_path.parent.mkdir(parents=True, exist_ok=True)

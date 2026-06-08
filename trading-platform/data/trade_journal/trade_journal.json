@@ -1,0 +1,32 @@
+{
+  "trades": [
+    {
+      "broker_execution_enabled": false,
+      "close_price": null,
+      "closed_at": "",
+      "created_at": "2026-06-08T07:58:58.516137+00:00",
+      "demo_execution": true,
+      "entry_price": 1.15259,
+      "environment": "DEMO",
+      "live_execution_enabled": false,
+      "lot": 0.01,
+      "mt5_comment": "PHASE17_SINGLE_D",
+      "mt5_retcode": "",
+      "mt5_ticket": "8965515202",
+      "notes": "Synced from MT5 open position.",
+      "opened_at": "2026-06-08T07:58:58.516137+00:00",
+      "profit_loss": -0.79,
+      "result": "OPEN",
+      "risk_reward_ratio": null,
+      "side": "BUY",
+      "simulation_only": true,
+      "source": "MT5_DEMO",
+      "status": "OPEN",
+      "stop_loss": 1.14973,
+      "symbol": "EURUSD",
+      "take_profit": 1.15573,
+      "trade_id": "mt5_demo_8965515202",
+      "updated_at": "2026-06-08T07:58:58.516137+00:00"
+    }
+  ]
+}

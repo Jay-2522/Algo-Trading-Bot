@@ -15,6 +15,7 @@ from backend.mt5_demo.market_snapshot_service import MarketSnapshotService
 from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
+from backend.mt5_demo.mt5_demo_position_sync_service import MT5DemoPositionSyncService
 from backend.mt5_demo.mt5_strategy_consumption_service import MT5StrategyConsumptionService
 from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
 from backend.mt5_demo.mt5_risk_qualification_service import MT5RiskQualificationService
@@ -86,6 +87,7 @@ demo_approval_workflow_service = DemoApprovalWorkflowService(
     test_plan_service=demo_trade_test_plan_service,
     final_approval_service=demo_final_approval_service,
 )
+mt5_demo_position_sync_service = MT5DemoPositionSyncService()
 guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     mt5_demo_service=service,
     approval_workflow_service=demo_approval_workflow_service,
@@ -463,6 +465,31 @@ async def get_latest_guarded_demo_order() -> dict:
 @router.get("/guarded-demo-order/history")
 async def get_guarded_demo_order_history(limit: int = 100) -> list[dict]:
     return guarded_demo_order_sender_service.list_history(limit)
+
+
+@router.get("/positions/status")
+async def get_mt5_demo_positions_status() -> dict:
+    return mt5_demo_position_sync_service.get_status()
+
+
+@router.get("/positions/open")
+async def get_mt5_demo_open_positions() -> dict:
+    return mt5_demo_position_sync_service.get_open_positions()
+
+
+@router.get("/positions/open/{symbol}")
+async def get_mt5_demo_open_positions_by_symbol(symbol: str) -> dict:
+    return mt5_demo_position_sync_service.get_open_positions_by_symbol(symbol)
+
+
+@router.post("/positions/sync-journal")
+async def sync_mt5_demo_positions_to_journal() -> dict:
+    return mt5_demo_position_sync_service.sync_journal()
+
+
+@router.get("/positions/latest-sync")
+async def get_latest_mt5_demo_position_sync() -> dict:
+    return mt5_demo_position_sync_service.get_latest_sync()
 
 
 @router.post("/order-send")

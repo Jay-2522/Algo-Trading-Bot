@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from backend.trade_journal.persistent_trade_journal_service import PersistentTradeJournalService
+
 try:
     import MetaTrader5 as mt5
 except Exception as exc:  # pragma: no cover - depends on local MT5 installation
@@ -28,6 +30,7 @@ class GuardedDemoOrderSenderService:
         preflight_service: Any,
         simulator_service: Any,
         readiness_service: Any,
+        persistent_trade_journal_service: Any | None = None,
     ) -> None:
         self.mt5_demo_service = mt5_demo_service
         self.approval_workflow_service = approval_workflow_service
@@ -36,6 +39,7 @@ class GuardedDemoOrderSenderService:
         self.preflight_service = preflight_service
         self.simulator_service = simulator_service
         self.readiness_service = readiness_service
+        self.persistent_trade_journal_service = persistent_trade_journal_service or PersistentTradeJournalService()
         self._history: list[dict[str, Any]] = []
         self._demo_send_attempted = False
 
@@ -271,7 +275,7 @@ class GuardedDemoOrderSenderService:
                     break
 
             ticket = getattr(final_result, "order", 0) if final_result is not None else 0
-            return self._sent_result(
+            result = self._sent_result(
                 "DEMO_ORDER_SENT" if sent else "DEMO_ORDER_REJECTED",
                 payload,
                 sent,
@@ -290,6 +294,8 @@ class GuardedDemoOrderSenderService:
                 final_retcode=final_retcode,
                 final_comment=final_comment,
             )
+            self._persist_trade_journal_result(result, payload, price)
+            return result
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"Guarded MT5 send failed safely: {exc}")
         finally:
@@ -320,6 +326,59 @@ class GuardedDemoOrderSenderService:
         attempts = latest.get("filling_mode_attempts") or []
         created_order_or_deal = any((attempt.get("order") or 0) != 0 or (attempt.get("deal") or 0) != 0 for attempt in attempts)
         return latest.get("status") == "DEMO_ORDER_REJECTED" and latest.get("mt5_order_sent") is False and str(latest.get("ticket")) == "0" and not created_order_or_deal
+
+    def _persist_trade_journal_result(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> None:
+        ticket = self._positive_int(result.get("ticket"))
+        retcode = self._positive_int(result.get("retcode"))
+        attempted = result.get("demo_order_attempted") is True
+        sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True and retcode == 10009 and ticket > 0
+        rejected = result.get("status") == "DEMO_ORDER_REJECTED" and attempted and result.get("mt5_order_sent") is False and retcode is not None
+
+        if not sent and not rejected:
+            return
+
+        journal_payload = self._journal_payload(result, payload, executed_price)
+        if sent:
+            self.persistent_trade_journal_service.record_order_sent(journal_payload)
+        elif rejected:
+            self.persistent_trade_journal_service.record_order_rejected(journal_payload)
+
+    def _journal_payload(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> dict[str, Any]:
+        ticket = str(result.get("ticket") or "0")
+        retcode = str(result.get("retcode") or "")
+        return {
+            "trade_id": f"mt5_demo_{ticket}" if ticket != "0" else f"mt5_demo_rejected_{result.get('request_id')}",
+            "source": "MT5_DEMO",
+            "environment": "DEMO",
+            "symbol": "EURUSD",
+            "side": str(payload.get("action") or result.get("action") or "").strip().upper(),
+            "lot": 0.01,
+            "entry_price": executed_price or self._float_or_none(payload.get("entry_price")),
+            "stop_loss": self._float_or_none(payload.get("stop_loss")),
+            "take_profit": self._float_or_none(payload.get("take_profit")),
+            "risk_reward_ratio": self._risk_reward_ratio(payload),
+            "mt5_ticket": ticket,
+            "mt5_retcode": retcode,
+            "mt5_comment": result.get("final_comment") or result.get("comment"),
+            "profit_loss": 0,
+            "notes": "First controlled MT5 demo order executed through guarded sender.",
+        }
+
+    def _risk_reward_ratio(self, payload: dict[str, Any]) -> float | None:
+        explicit = self._float_or_none(payload.get("risk_reward_ratio") or payload.get("rr"))
+        if explicit is not None:
+            return explicit
+        entry = self._float_or_none(payload.get("entry_price"))
+        stop_loss = self._float_or_none(payload.get("stop_loss"))
+        take_profit = self._float_or_none(payload.get("take_profit"))
+        action = str(payload.get("action") or "").strip().upper()
+        if entry is None or stop_loss is None or take_profit is None:
+            return 2.0
+        risk = entry - stop_loss if action == "BUY" else stop_loss - entry
+        reward = take_profit - entry if action == "BUY" else entry - take_profit
+        if risk <= 0 or reward <= 0:
+            return 2.0
+        return round(reward / risk, 2)
 
     def _sent_result(
         self,
@@ -415,6 +474,13 @@ class GuardedDemoOrderSenderService:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    def _positive_int(self, value: Any) -> int | None:
+        try:
+            number = int(str(value))
+        except (TypeError, ValueError):
+            return None
+        return number if number > 0 else 0
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).isoformat()

@@ -1,4 +1,4 @@
-import type { ClientAnalyticsOverview } from "@/lib/clientAnalyticsApi";
+import type { ClientAnalyticsOverview, DemoPositionsSummary } from "@/lib/clientAnalyticsApi";
 
 function formatNumber(value: number): string {
   return Number(value || 0).toLocaleString();
@@ -12,10 +12,13 @@ function formatMoney(value: number): string {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-export function AnalyticsOverviewCards({ overview }: { overview: ClientAnalyticsOverview }) {
+export function AnalyticsOverviewCards({ overview, demoPositions }: { overview: ClientAnalyticsOverview; demoPositions: DemoPositionsSummary }) {
   const cards = [
     ["Demo Signals", formatNumber(overview.total_signals), "Source: /client-analytics/overview"],
     ["Demo Executions", formatNumber(overview.total_demo_executions), overview.total_demo_executions ? "Recorded demo activity only" : "No completed demo trades yet"],
+    ["Open Demo Positions", formatNumber(demoPositions.open_positions), "Source: /client-analytics/demo-positions/summary"],
+    ["Floating Demo P&L", formatMoney(demoPositions.total_floating_pnl), "Real MT5 demo floating P&L only"],
+    ["Lifecycle Status", `${demoPositions.lifecycle_open_count} open / ${demoPositions.lifecycle_closed_count} closed`, "Derived from MT5 demo lifecycle journal"],
     ["Demo Copy Batches", formatNumber(overview.total_copy_batches), "Recorded copier batches only"],
     ["Risk Blocks", formatNumber(overview.total_risk_blocks), "Derived risk engine events"],
     ["News Blocks", formatNumber(overview.total_news_blocks), "Derived news filter events"],

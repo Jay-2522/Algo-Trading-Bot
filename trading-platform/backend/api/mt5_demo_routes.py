@@ -16,6 +16,8 @@ from backend.mt5_demo.mt5_demo_service import MT5DemoService
 from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
 from backend.mt5_demo.mt5_demo_position_sync_service import MT5DemoPositionSyncService
+from backend.mt5_demo.mt5_position_monitoring_service import MT5PositionMonitoringService
+from backend.mt5_demo.mt5_trade_lifecycle_service import MT5TradeLifecycleService
 from backend.mt5_demo.mt5_strategy_consumption_service import MT5StrategyConsumptionService
 from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
 from backend.mt5_demo.mt5_risk_qualification_service import MT5RiskQualificationService
@@ -88,6 +90,8 @@ demo_approval_workflow_service = DemoApprovalWorkflowService(
     final_approval_service=demo_final_approval_service,
 )
 mt5_demo_position_sync_service = MT5DemoPositionSyncService()
+mt5_trade_lifecycle_service = MT5TradeLifecycleService()
+mt5_position_monitoring_service = MT5PositionMonitoringService(mt5_demo_position_sync_service)
 guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     mt5_demo_service=service,
     approval_workflow_service=demo_approval_workflow_service,
@@ -490,6 +494,56 @@ async def sync_mt5_demo_positions_to_journal() -> dict:
 @router.get("/positions/latest-sync")
 async def get_latest_mt5_demo_position_sync() -> dict:
     return mt5_demo_position_sync_service.get_latest_sync()
+
+
+@router.get("/lifecycle/status")
+async def get_mt5_demo_lifecycle_status() -> dict:
+    return mt5_trade_lifecycle_service.get_status()
+
+
+@router.post("/lifecycle/sync")
+async def sync_mt5_demo_trade_lifecycle() -> dict:
+    return mt5_trade_lifecycle_service.sync()
+
+
+@router.get("/lifecycle/latest")
+async def get_latest_mt5_demo_trade_lifecycle() -> dict:
+    return mt5_trade_lifecycle_service.get_latest()
+
+
+@router.get("/lifecycle/history")
+async def get_mt5_demo_trade_lifecycle_history(limit: int = 100) -> list[dict]:
+    return mt5_trade_lifecycle_service.get_history(limit)
+
+
+@router.get("/lifecycle/analytics")
+async def get_mt5_demo_trade_lifecycle_analytics() -> dict:
+    return mt5_trade_lifecycle_service.get_analytics()
+
+
+@router.get("/position-monitor/status")
+async def get_mt5_demo_position_monitor_status() -> dict:
+    return mt5_position_monitoring_service.get_status()
+
+
+@router.get("/position-monitor/open")
+async def get_mt5_demo_position_monitor_open() -> dict:
+    return mt5_position_monitoring_service.get_open_positions()
+
+
+@router.get("/position-monitor/open/{symbol}")
+async def get_mt5_demo_position_monitor_open_by_symbol(symbol: str) -> dict:
+    return mt5_position_monitoring_service.get_open_positions_by_symbol(symbol)
+
+
+@router.get("/position-monitor/ticket/{ticket}")
+async def get_mt5_demo_position_monitor_by_ticket(ticket: str) -> dict:
+    return mt5_position_monitoring_service.get_position_by_ticket(ticket)
+
+
+@router.post("/position-monitor/sync")
+async def sync_mt5_demo_position_monitor() -> dict:
+    return mt5_position_monitoring_service.sync()
 
 
 @router.post("/order-send")

@@ -154,6 +154,8 @@ class MT5DemoPositionSyncService:
             "profit_loss": position["profit"],
             "mt5_ticket": str(position["ticket"]),
             "mt5_comment": position["comment"],
+            "account_login": position["account_login"],
+            "server": position["server"],
             "notes": "Synced from MT5 open position.",
         }
 

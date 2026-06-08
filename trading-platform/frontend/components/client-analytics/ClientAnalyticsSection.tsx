@@ -17,10 +17,13 @@ import {
   fetchClientAnalyticsSessions,
   fetchClientAnalyticsSnapshot,
   fetchClientAnalyticsSymbols,
+  fetchDemoPositionsSummary,
   type ClientAnalyticsOverview,
+  type DemoPositionsSummary,
   type RiskAnalyticsSummary,
   type SessionPerformanceSummary,
   type SymbolPerformanceSummary,
+  emptyDemoPositionsSummary,
 } from "@/lib/clientAnalyticsApi";
 
 function SafetyBadge({ label }: { label: string }) {
@@ -36,22 +39,25 @@ export function ClientAnalyticsSection() {
   const [symbols, setSymbols] = useState<SymbolPerformanceSummary[]>(emptySymbols);
   const [sessions, setSessions] = useState<SessionPerformanceSummary[]>(emptySessions);
   const [risk, setRisk] = useState<RiskAnalyticsSummary>(emptyRiskAnalytics);
+  const [demoPositions, setDemoPositions] = useState<DemoPositionsSummary>(emptyDemoPositionsSummary);
   const [loading, setLoading] = useState(true);
   const emptyData = overview.total_signals === 0 && overview.total_demo_executions === 0;
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [overviewData, symbolData, sessionData, riskData] = await Promise.all([
+    const [overviewData, symbolData, sessionData, riskData, demoPositionsData] = await Promise.all([
       fetchClientAnalyticsOverview(),
       fetchClientAnalyticsSymbols(),
       fetchClientAnalyticsSessions(),
       fetchClientAnalyticsRisk(),
+      fetchDemoPositionsSummary(),
     ]);
     void fetchClientAnalyticsSnapshot();
     setOverview(overviewData);
     setSymbols(symbolData.length ? symbolData : emptySymbols);
     setSessions(sessionData.length ? sessionData : emptySessions);
     setRisk(riskData);
+    setDemoPositions(demoPositionsData);
     setLoading(false);
   }, []);
 
@@ -89,7 +95,7 @@ export function ClientAnalyticsSection() {
       </div>
 
       <div className="mt-5 space-y-4">
-        <AnalyticsOverviewCards overview={overview} />
+        <AnalyticsOverviewCards overview={overview} demoPositions={demoPositions} />
         <SymbolPerformanceGrid symbols={symbols} />
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <SessionPerformancePanel sessions={sessions} />

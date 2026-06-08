@@ -72,15 +72,31 @@ class PersistentTradeJournalService:
         trade["mt5_retcode"] = self._text(payload.get("mt5_retcode") or payload.get("retcode"))
         trade["mt5_comment"] = self._text(payload.get("mt5_comment") or payload.get("comment"))
         trade["profit_loss"] = self._number_or_none(payload.get("profit_loss")) or 0.0
+        trade["account_login"] = self._text(payload.get("account_login"))
+        trade["server"] = self._text(payload.get("server"))
         return self._upsert_trade(trade)
 
     def record_trade_closed(self, payload: dict[str, Any]) -> dict[str, Any]:
+        ticket = self._text(payload.get("mt5_ticket") or payload.get("ticket"))
+        existing = self._find_by_mt5_ticket(ticket) if ticket and not payload.get("trade_id") else None
+        if existing:
+            payload = {**existing, **payload, "trade_id": existing["trade_id"]}
         trade = self._base_record(payload, status="CLOSED", result=self._closed_result(payload))
         trade["opened_at"] = self._text(payload.get("opened_at"))
-        trade["closed_at"] = self._text(payload.get("closed_at")) or utc_now_iso()
+        trade["closed_at"] = self._text(payload.get("closed_at") or payload.get("close_time")) or utc_now_iso()
         trade["close_price"] = self._number_or_none(payload.get("close_price"))
         trade["profit_loss"] = self._number_or_none(payload.get("profit_loss"))
-        trade["mt5_ticket"] = self._text(payload.get("mt5_ticket") or payload.get("ticket"))
+        trade["realized_pnl"] = self._number_or_none(payload.get("realized_pnl"))
+        trade["swap"] = self._number_or_none(payload.get("swap")) or 0.0
+        trade["commission"] = self._number_or_none(payload.get("commission")) or 0.0
+        trade["total_pnl"] = self._number_or_none(payload.get("total_pnl") or payload.get("profit_loss"))
+        trade["duration_minutes"] = self._number_or_none(payload.get("duration_minutes"))
+        trade["exit_reason"] = self._text(payload.get("exit_reason") or "UNKNOWN")
+        trade["mt5_ticket"] = ticket
+        trade["mt5_retcode"] = self._text(payload.get("mt5_retcode") or payload.get("retcode"))
+        trade["mt5_comment"] = self._text(payload.get("mt5_comment") or payload.get("comment"))
+        trade["account_login"] = self._text(payload.get("account_login"))
+        trade["server"] = self._text(payload.get("server"))
         return self._upsert_trade(trade)
 
     def get_trade(self, trade_id: str) -> dict[str, Any] | None:
@@ -144,10 +160,18 @@ class PersistentTradeJournalService:
             "mt5_ticket": self._text(payload.get("mt5_ticket")),
             "mt5_retcode": self._text(payload.get("mt5_retcode")),
             "mt5_comment": self._text(payload.get("mt5_comment")),
+            "account_login": self._text(payload.get("account_login")),
+            "server": self._text(payload.get("server")),
             "opened_at": self._text(payload.get("opened_at")),
             "closed_at": self._text(payload.get("closed_at")),
             "close_price": self._number_or_none(payload.get("close_price")),
             "profit_loss": self._number_or_none(payload.get("profit_loss")),
+            "realized_pnl": self._number_or_none(payload.get("realized_pnl")),
+            "swap": self._number_or_none(payload.get("swap")),
+            "commission": self._number_or_none(payload.get("commission")),
+            "total_pnl": self._number_or_none(payload.get("total_pnl")),
+            "duration_minutes": self._number_or_none(payload.get("duration_minutes")),
+            "exit_reason": self._text(payload.get("exit_reason")),
             "result": self._enum(result, TRADE_RESULTS, "UNKNOWN"),
             "created_at": created_at,
             "updated_at": now,

@@ -18,6 +18,7 @@ type TraderBundle = {
   tradePerformance: Record<string, unknown> | null;
   tradeRiskAnalytics: Record<string, unknown> | null;
   mt5MarketOverview: Mt5MarketOverviewData | null;
+  demoPositionMonitor: Record<string, unknown> | null;
   signals: Array<Record<string, unknown>>;
 };
 
@@ -33,6 +34,7 @@ const emptyTraderBundle: TraderBundle = {
   tradePerformance: null,
   tradeRiskAnalytics: null,
   mt5MarketOverview: null,
+  demoPositionMonitor: null,
   signals: [],
 };
 
@@ -72,6 +74,7 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       tradePerformance: fetchJson<Record<string, unknown>>("/trade-journal/overall-performance"),
       tradeRiskAnalytics: fetchJson<Record<string, unknown>>("/trade-journal/risk-analytics"),
       mt5MarketOverview: fetchJson<Mt5MarketOverviewData>("/mt5-demo/overview"),
+      demoPositionMonitor: fetchJson<Record<string, unknown>>("/mt5-demo/position-monitor/open"),
       signals: fetchJson<Array<Record<string, unknown>>>("/webhooks/events?limit=4"),
     };
 
@@ -206,6 +209,8 @@ export function DashboardShell({
   const risk = bundle.tradeRiskAnalytics;
   const eurusdMarket = symbolOverview(bundle.mt5MarketOverview, "EURUSD");
   const xauusdMarket = symbolOverview(bundle.mt5MarketOverview, "XAUUSD");
+  const demoPositions = Array.isArray(bundle.demoPositionMonitor?.positions) ? (bundle.demoPositionMonitor.positions as Array<Record<string, unknown>>) : [];
+  const openDemoPosition = demoPositions[0] ?? null;
   const marketCards = [
     {
       label: "EURUSD Demo Bid",
@@ -234,7 +239,7 @@ export function DashboardShell({
       { label: "Simulated Balance", value: money(balance), detail: "Derived from /portfolio/exposure simulated account summaries", tone: "info" as const },
       { label: "Simulated Equity", value: money(equity), detail: "Derived from /portfolio/exposure simulated account summaries", tone: "good" as const },
       { label: "Demo P&L", value: signedMoney(dailyPnl), detail: "Derived from completed demo journal records only", tone: dailyPnl >= 0 ? ("good" as const) : ("danger" as const) },
-      { label: "Broker Positions", value: "Hidden", detail: "Live broker positions are not shown on the client dashboard", tone: "muted" as const },
+      { label: "Open Demo Positions", value: String(demoPositions.length), detail: "Read-only MT5 DEMO position monitor", tone: demoPositions.length ? ("info" as const) : ("muted" as const) },
       { label: "AI Signals", value: String(signals.length), detail: "Demo analysis events from /webhooks/events", tone: "info" as const },
     ],
     [balance, dailyPnl, equity, signals.length],
@@ -315,18 +320,42 @@ export function DashboardShell({
           <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">Broker Positions</p>
-                <h2 className="mt-1 text-xl font-bold text-white">Live Position Data Hidden</h2>
+                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500">DEMO MT5 Monitor</p>
+                <h2 className="mt-1 text-xl font-bold text-white">Open Demo MT5 Position</h2>
               </div>
-              <StatusBadge label="Hidden" tone="muted" />
+              <StatusBadge label={openDemoPosition ? "DEMO OPEN" : "DEMO EMPTY"} tone={openDemoPosition ? "info" : "muted"} />
             </div>
 
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-700 bg-white/[0.03] p-5">
-              <strong className="text-sm text-slate-100">No live broker position values are displayed here.</strong>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                Client-visible trading activity will populate from completed demo execution records, not live broker position snapshots.
-              </p>
-            </div>
+            {openDemoPosition ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ["Ticket", readText(openDemoPosition, ["ticket"], "")],
+                  ["Symbol", readText(openDemoPosition, ["symbol"], "")],
+                  ["Side", readText(openDemoPosition, ["side"], "")],
+                  ["Lot", readText(openDemoPosition, ["lot"], "")],
+                  ["Entry", marketValue(readNumber(openDemoPosition, ["entry_price"], 0))],
+                  ["Current Price", marketValue(readNumber(openDemoPosition, ["current_price"], 0))],
+                  ["SL", marketValue(readNumber(openDemoPosition, ["stop_loss"], 0))],
+                  ["TP", marketValue(readNumber(openDemoPosition, ["take_profit"], 0))],
+                  ["Floating P&L", signedMoney(readNumber(openDemoPosition, ["floating_pnl"], 0))],
+                  ["Lifecycle Status", readText(openDemoPosition, ["lifecycle_status"], "OPEN")],
+                  ["Journal Status", readText(openDemoPosition, ["journal_status"], "UNKNOWN")],
+                ].map(([label, value]) => (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3" key={label}>
+                    <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                    <strong className="mt-1 block break-words text-sm text-white">{value}</strong>
+                  </div>
+                ))}
+                <p className="sm:col-span-2 text-xs leading-5 text-slate-400">
+                  DEMO account only. Source: /mt5-demo/position-monitor/open and persistent trade journal.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-700 bg-white/[0.03] p-5">
+                <strong className="text-sm text-slate-100">No open MT5 demo positions.</strong>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">This card uses read-only MT5 DEMO position data and journal matching. No live broker execution is enabled.</p>
+              </div>
+            )}
           </section>
 
           <section className="min-w-0 rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">

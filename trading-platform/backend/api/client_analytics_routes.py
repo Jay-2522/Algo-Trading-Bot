@@ -10,6 +10,7 @@ from backend.client_analytics.analytics_models import (
     SymbolPerformanceSummary,
 )
 from backend.client_analytics.client_analytics_service import ClientAnalyticsService
+from backend.client_analytics.demo_position_analytics_service import DemoPositionAnalyticsService
 from backend.client_analytics.executive_dashboard_service import ExecutiveDashboardService
 from backend.client_analytics.executive_models import ExecutiveDashboardSummary, ExecutiveSystemHealth
 from backend.client_analytics.export_service import ExportService
@@ -28,6 +29,7 @@ export_service = ExportService(report_builder)
 strategy_analytics_service = StrategyAnalyticsService()
 executive_dashboard_service = ExecutiveDashboardService()
 reporting_engine_service = ReportingEngineService()
+demo_position_analytics_service = DemoPositionAnalyticsService()
 
 
 @router.get("/status")
@@ -271,3 +273,18 @@ async def export_reports_v2_json() -> dict:
 @router.get("/reports-v2/export/csv", response_class=PlainTextResponse)
 async def export_reports_v2_csv() -> str:
     return reporting_engine_service.export_csv()
+
+
+@router.get("/demo-positions/status")
+async def get_demo_positions_status() -> dict:
+    return demo_position_analytics_service.get_status()
+
+
+@router.get("/demo-positions/open")
+async def get_demo_positions_open() -> dict:
+    return demo_position_analytics_service.get_open_positions()
+
+
+@router.get("/demo-positions/summary")
+async def get_demo_positions_summary() -> dict:
+    return demo_position_analytics_service.get_summary()

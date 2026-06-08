@@ -62,6 +62,22 @@ export type RiskAnalyticsSummary = {
   timestamp?: string;
 };
 
+export type DemoPositionsSummary = {
+  status: string;
+  environment: string;
+  open_positions: number;
+  total_floating_pnl: number;
+  symbols: string[];
+  largest_floating_profit: number;
+  largest_floating_loss: number;
+  lifecycle_open_count: number;
+  lifecycle_closed_count: number;
+  simulation_only: boolean;
+  demo_execution: boolean;
+  live_execution_enabled: boolean;
+  broker_execution_enabled: boolean;
+};
+
 export const emptyAnalyticsOverview: ClientAnalyticsOverview = {
   status: "OPERATIONAL",
   total_signals: 0,
@@ -120,6 +136,22 @@ export const emptySessions: SessionPerformanceSummary[] = ["ASIAN", "LONDON", "N
   avg_confidence: 0,
 }));
 
+export const emptyDemoPositionsSummary: DemoPositionsSummary = {
+  status: "READY",
+  environment: "DEMO",
+  open_positions: 0,
+  total_floating_pnl: 0,
+  symbols: [],
+  largest_floating_profit: 0,
+  largest_floating_loss: 0,
+  lifecycle_open_count: 0,
+  lifecycle_closed_count: 0,
+  simulation_only: true,
+  demo_execution: true,
+  live_execution_enabled: false,
+  broker_execution_enabled: false,
+};
+
 function buildUrl(endpoint: string): string {
   const url = new URL(endpoint, API_BASE_URL);
   url.searchParams.set("_ts", String(Date.now()));
@@ -154,4 +186,8 @@ export function fetchClientAnalyticsRisk(): Promise<RiskAnalyticsSummary> {
 
 export function fetchClientAnalyticsSnapshot(): Promise<ClientAnalyticsOverview> {
   return fetchAnalytics("/client-analytics/snapshots/latest", emptyAnalyticsOverview);
+}
+
+export function fetchDemoPositionsSummary(): Promise<DemoPositionsSummary> {
+  return fetchAnalytics("/client-analytics/demo-positions/summary", emptyDemoPositionsSummary);
 }

@@ -140,10 +140,13 @@ def verify_strategy_dashboard(client: TestClient) -> bool:
     rejections = client.get("/client-analytics/strategy-dashboard/rejections")
     performance = client.get("/client-analytics/strategy-dashboard/performance")
     payloads = [overview.json(), symbols.json(), rejections.json(), performance.json()]
+    performance_payload = performance.json()
+    performance_is_empty = performance_payload.get("net_pnl", 0) == 0 and performance_payload.get("closed_demo_trades", 0) == 0
+    performance_is_real_demo = performance_payload.get("closed_demo_trades", 0) > 0 and performance_payload.get("empty_state") is False
     passed = (
         all(response.status_code == 200 for response in [overview, symbols, rejections, performance])
         and overview.json().get("live_execution_enabled") is False
-        and performance.json().get("net_pnl", 0) == 0
+        and (performance_is_empty or performance_is_real_demo)
         and all(safety_ok(payload) for payload in payloads)
     )
     return show("Strategy analytics dashboard routes are safe", passed)

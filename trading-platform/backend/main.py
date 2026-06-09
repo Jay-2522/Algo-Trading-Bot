@@ -14,6 +14,7 @@ from backend.api.broker_account_routes import router as broker_account_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.client_acceptance_routes import router as client_acceptance_router
 from backend.api.client_analytics_routes import router as client_analytics_router
+from backend.api.client_signal_engine_routes import router as client_signal_engine_router
 from backend.api.client_signal_routes import router as client_signal_router
 from backend.api.control_center_routes import router as control_center_router
 from backend.api.dashboard_routes import router as dashboard_router
@@ -112,6 +113,7 @@ app.include_router(market_data_router)
 app.include_router(account_routing_router)
 app.include_router(client_acceptance_router)
 app.include_router(client_analytics_router)
+app.include_router(client_signal_engine_router)
 app.include_router(client_signal_router)
 app.include_router(control_center_router)
 app.include_router(dashboard_router)

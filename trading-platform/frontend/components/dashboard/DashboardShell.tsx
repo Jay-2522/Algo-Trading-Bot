@@ -493,6 +493,7 @@ export function DashboardShell(_: {
                 {tradeError || `Demo order status: ${readText(sendResult, ["status"], "Submitted")}`}
               </div>
             )}
+            {signalAction === "WAIT" ? <EmptyState text="Waiting for a valid strategy setup." /> : null}
           </section>
 
           <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
@@ -662,7 +663,29 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
         <Metric label="Risk / Reward" value={Number.isFinite(riskReward) ? `${riskReward.toFixed(2)}:1` : "Unavailable"} compact />
         <Metric label="Risk Status" value={readText(signal, ["risk_status"], "NO_SIGNAL").replaceAll("_", " ")} compact />
       </div>
+      <StrategyComponents components={asRecord(signal?.strategy_components)} />
     </button>
+  );
+}
+
+function StrategyComponents({ components }: { components: ApiRecord | null }) {
+  const items = [
+    ["Liquidity Sweep", components?.liquidity_sweep],
+    ["BOS", components?.bos],
+    ["CHOCH", components?.choch],
+    ["FVG", components?.fvg],
+    ["Order Block", components?.order_block],
+    ["Session Valid", components?.session_valid],
+  ] as const;
+  return (
+    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      {items.map(([label, value]) => (
+        <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0B1220] px-3 py-2 text-xs font-bold" key={label}>
+          <span className="text-slate-300">{label}</span>
+          <span className={value === true ? "text-emerald-300" : value === false ? "text-rose-300" : "text-slate-500"}>{value === true ? "Yes" : value === false ? "No" : "Unavailable"}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

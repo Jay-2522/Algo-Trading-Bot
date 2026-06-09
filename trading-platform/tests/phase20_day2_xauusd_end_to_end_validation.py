@@ -49,8 +49,11 @@ def verify_market_data_routes_honest() -> bool:
     acceptable_statuses = {
         "OK",
         "STALE_OR_MARKET_CLOSED",
+        "SYMBOL_NOT_FOUND",
+        "SYMBOL_HIDDEN",
         "SYMBOL_NOT_AVAILABLE",
         "SYMBOL_UNAVAILABLE",
+        "SYMBOL_TICK_UNAVAILABLE",
         "MT5_UNAVAILABLE",
         "TICK_READ_FAILED",
     }
@@ -85,7 +88,7 @@ def verify_history_routes_work() -> bool:
     client = _client()
     m5 = client.get("/mt5-demo/history/XAUUSD/M5/summary")
     h1 = client.get("/mt5-demo/history/XAUUSD/H1/summary")
-    acceptable = {"OK", "HISTORY_UNAVAILABLE", "CANDLES_UNAVAILABLE", "SYMBOL_UNAVAILABLE", "MT5_UNAVAILABLE", "CANDLE_READ_FAILED"}
+    acceptable = {"OK", "HISTORY_UNAVAILABLE", "CANDLES_UNAVAILABLE", "SYMBOL_NOT_FOUND", "SYMBOL_HIDDEN", "SYMBOL_UNAVAILABLE", "MT5_UNAVAILABLE", "CANDLE_READ_FAILED"}
     m5_json = m5.json()
     h1_json = h1.json()
     passed = (

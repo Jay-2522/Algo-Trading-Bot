@@ -140,6 +140,11 @@ async def get_mt5_demo_market_data_status() -> dict:
     return market_data_service.get_market_data_status()
 
 
+@router.get("/diagnostics/xauusd")
+async def get_mt5_demo_xauusd_diagnostics() -> dict:
+    return market_data_service.get_xauusd_diagnostics()
+
+
 @router.get("/market-data/tick/{symbol}")
 async def get_mt5_demo_symbol_tick(symbol: str) -> dict:
     return market_data_service.get_symbol_tick(symbol)

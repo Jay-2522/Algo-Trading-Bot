@@ -48,9 +48,9 @@ class MT5MarketDataService:
             return self._error_payload(normalized, "MT5_UNAVAILABLE", error)
 
         try:
-            visible, visibility_error = self._ensure_symbol_visible(normalized)
-            if not visible:
-                return self._error_payload(normalized, "SYMBOL_NOT_AVAILABLE", visibility_error)
+            availability = self._symbol_availability(normalized)
+            if availability["classification"] in {"SYMBOL_NOT_FOUND", "SYMBOL_HIDDEN"}:
+                return self._error_payload(normalized, availability["classification"], availability["message"])
             time.sleep(0.15)
             tick = mt5.symbol_info_tick(normalized)
             info = mt5.symbol_info(normalized)
@@ -69,7 +69,7 @@ class MT5MarketDataService:
             timestamp = self._epoch_to_iso(raw_timestamp)
             freshness = self._tick_freshness(timestamp if raw_timestamp > 0 else None)
             if bid <= 0 or ask <= 0 or spread <= 0 or raw_timestamp <= 0 or freshness != "READY":
-                return self._stale_tick_payload(normalized, bid, ask, raw_timestamp, freshness)
+                return self._stale_tick_payload(normalized, bid, ask, raw_timestamp, freshness, availability)
             return {
                 "symbol": normalized,
                 "bid": bid,
@@ -83,6 +83,9 @@ class MT5MarketDataService:
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,
                 "execution_allowed": False,
+                "symbol_availability": availability["classification"],
+                "symbol_select_result": availability["symbol_select_result"],
+                "symbol_select_error": availability["last_error"],
             }
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return self._error_payload(normalized, "TICK_READ_FAILED", str(exc))
@@ -104,9 +107,9 @@ class MT5MarketDataService:
             return self._candle_error_payload(normalized, normalized_timeframe, count, "MT5_UNAVAILABLE", error)
 
         try:
-            visible, visibility_error = self._ensure_symbol_visible(normalized)
-            if not visible:
-                return self._candle_error_payload(normalized, normalized_timeframe, count, "SYMBOL_UNAVAILABLE", visibility_error)
+            availability = self._symbol_availability(normalized)
+            if availability["classification"] in {"SYMBOL_NOT_FOUND", "SYMBOL_HIDDEN"}:
+                return self._candle_error_payload(normalized, normalized_timeframe, count, availability["classification"], availability["message"])
             mt5_timeframe = self._mt5_timeframe(normalized_timeframe)
             rates = mt5.copy_rates_from_pos(normalized, mt5_timeframe, 0, count)
             if rates is None or len(rates) == 0:
@@ -130,6 +133,9 @@ class MT5MarketDataService:
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,
                 "execution_allowed": False,
+                "symbol_availability": availability["classification"],
+                "symbol_select_result": availability["symbol_select_result"],
+                "symbol_select_error": availability["last_error"],
                 "timestamp": self._timestamp(),
             }
         except Exception as exc:  # pragma: no cover - depends on terminal state
@@ -154,7 +160,85 @@ class MT5MarketDataService:
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
             "execution_allowed": False,
+            "symbol_availability": tick.get("symbol_availability"),
+            "symbol_select_result": tick.get("symbol_select_result"),
+            "symbol_select_error": tick.get("symbol_select_error"),
         }
+
+    def get_xauusd_diagnostics(self) -> dict[str, Any]:
+        return self.get_symbol_diagnostics("XAUUSD")
+
+    def get_symbol_diagnostics(self, symbol: str) -> dict[str, Any]:
+        normalized = self._normalize_symbol(symbol)
+        initialized, error = self._initialize()
+        if not initialized:
+            return {
+                "symbol": normalized,
+                "initialization_state": "FAILED",
+                "initialization_error": error,
+                "classification": "MT5_UNAVAILABLE",
+                "diagnostic_report": error,
+                "simulation_only": True,
+                "live_execution_enabled": False,
+                "broker_execution_enabled": False,
+                "execution_allowed": False,
+                "timestamp": self._timestamp(),
+            }
+
+        try:
+            account = mt5.account_info()
+            terminal = mt5.terminal_info()
+            info = mt5.symbol_info(normalized)
+            tick = mt5.symbol_info_tick(normalized)
+            select_result = bool(mt5.symbol_select(normalized, True)) if info is not None else False
+            select_error = mt5.last_error()
+            symbols_total = self._safe_call(mt5.symbols_total)
+            version = self._safe_call(mt5.version)
+            availability = self._classify_symbol(normalized, info, select_result, select_error)
+            if availability["classification"] == "SYMBOL_AVAILABLE" and tick is None:
+                availability = {
+                    **availability,
+                    "classification": "SYMBOL_TICK_UNAVAILABLE",
+                    "message": f"{normalized} exists but MT5 returned no tick.",
+                }
+            report = self._diagnostic_report(normalized, availability, tick)
+            return {
+                "symbol": normalized,
+                "initialization_state": "INITIALIZED",
+                "account_login": str(getattr(account, "login", "")) if account else "",
+                "server": str(getattr(account, "server", "")) if account else "",
+                "terminal_path": str(getattr(terminal, "path", "")) if terminal else "",
+                "terminal_build": getattr(terminal, "build", None) if terminal else None,
+                "terminal_symbol_count": symbols_total,
+                "mt5_version": version,
+                "symbol_info": self._object_to_dict(info),
+                "symbol_info_tick": self._object_to_dict(tick),
+                "symbol_visibility": bool(getattr(info, "visible", False)) if info is not None else False,
+                "symbol_select_result": select_result,
+                "mt5_last_error": select_error,
+                "classification": availability["classification"],
+                "diagnostic_report": report,
+                "source": "MT5_DEMO",
+                "simulation_only": True,
+                "live_execution_enabled": False,
+                "broker_execution_enabled": False,
+                "execution_allowed": False,
+                "timestamp": self._timestamp(),
+            }
+        except Exception as exc:  # pragma: no cover - depends on terminal state
+            return {
+                "symbol": normalized,
+                "initialization_state": "INITIALIZED",
+                "classification": "DIAGNOSTICS_FAILED",
+                "diagnostic_report": f"MT5 diagnostics failed safely: {exc}",
+                "simulation_only": True,
+                "live_execution_enabled": False,
+                "broker_execution_enabled": False,
+                "execution_allowed": False,
+                "timestamp": self._timestamp(),
+            }
+        finally:
+            mt5.shutdown()
 
     def _initialize(self) -> tuple[bool, str]:
         if mt5 is None:
@@ -212,6 +296,52 @@ class MT5MarketDataService:
             return False, f"{symbol} could not be selected in Market Watch: {mt5.last_error()}"
         return True, ""
 
+    def _symbol_availability(self, symbol: str) -> dict[str, Any]:
+        info = mt5.symbol_info(symbol)
+        select_result = False
+        select_error: Any = None
+        if info is not None:
+            select_result = bool(mt5.symbol_select(symbol, True))
+            select_error = mt5.last_error()
+        return self._classify_symbol(symbol, info, select_result, select_error)
+
+    def _classify_symbol(self, symbol: str, info: Any, select_result: bool, select_error: Any) -> dict[str, Any]:
+        if info is None:
+            return {
+                "classification": "SYMBOL_NOT_FOUND",
+                "message": f"{symbol} was not returned by mt5.symbol_info().",
+                "symbol_select_result": False,
+                "last_error": select_error,
+            }
+        visible = bool(getattr(info, "visible", False))
+        if visible and not select_result:
+            return {
+                "classification": "SYMBOL_AVAILABLE_SELECT_FAILED",
+                "message": f"{symbol} is visible from mt5.symbol_info(), but mt5.symbol_select() failed: {select_error}",
+                "symbol_select_result": False,
+                "last_error": select_error,
+            }
+        if visible:
+            return {
+                "classification": "SYMBOL_AVAILABLE",
+                "message": f"{symbol} is available and visible in MT5.",
+                "symbol_select_result": select_result,
+                "last_error": select_error,
+            }
+        if select_result:
+            return {
+                "classification": "SYMBOL_AVAILABLE",
+                "message": f"{symbol} was hidden but mt5.symbol_select() made it available.",
+                "symbol_select_result": True,
+                "last_error": select_error,
+            }
+        return {
+            "classification": "SYMBOL_HIDDEN",
+            "message": f"{symbol} exists but is hidden and mt5.symbol_select() failed: {select_error}",
+            "symbol_select_result": False,
+            "last_error": select_error,
+        }
+
     def _mt5_timeframe(self, timeframe: str) -> Any:
         return {
             "M1": mt5.TIMEFRAME_M1,
@@ -250,7 +380,17 @@ class MT5MarketDataService:
             "execution_allowed": False,
         }
 
-    def _stale_tick_payload(self, symbol: str, bid: float, ask: float, raw_timestamp: int, freshness: str | None = None) -> dict[str, Any]:
+    def _stale_tick_payload(
+        self,
+        symbol: str,
+        bid: float,
+        ask: float,
+        raw_timestamp: int,
+        freshness: str | None = None,
+        availability: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        availability = availability or {}
+        status = "SYMBOL_TICK_UNAVAILABLE" if raw_timestamp <= 0 and bid <= 0 and ask <= 0 else "STALE_OR_MARKET_CLOSED"
         return {
             "symbol": symbol,
             "bid": bid,
@@ -259,13 +399,16 @@ class MT5MarketDataService:
             "timestamp": self._epoch_to_iso(raw_timestamp) if raw_timestamp > 0 else None,
             "freshness": "OFFLINE",
             "source": "MT5_DEMO",
-            "status": "STALE_OR_MARKET_CLOSED",
+            "status": status,
             "error": "STALE_TICK",
-            "message": "MT5 tick is stale. Market may be closed or broker feed is not updating.",
+            "message": self._tick_unavailable_message(symbol, availability, status),
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
             "execution_allowed": False,
+            "symbol_availability": availability.get("classification"),
+            "symbol_select_result": availability.get("symbol_select_result"),
+            "symbol_select_error": availability.get("last_error"),
         }
 
     def _candle_error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str) -> dict[str, Any]:
@@ -306,6 +449,46 @@ class MT5MarketDataService:
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _object_to_dict(self, value: Any) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if hasattr(value, "_asdict"):
+            return dict(value._asdict())
+        keys = [key for key in dir(value) if not key.startswith("_")]
+        result: dict[str, Any] = {}
+        for key in keys:
+            item = getattr(value, key, None)
+            if isinstance(item, (str, int, float, bool)) or item is None:
+                result[key] = item
+        return result
+
+    def _safe_call(self, fn: Any) -> Any:
+        try:
+            return fn()
+        except Exception as exc:  # pragma: no cover - diagnostic only
+            return f"UNAVAILABLE: {exc}"
+
+    def _diagnostic_report(self, symbol: str, availability: dict[str, Any], tick: Any) -> str:
+        classification = availability.get("classification")
+        if classification == "SYMBOL_AVAILABLE_SELECT_FAILED":
+            return (
+                f"{symbol} is available because mt5.symbol_info() returned a visible symbol. "
+                f"mt5.symbol_select() failed with {availability.get('last_error')}, so selection failure is recorded as a terminal/API warning, "
+                "not as symbol unavailability."
+            )
+        if classification == "SYMBOL_TICK_UNAVAILABLE":
+            return f"{symbol} exists, but mt5.symbol_info_tick() returned no tick; validation cannot report a live price."
+        if classification == "SYMBOL_AVAILABLE":
+            tick_text = "and tick data is available" if tick is not None else "but tick data is unavailable"
+            return f"{symbol} is available from mt5.symbol_info() {tick_text}."
+        return str(availability.get("message") or f"{symbol} diagnostic classification: {classification}")
+
+    def _tick_unavailable_message(self, symbol: str, availability: dict[str, Any], status: str) -> str:
+        prefix = str(availability.get("message") or f"{symbol} is available from mt5.symbol_info().")
+        if status == "SYMBOL_TICK_UNAVAILABLE":
+            return f"{prefix} MT5 did not provide a usable tick."
+        return f"{prefix} MT5 tick is stale. Market may be closed or broker feed is not updating."
 
     def _tick_freshness(self, timestamp: str | None) -> str:
         if not timestamp:

@@ -21,6 +21,8 @@ type TraderBundle = {
   demoPositionMonitor: Record<string, unknown> | null;
   persistentTrades: Array<Record<string, unknown>>;
   outcomeSummary: Record<string, unknown> | null;
+  performanceValidationCompare: Record<string, unknown> | null;
+  performanceValidationDrift: Record<string, unknown> | null;
   signals: Array<Record<string, unknown>>;
 };
 
@@ -39,6 +41,8 @@ const emptyTraderBundle: TraderBundle = {
   demoPositionMonitor: null,
   persistentTrades: [],
   outcomeSummary: null,
+  performanceValidationCompare: null,
+  performanceValidationDrift: null,
   signals: [],
 };
 
@@ -81,6 +85,8 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       demoPositionMonitor: fetchJson<Record<string, unknown>>("/mt5-demo/position-monitor/open"),
       persistentTrades: fetchJson<Array<Record<string, unknown>>>("/trade-journal/persistence/recent?limit=5"),
       outcomeSummary: fetchJson<Record<string, unknown>>("/analytics/outcomes/summary"),
+      performanceValidationCompare: fetchJson<Record<string, unknown>>("/analytics/performance-validation/compare"),
+      performanceValidationDrift: fetchJson<Record<string, unknown>>("/analytics/performance-validation/drift"),
       signals: fetchJson<Array<Record<string, unknown>>>("/webhooks/events?limit=4"),
     };
 
@@ -179,6 +185,27 @@ function statusTone(value: string | boolean | null | undefined): "good" | "info"
   return "info";
 }
 
+function nestedRecord(record: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | null {
+  const value = record?.[key];
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function percentValue(record: Record<string, unknown> | null | undefined, key: string): string {
+  return `${readNumber(record, [key], 0).toFixed(2)}%`;
+}
+
+function driftTone(value: string): "good" | "info" | "warning" | "danger" | "muted" {
+  const text = value.toUpperCase();
+  if (text === "NORMAL") return "good";
+  if (text === "MINOR_DRIFT") return "info";
+  if (text === "MODERATE_DRIFT") return "warning";
+  if (text === "MAJOR_DRIFT") return "danger";
+  return "muted";
+}
+
 export function DashboardShell({
   executiveDashboardSection,
   analyticsSection,
@@ -220,6 +247,13 @@ export function DashboardShell({
   const closedDemoTrade = bundle.persistentTrades.find((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED") ?? null;
   const outcomeSummary = bundle.outcomeSummary;
   const closedOutcomeCount = readNumber(outcomeSummary, ["total_closed_trades"], 0);
+  const validationCompare = bundle.performanceValidationCompare;
+  const validationDrift = bundle.performanceValidationDrift;
+  const historicalValidationMetrics = nestedRecord(nestedRecord(validationCompare, "historical"), "metrics");
+  const liveValidationMetrics = nestedRecord(nestedRecord(validationCompare, "live"), "metrics");
+  const validationStatus = readText(validationCompare, ["status"], "INSUFFICIENT_DATA");
+  const driftStatus = readText(validationDrift, ["drift_status"], readText(validationCompare, ["drift_status"], "INSUFFICIENT_DATA"));
+  const confidenceScore = readNumber(validationCompare, ["confidence_score"], readNumber(validationDrift, ["confidence_score"], 0));
   const marketCards = [
     {
       label: "EURUSD Demo Bid",
@@ -350,6 +384,39 @@ export function DashboardShell({
             <div className="mt-4 rounded-2xl border border-dashed border-emerald-200/20 bg-slate-950/35 p-4 text-sm leading-6 text-emerald-50/80">
               <strong className="block text-white">No closed demo trades yet.</strong>
               DEMO performance attribution will populate after MT5 demo trades close and are synchronized.
+            </div>
+          )}
+        </section>
+        <section className="rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-cyan-100/70">DEMO Validation Panel</p>
+              <h2 className="mt-1 text-xl font-bold text-white">Historical vs Live Performance</h2>
+            </div>
+            <StatusBadge label={driftStatus.replaceAll("_", " ")} tone={driftTone(driftStatus)} />
+          </div>
+          {validationStatus === "READY" ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {[
+                ["Historical Win Rate", percentValue(historicalValidationMetrics, "win_rate")],
+                ["Live Win Rate", percentValue(liveValidationMetrics, "win_rate")],
+                ["Historical Avg RR", readNumber(historicalValidationMetrics, ["avg_rr"], 0).toFixed(2)],
+                ["Live Avg RR", readNumber(liveValidationMetrics, ["avg_rr"], 0).toFixed(2)],
+                ["Historical Net PnL", signedMoney(readNumber(historicalValidationMetrics, ["net_pnl"], 0))],
+                ["Live Net PnL", signedMoney(readNumber(liveValidationMetrics, ["net_pnl"], 0))],
+                ["Drift Status", driftStatus.replaceAll("_", " ")],
+                ["Confidence Score", `${confidenceScore.toFixed(2)}%`],
+              ].map(([label, value]) => (
+                <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" key={label}>
+                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                  <strong className="mt-1 block break-words text-lg text-white">{value}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-dashed border-cyan-200/20 bg-slate-950/35 p-4 text-sm leading-6 text-cyan-50/80">
+              <strong className="block text-white">INSUFFICIENT_DATA</strong>
+              Validation will compare historical backtests with closed live demo trades once both sources contain real records.
             </div>
           )}
         </section>

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 from typing import Any
 
+from backend.analytics.performance_validation_service import PerformanceValidationService
 from backend.analytics.trade_outcome_intelligence_service import TradeOutcomeIntelligenceService
 from backend.trade_journal.persistent_trade_journal_service import PersistentTradeJournalService
 
@@ -28,6 +29,7 @@ class ReportingEngineService:
     def __init__(self, journal: PersistentTradeJournalService | None = None) -> None:
         self.journal = journal or PersistentTradeJournalService()
         self.outcomes = TradeOutcomeIntelligenceService(self.journal)
+        self.performance_validation = PerformanceValidationService(self.journal)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -89,6 +91,36 @@ class ReportingEngineService:
             "outcome_attribution_summary": summary.get("outcome_attribution", {}),
             "empty_state": summary.get("total_closed_trades", 0) == 0,
             "message": "No closed demo trades available." if summary.get("total_closed_trades", 0) == 0 else "Performance V3 derived from closed demo trade outcomes.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
+    def build_performance_validation_v4(self) -> dict[str, Any]:
+        comparison = self.performance_validation.compare()
+        drift = self.performance_validation.detect_drift()
+        insufficient = comparison.get("status") == "INSUFFICIENT_DATA"
+        return {
+            "status": "INSUFFICIENT_DATA" if insufficient else "READY",
+            "report_type": "PERFORMANCE_VALIDATION_V4",
+            "data_source": "persistent_journal_and_backtest_storage",
+            "performance_validation_report": {
+                "live_vs_historical_comparison": comparison,
+                "drift_explanation": {
+                    "drift_status": drift.get("drift_status"),
+                    "reason": drift.get("reason"),
+                    "contributing_metrics": drift.get("contributing_metrics", []),
+                    "suggested_action": drift.get("suggested_action"),
+                },
+                "confidence_summary": {
+                    "confidence_score": comparison.get("confidence_score"),
+                    "drift_score": comparison.get("drift_score"),
+                    "status": "INSUFFICIENT_DATA" if insufficient else "READY",
+                },
+                "strategy_health_score": comparison.get("strategy_health_score"),
+            },
+            "message": "Insufficient closed live demo or historical backtest data." if insufficient else "Performance validation report built from closed demo outcomes and historical backtests.",
             "simulation_only": True,
             "demo_execution": True,
             "live_execution_enabled": False,

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 from typing import Any
 
+from backend.analytics.trade_outcome_intelligence_service import TradeOutcomeIntelligenceService
 from backend.trade_journal.persistent_trade_journal_service import PersistentTradeJournalService
 
 
@@ -26,6 +27,7 @@ class ReportingEngineService:
 
     def __init__(self, journal: PersistentTradeJournalService | None = None) -> None:
         self.journal = journal or PersistentTradeJournalService()
+        self.outcomes = TradeOutcomeIntelligenceService(self.journal)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -74,6 +76,24 @@ class ReportingEngineService:
         writer.writeheader()
         writer.writerows(rows)
         return buffer.getvalue()
+
+    def build_performance_v3(self) -> dict[str, Any]:
+        summary = self.outcomes.get_summary()
+        return {
+            "status": "READY",
+            "report_type": "PERFORMANCE_V3",
+            "data_source": "trade_outcome_intelligence",
+            "performance_summary": summary,
+            "symbol_breakdown": self.outcomes.get_symbol_performance(),
+            "session_breakdown": self.outcomes.get_session_performance(),
+            "outcome_attribution_summary": summary.get("outcome_attribution", {}),
+            "empty_state": summary.get("total_closed_trades", 0) == 0,
+            "message": "No closed demo trades available." if summary.get("total_closed_trades", 0) == 0 else "Performance V3 derived from closed demo trade outcomes.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
 
     def _build_report(self, report_type: str, period: str, since: datetime) -> dict[str, Any]:
         trades = [trade for trade in self.journal.list_trades(limit=100000) if self._created_at(trade) >= since]

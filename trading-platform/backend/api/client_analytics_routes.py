@@ -275,6 +275,11 @@ async def export_reports_v2_csv() -> str:
     return reporting_engine_service.export_csv()
 
 
+@router.get("/reports-v3/performance")
+async def get_reports_v3_performance() -> dict:
+    return reporting_engine_service.build_performance_v3()
+
+
 @router.get("/demo-positions/status")
 async def get_demo_positions_status() -> dict:
     return demo_position_analytics_service.get_status()

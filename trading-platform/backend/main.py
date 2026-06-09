@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from backend.api.ai_routes import router as ai_router
 from backend.api.account_routing_routes import router as account_routing_router
+from backend.api.analytics_routes import router as analytics_router
 from backend.api.backtesting_routes import router as backtesting_router
 from backend.api.backup_routes import router as backup_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
@@ -130,6 +131,7 @@ app.include_router(trade_copier_router)
 app.include_router(monitoring_router)
 app.include_router(database_router)
 app.include_router(ai_router)
+app.include_router(analytics_router)
 app.include_router(news_router)
 app.include_router(nifty50_router)
 app.include_router(operational_intelligence_router)

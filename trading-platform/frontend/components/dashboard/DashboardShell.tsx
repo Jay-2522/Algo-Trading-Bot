@@ -20,6 +20,7 @@ type TraderBundle = {
   mt5MarketOverview: Mt5MarketOverviewData | null;
   demoPositionMonitor: Record<string, unknown> | null;
   persistentTrades: Array<Record<string, unknown>>;
+  outcomeSummary: Record<string, unknown> | null;
   signals: Array<Record<string, unknown>>;
 };
 
@@ -37,6 +38,7 @@ const emptyTraderBundle: TraderBundle = {
   mt5MarketOverview: null,
   demoPositionMonitor: null,
   persistentTrades: [],
+  outcomeSummary: null,
   signals: [],
 };
 
@@ -78,6 +80,7 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       mt5MarketOverview: fetchJson<Mt5MarketOverviewData>("/mt5-demo/overview"),
       demoPositionMonitor: fetchJson<Record<string, unknown>>("/mt5-demo/position-monitor/open"),
       persistentTrades: fetchJson<Array<Record<string, unknown>>>("/trade-journal/persistence/recent?limit=5"),
+      outcomeSummary: fetchJson<Record<string, unknown>>("/analytics/outcomes/summary"),
       signals: fetchJson<Array<Record<string, unknown>>>("/webhooks/events?limit=4"),
     };
 
@@ -215,6 +218,8 @@ export function DashboardShell({
   const demoPositions = Array.isArray(bundle.demoPositionMonitor?.positions) ? (bundle.demoPositionMonitor.positions as Array<Record<string, unknown>>) : [];
   const openDemoPosition = demoPositions[0] ?? null;
   const closedDemoTrade = bundle.persistentTrades.find((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED") ?? null;
+  const outcomeSummary = bundle.outcomeSummary;
+  const closedOutcomeCount = readNumber(outcomeSummary, ["total_closed_trades"], 0);
   const marketCards = [
     {
       label: "EURUSD Demo Bid",
@@ -315,6 +320,39 @@ export function DashboardShell({
         {executiveDashboardSection}
         {platformFoundationSection}
         {analyticsSection}
+        <section className="rounded-3xl border border-emerald-300/15 bg-emerald-300/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-emerald-100/70">DEMO Performance</p>
+              <h2 className="mt-1 text-xl font-bold text-white">Trade Outcome Intelligence</h2>
+            </div>
+            <StatusBadge label={closedOutcomeCount ? "Closed Trades" : "Empty"} tone={closedOutcomeCount ? "good" : "muted"} />
+          </div>
+          {closedOutcomeCount ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ["Total Closed Trades", readText(outcomeSummary, ["total_closed_trades"], "0")],
+                ["Win Rate", `${readText(outcomeSummary, ["win_rate"], "0")}%`],
+                ["Net PnL", signedMoney(readNumber(outcomeSummary, ["net_pnl"], 0))],
+                ["Avg RR", readText(outcomeSummary, ["avg_rr"], "0")],
+                ["Best Trade", signedMoney(readNumber(outcomeSummary?.best_trade as Record<string, unknown>, ["realized_pnl"], 0))],
+                ["Worst Trade", signedMoney(readNumber(outcomeSummary?.worst_trade as Record<string, unknown>, ["realized_pnl"], 0))],
+                ["Best Symbol", readText(outcomeSummary, ["best_symbol"], "n/a")],
+                ["Worst Symbol", readText(outcomeSummary, ["worst_symbol"], "n/a")],
+              ].map(([label, value]) => (
+                <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" key={label}>
+                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                  <strong className="mt-1 block break-words text-lg text-white">{value}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-dashed border-emerald-200/20 bg-slate-950/35 p-4 text-sm leading-6 text-emerald-50/80">
+              <strong className="block text-white">No closed demo trades yet.</strong>
+              DEMO performance attribution will populate after MT5 demo trades close and are synchronized.
+            </div>
+          )}
+        </section>
         {strategyIntelligenceSection}
         {accountAnalyticsSection}
         {tradeJournalSection}

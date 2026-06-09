@@ -101,3 +101,7 @@ export function syncClientLifecycle() {
 export function syncClientCloseHistory() {
   return postJson<ApiRecord>("/mt5-demo/close-sync/run");
 }
+
+export function fetchClientTradeHistory(limit = 500) {
+  return fetchJson<ApiRecord[]>(`/trade-journal/persistence/recent?limit=${Math.max(1, Math.min(limit, 500))}`);
+}

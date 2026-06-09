@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
 import {
   fetchClientOperatingDashboard,
@@ -59,6 +60,11 @@ function money(value: number | null | undefined): string {
   return `${prefix}$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function percent(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "Unavailable";
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`;
+}
+
 function numeric(record: ApiRecord | null | undefined, keys: string[], fallback = Number.NaN): number {
   for (const key of keys) {
     const value = record?.[key];
@@ -104,6 +110,23 @@ function formatDuration(value: unknown): string {
   return `${(number / 60).toFixed(1)}h`;
 }
 
+function formatTradeTime(value: unknown): string {
+  if (!value) return "Unavailable";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "Unavailable";
+  const datePart = date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  const timePart = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "UTC" });
+  return `${datePart}\n${timePart} UTC`;
+}
+
+function sessionOpen(session: "Sydney" | "Tokyo" | "London" | "New York", now = new Date()): boolean {
+  const hour = now.getUTCHours();
+  if (session === "Sydney") return hour >= 21 || hour < 6;
+  if (session === "Tokyo") return hour >= 0 && hour < 9;
+  if (session === "London") return hour >= 7 && hour < 16;
+  return hour >= 12 && hour < 21;
+}
+
 function todayPnl(closedTrades: ApiRecord[]): number {
   const today = new Date().toDateString();
   return closedTrades.reduce((sum, trade) => {
@@ -111,6 +134,10 @@ function todayPnl(closedTrades: ApiRecord[]): number {
     if (!closedAt || new Date(closedAt).toDateString() !== today) return sum;
     return sum + readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl"], 0);
   }, 0);
+}
+
+function floatingPnl(positions: ApiRecord[]): number {
+  return positions.reduce((sum, position) => sum + readNumber(position, ["floating_pnl", "profit"], 0), 0);
 }
 
 function currentEntryPrice(tick: ApiRecord | null, action: "BUY" | "SELL"): number {
@@ -128,6 +155,15 @@ function rrFrom(entry: number, action: "BUY" | "SELL", stopLoss: number, takePro
 function cleanBlockers(blockers: unknown): string[] {
   if (!Array.isArray(blockers)) return [];
   return blockers.map((item) => String(item).replaceAll("_", " ").toLowerCase()).slice(0, 6);
+}
+
+function tradeStatusMessage(marketOpen: boolean, openTradeExists: boolean, stopLoss: string, takeProfit: string, formValid: boolean): { ok: boolean; text: string } {
+  if (!marketOpen) return { ok: false, text: "Market Closed" };
+  if (!stopLoss) return { ok: false, text: "Stop Loss Required" };
+  if (!takeProfit) return { ok: false, text: "Take Profit Required" };
+  if (openTradeExists) return { ok: false, text: "Existing Demo Position Active" };
+  if (!formValid) return { ok: false, text: "Check SL / TP Placement" };
+  return { ok: true, text: "Trade Ready" };
 }
 
 export function DashboardShell(_: {
@@ -203,6 +239,9 @@ export function DashboardShell(_: {
   const avgRr = readNumber(data.journalSummary, ["avg_rr"], readNumber(data.outcomeSummary, ["avg_rr"], 0));
   const bestTrade = asRecord(data.outcomeSummary?.best_trade);
   const worstTrade = asRecord(data.outcomeSummary?.worst_trade);
+  const openFloatingPnl = floatingPnl(data.openPositions);
+  const lastTrade = closedTrades[0] ?? null;
+  const tradeStatus = tradeStatusMessage(marketOpen, openTradeExists, form.stopLoss, form.takeProfit, formValid);
 
   const orderPayload = (): ClientOrderPayload => ({
     symbol: "EURUSD",
@@ -285,14 +324,63 @@ export function DashboardShell(_: {
               </button>
             </div>
           </div>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Status</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-5">
-            <Metric label="Account" value={readText(data.account, ["login"], "Unavailable")} />
-            <Metric label="Server" value={readText(data.account, ["server"], "Unavailable")} />
-            <Metric label="Balance" value={money(numeric(data.account, ["balance"]))} />
-            <Metric label="Equity" value={money(numeric(data.account, ["equity"]))} />
-            <Metric label="Today's P&L" value={money(todayPnl(closedTrades))} valueClass={pnlClass(todayPnl(closedTrades))} />
+          <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_1fr_0.8fr_1fr]">
+            <section>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Status</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Metric label="Account" value={readText(data.account, ["login"], "Unavailable")} />
+                <Metric label="Server" value={readText(data.account, ["server"], "Unavailable")} />
+                <Metric label="Balance" value={money(numeric(data.account, ["balance"]))} />
+                <Metric label="Equity" value={money(numeric(data.account, ["equity"]))} />
+              </div>
+            </section>
+            <section>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Health</p>
+              <div className="mt-3 grid gap-3">
+                <Metric label="Margin Level" value={percent(numeric(data.account, ["margin_level"]))} compact />
+                <Metric label="Free Margin" value={money(numeric(data.account, ["free_margin"]))} compact />
+                <Metric label="Used Margin" value={money(numeric(data.account, ["used_margin"]))} compact />
+              </div>
+            </section>
+            <section>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Floating P&L</p>
+              <div className="mt-3 grid gap-3">
+                <Metric label="Open Positions" value={String(data.openPositions.length)} compact />
+                <Metric label="Floating P&L" value={money(openFloatingPnl)} valueClass={pnlClass(openFloatingPnl)} />
+                <Metric label="Today's P&L" value={money(todayPnl(closedTrades))} valueClass={pnlClass(todayPnl(closedTrades))} compact />
+              </div>
+            </section>
+            <section>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Last Trade</p>
+              <div className="mt-3 grid gap-3">
+                {lastTrade ? (
+                  <>
+                    <Metric label="Setup" value={`${readText(lastTrade, ["symbol"], "Trade")} ${readText(lastTrade, ["side"], "")}`} compact />
+                    <Metric label="Result" value={readText(lastTrade, ["result"], "Unavailable")} compact />
+                    <Metric label="P&L" value={money(readNumber(lastTrade, ["net_pnl", "profit_loss", "realized_pnl"], 0))} valueClass={pnlClass(readNumber(lastTrade, ["net_pnl", "profit_loss", "realized_pnl"], 0))} compact />
+                  </>
+                ) : (
+                  <Metric label="Status" value="No completed trades yet" compact />
+                )}
+              </div>
+            </section>
           </div>
+          <section className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Forex Sessions</p>
+              <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[36rem]">
+                {(["Sydney", "Tokyo", "London", "New York"] as const).map((session) => {
+                  const open = sessionOpen(session);
+                  return (
+                    <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0B1220] px-3 py-2" key={session}>
+                      <span className="text-sm font-bold text-slate-200">{session}</span>
+                      <span className={open ? "text-xs font-black text-emerald-300" : "text-xs font-black text-slate-500"}>{open ? "OPEN" : "CLOSED"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
           <p className="mt-3 text-xs text-slate-500">{lastUpdated ? `Auto-refresh every 5 seconds. Last updated ${lastUpdated}.` : "Preparing dashboard data."}</p>
         </header>
 
@@ -353,18 +441,22 @@ export function DashboardShell(_: {
             </div>
 
             <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Readiness</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Trade Status</p>
               <div className="mt-3 grid gap-2 text-sm text-slate-300">
-                <StatusLine ok={marketOpen} label="Market open" />
-                <StatusLine ok={!openTradeExists} label="Single demo trade slot available" />
-                <StatusLine ok={formValid} label="SL and TP valid" />
-                <StatusLine ok={approvalReady} label="Approval workflow approved" />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-bold text-slate-200">{marketOpen ? "Market Open" : "Market Closed"}</span>
+                  <span className={marketOpen ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{marketOpen ? "Ready" : "Blocked"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-bold text-slate-200">{tradeStatus.text}</span>
+                  <span className={tradeStatus.ok ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{tradeStatus.ok ? "Ready" : "Blocked"}</span>
+                </div>
               </div>
             </div>
 
             {preview && (
               <div className="mt-4 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
-                <p className="text-sm font-bold text-blue-100">Preview Status: {readText(preview, ["status"], "Review")}</p>
+                <p className="text-sm font-bold text-blue-100">Preview Status: {approvalReady ? "Approved" : "Needs Attention"}</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   <Metric label="Risk / Reward" value={rr ? `${rr}:1` : "Unavailable"} compact />
                   <Metric label="Estimated Margin" value="Unavailable" compact />
@@ -389,13 +481,18 @@ export function DashboardShell(_: {
 
           <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
             <SectionTitle eyebrow="Open Demo Positions" title="Active MT5 Demo Exposure" />
-            {data.openPositions.length ? <OpenPositionsTable positions={data.openPositions} /> : <EmptyState text="No open demo positions." />}
+            {data.openPositions.length ? <OpenPositionsTable positions={data.openPositions} /> : <EmptyState text="Waiting for the next trade opportunity." />}
           </section>
         </section>
 
         <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-          <SectionTitle eyebrow="Closed Demo Trades" title="Completed Trade Journal" />
-          {closedTrades.length ? <ClosedTradesTable trades={closedTrades} /> : <EmptyState text="No completed demo trades yet." />}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <SectionTitle eyebrow="Closed Demo Trades" title="Completed Trade Journal" />
+            <Link className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" href="/dashboard/history">
+              View Trade History
+            </Link>
+          </div>
+          {closedTrades.length ? <ClosedTradesTable trades={closedTrades} /> : <EmptyState text="Completed trades will appear here." />}
         </section>
 
         <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
@@ -478,6 +575,7 @@ function MarketCard({ title, tick }: { title: string; tick: ApiRecord | null }) 
   const bid = readNumber(tick, ["bid"], Number.NaN);
   const ask = readNumber(tick, ["ask"], Number.NaN);
   const spread = readNumber(tick, ["spread"], Number.NaN);
+  const feedUnavailable = !tick || readText(tick, ["status"], "").toUpperCase() !== "OK";
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex items-start justify-between gap-3">
@@ -489,16 +587,8 @@ function MarketCard({ title, tick }: { title: string; tick: ApiRecord | null }) 
         <Metric label="Ask" value={marketNumber(ask, title === "XAUUSD" ? 2 : 5)} compact />
         <Metric label="Spread" value={Number.isFinite(spread) ? spread.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "Unavailable"} compact />
       </div>
+      {feedUnavailable ? <p className="mt-3 text-sm font-bold text-slate-400">Market feed unavailable.</p> : null}
     </section>
-  );
-}
-
-function StatusLine({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span>{label}</span>
-      <span className={ok ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{ok ? "Ready" : "Blocked"}</span>
-    </div>
   );
 }
 
@@ -507,7 +597,13 @@ function OpenPositionsTable({ positions }: { positions: ApiRecord[] }) {
     <div className="mt-4 overflow-x-auto">
       <table className="w-full min-w-[860px] border-separate border-spacing-y-2 text-left text-sm">
         <thead className="text-xs uppercase tracking-[0.16em] text-slate-400">
-          <tr>{["Ticket", "Symbol", "Side", "Lot", "Entry", "Current", "SL", "TP", "Floating P&L", "Status"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+          <tr>
+            {["Ticket", "Symbol", "Direction", "Lot", "Entry", "Current Price", "Floating P&L", "SL", "TP"].map((item, index) => (
+              <th className={`px-3 py-2 ${index >= 3 ? "text-right" : ""}`} key={item}>
+                {item}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
           {positions.map((position, index) => {
@@ -517,13 +613,12 @@ function OpenPositionsTable({ positions }: { positions: ApiRecord[] }) {
                 <td className="rounded-l-xl px-3 py-3 font-bold">{readText(position, ["ticket"], "Unavailable")}</td>
                 <td className="px-3 py-3">{readText(position, ["symbol"], "Unavailable")}</td>
                 <td className="px-3 py-3">{readText(position, ["side", "type"], "Unavailable")}</td>
-                <td className="px-3 py-3">{readText(position, ["lot", "volume"], "Unavailable")}</td>
-                <td className="px-3 py-3">{marketNumber(readNumber(position, ["entry_price", "price_open"], Number.NaN))}</td>
-                <td className="px-3 py-3">{marketNumber(readNumber(position, ["current_price", "price_current"], Number.NaN))}</td>
-                <td className="px-3 py-3">{marketNumber(readNumber(position, ["stop_loss", "sl"], Number.NaN))}</td>
-                <td className="px-3 py-3">{marketNumber(readNumber(position, ["take_profit", "tp"], Number.NaN))}</td>
-                <td className={`px-3 py-3 font-bold ${pnlClass(pnl)}`}>{money(pnl)}</td>
-                <td className="rounded-r-xl px-3 py-3">{readText(position, ["lifecycle_status", "status"], "OPEN")}</td>
+                <td className="px-3 py-3 text-right">{readText(position, ["lot", "volume"], "Unavailable")}</td>
+                <td className="px-3 py-3 text-right">{marketNumber(readNumber(position, ["entry_price", "price_open"], Number.NaN))}</td>
+                <td className="px-3 py-3 text-right">{marketNumber(readNumber(position, ["current_price", "price_current"], Number.NaN))}</td>
+                <td className={`px-3 py-3 text-right font-bold ${pnlClass(pnl)}`}>{money(pnl)}</td>
+                <td className="px-3 py-3 text-right">{marketNumber(readNumber(position, ["stop_loss", "sl"], Number.NaN))}</td>
+                <td className="rounded-r-xl px-3 py-3 text-right">{marketNumber(readNumber(position, ["take_profit", "tp"], Number.NaN))}</td>
               </tr>
             );
           })}
@@ -552,7 +647,7 @@ function ClosedTradesTable({ trades }: { trades: ApiRecord[] }) {
                 <td className={`px-3 py-3 font-bold ${pnlClass(pnl)}`}>{money(pnl)}</td>
                 <td className="px-3 py-3">{readText(trade, ["result"], "Unavailable")}</td>
                 <td className="px-3 py-3">{formatDuration(trade.duration_minutes)}</td>
-                <td className="rounded-r-xl px-3 py-3">{readText(trade, ["closed_at"], "Unavailable")}</td>
+                <td className="whitespace-pre-line rounded-r-xl px-3 py-3">{formatTradeTime(readText(trade, ["closed_at", "close_time"], ""))}</td>
               </tr>
             );
           })}

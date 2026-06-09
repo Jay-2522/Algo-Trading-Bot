@@ -6,8 +6,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 DASHBOARD_PATH = PROJECT_ROOT / "frontend/components/dashboard/DashboardShell.tsx"
+HISTORY_PATH = PROJECT_ROOT / "frontend/components/dashboard/TradeHistoryPage.tsx"
+HISTORY_ROUTE_PATH = PROJECT_ROOT / "frontend/app/dashboard/history/page.tsx"
 API_PATH = PROJECT_ROOT / "frontend/lib/clientOperatingDashboardApi.ts"
 DOC_PATH = PROJECT_ROOT / "docs/phase18-final-client-operating-dashboard.md"
+GLOBALS_PATH = PROJECT_ROOT / "frontend/app/globals.css"
 
 
 def show(name: str, passed: bool, detail: str = "") -> bool:
@@ -16,7 +19,8 @@ def show(name: str, passed: bool, detail: str = "") -> bool:
 
 
 def verify_files_exist() -> bool:
-    missing = [str(path.relative_to(PROJECT_ROOT)) for path in [DASHBOARD_PATH, API_PATH, DOC_PATH] if not path.exists()]
+    required_paths = [DASHBOARD_PATH, HISTORY_PATH, HISTORY_ROUTE_PATH, API_PATH, DOC_PATH]
+    missing = [str(path.relative_to(PROJECT_ROOT)) for path in required_paths if not path.exists()]
     return show("Client dashboard files exist", not missing, ", ".join(missing))
 
 
@@ -33,6 +37,8 @@ def verify_api_helpers_exist() -> bool:
         "/mt5-demo/guarded-demo-order/send",
         "/mt5-demo/positions/sync-journal",
         "/mt5-demo/lifecycle/sync",
+        "fetchClientTradeHistory",
+        "/trade-journal/persistence/recent?limit=",
     ]
     missing = [item for item in required if item not in text]
     return show("Dashboard API helpers exist", not missing, ", ".join(missing))
@@ -81,8 +87,13 @@ def verify_clean_client_sections() -> bool:
     text = DASHBOARD_PATH.read_text(encoding="utf-8")
     required = [
         "Account Status",
+        "Account Health",
+        "Floating P&L",
+        "Last Trade",
+        "Forex Sessions",
         "Market Status",
         "Quick Trade Panel",
+        "Trade Status",
         "Open Demo Positions",
         "Closed Demo Trades",
         "Performance Summary",
@@ -92,6 +103,8 @@ def verify_clean_client_sections() -> bool:
     ]
     missing = [item for item in required if item not in text]
     hidden = [
+        "Readiness",
+        "Approval workflow approved",
         "workflow_id",
         "audit_id",
         "preflight_id",
@@ -106,8 +119,63 @@ def verify_clean_client_sections() -> bool:
     return show("Client dashboard sections are clean and developer IDs hidden", not missing and not present, ", ".join(missing + present))
 
 
+def verify_trade_history_page() -> bool:
+    dashboard = DASHBOARD_PATH.read_text(encoding="utf-8")
+    history = HISTORY_PATH.read_text(encoding="utf-8")
+    route = HISTORY_ROUTE_PATH.read_text(encoding="utf-8")
+    required = [
+        "View Trade History",
+        'href="/dashboard/history"',
+        "fetchClientTradeHistory(500)",
+        "Search by symbol",
+        "Sort by date",
+        "Completed trades will appear here.",
+        "Previous",
+        "Next",
+        "formatTradeTime",
+        "Date",
+        "Symbol",
+        "Direction",
+        "Lot",
+        "Entry",
+        "Exit",
+        "P&L",
+        "Result",
+        "Duration",
+        "TradeHistoryPage",
+    ]
+    combined = "\n".join([dashboard, history, route])
+    missing = [item for item in required if item not in combined]
+    return show("Trade history page provides search, sort, pagination, and clean columns", not missing, ", ".join(missing))
+
+
+def verify_human_timestamps_and_empty_states() -> bool:
+    dashboard = DASHBOARD_PATH.read_text(encoding="utf-8")
+    history = HISTORY_PATH.read_text(encoding="utf-8")
+    required = [
+        "formatTradeTime(readText(trade, [\"closed_at\", \"close_time\"], \"\"))",
+        "whitespace-pre-line",
+        "Waiting for the next trade opportunity.",
+        "Completed trades will appear here.",
+        "Market feed unavailable.",
+    ]
+    forbidden = [
+        "readText(trade, [\"closed_at\"], \"Unavailable\")",
+        "No completed demo trades yet.",
+    ]
+    combined = "\n".join([dashboard, history])
+    missing = [item for item in required if item not in combined]
+    present = [item for item in forbidden if item in combined]
+    return show("Timestamps and empty states are client-facing", not missing and not present, ", ".join(missing + present))
+
+
+def verify_client_font_polish() -> bool:
+    text = GLOBALS_PATH.read_text(encoding="utf-8")
+    return show("Dashboard uses configured premium font stack", "var(--font-geist-sans), Inter" in text)
+
+
 def verify_no_fake_data() -> bool:
-    text = DASHBOARD_PATH.read_text(encoding="utf-8")
+    text = "\n".join([DASHBOARD_PATH.read_text(encoding="utf-8"), HISTORY_PATH.read_text(encoding="utf-8")])
     suspicious = [
         "fake",
         "mock",
@@ -118,7 +186,7 @@ def verify_no_fake_data() -> bool:
         "hardcoded",
     ]
     present = [item for item in suspicious if item.lower() in text.lower()]
-    honest = "Unavailable" in text and "Need more closed trades." in text and "No completed demo trades yet." in text
+    honest = "Unavailable" in text and "Need more closed trades." in text and "Completed trades will appear here." in text
     return show("No fake data appears in client dashboard", not present and honest, ", ".join(present))
 
 
@@ -165,6 +233,9 @@ def main() -> int:
         verify_no_direct_order_send_route_from_frontend(),
         verify_trade_button_blocks(),
         verify_clean_client_sections(),
+        verify_trade_history_page(),
+        verify_human_timestamps_and_empty_states(),
+        verify_client_font_polish(),
         verify_no_fake_data(),
         verify_auto_refresh_and_safe_sync(),
         verify_backend_order_send_unchanged(),

@@ -22,6 +22,7 @@ type DashboardData = {
   marketScope: ApiRecord[];
   clientSignals: ApiRecord[];
   brokerAccounts: ApiRecord[];
+  brokerCopyPlans: ApiRecord[];
   currentTerminalAccount: ApiRecord | null;
   openPositions: ApiRecord[];
   recentTrades: ApiRecord[];
@@ -39,6 +40,7 @@ const emptyData: DashboardData = {
   marketScope: [],
   clientSignals: [],
   brokerAccounts: [],
+  brokerCopyPlans: [],
   currentTerminalAccount: null,
   openPositions: [],
   recentTrades: [],
@@ -205,6 +207,7 @@ export function DashboardShell(_: {
         marketScope: Array.isArray(payload.marketScope) ? (payload.marketScope.filter((item) => asRecord(item)) as ApiRecord[]) : [],
         clientSignals: recordsFrom(payload.clientSignals, "signals"),
         brokerAccounts: recordsFrom(payload.brokerAccounts, "accounts"),
+        brokerCopyPlans: recordsFrom(payload.brokerCopyReadiness, "plans"),
         currentTerminalAccount: asRecord(asRecord(payload.brokerAccounts)?.current_terminal_account),
         openPositions: recordsFrom(payload.openPositions, "positions"),
         recentTrades: Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : [],
@@ -414,7 +417,12 @@ export function DashboardShell(_: {
           <SectionTitle eyebrow="Broker Accounts" title="StarTrader, FxPro, and Vantage" />
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             {(["STARTRADER", "FXPRO", "VANTAGE"] as const).map((brokerId) => (
-              <BrokerAccountCard account={data.brokerAccounts.find((account) => readText(account, ["broker_id"], "") === brokerId) ?? null} brokerId={brokerId} key={brokerId} />
+              <BrokerAccountCard
+                account={data.brokerAccounts.find((account) => readText(account, ["broker_id"], "") === brokerId) ?? null}
+                brokerId={brokerId}
+                copyPlan={data.brokerCopyPlans.find((plan) => readText(plan, ["broker_id"], "") === brokerId) ?? null}
+                key={brokerId}
+              />
             ))}
           </div>
           <CurrentTerminalCard account={data.currentTerminalAccount} />
@@ -658,10 +666,11 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
   );
 }
 
-function BrokerAccountCard({ brokerId, account }: { brokerId: "STARTRADER" | "FXPRO" | "VANTAGE"; account: ApiRecord | null }) {
+function BrokerAccountCard({ brokerId, account, copyPlan }: { brokerId: "STARTRADER" | "FXPRO" | "VANTAGE"; account: ApiRecord | null; copyPlan: ApiRecord | null }) {
   const brokerName = readText(account, ["broker_name"], brokerId === "STARTRADER" ? "StarTrader" : brokerId === "FXPRO" ? "FxPro" : "Vantage");
   const connectionStatus = readText(account, ["connection_status"], "PENDING_CONNECTION").replaceAll("_", " ");
   const executionEnabled = readText(account, ["execution_enabled"], "false") === "true";
+  const blockedReasons = Array.isArray(copyPlan?.blocked_reasons) ? (copyPlan.blocked_reasons.map((reason) => String(reason)) as string[]) : [];
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0F172A] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -678,7 +687,17 @@ function BrokerAccountCard({ brokerId, account }: { brokerId: "STARTRADER" | "FX
         <Metric label="Balance" value={money(readNumber(account, ["balance"], Number.NaN))} valueClass="whitespace-nowrap text-white" compact />
         <Metric label="Equity" value={money(readNumber(account, ["equity"], Number.NaN))} valueClass="whitespace-nowrap text-white" compact />
         <Metric label="Execution Status" value={executionEnabled ? "Enabled" : "Disabled"} valueClass={executionEnabled ? "text-rose-300" : "text-emerald-300"} compact />
+        <Metric label="Copy Readiness" value={readText(copyPlan, ["readiness_status"], "BLOCKED").replaceAll("_", " ")} compact />
+        <Metric label="Duplicate Protection" value={readText(asRecord(copyPlan?.duplicate_protection), ["reason"], "No duplicate check available.")} compact />
+        <Metric label="Execution Decision" value={readText(copyPlan, ["final_execution_decision"], "BLOCKED").replaceAll("_", " ")} compact />
       </div>
+      {blockedReasons.length > 0 ? (
+        <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
+          {blockedReasons.slice(0, 3).map((reason) => (
+            <p key={reason}>{reason}</p>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

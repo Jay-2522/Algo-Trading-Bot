@@ -46,6 +46,11 @@ async def get_broker_account_readiness() -> dict:
     return broker_account_service.readiness()
 
 
+@router.get("/copy-readiness")
+async def get_broker_copy_readiness() -> dict:
+    return execution_planner.copy_readiness()
+
+
 @router.post("/execution-plan/preview")
 async def preview_multi_account_execution_plan(payload: dict = Body(default_factory=dict)) -> dict:
     return execution_planner.preview(payload)

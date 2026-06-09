@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 BrokerId = Literal["STARTRADER", "FXPRO", "VANTAGE"]
@@ -17,6 +17,8 @@ class BrokerAccountConfig(BaseModel):
     account_type: AccountType | None = None
     enabled: bool = True
     execution_enabled: bool = False
+    max_open_trades: int = 1
+    open_positions: list[dict] = Field(default_factory=list)
 
 
 class BrokerAccountStatus(BaseModel):

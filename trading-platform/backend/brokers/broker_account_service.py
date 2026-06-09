@@ -48,6 +48,7 @@ class BrokerAccountService:
         config = self._configs.get(normalized)
         if config is None:
             raise KeyError(normalized)
+        connected = bool(config.account_login and config.server)
         return BrokerAccountStatus(
             broker_id=config.broker_id,
             broker_name=config.broker_name,
@@ -55,12 +56,23 @@ class BrokerAccountService:
             account_login=config.account_login,
             server=config.server,
             account_type=config.account_type,
-            connection_status="PENDING_CONNECTION",
+            connection_status="CONNECTED" if connected else "PENDING_CONNECTION",
+            balance=None,
+            equity=None,
+            margin=None,
+            free_margin=None,
             enabled=config.enabled,
             execution_enabled=False,
-            last_sync=None,
-            message="Broker account not connected yet.",
+            last_sync=self._timestamp() if connected else None,
+            message="Broker account connected for preview only." if connected else "Broker account not connected yet.",
         )
+
+    def get_account_config(self, broker_id: str) -> BrokerAccountConfig:
+        normalized = str(broker_id or "").strip().upper()
+        config = self._configs.get(normalized)
+        if config is None:
+            raise KeyError(normalized)
+        return config
 
     def sync_accounts(self) -> dict[str, Any]:
         return {

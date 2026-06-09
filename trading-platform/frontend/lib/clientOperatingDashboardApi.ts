@@ -46,6 +46,7 @@ export async function fetchClientOperatingDashboard() {
     marketScope: fetchJson<ApiRecord[]>("/market-scope/instruments/status"),
     clientSignals: fetchJson<ApiRecord>("/client-signals/current"),
     brokerAccounts: fetchJson<ApiRecord>("/brokers/accounts"),
+    brokerCopyReadiness: fetchJson<ApiRecord>("/brokers/copy-readiness"),
     openPositions: fetchJson<ApiRecord>("/mt5-demo/position-monitor/open"),
     recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/recent?limit=20"),
     journalSummary: fetchJson<ApiRecord>("/trade-journal/persistence/summary"),

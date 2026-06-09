@@ -48,6 +48,24 @@ The execution planner accepts a signal preview containing:
 
 It returns one plan per broker with eligibility, reason, and execution status. This is a preview-only planning layer. It never sends orders.
 
+Each broker preview includes:
+
+- broker id and connection status
+- execution enabled/disabled state
+- account type and available balance/equity
+- requested symbol, direction, and lot
+- adjusted lot
+- readiness status
+- blocked reasons
+- duplicate protection result
+- final execution decision: `BLOCKED`, `READY_FOR_DEMO`, or `READY_FOR_LIVE_DISABLED`
+
+Duplicate protection checks broker id, account login, symbol, direction, recent signal hash, and known open positions where available.
+
+Account-level risk checks include broker connection, supported broker, broker symbol support, lot validity, SL/TP presence, maximum open trades, and the live-execution-disabled guard.
+
+The `/brokers/copy-readiness` route returns a safe read-only readiness preview for StarTrader, FxPro, and Vantage.
+
 ## Safety Restrictions
 
 The broker layer does not:

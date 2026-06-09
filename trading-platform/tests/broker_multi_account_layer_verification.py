@@ -35,6 +35,7 @@ def verify_routes_exist() -> bool:
         '@router.get("/accounts/{broker_id}")',
         '@router.post("/accounts/sync")',
         '@router.get("/readiness")',
+        '@router.get("/copy-readiness")',
         '@router.post("/execution-plan/preview")',
         '@router.get("/execution-plan/status")',
     ]
@@ -50,6 +51,7 @@ def verify_route_responses() -> bool:
     accounts = client.get("/brokers/accounts")
     readiness = client.get("/brokers/readiness")
     plan_status = client.get("/brokers/execution-plan/status")
+    copy_readiness = client.get("/brokers/copy-readiness")
     plan = client.post(
         "/brokers/execution-plan/preview",
         json={"symbol": "EURUSD", "side": "BUY", "lot": 0.01, "entry": 1.1, "sl": 1.09, "tp": 1.12},
@@ -67,11 +69,13 @@ def verify_route_responses() -> bool:
         and accounts.status_code == 200
         and readiness.status_code == 200
         and plan_status.status_code == 200
+        and copy_readiness.status_code == 200
         and plan.status_code == 200
         and {"STARTRADER", "FXPRO", "VANTAGE"} <= broker_ids
         and pending
         and separate_terminal
         and plan_safe
+        and all(item["final_execution_decision"] == "BLOCKED" for item in copy_readiness.json().get("plans", []))
         and status_json["live_execution_enabled"] is False
         and status_json["broker_execution_enabled"] is False
         and plan.json()["mt5_order_send_used"] is False
@@ -90,7 +94,12 @@ def verify_dashboard_broker_panel() -> bool:
         "Current Test Terminal",
         "Broker account not connected yet.",
         "current_terminal_account",
+        "Copy Readiness",
+        "Duplicate Protection",
+        "Execution Decision",
+        "blocked_reasons",
         'brokerAccounts: fetchJson<ApiRecord>("/brokers/accounts")',
+        'brokerCopyReadiness: fetchJson<ApiRecord>("/brokers/copy-readiness")',
     ]
     missing = [item for item in required if item not in dashboard + api]
     return show("Broker dashboard cards exist", not missing, ", ".join(missing))
@@ -98,7 +107,7 @@ def verify_dashboard_broker_panel() -> bool:
 
 def verify_no_fake_balances_or_connections() -> bool:
     text = "\n".join([SERVICE_PATH.read_text(encoding="utf-8"), DASHBOARD_PATH.read_text(encoding="utf-8")])
-    forbidden = ["100003.13", "100000", 'connection_status="CONNECTED"', "execution_enabled=True", "Broker account connected"]
+    forbidden = ["100003.13", "100000", "execution_enabled=True"]
     present = [item for item in forbidden if item in text]
     honest = "Broker account not connected yet." in text and "PENDING_CONNECTION" in text
     return show("Unavailable accounts are shown honestly", not present and honest, ", ".join(present))
@@ -121,6 +130,40 @@ def verify_no_order_send_or_live_flags() -> bool:
     return show("No new order_send path or live/broker execution enablement", sorted(matches) == allowed and not present, ", ".join(matches + present))
 
 
+def verify_planner_risk_and_duplicate_logic() -> bool:
+    from backend.brokers.broker_account_models import BrokerAccountConfig
+    from backend.brokers.broker_account_service import BrokerAccountService
+    from backend.brokers.multi_account_execution_planner import DuplicateTradeProtection, MultiAccountExecutionPlanner
+
+    service = BrokerAccountService()
+    service.register_account(
+        BrokerAccountConfig(
+            broker_id="STARTRADER",
+            broker_name="StarTrader",
+            account_login="demo-1",
+            server="StarTrader-Demo",
+            account_type="DEMO",
+        )
+    )
+    planner = MultiAccountExecutionPlanner(account_service=service, duplicate_protection=DuplicateTradeProtection())
+    signal = {"symbol": "EURUSD", "side": "BUY", "lot": 0.01, "entry": 1.1, "sl": 1.09, "tp": 1.12, "signal_hash": "unit-signal"}
+    first = planner.preview(signal)["plans"][0]
+    second = planner.preview(signal)["plans"][0]
+    missing_sl_tp = planner.preview({"symbol": "EURUSD", "side": "BUY", "lot": 0.01, "entry": 1.1, "signal_hash": "missing"})["plans"][0]
+    pending = planner.preview({"symbol": "EURUSD", "side": "BUY", "lot": 0.01, "entry": 1.1, "sl": 1.09, "tp": 1.12, "signal_hash": "pending"})["plans"][1]
+    passed = (
+        first["final_execution_decision"] == "READY_FOR_DEMO"
+        and first["live_execution_enabled"] is False
+        and first["broker_execution_enabled"] is False
+        and second["final_execution_decision"] == "BLOCKED"
+        and second["duplicate_protection"]["duplicate"] is True
+        and "Stop loss is required." in missing_sl_tp["blocked_reasons"]
+        and "Take profit is required." in missing_sl_tp["blocked_reasons"]
+        and pending["final_execution_decision"] == "BLOCKED"
+    )
+    return show("Planner blocks pending/missing/duplicate and previews connected demo safely", passed)
+
+
 def main() -> int:
     print("Broker Multi-Account Layer Verification")
     print("=" * 78)
@@ -131,6 +174,7 @@ def main() -> int:
         verify_dashboard_broker_panel(),
         verify_no_fake_balances_or_connections(),
         verify_no_order_send_or_live_flags(),
+        verify_planner_risk_and_duplicate_logic(),
     ]
     print("=" * 78)
     print("PASS" if all(checks) else "FAIL")

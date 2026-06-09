@@ -70,14 +70,14 @@ def verify_no_direct_order_send_route_from_frontend() -> bool:
 def verify_trade_button_blocks() -> bool:
     text = DASHBOARD_PATH.read_text(encoding="utf-8")
     required = [
-        "const canPreview = marketOpen && !openTradeExists && formValid && !workingAction",
+        "const canPreview = selectedMarketOpen && !openTradeExists && formValid && !workingAction",
         "const canSend = canPreview && approvalReady",
         "disabled={!canPreview}",
         "disabled={!canSend}",
         "Stop Loss",
         "Take Profit",
-        "rrFrom",
-        "Preview is blocked until the market is open",
+        "selectedSignal",
+        "Preview is blocked until a EURUSD AI signal is ready",
     ]
     missing = [item for item in required if item not in text]
     return show("Market closed and missing SL/TP block preview/send", not missing, ", ".join(missing))
@@ -90,11 +90,11 @@ def verify_clean_client_sections() -> bool:
         "Account Health",
         "Floating P&L",
         "Last Trade",
-        "Forex Sessions",
-        "Market Status",
-        "Quick Trade Panel",
+        "Market Overview",
+        "AI Signal Center",
+        "Signal Execution Panel",
         "Trade Status",
-        "Open Demo Positions",
+        "Open Trades",
         "Closed Demo Trades",
         "Performance Summary",
         "DEMO MODE",
@@ -124,7 +124,7 @@ def verify_trade_history_page() -> bool:
     history = HISTORY_PATH.read_text(encoding="utf-8")
     route = HISTORY_ROUTE_PATH.read_text(encoding="utf-8")
     required = [
-        "View Trade History",
+        "View Full Trade History",
         'href="/dashboard/history"',
         "fetchClientTradeHistory(500)",
         "Search by symbol",
@@ -155,7 +155,7 @@ def verify_human_timestamps_and_empty_states() -> bool:
     required = [
         "formatTradeTime(readText(trade, [\"closed_at\", \"close_time\"], \"\"))",
         "whitespace-pre-line",
-        "Waiting for the next trade opportunity.",
+        "Waiting for the next AI-approved trade.",
         "Completed trades will appear here.",
         "Market feed unavailable.",
     ]

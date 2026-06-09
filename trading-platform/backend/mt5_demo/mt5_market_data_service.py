@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import time
 from typing import Any
 
 
@@ -49,13 +50,21 @@ class MT5MarketDataService:
         try:
             visible, visibility_error = self._ensure_symbol_visible(normalized)
             if not visible:
-                return self._error_payload(normalized, "SYMBOL_UNAVAILABLE", visibility_error)
+                return self._error_payload(normalized, "SYMBOL_NOT_AVAILABLE", visibility_error)
+            time.sleep(0.15)
             tick = mt5.symbol_info_tick(normalized)
+            info = mt5.symbol_info(normalized)
             if tick is None:
-                return self._error_payload(normalized, "TICK_UNAVAILABLE", f"No tick returned for {normalized}: {mt5.last_error()}")
-            bid = float(getattr(tick, "bid", 0.0) or 0.0)
-            ask = float(getattr(tick, "ask", 0.0) or 0.0)
-            raw_timestamp = int(getattr(tick, "time", 0) or 0)
+                bid = float(getattr(info, "bid", 0.0) or 0.0) if info else 0.0
+                ask = float(getattr(info, "ask", 0.0) or 0.0) if info else 0.0
+                raw_timestamp = 0
+            else:
+                bid = float(getattr(tick, "bid", 0.0) or 0.0)
+                ask = float(getattr(tick, "ask", 0.0) or 0.0)
+                if (bid <= 0 or ask <= 0) and info is not None:
+                    bid = float(getattr(info, "bid", 0.0) or 0.0)
+                    ask = float(getattr(info, "ask", 0.0) or 0.0)
+                raw_timestamp = int(getattr(tick, "time", 0) or 0)
             spread = round(ask - bid, 6)
             timestamp = self._epoch_to_iso(raw_timestamp)
             freshness = self._tick_freshness(timestamp if raw_timestamp > 0 else None)
@@ -198,10 +207,9 @@ class MT5MarketDataService:
         info = mt5.symbol_info(symbol)
         if info is None:
             return False, f"{symbol} is unavailable in MT5."
-        if not getattr(info, "visible", False):
-            selected = bool(mt5.symbol_select(symbol, True))
-            if not selected:
-                return False, f"{symbol} could not be selected in Market Watch: {mt5.last_error()}"
+        selected = bool(mt5.symbol_select(symbol, True))
+        if not selected:
+            return False, f"{symbol} could not be selected in Market Watch: {mt5.last_error()}"
         return True, ""
 
     def _mt5_timeframe(self, timeframe: str) -> Any:

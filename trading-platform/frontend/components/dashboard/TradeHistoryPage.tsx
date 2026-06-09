@@ -52,6 +52,7 @@ export function TradeHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [symbolFilter, setSymbolFilter] = useState<"ALL" | "EURUSD" | "XAUUSD" | "NIFTY50">("ALL");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [page, setPage] = useState(1);
 
@@ -79,12 +80,13 @@ export function TradeHistoryPage() {
 
   const filteredTrades = useMemo(() => {
     const normalizedQuery = query.trim().toUpperCase();
-    const matching = normalizedQuery ? trades.filter((trade) => readText(trade, ["symbol"], "").toUpperCase().includes(normalizedQuery)) : trades;
+    const scoped = symbolFilter === "ALL" ? trades : trades.filter((trade) => readText(trade, ["symbol"], "").toUpperCase() === symbolFilter);
+    const matching = normalizedQuery ? scoped.filter((trade) => readText(trade, ["symbol"], "").toUpperCase().includes(normalizedQuery)) : scoped;
     return [...matching].sort((left, right) => {
       const difference = closeTimestamp(right) - closeTimestamp(left);
       return sortOrder === "newest" ? difference : -difference;
     });
-  }, [query, sortOrder, trades]);
+  }, [query, sortOrder, symbolFilter, trades]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTrades.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -92,7 +94,7 @@ export function TradeHistoryPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, sortOrder]);
+  }, [query, sortOrder, symbolFilter]);
 
   return (
     <main className="min-h-screen bg-[#050816] text-white">
@@ -107,10 +109,19 @@ export function TradeHistoryPage() {
               <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Completed Demo Trades</h1>
               <p className="mt-2 text-sm text-slate-400">All completed trades recorded in the persistent journal.</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <label className="grid gap-2 text-sm font-bold text-slate-300">
                 Search by symbol
                 <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" placeholder="EURUSD" value={query} onChange={(event) => setQuery(event.target.value)} />
+              </label>
+              <label className="grid gap-2 text-sm font-bold text-slate-300">
+                Filter
+                <select className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" value={symbolFilter} onChange={(event) => setSymbolFilter(event.target.value as "ALL" | "EURUSD" | "XAUUSD" | "NIFTY50")}>
+                  <option value="ALL">All scoped symbols</option>
+                  <option value="EURUSD">EURUSD</option>
+                  <option value="XAUUSD">XAUUSD</option>
+                  <option value="NIFTY50">NIFTY50</option>
+                </select>
               </label>
               <label className="grid gap-2 text-sm font-bold text-slate-300">
                 Sort by date

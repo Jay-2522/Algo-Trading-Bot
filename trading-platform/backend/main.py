@@ -13,6 +13,7 @@ from backend.api.backup_routes import router as backup_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.client_acceptance_routes import router as client_acceptance_router
 from backend.api.client_analytics_routes import router as client_analytics_router
+from backend.api.client_signal_routes import router as client_signal_router
 from backend.api.control_center_routes import router as control_center_router
 from backend.api.dashboard_routes import router as dashboard_router
 from backend.api.database_routes import router as database_router
@@ -28,6 +29,7 @@ from backend.api.execution_routes import router as execution_router
 from backend.api.execution_queue_routes import router as execution_queue_router
 from backend.api.institutional_routes import router as institutional_router
 from backend.api.market_data_routes import router as market_data_router
+from backend.api.market_scope_routes import router as market_scope_router
 from backend.api.monitoring_routes import router as monitoring_router
 from backend.api.mt5_routes import router as mt5_router
 from backend.api.mt5_demo_routes import router as mt5_demo_router
@@ -109,6 +111,7 @@ app.include_router(market_data_router)
 app.include_router(account_routing_router)
 app.include_router(client_acceptance_router)
 app.include_router(client_analytics_router)
+app.include_router(client_signal_router)
 app.include_router(control_center_router)
 app.include_router(dashboard_router)
 app.include_router(demo_execution_router)
@@ -126,6 +129,7 @@ app.include_router(execution_router)
 app.include_router(execution_queue_router)
 app.include_router(mt5_router)
 app.include_router(mt5_demo_router)
+app.include_router(market_scope_router)
 app.include_router(multi_account_execution_router)
 app.include_router(trade_copier_router)
 app.include_router(monitoring_router)

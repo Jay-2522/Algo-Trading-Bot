@@ -43,6 +43,8 @@ export async function fetchClientOperatingDashboard() {
     account: fetchJson<ApiRecord>("/mt5-demo/account"),
     eurusdTick: fetchJson<ApiRecord>("/mt5-demo/market-data/tick/EURUSD"),
     xauusdTick: fetchJson<ApiRecord>("/mt5-demo/market-data/tick/XAUUSD"),
+    marketScope: fetchJson<ApiRecord[]>("/market-scope/instruments/status"),
+    clientSignals: fetchJson<ApiRecord>("/client-signals/current"),
     openPositions: fetchJson<ApiRecord>("/mt5-demo/position-monitor/open"),
     recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/recent?limit=20"),
     journalSummary: fetchJson<ApiRecord>("/trade-journal/persistence/summary"),
@@ -104,4 +106,12 @@ export function syncClientCloseHistory() {
 
 export function fetchClientTradeHistory(limit = 500) {
   return fetchJson<ApiRecord[]>(`/trade-journal/persistence/recent?limit=${Math.max(1, Math.min(limit, 500))}`);
+}
+
+export function fetchClientSignals() {
+  return fetchJson<ApiRecord>("/client-signals/current");
+}
+
+export function refreshClientSignals() {
+  return postJson<ApiRecord>("/client-signals/refresh");
 }

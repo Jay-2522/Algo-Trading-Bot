@@ -19,6 +19,8 @@ type DashboardData = {
   account: ApiRecord | null;
   eurusdTick: ApiRecord | null;
   xauusdTick: ApiRecord | null;
+  marketScope: ApiRecord[];
+  clientSignals: ApiRecord[];
   openPositions: ApiRecord[];
   recentTrades: ApiRecord[];
   journalSummary: ApiRecord | null;
@@ -26,17 +28,14 @@ type DashboardData = {
   guardedStatus: ApiRecord | null;
 };
 
-type TradeForm = {
-  symbol: "EURUSD";
-  action: "BUY" | "SELL";
-  stopLoss: string;
-  takeProfit: string;
-};
+type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
 
 const emptyData: DashboardData = {
   account: null,
   eurusdTick: null,
   xauusdTick: null,
+  marketScope: [],
+  clientSignals: [],
   openPositions: [],
   recentTrades: [],
   journalSummary: null,
@@ -140,10 +139,6 @@ function floatingPnl(positions: ApiRecord[]): number {
   return positions.reduce((sum, position) => sum + readNumber(position, ["floating_pnl", "profit"], 0), 0);
 }
 
-function currentEntryPrice(tick: ApiRecord | null, action: "BUY" | "SELL"): number {
-  return action === "BUY" ? readNumber(tick, ["ask"], 0) : readNumber(tick, ["bid"], 0);
-}
-
 function rrFrom(entry: number, action: "BUY" | "SELL", stopLoss: number, takeProfit: number): number | null {
   if (entry <= 0 || stopLoss <= 0 || takeProfit <= 0) return null;
   const risk = action === "BUY" ? entry - stopLoss : stopLoss - entry;
@@ -157,13 +152,16 @@ function cleanBlockers(blockers: unknown): string[] {
   return blockers.map((item) => String(item).replaceAll("_", " ").toLowerCase()).slice(0, 6);
 }
 
-function tradeStatusMessages(marketOpen: boolean, openTradeExists: boolean, stopLoss: string, takeProfit: string, formValid: boolean): { ok: boolean; text: string }[] {
+function tradeStatusMessages(marketOpen: boolean, openTradeExists: boolean, signal: ApiRecord | null, formValid: boolean): { ok: boolean; text: string }[] {
   if (!marketOpen) return [{ ok: false, text: "Market Closed" }];
   const messages: { ok: boolean; text: string }[] = [{ ok: true, text: "Market Open" }];
-  if (!stopLoss) messages.push({ ok: false, text: "Stop Loss Required" });
-  if (!takeProfit) messages.push({ ok: false, text: "Take Profit Required" });
+  if (!signal) messages.push({ ok: false, text: "Select AI Signal" });
+  if (readText(signal, ["signal"], "WAIT").toUpperCase() === "WAIT") messages.push({ ok: false, text: "No Confirmed Signal" });
+  if (!numeric(signal, ["stop_loss"])) messages.push({ ok: false, text: "Stop Loss Required" });
+  if (!numeric(signal, ["take_profit"])) messages.push({ ok: false, text: "Take Profit Required" });
   if (openTradeExists) messages.push({ ok: false, text: "Existing Demo Position Active" });
-  if (stopLoss && takeProfit && !formValid) messages.push({ ok: false, text: "Check SL / TP Placement" });
+  if (signal && readText(signal, ["symbol"], "") !== "EURUSD") messages.push({ ok: false, text: "EURUSD Demo Execution Only" });
+  if (signal && !formValid) messages.push({ ok: false, text: "Check SL / TP Placement" });
   if (messages.length === 1) messages.push({ ok: true, text: "Trade Ready" });
   return messages;
 }
@@ -181,7 +179,7 @@ export function DashboardShell(_: {
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [form, setForm] = useState<TradeForm>({ symbol: "EURUSD", action: "BUY", stopLoss: "", takeProfit: "" });
+  const [selectedSymbol, setSelectedSymbol] = useState<ScopedSymbol>("EURUSD");
   const [preview, setPreview] = useState<ApiRecord | null>(null);
   const [sendResult, setSendResult] = useState<ApiRecord | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
@@ -200,6 +198,8 @@ export function DashboardShell(_: {
         account: asRecord(payload.account),
         eurusdTick: asRecord(payload.eurusdTick),
         xauusdTick: asRecord(payload.xauusdTick),
+        marketScope: Array.isArray(payload.marketScope) ? (payload.marketScope.filter((item) => asRecord(item)) as ApiRecord[]) : [],
+        clientSignals: recordsFrom(payload.clientSignals, "signals"),
         openPositions: recordsFrom(payload.openPositions, "positions"),
         recentTrades: Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : [],
         journalSummary: asRecord(payload.journalSummary),
@@ -227,18 +227,22 @@ export function DashboardShell(_: {
     setPreview(null);
     setSendResult(null);
     setTradeError(null);
-  }, [form.action, form.stopLoss, form.takeProfit]);
+  }, [selectedSymbol]);
 
   const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
   const marketOpen = isMarketOpen(data.eurusdTick);
   const openTradeExists = data.openPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
   const approvalReady = preview?.approved_for_future_demo_order === true;
-  const stopLoss = Number(form.stopLoss);
-  const takeProfit = Number(form.takeProfit);
-  const entryPrice = currentEntryPrice(data.eurusdTick, form.action);
-  const rr = rrFrom(entryPrice, form.action, stopLoss, takeProfit);
-  const formValid = form.symbol === "EURUSD" && Number.isFinite(stopLoss) && stopLoss > 0 && Number.isFinite(takeProfit) && takeProfit > 0 && rr !== null;
-  const canPreview = marketOpen && !openTradeExists && formValid && !workingAction;
+  const selectedSignal = data.clientSignals.find((signal) => readText(signal, ["symbol"], "") === selectedSymbol) ?? null;
+  const signalAction = readText(selectedSignal, ["signal"], "WAIT").toUpperCase();
+  const signalEntry = readNumber(selectedSignal, ["entry"], Number.NaN);
+  const stopLoss = readNumber(selectedSignal, ["stop_loss"], Number.NaN);
+  const takeProfit = readNumber(selectedSignal, ["take_profit"], Number.NaN);
+  const rr = readNumber(selectedSignal, ["risk_reward"], Number.NaN);
+  const selectedMarketOpen = selectedSymbol === "EURUSD" ? marketOpen : false;
+  const signalExecutable = selectedSymbol === "EURUSD" && (signalAction === "BUY" || signalAction === "SELL");
+  const formValid = signalExecutable && Number.isFinite(signalEntry) && signalEntry > 0 && Number.isFinite(stopLoss) && stopLoss > 0 && Number.isFinite(takeProfit) && takeProfit > 0 && Number.isFinite(rr) && rr > 0;
+  const canPreview = selectedMarketOpen && !openTradeExists && formValid && !workingAction;
   const canSend = canPreview && approvalReady;
   const totalTrades = readNumber(data.journalSummary, ["total_trades"], 0);
   const closedCount = readNumber(data.journalSummary, ["closed_demo_trades"], 0);
@@ -249,13 +253,13 @@ export function DashboardShell(_: {
   const worstTrade = asRecord(data.outcomeSummary?.worst_trade);
   const openFloatingPnl = floatingPnl(data.openPositions);
   const lastTrade = closedTrades[0] ?? null;
-  const tradeStatus = tradeStatusMessages(marketOpen, openTradeExists, form.stopLoss, form.takeProfit, formValid);
+  const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
 
   const orderPayload = (): ClientOrderPayload => ({
     symbol: "EURUSD",
-    action: form.action,
+    action: signalAction as "BUY" | "SELL",
     lot: 0.01,
-    entry_price: entryPrice,
+    entry_price: signalEntry,
     stop_loss: stopLoss,
     take_profit: takeProfit,
   });
@@ -264,7 +268,7 @@ export function DashboardShell(_: {
     setTradeError(null);
     setSendResult(null);
     if (!canPreview) {
-      setTradeError("Preview is blocked until the market is open, SL/TP are valid, and no demo position is open.");
+      setTradeError("Preview is blocked until a EURUSD AI signal is ready, the market is open, SL/TP are valid, and no demo position is open.");
       return;
     }
     setWorkingAction("preview");
@@ -316,9 +320,9 @@ export function DashboardShell(_: {
         <header className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-2xl shadow-black/30">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-blue-300">MT5 Demo Operating Dashboard</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Client Trading Monitor</h1>
-              <p className="mt-2 text-sm text-slate-400">Monitor demo account status, market feed, trades, and guarded demo execution.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-blue-300">Client-Scoped AI Trading</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">AI Trading Dashboard</h1>
+              <p className="mt-2 text-sm text-slate-400">EURUSD, XAUUSD, and NIFTY50 signal monitoring with guarded execution.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" onClick={() => void refresh()} type="button">
@@ -373,76 +377,60 @@ export function DashboardShell(_: {
               </div>
             </section>
           </div>
-          <section className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Forex Sessions</p>
-              <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[36rem]">
-                {(["Sydney", "Tokyo", "London", "New York"] as const).map((session) => {
-                  const open = sessionOpen(session);
-                  return (
-                    <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0B1220] px-3 py-2" key={session}>
-                      <span className="whitespace-nowrap text-sm font-bold text-slate-200">{session}</span>
-                      <span className={open ? "text-xs font-black text-emerald-300" : "text-xs font-black text-slate-500"}>{open ? "OPEN" : "CLOSED"}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
           <p className="mt-3 text-xs text-slate-500">{lastUpdated ? `Auto-refresh every 5 seconds. Last updated ${lastUpdated}.` : "Preparing dashboard data."}</p>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <MarketCard title="EURUSD" tick={data.eurusdTick} />
-          <MarketCard title="XAUUSD" tick={data.xauusdTick} />
+        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+          <SectionTitle eyebrow="Market Overview" title="Scoped Instruments" />
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            <MarketCard title="EURUSD" tick={data.eurusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "EURUSD") ?? null} />
+            <MarketCard title="XAUUSD" tick={data.xauusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} />
+            <NiftyMarketCard scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "NIFTY50") ?? null} />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+          <SectionTitle eyebrow="AI Signal Center" title="Current Client Signals" />
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            {(["EURUSD", "XAUUSD", "NIFTY50"] as const).map((symbol) => (
+              <SignalCard
+                key={symbol}
+                selected={selectedSymbol === symbol}
+                signal={data.clientSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null}
+                symbol={symbol}
+                onSelect={() => setSelectedSymbol(symbol)}
+              />
+            ))}
+          </div>
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Quick Trade Panel</p>
-                <h2 className="mt-1 text-2xl font-black">Guarded Demo Order</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Signal Execution Panel</p>
+                <h2 className="mt-1 text-2xl font-black">Review the selected AI signal and approve demo execution.</h2>
               </div>
-              <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(marketLabel(data.eurusdTick))}`}>{marketLabel(data.eurusdTick)}</span>
+              <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(readText(selectedSignal, ["execution_status"], "WAITING"))}`}>{readText(selectedSignal, ["execution_status"], "WAITING")}</span>
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Symbol
-                <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-slate-300" value="EURUSD" disabled readOnly />
-              </label>
-              <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Direction
-                <select className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" value={form.action} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value as "BUY" | "SELL" }))}>
-                  <option>BUY</option>
-                  <option>SELL</option>
-                </select>
-              </label>
-              <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Lot
-                <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" value="0.01" disabled />
-              </label>
-              <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Entry
-                <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-slate-300" value={marketNumber(entryPrice)} disabled />
-              </label>
-              <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Stop Loss
-                <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" inputMode="decimal" placeholder="Required" value={form.stopLoss} onChange={(event) => setForm((current) => ({ ...current, stopLoss: event.target.value }))} />
-              </label>
-              <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Take Profit
-                <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" inputMode="decimal" placeholder="Required" value={form.takeProfit} onChange={(event) => setForm((current) => ({ ...current, takeProfit: event.target.value }))} />
-              </label>
+              <Metric label="Selected Symbol" value={selectedSymbol} />
+              <Metric label="AI Direction" value={signalAction} />
+              <Metric label="Entry" value={marketNumber(signalEntry, selectedSymbol === "XAUUSD" ? 2 : 5)} />
+              <Metric label="Stop Loss" value={marketNumber(stopLoss, selectedSymbol === "XAUUSD" ? 2 : 5)} />
+              <Metric label="Take Profit" value={marketNumber(takeProfit, selectedSymbol === "XAUUSD" ? 2 : 5)} />
+              <Metric label="Lot" value="0.01" />
+              <Metric label="Risk / Reward" value={Number.isFinite(rr) ? `${rr.toFixed(2)}:1` : "Unavailable"} />
+              <Metric label="Risk Status" value={readText(selectedSignal, ["risk_status"], "NO_SIGNAL").replaceAll("_", " ")} />
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button className="rounded-xl bg-blue-500 px-4 py-3 text-sm font-black text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canPreview} onClick={() => void handlePreview()} type="button">
-                {workingAction === "preview" ? "Previewing..." : "Preview Trade"}
+                {workingAction === "preview" ? "Previewing..." : "Preview Signal Trade"}
               </button>
               <button className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canSend} onClick={() => setConfirmOpen(true)} type="button">
-                Place Demo Trade
+                Confirm & Send Demo Order
               </button>
             </div>
 
@@ -484,8 +472,8 @@ export function DashboardShell(_: {
           </section>
 
           <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-            <SectionTitle eyebrow="Open Demo Positions" title="Active Demo Positions" />
-            {data.openPositions.length ? <OpenPositionsTable positions={data.openPositions} /> : <EmptyState text="Waiting for the next trade opportunity." />}
+            <SectionTitle eyebrow="Open Trades" title="Active Demo Positions" />
+            {data.openPositions.length ? <OpenPositionsTable positions={data.openPositions} /> : <EmptyState text="Waiting for the next AI-approved trade." />}
           </section>
         </section>
 
@@ -493,7 +481,7 @@ export function DashboardShell(_: {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <SectionTitle eyebrow="Closed Demo Trades" title="Completed Trade Journal" />
             <Link className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" href="/dashboard/history">
-              View Trade History
+              View Full Trade History
             </Link>
           </div>
           {closedTrades.length ? <ClosedTradesTable trades={closedTrades} /> : <EmptyState text="Completed trades will appear here." />}
@@ -502,13 +490,13 @@ export function DashboardShell(_: {
         <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
           <SectionTitle eyebrow="Performance Summary" title="Demo Analytics" />
           {closedCount ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <Metric label="Total Trades" value={String(totalTrades)} />
               <Metric label="Closed Trades" value={String(closedCount)} />
               <Metric label="Win Rate" value={`${winRate.toFixed(2)}%`} />
               <Metric label="Net P&L" value={money(netPnl)} valueClass={pnlClass(netPnl)} />
               <Metric label="Average RR" value={avgRr ? avgRr.toFixed(2) : "Unavailable"} />
-              <Metric label="Best / Worst" value={`${money(readNumber(bestTrade, ["realized_pnl", "net_pnl"], Number.NaN))} / ${money(readNumber(worstTrade, ["realized_pnl", "net_pnl"], Number.NaN))}`} />
+              {closedCount >= 5 ? <Metric label="Best / Worst" value={`${money(readNumber(bestTrade, ["realized_pnl", "net_pnl"], Number.NaN))} / ${money(readNumber(worstTrade, ["realized_pnl", "net_pnl"], Number.NaN))}`} /> : null}
             </div>
           ) : (
             <EmptyState text="Need more closed trades." />
@@ -534,10 +522,10 @@ export function DashboardShell(_: {
           <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0B1220] p-6 shadow-2xl shadow-black">
             <h2 className="text-2xl font-black">Confirm DEMO Trade</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Metric label="Symbol" value={form.symbol} compact />
-              <Metric label="Direction" value={form.action} compact />
+              <Metric label="Symbol" value={selectedSymbol} compact />
+              <Metric label="Direction" value={signalAction} compact />
               <Metric label="Lot" value="0.01" compact />
-              <Metric label="Entry" value={marketNumber(entryPrice)} compact />
+              <Metric label="Entry" value={marketNumber(signalEntry)} compact />
               <Metric label="Stop Loss" value={marketNumber(stopLoss)} compact />
               <Metric label="Take Profit" value={marketNumber(takeProfit)} compact />
             </div>
@@ -574,7 +562,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-function MarketCard({ title, tick }: { title: string; tick: ApiRecord | null }) {
+function MarketCard({ title, tick, scope }: { title: string; tick: ApiRecord | null; scope: ApiRecord | null }) {
   const label = marketLabel(tick);
   const bid = readNumber(tick, ["bid"], Number.NaN);
   const ask = readNumber(tick, ["ask"], Number.NaN);
@@ -591,8 +579,66 @@ function MarketCard({ title, tick }: { title: string; tick: ApiRecord | null }) 
         <Metric label="Ask" value={marketNumber(ask, title === "XAUUSD" ? 2 : 5)} compact />
         <Metric label="Spread" value={Number.isFinite(spread) ? spread.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "Unavailable"} compact />
       </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Metric label="Source" value={readText(scope, ["source"], "MT5_DEMO")} compact />
+        <Metric label="Last Update" value={formatTradeTime(readText(tick, ["timestamp"], ""))} compact />
+      </div>
       {feedUnavailable ? <p className="mt-3 text-sm font-bold text-slate-400">Market feed unavailable.</p> : null}
     </section>
+  );
+}
+
+function NiftyMarketCard({ scope }: { scope: ApiRecord | null }) {
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+      <div className="flex items-start justify-between gap-3">
+        <SectionTitle eyebrow="Market Status" title="NIFTY50" />
+        <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-black uppercase text-sky-200">Integration Pending</span>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <Metric label="Price" value="Unavailable" compact />
+        <Metric label="Spread" value="Unavailable" compact />
+        <Metric label="Status" value={readText(scope, ["status"], "INTEGRATION_PENDING").replaceAll("_", " ")} compact />
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Metric label="Source" value={readText(scope, ["source"], "PENDING_INDIAN_MARKET_INTEGRATION").replaceAll("_", " ")} compact />
+        <Metric label="Last Update" value={formatTradeTime(readText(scope, ["timestamp"], ""))} compact />
+      </div>
+      <p className="mt-3 text-sm font-bold text-slate-400">Indian market data/broker integration pending.</p>
+    </section>
+  );
+}
+
+function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymbol; signal: ApiRecord | null; selected: boolean; onSelect: () => void }) {
+  const action = readText(signal, ["signal"], "WAIT").toUpperCase();
+  const confidence = readNumber(signal, ["confidence"], Number.NaN);
+  const riskReward = readNumber(signal, ["risk_reward"], Number.NaN);
+  const actionable = action === "BUY" || action === "SELL";
+  return (
+    <button
+      className={`rounded-2xl border p-4 text-left transition ${selected ? "border-blue-400 bg-blue-500/10" : "border-slate-800 bg-[#0F172A] hover:border-slate-600"}`}
+      onClick={onSelect}
+      type="button"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{symbol}</p>
+          <strong className={`mt-2 block text-2xl ${actionable ? "text-emerald-300" : "text-slate-100"}`}>{action}</strong>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(readText(signal, ["execution_status"], "WAITING"))}`}>
+          {readText(signal, ["execution_status"], "WAITING")}
+        </span>
+      </div>
+      <p className="mt-3 min-h-10 text-sm font-semibold text-slate-300">{readText(signal, ["reason"], symbol === "NIFTY50" ? "Indian market integration pending." : "No confirmed setup available.")}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Metric label="Confidence" value={Number.isFinite(confidence) ? `${confidence.toFixed(0)}%` : "Unavailable"} compact />
+        <Metric label="Entry" value={marketNumber(readNumber(signal, ["entry"], Number.NaN), symbol === "XAUUSD" ? 2 : 5)} compact />
+        <Metric label="Stop Loss" value={marketNumber(readNumber(signal, ["stop_loss"], Number.NaN), symbol === "XAUUSD" ? 2 : 5)} compact />
+        <Metric label="Take Profit" value={marketNumber(readNumber(signal, ["take_profit"], Number.NaN), symbol === "XAUUSD" ? 2 : 5)} compact />
+        <Metric label="Risk / Reward" value={Number.isFinite(riskReward) ? `${riskReward.toFixed(2)}:1` : "Unavailable"} compact />
+        <Metric label="Risk Status" value={readText(signal, ["risk_status"], "NO_SIGNAL").replaceAll("_", " ")} compact />
+      </div>
+    </button>
   );
 }
 

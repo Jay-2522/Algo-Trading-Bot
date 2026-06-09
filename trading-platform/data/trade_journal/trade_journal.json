@@ -1,32 +1,41 @@
 {
   "trades": [
     {
+      "account_login": "107453350",
       "broker_execution_enabled": false,
-      "close_price": null,
-      "closed_at": "",
+      "close_price": 1.15573,
+      "closed_at": "2026-06-09T12:16:27+00:00",
+      "commission": 0.0,
       "created_at": "2026-06-08T07:58:58.516137+00:00",
       "demo_execution": true,
+      "duration_minutes": 1642.88,
       "entry_price": 1.15259,
       "environment": "DEMO",
+      "exit_reason": "TAKE_PROFIT",
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "PHASE17_SINGLE_D",
       "mt5_retcode": "",
       "mt5_ticket": "8965515202",
-      "notes": "Synced from MT5 open position.",
+      "net_pnl": 3.13,
+      "notes": "Synced from MT5 open position. Lifecycle closed from MT5 deal history.",
       "opened_at": "2026-06-08T08:53:34.131069+00:00",
-      "profit_loss": -1.5899999999999999,
-      "result": "OPEN",
+      "profit_loss": 3.13,
+      "realized_pnl": 3.14,
+      "result": "WIN",
       "risk_reward_ratio": null,
+      "server": "MetaQuotes-Demo",
       "side": "BUY",
       "simulation_only": true,
       "source": "MT5_DEMO",
-      "status": "OPEN",
+      "status": "CLOSED",
       "stop_loss": 1.14973,
+      "swap": -0.01,
       "symbol": "EURUSD",
       "take_profit": 1.15573,
+      "total_pnl": 3.13,
       "trade_id": "mt5_demo_8965515202",
-      "updated_at": "2026-06-08T08:53:34.131069+00:00"
+      "updated_at": "2026-06-09T10:08:41.491615+00:00"
     }
   ]
 }

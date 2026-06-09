@@ -38,6 +38,7 @@ class MT5TradeLifecycleService:
 
         open_positions = mt5_state["open_positions"]
         deals = mt5_state["deals"]
+        orders = mt5_state["orders"]
         account = mt5_state["account"]
         open_trades = [
             trade
@@ -51,7 +52,7 @@ class MT5TradeLifecycleService:
             if self._matching_open_position(trade, open_positions, account):
                 unchanged_trades.append({"trade_id": trade["trade_id"], "mt5_ticket": trade["mt5_ticket"], "status": "OPEN"})
                 continue
-            close_deal = self._matching_close_deal(trade, deals, account)
+            close_deal = self._matching_close_deal(trade, deals, orders, account)
             if close_deal is None:
                 unchanged_trades.append({"trade_id": trade["trade_id"], "mt5_ticket": trade["mt5_ticket"], "status": "OPEN", "reason": "NO_MATCHING_MT5_CLOSE"})
                 continue
@@ -61,6 +62,8 @@ class MT5TradeLifecycleService:
             "status": "SYNCED",
             "environment": "DEMO",
             "open_trades_checked": len(open_trades),
+            "history_deals_checked": len(deals),
+            "history_orders_checked": len(orders),
             "closed_trades_updated": len(updated_trades),
             "updated_trades": updated_trades,
             "unchanged_trades": unchanged_trades,
@@ -113,8 +116,7 @@ class MT5TradeLifecycleService:
             if not self._is_demo_account(account):
                 return self._empty_sync("NON_DEMO_ACCOUNT", "MT5 account is not confirmed as DEMO.")
             raw_positions = mt5.positions_get() or []
-            now = datetime.now(timezone.utc)
-            since = now - timedelta(days=30)
+            since, now = self._history_range()
             deals = mt5.history_deals_get(since, now) or []
             orders = mt5.history_orders_get(since, now) or []
             return {
@@ -146,23 +148,51 @@ class MT5TradeLifecycleService:
                 return position
         return None
 
-    def _matching_close_deal(self, trade: dict[str, Any], deals: list[Any], account: Any) -> Any | None:
+    def _matching_close_deal(self, trade: dict[str, Any], deals: list[Any], orders: list[Any], account: Any) -> Any | None:
         ticket = str(trade.get("mt5_ticket") or "")
         symbol = str(trade.get("symbol") or "").upper()
         lot = self._float_or_zero(trade.get("lot"))
+        related_ticket_values = self._related_ticket_values(ticket, deals, orders)
         close_candidates = []
         for deal in deals:
-            deal_ticket_values = {
-                str(getattr(deal, "position_id", "") or ""),
-                str(getattr(deal, "order", "") or ""),
-                str(getattr(deal, "ticket", "") or ""),
-            }
+            deal_ticket_values = self._deal_ticket_values(deal)
             deal_symbol = str(getattr(deal, "symbol", "") or "").upper()
             deal_volume = self._float_or_zero(getattr(deal, "volume", 0.0))
-            if ticket in deal_ticket_values and deal_symbol == symbol and abs(deal_volume - lot) < 0.0000001:
+            if related_ticket_values.intersection(deal_ticket_values) and deal_symbol == symbol and abs(deal_volume - lot) < 0.0000001:
                 if self._is_close_deal(deal):
                     close_candidates.append(deal)
         return sorted(close_candidates, key=lambda item: self._int_or_zero(getattr(item, "time", 0)))[-1] if close_candidates else None
+
+    def _related_ticket_values(self, ticket: str, deals: list[Any], orders: list[Any]) -> set[str]:
+        related = {ticket} if ticket else set()
+        changed = True
+        while changed:
+            changed = False
+            for order in orders:
+                values = self._order_ticket_values(order)
+                if related.intersection(values) and not values.issubset(related):
+                    related.update(values)
+                    changed = True
+            for deal in deals:
+                values = self._deal_ticket_values(deal)
+                if related.intersection(values) and not values.issubset(related):
+                    related.update(values)
+                    changed = True
+        return {value for value in related if value}
+
+    def _deal_ticket_values(self, deal: Any) -> set[str]:
+        return {
+            str(getattr(deal, "position_id", "") or ""),
+            str(getattr(deal, "order", "") or ""),
+            str(getattr(deal, "ticket", "") or ""),
+        } - {""}
+
+    def _order_ticket_values(self, order: Any) -> set[str]:
+        return {
+            str(getattr(order, "position_id", "") or ""),
+            str(getattr(order, "position_by_id", "") or ""),
+            str(getattr(order, "ticket", "") or ""),
+        } - {""}
 
     def _closed_payload(self, trade: dict[str, Any], close_deal: Any, account: Any) -> dict[str, Any]:
         realized_pnl = self._float_or_zero(getattr(close_deal, "profit", 0.0))
@@ -207,6 +237,28 @@ class MT5TradeLifecycleService:
         if close_entries:
             return entry in close_entries
         return self._float_or_zero(getattr(deal, "profit", 0.0)) != 0.0
+
+    def _history_range(self) -> tuple[datetime, datetime]:
+        now = datetime.now(timezone.utc) + timedelta(days=1)
+        opened_values = []
+        for trade in self.persistent_trade_journal_service.get_open_trades():
+            opened_at = trade.get("opened_at") or trade.get("created_at")
+            parsed = self._parse_datetime(opened_at)
+            if parsed is not None:
+                opened_values.append(parsed)
+        since = min(opened_values) - timedelta(days=1) if opened_values else datetime.now(timezone.utc) - timedelta(days=90)
+        return since, now
+
+    def _parse_datetime(self, value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
     def _exit_reason(self, trade: dict[str, Any], close_price: float) -> str:
         stop_loss = self._float_or_zero(trade.get("stop_loss"))

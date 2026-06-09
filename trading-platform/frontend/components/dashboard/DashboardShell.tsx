@@ -92,7 +92,18 @@ function isMarketOpen(tick: ApiRecord | null): boolean {
 }
 
 function marketLabel(tick: ApiRecord | null): string {
-  return isMarketOpen(tick) ? "Market Open" : "Market Closed / Feed Offline";
+  const status = readText(tick, ["status"], "").toUpperCase();
+  if (status === "SYMBOL_NOT_AVAILABLE" || status === "SYMBOL_UNAVAILABLE") return "Symbol Not Available";
+  return isMarketOpen(tick) ? "Market Ready" : "Market Closed / Feed Offline";
+}
+
+function xauusdReadinessLabel(tick: ApiRecord | null, signal: ApiRecord | null): string {
+  const status = readText(tick, ["status"], "").toUpperCase();
+  if (status === "SYMBOL_NOT_AVAILABLE" || status === "SYMBOL_UNAVAILABLE") return "Symbol Not Available";
+  if (!isMarketOpen(tick)) return "Market Closed / Feed Offline";
+  const action = readText(signal, ["signal"], "WAIT").toUpperCase();
+  if (action === "BUY" || action === "SELL") return "Ready for Future Demo Test";
+  return "Waiting for Strategy Setup";
 }
 
 function statusTone(status: string): string {
@@ -159,8 +170,9 @@ function cleanBlockers(blockers: unknown): string[] {
 }
 
 function tradeStatusMessages(marketOpen: boolean, openTradeExists: boolean, signal: ApiRecord | null, formValid: boolean): { ok: boolean; text: string }[] {
-  if (!marketOpen) return [{ ok: false, text: "Market Closed" }];
-  const messages: { ok: boolean; text: string }[] = [{ ok: true, text: "Market Open" }];
+  const symbol = readText(signal, ["symbol"], "");
+  if (!marketOpen) return [{ ok: false, text: symbol === "XAUUSD" ? "XAUUSD Future Demo Test Only" : "Market Closed" }];
+  const messages: { ok: boolean; text: string }[] = [{ ok: true, text: "Market Ready" }];
   if (!signal) messages.push({ ok: false, text: "Select AI Signal" });
   if (readText(signal, ["signal"], "WAIT").toUpperCase() === "WAIT") messages.push({ ok: false, text: "No Confirmed Signal" });
   if (!numeric(signal, ["stop_loss"])) messages.push({ ok: false, text: "Stop Loss Required" });
@@ -393,7 +405,7 @@ export function DashboardShell(_: {
           <SectionTitle eyebrow="Market Overview" title="Scoped Instruments" />
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <MarketCard title="EURUSD" tick={data.eurusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "EURUSD") ?? null} />
-            <MarketCard title="XAUUSD" tick={data.xauusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} />
+            <MarketCard title="XAUUSD" tick={data.xauusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} signal={data.clientSignals.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} />
             <NiftyMarketCard scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "NIFTY50") ?? null} />
           </div>
         </section>
@@ -587,8 +599,8 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-function MarketCard({ title, tick, scope }: { title: string; tick: ApiRecord | null; scope: ApiRecord | null }) {
-  const label = marketLabel(tick);
+function MarketCard({ title, tick, scope, signal = null }: { title: string; tick: ApiRecord | null; scope: ApiRecord | null; signal?: ApiRecord | null }) {
+  const label = title === "XAUUSD" ? xauusdReadinessLabel(tick, signal) : marketLabel(tick);
   const bid = readNumber(tick, ["bid"], Number.NaN);
   const ask = readNumber(tick, ["ask"], Number.NaN);
   const spread = readNumber(tick, ["spread"], Number.NaN);
@@ -608,6 +620,7 @@ function MarketCard({ title, tick, scope }: { title: string; tick: ApiRecord | n
         <Metric label="Source" value={readText(scope, ["source"], "MT5_DEMO")} compact />
         <Metric label="Last Update" value={formatTradeTime(readText(tick, ["timestamp"], ""))} compact />
       </div>
+      {title === "XAUUSD" ? <p className="mt-3 text-sm font-bold text-slate-400">XAUUSD execution is not enabled today; valid setups are classified for a future guarded demo test.</p> : null}
       {feedUnavailable ? <p className="mt-3 text-sm font-bold text-slate-400">Market feed unavailable.</p> : null}
     </section>
   );

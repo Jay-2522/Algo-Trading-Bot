@@ -211,7 +211,7 @@ class GuardedDemoOrderSenderService:
             if price <= 0:
                 return self._sent_result("DEMO_ORDER_REJECTED", payload, False, None, None, f"No valid {action} price available.", account=account)
 
-            symbol_info = mt5.symbol_info("EURUSD")
+            symbol_info = mt5.symbol_info(symbol)
             filling_mode_candidates = self._build_filling_mode_candidates(symbol_info)
             if not filling_mode_candidates:
                 return self._sent_result(
@@ -220,12 +220,12 @@ class GuardedDemoOrderSenderService:
                     False,
                     0,
                     None,
-                    "No supported filling mode available for EURUSD.",
+                    f"No supported filling mode available for {symbol}.",
                     account=account,
                     selected_filling_mode=None,
                     filling_mode_attempts=[],
                     final_retcode=None,
-                    final_comment="No supported filling mode available for EURUSD.",
+                    final_comment=f"No supported filling mode available for {symbol}.",
                 )
 
             base_order_request = {
@@ -356,7 +356,7 @@ class GuardedDemoOrderSenderService:
             "trade_id": f"mt5_demo_{ticket}" if ticket != "0" else f"mt5_demo_rejected_{result.get('request_id')}",
             "source": "MT5_DEMO",
             "environment": "DEMO",
-            "symbol": "EURUSD",
+            "symbol": str(payload.get("symbol") or "EURUSD").strip().upper(),
             "side": str(payload.get("action") or result.get("action") or "").strip().upper(),
             "lot": 0.01,
             "entry_price": executed_price or self._float_or_none(payload.get("entry_price")),

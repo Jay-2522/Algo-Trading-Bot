@@ -10,6 +10,7 @@ from backend.api.account_routing_routes import router as account_routing_router
 from backend.api.analytics_routes import router as analytics_router
 from backend.api.backtesting_routes import router as backtesting_router
 from backend.api.backup_routes import router as backup_router
+from backend.api.broker_account_routes import router as broker_account_router
 from backend.api.broker_compatibility_routes import router as broker_compatibility_router
 from backend.api.client_acceptance_routes import router as client_acceptance_router
 from backend.api.client_analytics_routes import router as client_analytics_router
@@ -147,6 +148,7 @@ app.include_router(backtesting_router)
 app.include_router(backup_router)
 app.include_router(replay_router)
 app.include_router(security_router)
+app.include_router(broker_account_router)
 app.include_router(broker_compatibility_router)
 app.include_router(tradingview_webhook_router)
 app.include_router(streaming_router)

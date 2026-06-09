@@ -45,6 +45,7 @@ export async function fetchClientOperatingDashboard() {
     xauusdTick: fetchJson<ApiRecord>("/mt5-demo/market-data/tick/XAUUSD"),
     marketScope: fetchJson<ApiRecord[]>("/market-scope/instruments/status"),
     clientSignals: fetchJson<ApiRecord>("/client-signals/current"),
+    brokerAccounts: fetchJson<ApiRecord>("/brokers/accounts"),
     openPositions: fetchJson<ApiRecord>("/mt5-demo/position-monitor/open"),
     recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/recent?limit=20"),
     journalSummary: fetchJson<ApiRecord>("/trade-journal/persistence/summary"),

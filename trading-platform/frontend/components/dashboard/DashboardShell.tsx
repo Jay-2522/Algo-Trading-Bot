@@ -21,6 +21,8 @@ type DashboardData = {
   xauusdTick: ApiRecord | null;
   marketScope: ApiRecord[];
   clientSignals: ApiRecord[];
+  brokerAccounts: ApiRecord[];
+  currentTerminalAccount: ApiRecord | null;
   openPositions: ApiRecord[];
   recentTrades: ApiRecord[];
   journalSummary: ApiRecord | null;
@@ -36,6 +38,8 @@ const emptyData: DashboardData = {
   xauusdTick: null,
   marketScope: [],
   clientSignals: [],
+  brokerAccounts: [],
+  currentTerminalAccount: null,
   openPositions: [],
   recentTrades: [],
   journalSummary: null,
@@ -200,6 +204,8 @@ export function DashboardShell(_: {
         xauusdTick: asRecord(payload.xauusdTick),
         marketScope: Array.isArray(payload.marketScope) ? (payload.marketScope.filter((item) => asRecord(item)) as ApiRecord[]) : [],
         clientSignals: recordsFrom(payload.clientSignals, "signals"),
+        brokerAccounts: recordsFrom(payload.brokerAccounts, "accounts"),
+        currentTerminalAccount: asRecord(asRecord(payload.brokerAccounts)?.current_terminal_account),
         openPositions: recordsFrom(payload.openPositions, "positions"),
         recentTrades: Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : [],
         journalSummary: asRecord(payload.journalSummary),
@@ -402,6 +408,16 @@ export function DashboardShell(_: {
               />
             ))}
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+          <SectionTitle eyebrow="Broker Accounts" title="StarTrader, FxPro, and Vantage" />
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            {(["STARTRADER", "FXPRO", "VANTAGE"] as const).map((brokerId) => (
+              <BrokerAccountCard account={data.brokerAccounts.find((account) => readText(account, ["broker_id"], "") === brokerId) ?? null} brokerId={brokerId} key={brokerId} />
+            ))}
+          </div>
+          <CurrentTerminalCard account={data.currentTerminalAccount} />
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -639,6 +655,50 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
         <Metric label="Risk Status" value={readText(signal, ["risk_status"], "NO_SIGNAL").replaceAll("_", " ")} compact />
       </div>
     </button>
+  );
+}
+
+function BrokerAccountCard({ brokerId, account }: { brokerId: "STARTRADER" | "FXPRO" | "VANTAGE"; account: ApiRecord | null }) {
+  const brokerName = readText(account, ["broker_name"], brokerId === "STARTRADER" ? "StarTrader" : brokerId === "FXPRO" ? "FxPro" : "Vantage");
+  const connectionStatus = readText(account, ["connection_status"], "PENDING_CONNECTION").replaceAll("_", " ");
+  const executionEnabled = readText(account, ["execution_enabled"], "false") === "true";
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-[#0F172A] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{brokerId}</p>
+          <h3 className="mt-1 text-xl font-black text-white">{brokerName}</h3>
+        </div>
+        <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-black uppercase text-sky-200">Pending</span>
+      </div>
+      <p className="mt-3 text-sm font-bold text-slate-400">{readText(account, ["message"], "Broker account not connected yet.")}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Metric label="Connection Status" value={connectionStatus} compact />
+        <Metric label="Account Type" value={readText(account, ["account_type"], "Unavailable")} compact />
+        <Metric label="Balance" value={money(readNumber(account, ["balance"], Number.NaN))} valueClass="whitespace-nowrap text-white" compact />
+        <Metric label="Equity" value={money(readNumber(account, ["equity"], Number.NaN))} valueClass="whitespace-nowrap text-white" compact />
+        <Metric label="Execution Status" value={executionEnabled ? "Enabled" : "Disabled"} valueClass={executionEnabled ? "text-rose-300" : "text-emerald-300"} compact />
+      </div>
+    </section>
+  );
+}
+
+function CurrentTerminalCard({ account }: { account: ApiRecord | null }) {
+  return (
+    <section className="mt-4 rounded-2xl border border-slate-800 bg-[#0F172A] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-300">Current Test Terminal</p>
+          <h3 className="mt-1 text-xl font-black text-white">{readText(account, ["server"], "MetaQuotes-Demo")}</h3>
+          <p className="mt-1 text-sm font-bold text-slate-400">{readText(account, ["message"], "Current MT5 terminal account; not mapped to StarTrader, FxPro, or Vantage.")}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[34rem]">
+          <Metric label="Account" value={readText(account, ["account_login"], "Unavailable")} compact />
+          <Metric label="Account Type" value={readText(account, ["account_type"], "Unavailable")} compact />
+          <Metric label="Execution" value="Disabled" valueClass="text-emerald-300" compact />
+        </div>
+      </div>
+    </section>
   );
 }
 

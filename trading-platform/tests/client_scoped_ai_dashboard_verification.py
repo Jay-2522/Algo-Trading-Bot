@@ -63,8 +63,9 @@ def verify_xauusd_market_data_fix() -> bool:
         "mt5.symbol_select(symbol, True)",
         "mt5.symbol_info_tick(normalized)",
         "info = mt5.symbol_info(normalized)",
-        "SYMBOL_NOT_AVAILABLE",
-        "STALE_OR_MARKET_CLOSED",
+        "SYMBOL_AVAILABLE_SELECT_FAILED",
+        "SYMBOL_TICK_UNAVAILABLE",
+        "tick_recovery_status",
     ]
     missing = [item for item in required if item not in text]
     return show("XAUUSD market data selects symbol and classifies honestly", not missing, ", ".join(missing))

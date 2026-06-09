@@ -54,31 +54,19 @@ class MT5MarketDataService:
             time.sleep(0.15)
             tick = mt5.symbol_info_tick(normalized)
             info = mt5.symbol_info(normalized)
-            if tick is None:
-                bid = float(getattr(info, "bid", 0.0) or 0.0) if info else 0.0
-                ask = float(getattr(info, "ask", 0.0) or 0.0) if info else 0.0
-                raw_timestamp = 0
-            else:
-                bid = float(getattr(tick, "bid", 0.0) or 0.0)
-                ask = float(getattr(tick, "ask", 0.0) or 0.0)
-                if (bid <= 0 or ask <= 0) and info is not None:
-                    bid = float(getattr(info, "bid", 0.0) or 0.0)
-                    ask = float(getattr(info, "ask", 0.0) or 0.0)
-                raw_timestamp = int(getattr(tick, "time", 0) or 0)
-            spread = round(ask - bid, 6)
-            timestamp = self._epoch_to_iso(raw_timestamp)
-            freshness = self._tick_freshness(timestamp if raw_timestamp > 0 else None)
-            if bid <= 0 or ask <= 0 or spread <= 0 or raw_timestamp <= 0 or freshness != "READY":
-                return self._stale_tick_payload(normalized, bid, ask, raw_timestamp, freshness, availability)
+            recovery = self._recover_tick_quote(normalized, tick, info, availability)
+            if recovery["tick_recovery_status"] == "TICK_STILL_UNAVAILABLE":
+                return self._stale_tick_payload(normalized, recovery, availability)
             return {
                 "symbol": normalized,
-                "bid": bid,
-                "ask": ask,
-                "spread": spread,
-                "timestamp": timestamp,
-                "freshness": freshness,
-                "source": "MT5_DEMO",
+                "bid": recovery["bid"],
+                "ask": recovery["ask"],
+                "spread": recovery["spread"],
+                "timestamp": recovery["timestamp"],
+                "freshness": "READY",
+                "source": recovery["source"],
                 "status": "OK",
+                "tick_recovery_status": recovery["tick_recovery_status"],
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,
@@ -86,6 +74,8 @@ class MT5MarketDataService:
                 "symbol_availability": availability["classification"],
                 "symbol_select_result": availability["symbol_select_result"],
                 "symbol_select_error": availability["last_error"],
+                "mt5_last_error": availability["last_error"],
+                "terminal_memory_warning": self._terminal_memory_warning(availability.get("last_error")),
             }
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return self._error_payload(normalized, "TICK_READ_FAILED", str(exc))
@@ -163,6 +153,9 @@ class MT5MarketDataService:
             "symbol_availability": tick.get("symbol_availability"),
             "symbol_select_result": tick.get("symbol_select_result"),
             "symbol_select_error": tick.get("symbol_select_error"),
+            "tick_recovery_status": tick.get("tick_recovery_status"),
+            "mt5_last_error": tick.get("mt5_last_error"),
+            "terminal_memory_warning": tick.get("terminal_memory_warning"),
         }
 
     def get_xauusd_diagnostics(self) -> dict[str, Any]:
@@ -195,13 +188,14 @@ class MT5MarketDataService:
             symbols_total = self._safe_call(mt5.symbols_total)
             version = self._safe_call(mt5.version)
             availability = self._classify_symbol(normalized, info, select_result, select_error)
-            if availability["classification"] == "SYMBOL_AVAILABLE" and tick is None:
+            recovery = self._recover_tick_quote(normalized, tick, info, availability)
+            if availability["classification"] == "SYMBOL_AVAILABLE" and recovery["tick_recovery_status"] == "TICK_STILL_UNAVAILABLE":
                 availability = {
                     **availability,
                     "classification": "SYMBOL_TICK_UNAVAILABLE",
-                    "message": f"{normalized} exists but MT5 returned no tick.",
+                    "message": f"{normalized} exists but MT5 returned no usable tick or symbol_info bid/ask.",
                 }
-            report = self._diagnostic_report(normalized, availability, tick)
+            report = self._diagnostic_report(normalized, availability, tick, recovery)
             return {
                 "symbol": normalized,
                 "initialization_state": "INITIALIZED",
@@ -213,9 +207,16 @@ class MT5MarketDataService:
                 "mt5_version": version,
                 "symbol_info": self._object_to_dict(info),
                 "symbol_info_tick": self._object_to_dict(tick),
+                "direct_tick_result": recovery["direct_tick_result"],
+                "symbol_info_bid": self._positive_float(getattr(info, "bid", None)) if info is not None else None,
+                "symbol_info_ask": self._positive_float(getattr(info, "ask", None)) if info is not None else None,
+                "symbol_info_last": self._positive_float(getattr(info, "last", None)) if info is not None else None,
+                "calculated_spread": recovery["spread"],
+                "recovery_status": recovery["tick_recovery_status"],
                 "symbol_visibility": bool(getattr(info, "visible", False)) if info is not None else False,
                 "symbol_select_result": select_result,
                 "mt5_last_error": select_error,
+                "terminal_memory_warning": self._terminal_memory_warning(select_error),
                 "classification": availability["classification"],
                 "diagnostic_report": report,
                 "source": "MT5_DEMO",
@@ -342,6 +343,73 @@ class MT5MarketDataService:
             "last_error": select_error,
         }
 
+    def _recover_tick_quote(self, symbol: str, tick: Any, info: Any, availability: dict[str, Any]) -> dict[str, Any]:
+        tick_bid = self._positive_float(getattr(tick, "bid", None)) if tick is not None else None
+        tick_ask = self._positive_float(getattr(tick, "ask", None)) if tick is not None else None
+        tick_time = int(getattr(tick, "time", 0) or 0) if tick is not None else 0
+        direct_tick_result = {
+            "available": tick is not None,
+            "bid": tick_bid,
+            "ask": tick_ask,
+            "time": tick_time or None,
+        }
+        if tick_bid is not None and tick_ask is not None and tick_ask > tick_bid:
+            return self._quote_recovery_payload(
+                symbol,
+                tick_bid,
+                tick_ask,
+                self._epoch_to_iso(tick_time) if tick_time > 0 else self._timestamp(),
+                "MT5_SYMBOL_INFO_TICK",
+                "TICK_AVAILABLE_DIRECT",
+                direct_tick_result,
+            )
+
+        info_bid = self._positive_float(getattr(info, "bid", None)) if info is not None else None
+        info_ask = self._positive_float(getattr(info, "ask", None)) if info is not None else None
+        if info_bid is not None and info_ask is not None and info_ask > info_bid:
+            return self._quote_recovery_payload(
+                symbol,
+                info_bid,
+                info_ask,
+                self._timestamp(),
+                "MT5_SYMBOL_INFO_FIELDS",
+                "TICK_AVAILABLE_FROM_SYMBOL_INFO",
+                direct_tick_result,
+            )
+
+        return {
+            "symbol": symbol,
+            "bid": tick_bid or info_bid or 0.0,
+            "ask": tick_ask or info_ask or 0.0,
+            "spread": None,
+            "timestamp": None,
+            "source": "MT5_DEMO",
+            "tick_recovery_status": "TICK_STILL_UNAVAILABLE",
+            "direct_tick_result": direct_tick_result,
+            "terminal_memory_warning": self._terminal_memory_warning(availability.get("last_error")),
+        }
+
+    def _quote_recovery_payload(
+        self,
+        symbol: str,
+        bid: float,
+        ask: float,
+        timestamp: str,
+        source: str,
+        recovery_status: str,
+        direct_tick_result: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "symbol": symbol,
+            "bid": bid,
+            "ask": ask,
+            "spread": round(ask - bid, 6),
+            "timestamp": timestamp,
+            "source": source,
+            "tick_recovery_status": recovery_status,
+            "direct_tick_result": direct_tick_result,
+        }
+
     def _mt5_timeframe(self, timeframe: str) -> Any:
         return {
             "M1": mt5.TIMEFRAME_M1,
@@ -380,28 +448,20 @@ class MT5MarketDataService:
             "execution_allowed": False,
         }
 
-    def _stale_tick_payload(
-        self,
-        symbol: str,
-        bid: float,
-        ask: float,
-        raw_timestamp: int,
-        freshness: str | None = None,
-        availability: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    def _stale_tick_payload(self, symbol: str, recovery: dict[str, Any], availability: dict[str, Any] | None = None) -> dict[str, Any]:
         availability = availability or {}
-        status = "SYMBOL_TICK_UNAVAILABLE" if raw_timestamp <= 0 and bid <= 0 and ask <= 0 else "STALE_OR_MARKET_CLOSED"
         return {
             "symbol": symbol,
-            "bid": bid,
-            "ask": ask,
-            "spread": round(ask - bid, 6) if bid > 0 and ask > 0 else None,
-            "timestamp": self._epoch_to_iso(raw_timestamp) if raw_timestamp > 0 else None,
+            "bid": recovery.get("bid") or 0.0,
+            "ask": recovery.get("ask") or 0.0,
+            "spread": recovery.get("spread"),
+            "timestamp": recovery.get("timestamp"),
             "freshness": "OFFLINE",
             "source": "MT5_DEMO",
-            "status": status,
+            "status": "SYMBOL_TICK_UNAVAILABLE",
             "error": "STALE_TICK",
-            "message": self._tick_unavailable_message(symbol, availability, status),
+            "message": self._tick_unavailable_message(symbol, availability, "SYMBOL_TICK_UNAVAILABLE"),
+            "tick_recovery_status": "TICK_STILL_UNAVAILABLE",
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -409,6 +469,8 @@ class MT5MarketDataService:
             "symbol_availability": availability.get("classification"),
             "symbol_select_result": availability.get("symbol_select_result"),
             "symbol_select_error": availability.get("last_error"),
+            "mt5_last_error": availability.get("last_error"),
+            "terminal_memory_warning": self._terminal_memory_warning(availability.get("last_error")),
         }
 
     def _candle_error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str) -> dict[str, Any]:
@@ -469,8 +531,13 @@ class MT5MarketDataService:
         except Exception as exc:  # pragma: no cover - diagnostic only
             return f"UNAVAILABLE: {exc}"
 
-    def _diagnostic_report(self, symbol: str, availability: dict[str, Any], tick: Any) -> str:
+    def _diagnostic_report(self, symbol: str, availability: dict[str, Any], tick: Any, recovery: dict[str, Any] | None = None) -> str:
         classification = availability.get("classification")
+        recovery_status = (recovery or {}).get("tick_recovery_status")
+        if recovery_status == "TICK_AVAILABLE_DIRECT":
+            return f"{symbol} live quote recovered directly from mt5.symbol_info_tick()."
+        if recovery_status == "TICK_AVAILABLE_FROM_SYMBOL_INFO":
+            return f"{symbol} live quote recovered from mt5.symbol_info() bid/ask fields without relying on symbol_select()."
         if classification == "SYMBOL_AVAILABLE_SELECT_FAILED":
             return (
                 f"{symbol} is available because mt5.symbol_info() returned a visible symbol. "
@@ -489,6 +556,17 @@ class MT5MarketDataService:
         if status == "SYMBOL_TICK_UNAVAILABLE":
             return f"{prefix} MT5 did not provide a usable tick."
         return f"{prefix} MT5 tick is stale. Market may be closed or broker feed is not updating."
+
+    def _positive_float(self, value: Any) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number > 0 else None
+
+    def _terminal_memory_warning(self, error: Any) -> bool:
+        text = str(error).lower()
+        return "out of memory" in text or text.startswith("(-3") or text.startswith("[-3")
 
     def _tick_freshness(self, timestamp: str | None) -> str:
         if not timestamp:

@@ -23,6 +23,8 @@ type TraderBundle = {
   outcomeSummary: Record<string, unknown> | null;
   performanceValidationCompare: Record<string, unknown> | null;
   performanceValidationDrift: Record<string, unknown> | null;
+  strategyHealth: Record<string, unknown> | null;
+  riskAlerts: Record<string, unknown> | null;
   signals: Array<Record<string, unknown>>;
 };
 
@@ -43,6 +45,8 @@ const emptyTraderBundle: TraderBundle = {
   outcomeSummary: null,
   performanceValidationCompare: null,
   performanceValidationDrift: null,
+  strategyHealth: null,
+  riskAlerts: null,
   signals: [],
 };
 
@@ -87,6 +91,8 @@ function useTraderDashboardData(refreshIntervalMs = 10000) {
       outcomeSummary: fetchJson<Record<string, unknown>>("/analytics/outcomes/summary"),
       performanceValidationCompare: fetchJson<Record<string, unknown>>("/analytics/performance-validation/compare"),
       performanceValidationDrift: fetchJson<Record<string, unknown>>("/analytics/performance-validation/drift"),
+      strategyHealth: fetchJson<Record<string, unknown>>("/analytics/strategy-health/current"),
+      riskAlerts: fetchJson<Record<string, unknown>>("/analytics/risk-alerts/current"),
       signals: fetchJson<Array<Record<string, unknown>>>("/webhooks/events?limit=4"),
     };
 
@@ -206,6 +212,22 @@ function driftTone(value: string): "good" | "info" | "warning" | "danger" | "mut
   return "muted";
 }
 
+function healthTone(value: string): "good" | "info" | "warning" | "danger" | "muted" {
+  const text = value.toUpperCase();
+  if (text === "EXCELLENT" || text === "GOOD") return "good";
+  if (text === "WATCHLIST") return "warning";
+  if (text === "DEGRADED" || text === "CRITICAL") return "danger";
+  return "muted";
+}
+
+function alertTone(value: string): "good" | "info" | "warning" | "danger" | "muted" {
+  const text = value.toUpperCase();
+  if (text === "INFO") return "info";
+  if (text === "WARNING") return "warning";
+  if (text === "HIGH" || text === "CRITICAL") return "danger";
+  return "muted";
+}
+
 export function DashboardShell({
   executiveDashboardSection,
   analyticsSection,
@@ -254,6 +276,12 @@ export function DashboardShell({
   const validationStatus = readText(validationCompare, ["status"], "INSUFFICIENT_DATA");
   const driftStatus = readText(validationDrift, ["drift_status"], readText(validationCompare, ["drift_status"], "INSUFFICIENT_DATA"));
   const confidenceScore = readNumber(validationCompare, ["confidence_score"], readNumber(validationDrift, ["confidence_score"], 0));
+  const strategyHealth = bundle.strategyHealth;
+  const healthComponents = nestedRecord(strategyHealth, "components");
+  const healthStatus = readText(strategyHealth, ["classification"], "INSUFFICIENT_DATA");
+  const healthScore = readNumber(strategyHealth, ["health_score"], 0);
+  const riskAlertsPayload = bundle.riskAlerts;
+  const activeAlerts = Array.isArray(riskAlertsPayload?.alerts) ? (riskAlertsPayload.alerts as Array<Record<string, unknown>>) : [];
   const marketCards = [
     {
       label: "EURUSD Demo Bid",
@@ -386,6 +414,68 @@ export function DashboardShell({
               DEMO performance attribution will populate after MT5 demo trades close and are synchronized.
             </div>
           )}
+        </section>
+        <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+          <section className="rounded-3xl border border-lime-300/15 bg-lime-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-lime-100/70">Strategy Health Panel</p>
+                <h2 className="mt-1 text-xl font-bold text-white">Demo Strategy Health</h2>
+              </div>
+              <StatusBadge label={healthStatus.replaceAll("_", " ")} tone={healthTone(healthStatus)} />
+            </div>
+            {readText(strategyHealth, ["status"], "INSUFFICIENT_DATA") === "READY" ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  ["Health Score", healthScore.toFixed(2)],
+                  ["Health Status", healthStatus.replaceAll("_", " ")],
+                  ["Win Rate Health", `${readNumber(healthComponents, ["win_rate_health"], 0).toFixed(2)}%`],
+                  ["RR Health", `${readNumber(healthComponents, ["rr_health"], 0).toFixed(2)}%`],
+                  ["Drift Health", `${readNumber(healthComponents, ["drift_health"], 0).toFixed(2)}%`],
+                  ["Drawdown Health", `${readNumber(healthComponents, ["drawdown_health"], 0).toFixed(2)}%`],
+                ].map(([label, value]) => (
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" key={label}>
+                    <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                    <strong className="mt-1 block break-words text-lg text-white">{value}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-lime-200/20 bg-slate-950/35 p-4 text-sm leading-6 text-lime-50/80">
+                <strong className="block text-white">INSUFFICIENT_DATA</strong>
+                Strategy health will populate after enough real closed demo trades are synchronized.
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-amber-300/15 bg-amber-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-amber-100/70">Risk Alerts Panel</p>
+                <h2 className="mt-1 text-xl font-bold text-white">Automated Demo Risk Alerts</h2>
+              </div>
+              <StatusBadge label={`${activeAlerts.length} Active`} tone={activeAlerts.length ? "warning" : "good"} />
+            </div>
+            <div className="mt-4 grid gap-3">
+              {activeAlerts.length ? (
+                activeAlerts.slice(0, 4).map((alert) => (
+                  <article className="rounded-2xl border border-white/10 bg-slate-950/35 p-4" key={readText(alert, ["alert_id"], readText(alert, ["alert_type"], "alert"))}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <strong className="break-words text-sm text-white">{readText(alert, ["alert_type"], "Strategy Alert").replaceAll("_", " ")}</strong>
+                      <StatusBadge label={readText(alert, ["severity"], "INFO")} tone={alertTone(readText(alert, ["severity"], "INFO"))} />
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-400">{readText(alert, ["reason"], "Read-only alert generated from demo analytics.")}</p>
+                    <p className="mt-2 text-xs leading-5 text-amber-50/80">{readText(alert, ["recommendation"], "Continue monitoring with demo-only controls.")}</p>
+                  </article>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-amber-200/20 bg-slate-950/35 p-4 text-sm leading-6 text-amber-50/80">
+                  <strong className="block text-white">No active strategy alerts.</strong>
+                  Alerts will appear only when real demo performance crosses a risk rule.
+                </div>
+              )}
+            </div>
+          </section>
         </section>
         <section className="rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.06] p-5 shadow-2xl shadow-black/20 backdrop-blur-xl">
           <div className="flex flex-wrap items-start justify-between gap-3">

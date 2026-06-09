@@ -6,6 +6,8 @@ from io import StringIO
 from typing import Any
 
 from backend.analytics.performance_validation_service import PerformanceValidationService
+from backend.analytics.risk_alert_service import RiskAlertService
+from backend.analytics.strategy_health_monitor_service import StrategyHealthMonitorService
 from backend.analytics.trade_outcome_intelligence_service import TradeOutcomeIntelligenceService
 from backend.trade_journal.persistent_trade_journal_service import PersistentTradeJournalService
 
@@ -30,6 +32,8 @@ class ReportingEngineService:
         self.journal = journal or PersistentTradeJournalService()
         self.outcomes = TradeOutcomeIntelligenceService(self.journal)
         self.performance_validation = PerformanceValidationService(self.journal)
+        self.strategy_health = StrategyHealthMonitorService(self.journal, self.performance_validation)
+        self.risk_alerts = RiskAlertService(self.journal, self.performance_validation, self.strategy_health)
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -127,6 +131,31 @@ class ReportingEngineService:
             "broker_execution_enabled": False,
         }
 
+    def build_strategy_health_v5(self) -> dict[str, Any]:
+        health = self.strategy_health.get_current_health()
+        alerts = self.risk_alerts.get_current_alerts()
+        drift = self.performance_validation.detect_drift()
+        insufficient = health.get("status") == "INSUFFICIENT_DATA"
+        return {
+            "status": "INSUFFICIENT_DATA" if insufficient else "READY",
+            "report_type": "STRATEGY_HEALTH_V5",
+            "data_source": "persistent_journal_validation_and_alerts",
+            "strategy_health_report": {
+                "overall_health_score": health.get("health_score"),
+                "health_status": health.get("classification"),
+                "trend": health.get("trend", "INSUFFICIENT_DATA"),
+                "active_alerts": alerts.get("alerts", []),
+                "drift_status": drift.get("drift_status"),
+                "drawdown_status": self._drawdown_status(health),
+                "recommendations": self._health_recommendations(health, alerts, drift),
+            },
+            "message": "Insufficient closed demo trades for strategy health reporting." if insufficient else "Strategy health report built from read-only demo analytics.",
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
     def _build_report(self, report_type: str, period: str, since: datetime) -> dict[str, Any]:
         trades = [trade for trade in self.journal.list_trades(limit=100000) if self._created_at(trade) >= since]
         return self._report_payload(report_type, period, trades)
@@ -197,3 +226,23 @@ class ReportingEngineService:
         if not with_pnl:
             return None
         return sorted(with_pnl, key=lambda trade: float(trade.get("profit_loss") or 0), reverse=best)[0]
+
+    def _drawdown_status(self, health: dict[str, Any]) -> str:
+        components = health.get("components", {})
+        drawdown_health = components.get("drawdown_health") if isinstance(components, dict) else None
+        if drawdown_health is None:
+            return "INSUFFICIENT_DATA"
+        if float(drawdown_health) >= 80:
+            return "NORMAL"
+        if float(drawdown_health) >= 55:
+            return "WATCHLIST"
+        return "DEGRADED"
+
+    def _health_recommendations(self, health: dict[str, Any], alerts: dict[str, Any], drift: dict[str, Any]) -> list[str]:
+        if health.get("status") == "INSUFFICIENT_DATA":
+            return ["Collect more closed demo trades before changing strategy parameters."]
+        recommendations = [alert.get("recommendation") for alert in alerts.get("alerts", []) if alert.get("recommendation")]
+        drift_action = drift.get("suggested_action")
+        if drift_action:
+            recommendations.append(str(drift_action))
+        return list(dict.fromkeys(recommendations)) or ["Continue monitoring with demo-only controls."]

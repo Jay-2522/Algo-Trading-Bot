@@ -285,6 +285,11 @@ async def get_reports_v4_performance_validation() -> dict:
     return reporting_engine_service.build_performance_validation_v4()
 
 
+@router.get("/reports-v5/strategy-health")
+async def get_reports_v5_strategy_health() -> dict:
+    return reporting_engine_service.build_strategy_health_v5()
+
+
 @router.get("/demo-positions/status")
 async def get_demo_positions_status() -> dict:
     return demo_position_analytics_service.get_status()

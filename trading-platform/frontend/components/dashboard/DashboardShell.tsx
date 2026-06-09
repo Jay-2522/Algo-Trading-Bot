@@ -157,13 +157,15 @@ function cleanBlockers(blockers: unknown): string[] {
   return blockers.map((item) => String(item).replaceAll("_", " ").toLowerCase()).slice(0, 6);
 }
 
-function tradeStatusMessage(marketOpen: boolean, openTradeExists: boolean, stopLoss: string, takeProfit: string, formValid: boolean): { ok: boolean; text: string } {
-  if (!marketOpen) return { ok: false, text: "Market Closed" };
-  if (!stopLoss) return { ok: false, text: "Stop Loss Required" };
-  if (!takeProfit) return { ok: false, text: "Take Profit Required" };
-  if (openTradeExists) return { ok: false, text: "Existing Demo Position Active" };
-  if (!formValid) return { ok: false, text: "Check SL / TP Placement" };
-  return { ok: true, text: "Trade Ready" };
+function tradeStatusMessages(marketOpen: boolean, openTradeExists: boolean, stopLoss: string, takeProfit: string, formValid: boolean): { ok: boolean; text: string }[] {
+  if (!marketOpen) return [{ ok: false, text: "Market Closed" }];
+  const messages: { ok: boolean; text: string }[] = [{ ok: true, text: "Market Open" }];
+  if (!stopLoss) messages.push({ ok: false, text: "Stop Loss Required" });
+  if (!takeProfit) messages.push({ ok: false, text: "Take Profit Required" });
+  if (openTradeExists) messages.push({ ok: false, text: "Existing Demo Position Active" });
+  if (stopLoss && takeProfit && !formValid) messages.push({ ok: false, text: "Check SL / TP Placement" });
+  if (messages.length === 1) messages.push({ ok: true, text: "Trade Ready" });
+  return messages;
 }
 
 export function DashboardShell(_: {
@@ -221,6 +223,12 @@ export function DashboardShell(_: {
     return () => window.clearInterval(interval);
   }, [refresh]);
 
+  useEffect(() => {
+    setPreview(null);
+    setSendResult(null);
+    setTradeError(null);
+  }, [form.action, form.stopLoss, form.takeProfit]);
+
   const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
   const marketOpen = isMarketOpen(data.eurusdTick);
   const openTradeExists = data.openPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
@@ -241,7 +249,7 @@ export function DashboardShell(_: {
   const worstTrade = asRecord(data.outcomeSummary?.worst_trade);
   const openFloatingPnl = floatingPnl(data.openPositions);
   const lastTrade = closedTrades[0] ?? null;
-  const tradeStatus = tradeStatusMessage(marketOpen, openTradeExists, form.stopLoss, form.takeProfit, formValid);
+  const tradeStatus = tradeStatusMessages(marketOpen, openTradeExists, form.stopLoss, form.takeProfit, formValid);
 
   const orderPayload = (): ClientOrderPayload => ({
     symbol: "EURUSD",
@@ -330,16 +338,16 @@ export function DashboardShell(_: {
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Metric label="Account" value={readText(data.account, ["login"], "Unavailable")} />
                 <Metric label="Server" value={readText(data.account, ["server"], "Unavailable")} />
-                <Metric label="Balance" value={money(numeric(data.account, ["balance"]))} />
-                <Metric label="Equity" value={money(numeric(data.account, ["equity"]))} />
+                <Metric label="Balance" value={money(numeric(data.account, ["balance"]))} valueClass="whitespace-nowrap text-white" />
+                <Metric label="Equity" value={money(numeric(data.account, ["equity"]))} valueClass="whitespace-nowrap text-white" />
               </div>
             </section>
             <section>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Health</p>
               <div className="mt-3 grid gap-3">
                 <Metric label="Margin Level" value={percent(numeric(data.account, ["margin_level"]))} compact />
-                <Metric label="Free Margin" value={money(numeric(data.account, ["free_margin"]))} compact />
-                <Metric label="Used Margin" value={money(numeric(data.account, ["used_margin"]))} compact />
+                <Metric label="Free Margin" value={money(numeric(data.account, ["free_margin"]))} valueClass="whitespace-nowrap text-white" compact />
+                <Metric label="Used Margin" value={money(numeric(data.account, ["used_margin"]))} valueClass="whitespace-nowrap text-white" compact />
               </div>
             </section>
             <section>
@@ -373,7 +381,7 @@ export function DashboardShell(_: {
                   const open = sessionOpen(session);
                   return (
                     <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0B1220] px-3 py-2" key={session}>
-                      <span className="text-sm font-bold text-slate-200">{session}</span>
+                      <span className="whitespace-nowrap text-sm font-bold text-slate-200">{session}</span>
                       <span className={open ? "text-xs font-black text-emerald-300" : "text-xs font-black text-slate-500"}>{open ? "OPEN" : "CLOSED"}</span>
                     </div>
                   );
@@ -402,9 +410,7 @@ export function DashboardShell(_: {
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="grid gap-2 text-sm font-bold text-slate-300">
                 Symbol
-                <select className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-white" value={form.symbol} disabled>
-                  <option>EURUSD</option>
-                </select>
+                <input className="rounded-xl border border-slate-700 bg-[#0F172A] px-3 py-3 text-slate-300" value="EURUSD" disabled readOnly />
               </label>
               <label className="grid gap-2 text-sm font-bold text-slate-300">
                 Direction
@@ -443,14 +449,12 @@ export function DashboardShell(_: {
             <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Trade Status</p>
               <div className="mt-3 grid gap-2 text-sm text-slate-300">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-slate-200">{marketOpen ? "Market Open" : "Market Closed"}</span>
-                  <span className={marketOpen ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{marketOpen ? "Ready" : "Blocked"}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-slate-200">{tradeStatus.text}</span>
-                  <span className={tradeStatus.ok ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{tradeStatus.ok ? "Ready" : "Blocked"}</span>
-                </div>
+                {tradeStatus.map((status) => (
+                  <div className="flex items-center justify-between gap-3" key={status.text}>
+                    <span className="font-bold text-slate-200">{status.text}</span>
+                    <span className={status.ok ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{status.ok ? "Ready" : "Blocked"}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -480,7 +484,7 @@ export function DashboardShell(_: {
           </section>
 
           <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-            <SectionTitle eyebrow="Open Demo Positions" title="Active MT5 Demo Exposure" />
+            <SectionTitle eyebrow="Open Demo Positions" title="Active Demo Positions" />
             {data.openPositions.length ? <OpenPositionsTable positions={data.openPositions} /> : <EmptyState text="Waiting for the next trade opportunity." />}
           </section>
         </section>

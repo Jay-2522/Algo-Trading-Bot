@@ -48,6 +48,26 @@ class BrokerAccountService:
         config = self._configs.get(normalized)
         if config is None:
             raise KeyError(normalized)
+        current = self.current_terminal_account()
+        if normalized == "VANTAGE" and current.broker_detected == "VANTAGE_DEMO":
+            return BrokerAccountStatus(
+                broker_id="VANTAGE",
+                broker_name="Vantage",
+                platform="MT5",
+                account_login=current.account_login,
+                server=current.server,
+                account_type="DEMO",
+                connection_status="CONNECTED",
+                balance=current.balance,
+                equity=current.equity,
+                margin=current.margin,
+                free_margin=current.free_margin,
+                currency=current.currency,
+                enabled=True,
+                execution_enabled=False,
+                last_sync=self._timestamp(),
+                message="Current MT5 terminal is mapped to Vantage demo for validation only.",
+            )
         connected = bool(config.account_login and config.server)
         return BrokerAccountStatus(
             broker_id=config.broker_id,
@@ -89,10 +109,11 @@ class BrokerAccountService:
 
     def readiness(self) -> dict[str, Any]:
         accounts = self.list_accounts()
+        vantage_ready = any(account.broker_id == "VANTAGE" and account.connection_status == "CONNECTED" for account in accounts)
         return {
-            "status": "PENDING_BROKER_CONNECTIONS",
-            "ready": False,
-            "brokers_ready": 0,
+            "status": "VANTAGE_DEMO_CONNECTED" if vantage_ready else "PENDING_BROKER_CONNECTIONS",
+            "ready": vantage_ready,
+            "brokers_ready": 1 if vantage_ready else 0,
             "brokers_total": len(accounts),
             "accounts": [account.model_dump(mode="json") for account in accounts],
             "current_terminal_account": self.current_terminal_account().model_dump(mode="json"),
@@ -114,18 +135,31 @@ class BrokerAccountService:
         connected = bool(account.get("account_connected"))
         server = self._text(account.get("server"))
         login = self._text(account.get("login"))
+        account_type = self._text(account.get("account_type")) or None
+        broker_detected = self.detect_broker(server, account_type)
         return CurrentTerminalAccount(
             connected=connected,
+            broker_detected=broker_detected,
             account_login=login or None,
             server=server or None,
-            account_type=self._text(account.get("account_type")) or None,
+            account_type=account_type,
             balance=self._number(account.get("balance")),
             equity=self._number(account.get("equity")),
             margin=self._number(account.get("used_margin")),
             free_margin=self._number(account.get("free_margin")),
             currency=None,
-            message="Current MT5 terminal account; not mapped to StarTrader, FxPro, or Vantage.",
+            message=(
+                "Current MT5 terminal is mapped to Vantage demo for validation only."
+                if broker_detected == "VANTAGE_DEMO"
+                else "Current MT5 terminal account; not mapped to StarTrader, FxPro, or Vantage."
+            ),
         )
+
+    def detect_broker(self, server: str | None, account_type: str | None) -> str | None:
+        text = self._text(server).lower()
+        if "vantage" in text and self._text(account_type).upper() == "DEMO":
+            return "VANTAGE_DEMO"
+        return None
 
     def _number(self, value: Any) -> float | None:
         if isinstance(value, (int, float)):

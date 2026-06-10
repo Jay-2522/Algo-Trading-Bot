@@ -23,6 +23,7 @@ from backend.mt5_demo.mt5_strategy_consumption_service import MT5StrategyConsump
 from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
 from backend.mt5_demo.mt5_risk_qualification_service import MT5RiskQualificationService
 from backend.mt5_demo.mt5_execution_gate_validation_service import MT5ExecutionGateValidationService
+from backend.mt5_demo.vantage_xauusd_demo_validation_service import VantageXAUUSDDemoValidationService
 
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
@@ -103,6 +104,14 @@ guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     simulator_service=demo_execution_simulator_service,
     readiness_service=demo_execution_readiness_service,
 )
+vantage_xauusd_demo_validation_service = VantageXAUUSDDemoValidationService(
+    mt5_demo_service=service,
+    market_data_service=market_data_service,
+    approval_workflow_service=demo_approval_workflow_service,
+    guarded_sender_service=guarded_demo_order_sender_service,
+    position_sync_service=mt5_demo_position_sync_service,
+    lifecycle_service=mt5_trade_lifecycle_service,
+)
 
 
 @router.get("/status")
@@ -143,6 +152,21 @@ async def get_mt5_demo_market_data_status() -> dict:
 @router.get("/diagnostics/xauusd")
 async def get_mt5_demo_xauusd_diagnostics() -> dict:
     return market_data_service.get_xauusd_diagnostics()
+
+
+@router.get("/vantage/xauusd/status")
+async def get_vantage_xauusd_demo_validation_status() -> dict:
+    return vantage_xauusd_demo_validation_service.status()
+
+
+@router.post("/vantage/xauusd/test-order/preview")
+async def preview_vantage_xauusd_test_order(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return vantage_xauusd_demo_validation_service.preview(payload)
+
+
+@router.post("/vantage/xauusd/test-order")
+async def send_vantage_xauusd_test_order(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    return vantage_xauusd_demo_validation_service.send_test_order(payload)
 
 
 @router.get("/market-data/tick/{symbol}")

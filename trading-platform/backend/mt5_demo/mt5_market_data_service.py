@@ -48,6 +48,8 @@ class MT5MarketDataService:
             return self._error_payload(normalized, "MT5_UNAVAILABLE", error)
 
         try:
+            account = mt5.account_info()
+            source = self._source_from_account(account)
             availability = self._symbol_availability(normalized)
             if availability["classification"] in {"SYMBOL_NOT_FOUND", "SYMBOL_HIDDEN"}:
                 return self._error_payload(normalized, availability["classification"], availability["message"])
@@ -56,7 +58,7 @@ class MT5MarketDataService:
             info = mt5.symbol_info(normalized)
             recovery = self._recover_tick_quote(normalized, tick, info, availability)
             if recovery["tick_recovery_status"] == "TICK_STILL_UNAVAILABLE":
-                return self._stale_tick_payload(normalized, recovery, availability)
+                return self._stale_tick_payload(normalized, recovery, availability, source)
             return {
                 "symbol": normalized,
                 "bid": recovery["bid"],
@@ -64,7 +66,8 @@ class MT5MarketDataService:
                 "spread": recovery["spread"],
                 "timestamp": recovery["timestamp"],
                 "freshness": "READY",
-                "source": recovery["source"],
+                "source": source,
+                "quote_source": recovery["source"],
                 "status": "OK",
                 "tick_recovery_status": recovery["tick_recovery_status"],
                 "simulation_only": True,
@@ -180,6 +183,7 @@ class MT5MarketDataService:
 
         try:
             account = mt5.account_info()
+            source = self._source_from_account(account)
             terminal = mt5.terminal_info()
             info = mt5.symbol_info(normalized)
             tick = mt5.symbol_info_tick(normalized)
@@ -201,6 +205,8 @@ class MT5MarketDataService:
                 "initialization_state": "INITIALIZED",
                 "account_login": str(getattr(account, "login", "")) if account else "",
                 "server": str(getattr(account, "server", "")) if account else "",
+                "account_type": self._account_type(account),
+                "broker_detected": "VANTAGE_DEMO" if source == "VANTAGE_DEMO" else None,
                 "terminal_path": str(getattr(terminal, "path", "")) if terminal else "",
                 "terminal_build": getattr(terminal, "build", None) if terminal else None,
                 "terminal_symbol_count": symbols_total,
@@ -213,13 +219,18 @@ class MT5MarketDataService:
                 "symbol_info_last": self._positive_float(getattr(info, "last", None)) if info is not None else None,
                 "calculated_spread": recovery["spread"],
                 "recovery_status": recovery["tick_recovery_status"],
+                "tick_available": recovery["tick_recovery_status"] in {"TICK_AVAILABLE_DIRECT", "TICK_AVAILABLE_FROM_SYMBOL_INFO"},
+                "bid": recovery["bid"] if recovery["tick_recovery_status"] != "TICK_STILL_UNAVAILABLE" else None,
+                "ask": recovery["ask"] if recovery["tick_recovery_status"] != "TICK_STILL_UNAVAILABLE" else None,
+                "spread": recovery["spread"],
+                "source": source,
+                "readiness_result": "READY" if recovery["tick_recovery_status"] in {"TICK_AVAILABLE_DIRECT", "TICK_AVAILABLE_FROM_SYMBOL_INFO"} else "BLOCKED",
                 "symbol_visibility": bool(getattr(info, "visible", False)) if info is not None else False,
                 "symbol_select_result": select_result,
                 "mt5_last_error": select_error,
                 "terminal_memory_warning": self._terminal_memory_warning(select_error),
                 "classification": availability["classification"],
                 "diagnostic_report": report,
-                "source": "MT5_DEMO",
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,
@@ -448,7 +459,13 @@ class MT5MarketDataService:
             "execution_allowed": False,
         }
 
-    def _stale_tick_payload(self, symbol: str, recovery: dict[str, Any], availability: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _stale_tick_payload(
+        self,
+        symbol: str,
+        recovery: dict[str, Any],
+        availability: dict[str, Any] | None = None,
+        source: str = "MT5_DEMO",
+    ) -> dict[str, Any]:
         availability = availability or {}
         return {
             "symbol": symbol,
@@ -457,7 +474,7 @@ class MT5MarketDataService:
             "spread": recovery.get("spread"),
             "timestamp": recovery.get("timestamp"),
             "freshness": "OFFLINE",
-            "source": "MT5_DEMO",
+            "source": source,
             "status": "SYMBOL_TICK_UNAVAILABLE",
             "error": "STALE_TICK",
             "message": self._tick_unavailable_message(symbol, availability, "SYMBOL_TICK_UNAVAILABLE"),
@@ -567,6 +584,12 @@ class MT5MarketDataService:
     def _terminal_memory_warning(self, error: Any) -> bool:
         text = str(error).lower()
         return "out of memory" in text or text.startswith("(-3") or text.startswith("[-3")
+
+    def _source_from_account(self, account: Any) -> str:
+        server = str(getattr(account, "server", "") if account else "")
+        if "vantage" in server.lower() and self._account_type(account) == "DEMO":
+            return "VANTAGE_DEMO"
+        return "MT5_DEMO"
 
     def _tick_freshness(self, timestamp: str | None) -> str:
         if not timestamp:

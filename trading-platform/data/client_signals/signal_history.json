@@ -1,64 +1,708 @@
 [
   {
-    "symbol": "EURUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-09T17:29:14.787004+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
-  },
-  {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:29:15.117581+00:00",
+    "timestamp": "2026-06-10T07:39:27.882026+00:00",
     "confidence": null,
     "execution_status": "WAITING"
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:29:15.144005+00:00",
+    "timestamp": "2026-06-10T07:39:27.904652+00:00",
     "confidence": null,
     "execution_status": "BLOCKED"
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:29:15.175612+00:00",
+    "timestamp": "2026-06-10T07:39:33.181011+00:00",
     "confidence": null,
     "execution_status": "WAITING"
   },
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:29:15.190698+00:00",
+    "timestamp": "2026-06-10T07:39:33.192008+00:00",
     "confidence": null,
     "execution_status": "WAITING"
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:29:15.213775+00:00",
+    "timestamp": "2026-06-10T07:39:33.211997+00:00",
     "confidence": null,
     "execution_status": "BLOCKED"
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:31:28.933596+00:00",
+    "timestamp": "2026-06-10T07:39:38.646592+00:00",
     "confidence": null,
     "execution_status": "WAITING"
   },
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:31:29.087963+00:00",
+    "timestamp": "2026-06-10T07:39:38.662603+00:00",
     "confidence": null,
     "execution_status": "WAITING"
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-09T17:31:29.116828+00:00",
+    "timestamp": "2026-06-10T07:39:38.683083+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:42.968225+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:42.991042+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:43.012225+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:48.512732+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:48.527747+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:48.551602+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:53.765094+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:53.778094+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:53.801100+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:58.842123+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:58.853565+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:39:58.873611+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:03.503207+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:03.523935+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:03.544932+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:08.622907+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:08.640534+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:08.660526+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:13.192113+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:13.218771+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:13.240842+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:18.734977+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:18.751102+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:18.772988+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:23.194856+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:23.207865+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:23.236377+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:28.711472+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:28.722479+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:28.743480+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:33.478556+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:33.489600+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:33.510066+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:38.640486+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:38.656361+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:38.680368+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:42.857736+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:42.872301+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:42.894296+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:48.678226+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:48.699752+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:48.722984+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:53.348167+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:53.359606+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:53.370334+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:58.697403+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:58.712918+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:40:58.735303+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:03.142841+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:03.164062+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:03.187670+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:08.310806+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:08.325413+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:08.345748+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:13.133210+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:13.145345+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:13.169102+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:18.232195+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:18.255418+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:18.275959+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:23.551795+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:23.563230+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:23.585241+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:27.970477+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:27.989046+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:28.009042+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:33.695696+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:33.717943+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:33.741614+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:38.310100+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:38.323121+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:38.333211+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:43.702007+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:43.727036+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:43.746027+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:48.950802+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:48.965932+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:48.986527+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:53.635314+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:53.656400+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:53.676404+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:58.138138+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:58.152100+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:41:58.171139+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:03.670631+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:03.684741+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:03.703739+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:08.050350+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:08.066465+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:08.088191+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED"
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:13.758118+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:13.785684+00:00",
+    "confidence": null,
+    "execution_status": "WAITING"
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T07:42:13.806681+00:00",
     "confidence": null,
     "execution_status": "BLOCKED"
   }

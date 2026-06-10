@@ -45,6 +45,7 @@ class BrokerAccountStatus(BaseModel):
 class CurrentTerminalAccount(BaseModel):
     connected: bool
     platform: Platform = "MT5"
+    broker_detected: str | None = None
     account_login: str | None = None
     server: str | None = None
     account_type: AccountType | str | None = None

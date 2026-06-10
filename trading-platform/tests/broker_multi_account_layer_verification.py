@@ -58,12 +58,22 @@ def verify_route_responses() -> bool:
     )
     status_json = status.json()
     accounts_json = accounts.json()
+    current_terminal = accounts_json.get("current_terminal_account", {})
     broker_ids = {account["broker_id"] for account in accounts_json.get("accounts", [])}
-    pending = all(account["connection_status"] == "PENDING_CONNECTION" for account in accounts_json.get("accounts", []))
+    vantage_detected = current_terminal.get("broker_detected") == "VANTAGE_DEMO"
+    pending = all(
+        account["connection_status"] == "PENDING_CONNECTION" or (vantage_detected and account["broker_id"] == "VANTAGE" and account["connection_status"] == "CONNECTED")
+        for account in accounts_json.get("accounts", [])
+    )
     separate_terminal = "current_terminal_account" in accounts_json and "MetaQuotes" not in " ".join(
         account.get("broker_name", "") for account in accounts_json.get("accounts", [])
     )
-    plan_safe = all(item["execution_status"] == "PENDING_CONNECTION" for item in plan.json().get("plans", []))
+    plan_safe = all(item["execution_status"] in {"PENDING_CONNECTION", "READY_FOR_FUTURE", "READY_FOR_DEMO"} for item in plan.json().get("plans", []))
+    copy_safe = all(
+        item["final_execution_decision"] == "BLOCKED"
+        or (vantage_detected and item["broker_id"] == "VANTAGE" and item["final_execution_decision"] == "READY_FOR_DEMO")
+        for item in copy_readiness.json().get("plans", [])
+    )
     passed = (
         status.status_code == 200
         and accounts.status_code == 200
@@ -75,12 +85,12 @@ def verify_route_responses() -> bool:
         and pending
         and separate_terminal
         and plan_safe
-        and all(item["final_execution_decision"] == "BLOCKED" for item in copy_readiness.json().get("plans", []))
+        and copy_safe
         and status_json["live_execution_enabled"] is False
         and status_json["broker_execution_enabled"] is False
         and plan.json()["mt5_order_send_used"] is False
     )
-    return show("Broker routes return pending accounts and safe plan preview", passed)
+    return show("Broker routes return pending/mapped demo accounts and safe plan preview", passed)
 
 
 def verify_dashboard_broker_panel() -> bool:

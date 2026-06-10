@@ -124,7 +124,7 @@ class GuardedDemoOrderSenderService:
             blockers.append("ENVIRONMENT_MUST_BE_DEMO")
         if symbol not in self.allowed_symbols:
             blockers.append("INVALID_SYMBOL")
-        elif symbol not in self.runtime_symbols:
+        elif symbol not in self.runtime_symbols and not self._xauusd_vantage_runtime_allowed(payload, account_status):
             blockers.append("RUNTIME_SYMBOL_NOT_ENABLED")
         if action not in self.allowed_actions:
             blockers.append("INVALID_ACTION")
@@ -328,6 +328,17 @@ class GuardedDemoOrderSenderService:
         attempts = latest.get("filling_mode_attempts") or []
         created_order_or_deal = any((attempt.get("order") or 0) != 0 or (attempt.get("deal") or 0) != 0 for attempt in attempts)
         return latest.get("status") == "DEMO_ORDER_REJECTED" and latest.get("mt5_order_sent") is False and str(latest.get("ticket")) == "0" and not created_order_or_deal
+
+    def _xauusd_vantage_runtime_allowed(self, payload: dict[str, Any], account_status: dict[str, Any]) -> bool:
+        symbol = str(payload.get("symbol") or "").strip().upper()
+        server = str(account_status.get("server") or "").lower()
+        return (
+            symbol == "XAUUSD"
+            and payload.get("broker_id") == "VANTAGE_DEMO"
+            and payload.get("allow_xauusd_vantage_demo_test") is True
+            and account_status.get("account_type") == "DEMO"
+            and "vantage" in server
+        )
 
     def _persist_trade_journal_result(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> str | None:
         try:

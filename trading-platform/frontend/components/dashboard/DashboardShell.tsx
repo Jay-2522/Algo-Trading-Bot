@@ -24,6 +24,8 @@ type DashboardData = {
   brokerAccounts: ApiRecord[];
   brokerCopyPlans: ApiRecord[];
   currentTerminalAccount: ApiRecord | null;
+  vantageXauusdStatus: ApiRecord | null;
+  vantageXauusdPreview: ApiRecord | null;
   openPositions: ApiRecord[];
   recentTrades: ApiRecord[];
   journalSummary: ApiRecord | null;
@@ -42,6 +44,8 @@ const emptyData: DashboardData = {
   brokerAccounts: [],
   brokerCopyPlans: [],
   currentTerminalAccount: null,
+  vantageXauusdStatus: null,
+  vantageXauusdPreview: null,
   openPositions: [],
   recentTrades: [],
   journalSummary: null,
@@ -221,6 +225,8 @@ export function DashboardShell(_: {
         brokerAccounts: recordsFrom(payload.brokerAccounts, "accounts"),
         brokerCopyPlans: recordsFrom(payload.brokerCopyReadiness, "plans"),
         currentTerminalAccount: asRecord(asRecord(payload.brokerAccounts)?.current_terminal_account),
+        vantageXauusdStatus: asRecord(payload.vantageXauusdStatus),
+        vantageXauusdPreview: asRecord(payload.vantageXauusdPreview),
         openPositions: recordsFrom(payload.openPositions, "positions"),
         recentTrades: Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : [],
         journalSummary: asRecord(payload.journalSummary),
@@ -439,6 +445,8 @@ export function DashboardShell(_: {
           </div>
           <CurrentTerminalCard account={data.currentTerminalAccount} />
         </section>
+
+        <VantageXauusdValidationPanel status={data.vantageXauusdStatus} preview={data.vantageXauusdPreview} />
 
         <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
@@ -734,6 +742,39 @@ function BrokerAccountCard({ brokerId, account, copyPlan }: { brokerId: "STARTRA
           ))}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function VantageXauusdValidationPanel({ status, preview }: { status: ApiRecord | null; preview: ApiRecord | null }) {
+  const blockedReasons = Array.isArray(preview?.blocked_reasons) ? (preview.blocked_reasons.map((reason) => String(reason)) as string[]) : [];
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <SectionTitle eyebrow="Vantage XAUUSD Demo Validation" title="Guarded Demo Test Readiness" />
+        <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(readText(status, ["readiness_result"], "BLOCKED"))}`}>
+          {readText(status, ["readiness_result"], "BLOCKED").replaceAll("_", " ")}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Broker Detected" value={readText(status, ["broker_detected"], "Unavailable").replaceAll("_", " ")} compact />
+        <Metric label="Tick Status" value={readText(status, ["tick_available"], "false") === "true" ? "Available" : "Unavailable"} compact />
+        <Metric label="Bid / Ask" value={`${marketNumber(readNumber(status, ["bid"], Number.NaN), 2)} / ${marketNumber(readNumber(status, ["ask"], Number.NaN), 2)}`} compact />
+        <Metric label="Spread" value={marketNumber(readNumber(status, ["spread"], Number.NaN), 2)} compact />
+        <Metric label="Preview Decision" value={readText(preview, ["readiness_decision"], "BLOCKED").replaceAll("_", " ")} compact />
+        <Metric label="Would Send" value={readText(preview, ["would_send"], "false") === "true" ? "Yes" : "No"} compact />
+        <Metric label="Latest Test Order" value={readText(asRecord(status?.latest_test_order), ["status"], "No order submitted")} compact />
+        <Metric label="Safety Flags" value="Live/Broker Off" valueClass="text-emerald-300" compact />
+      </div>
+      {blockedReasons.length ? (
+        <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
+          {blockedReasons.slice(0, 4).map((reason) => (
+            <p key={reason}>{reason.replaceAll("_", " ")}</p>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm font-bold text-slate-400">Preview is read-only. Test order placement remains behind the Vantage guarded demo endpoint.</p>
+      )}
     </section>
   );
 }

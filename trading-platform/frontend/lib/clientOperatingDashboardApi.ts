@@ -7,6 +7,11 @@ export type ClientOrderPayload = {
   entry_price: number;
   stop_loss: number;
   take_profit: number;
+  risk_reward_ratio?: number;
+  signal_confidence?: number;
+  signal_hash?: string;
+  setup_reason?: string;
+  strategy_metadata?: ApiRecord;
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";

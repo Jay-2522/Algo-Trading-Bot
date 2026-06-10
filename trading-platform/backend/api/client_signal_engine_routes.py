@@ -22,6 +22,27 @@ async def get_latest_client_signal_engine_signals() -> dict:
     return client_signal_engine.latest()
 
 
+@router.get("/diagnostics/{symbol}")
+async def get_client_signal_engine_diagnostics(symbol: str) -> dict:
+    signal = client_signal_engine.signal_for_symbol(symbol)
+    return {
+        "symbol": signal.get("symbol"),
+        "signal": signal.get("signal"),
+        "risk_status": signal.get("risk_status"),
+        "execution_status": signal.get("execution_status"),
+        "setup_reason": signal.get("setup_reason"),
+        "approval_audit": signal.get("approval_audit"),
+        "strategy_components": signal.get("strategy_components"),
+        "quality_score": signal.get("quality_score"),
+        "market_structure_state": signal.get("market_structure_state"),
+        "candle_source": signal.get("candle_source"),
+        "simulation_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+        "execution_allowed": False,
+    }
+
+
 @router.post("/refresh")
 async def refresh_client_signal_engine() -> dict:
     return client_signal_engine.refresh()

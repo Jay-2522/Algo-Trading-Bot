@@ -173,6 +173,21 @@ function cleanBlockers(blockers: unknown): string[] {
   return blockers.map((item) => String(item).replaceAll("_", " ").toLowerCase()).slice(0, 6);
 }
 
+function blockersFromPreview(preview: ApiRecord | null): string[] {
+  if (!preview) return [];
+  const blockedReasons = Array.isArray(preview.blocked_reasons) ? preview.blocked_reasons : preview.blockers;
+  return cleanBlockers(blockedReasons);
+}
+
+function lastCandleTimestamp(signal: ApiRecord | null): string {
+  const source = asRecord(signal?.candle_source);
+  const timeframes = asRecord(source?.timeframes);
+  const m15 = asRecord(timeframes?.M15);
+  const h1 = asRecord(timeframes?.H1);
+  const h4 = asRecord(timeframes?.H4);
+  return readText(m15, ["last_candle_timestamp"], readText(h1, ["last_candle_timestamp"], readText(h4, ["last_candle_timestamp"], "")));
+}
+
 function tradeStatusMessages(marketOpen: boolean, openTradeExists: boolean, signal: ApiRecord | null, formValid: boolean): { ok: boolean; text: string }[] {
   const symbol = readText(signal, ["symbol"], "");
   if (!marketOpen) return [{ ok: false, text: symbol === "XAUUSD" ? "XAUUSD Future Demo Test Only" : "Market Closed" }];
@@ -203,6 +218,7 @@ export function DashboardShell(_: {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<ScopedSymbol>("EURUSD");
   const [preview, setPreview] = useState<ApiRecord | null>(null);
+  const [previewSignal, setPreviewSignal] = useState<ApiRecord | null>(null);
   const [sendResult, setSendResult] = useState<ApiRecord | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -252,6 +268,7 @@ export function DashboardShell(_: {
 
   useEffect(() => {
     setPreview(null);
+    setPreviewSignal(null);
     setSendResult(null);
     setTradeError(null);
   }, [selectedSymbol]);
@@ -271,7 +288,17 @@ export function DashboardShell(_: {
   const signalExecutable = (selectedSymbol === "EURUSD" || selectedSymbol === "XAUUSD") && (signalAction === "BUY" || signalAction === "SELL");
   const formValid = signalReadyForPreview && signalExecutable && Number.isFinite(signalEntry) && signalEntry > 0 && Number.isFinite(stopLoss) && stopLoss > 0 && Number.isFinite(takeProfit) && takeProfit > 0 && Number.isFinite(rr) && rr >= 1.5;
   const canPreview = selectedMarketOpen && !openTradeExists && formValid && !workingAction;
-  const canSend = canPreview && approvalReady;
+  const previewBlockers = blockersFromPreview(preview);
+  const previewSource = asRecord(previewSignal?.candle_source);
+  const canSend =
+    approvalReady &&
+    readText(previewSignal, ["execution_status"], "") === "READY_FOR_PREVIEW" &&
+    readText(previewSignal, ["risk_status"], "") === "APPROVED" &&
+    readText(previewSource, ["broker_source", "source"], readText(preview, ["broker_source", "source"], "")) === "VANTAGE_DEMO" &&
+    readText(previewSource, ["account_type"], readText(preview, ["account_type"], "")) === "DEMO" &&
+    previewBlockers.length === 0 &&
+    readText(preview, ["duplicate_protection_status"], "BLOCKED") === "PASSED" &&
+    !workingAction;
   const totalTrades = readNumber(data.journalSummary, ["total_trades"], 0);
   const closedCount = readNumber(data.journalSummary, ["closed_demo_trades"], 0);
   const winRate = readNumber(data.journalSummary, ["win_rate"], 0);
@@ -283,26 +310,64 @@ export function DashboardShell(_: {
   const lastTrade = closedTrades[0] ?? null;
   const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
 
-  const orderPayload = (): ClientOrderPayload => ({
-    symbol: selectedSymbol === "XAUUSD" ? "XAUUSD" : "EURUSD",
-    action: signalAction as "BUY" | "SELL",
+  const orderPayload = (signal: ApiRecord | null = selectedSignal): ClientOrderPayload => ({
+    symbol: readText(signal, ["symbol"], selectedSymbol) === "XAUUSD" ? "XAUUSD" : "EURUSD",
+    action: readText(signal, ["signal"], signalAction).toUpperCase() as "BUY" | "SELL",
     lot: 0.01,
-    entry_price: signalEntry,
-    stop_loss: stopLoss,
-    take_profit: takeProfit,
+    entry_price: readNumber(signal, ["entry"], signalEntry),
+    stop_loss: readNumber(signal, ["stop_loss"], stopLoss),
+    take_profit: readNumber(signal, ["take_profit"], takeProfit),
+    risk_reward_ratio: readNumber(signal, ["risk_reward"], rr),
+    signal_confidence: readNumber(signal, ["confidence"], Number.NaN),
+    signal_hash: readText(signal, ["signal_hash"], ""),
+    setup_reason: readText(signal, ["setup_reason", "reason"], ""),
+    strategy_metadata: {
+      market_structure_state: asRecord(signal?.market_structure_state) ?? {},
+      strategy_components: asRecord(signal?.strategy_components) ?? {},
+      quality_score: asRecord(signal?.quality_score) ?? {},
+      approval_audit: asRecord(signal?.approval_audit) ?? {},
+      candle_source: asRecord(signal?.candle_source) ?? {},
+    },
   });
 
-  async function handlePreview() {
+  function canPreviewSignal(signal: ApiRecord | null): boolean {
+    const symbol = readText(signal, ["symbol"], "");
+    const tick = symbol === "XAUUSD" ? data.xauusdTick : data.eurusdTick;
+    const entry = readNumber(signal, ["entry"], Number.NaN);
+    const sl = readNumber(signal, ["stop_loss"], Number.NaN);
+    const tp = readNumber(signal, ["take_profit"], Number.NaN);
+    const signalRr = readNumber(signal, ["risk_reward"], Number.NaN);
+    return (
+      ["EURUSD", "XAUUSD"].includes(symbol) &&
+      readText(signal, ["execution_status"], "") === "READY_FOR_PREVIEW" &&
+      readText(signal, ["risk_status"], "") === "APPROVED" &&
+      Number.isFinite(entry) &&
+      entry > 0 &&
+      Number.isFinite(sl) &&
+      sl > 0 &&
+      Number.isFinite(tp) &&
+      tp > 0 &&
+      Number.isFinite(signalRr) &&
+      signalRr >= 1.5 &&
+      isMarketOpen(tick) &&
+      !openTradeExists &&
+      !workingAction
+    );
+  }
+
+  async function handlePreview(signal: ApiRecord | null = selectedSignal) {
     setTradeError(null);
     setSendResult(null);
-    if (!canPreview) {
+    if (!canPreviewSignal(signal)) {
       setTradeError("Preview is blocked until an AI signal is ready, the market is open, SL/TP are valid, and no demo position is open.");
       return;
     }
+    setSelectedSymbol(readText(signal, ["symbol"], selectedSymbol) as ScopedSymbol);
     setWorkingAction("preview");
     try {
-      const result = await previewClientDemoTrade(orderPayload());
+      const result = await previewClientDemoTrade(orderPayload(signal));
       setPreview(result);
+      setPreviewSignal(signal);
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "Preview failed.");
     } finally {
@@ -314,9 +379,13 @@ export function DashboardShell(_: {
     setTradeError(null);
     setWorkingAction("send");
     try {
-      const result = await sendGuardedClientDemoTrade(orderPayload());
+      const result = await sendGuardedClientDemoTrade(orderPayload(previewSignal ?? selectedSignal));
       setSendResult(result);
       setConfirmOpen(false);
+      if (readText(result, ["status"], "") === "DEMO_ORDER_SENT") {
+        await syncClientPositionsToJournal();
+        await syncClientLifecycle();
+      }
       await refresh();
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "Demo order send failed.");
@@ -423,6 +492,8 @@ export function DashboardShell(_: {
             {(["EURUSD", "XAUUSD", "NIFTY50"] as const).map((symbol) => (
               <SignalCard
                 key={symbol}
+                canPreview={canPreviewSignal(data.clientSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null)}
+                onPreview={(signal) => void handlePreview(signal)}
                 selected={selectedSymbol === symbol}
                 signal={data.clientSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null}
                 symbol={symbol}
@@ -491,23 +562,7 @@ export function DashboardShell(_: {
               </div>
             </div>
 
-            {preview && (
-              <div className="mt-4 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
-                <p className="text-sm font-bold text-blue-100">Preview Status: {approvalReady ? "Approved" : "Needs Attention"}</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <Metric label="Risk / Reward" value={rr ? `${rr}:1` : "Unavailable"} compact />
-                  <Metric label="Estimated Margin" value="Unavailable" compact />
-                  <Metric label="Lot" value="0.01" compact />
-                </div>
-                {cleanBlockers(preview.blockers).length > 0 && (
-                  <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-                    {cleanBlockers(preview.blockers).map((blocker) => (
-                      <p key={blocker}>{blocker}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {preview && <PreviewPanel preview={preview} signal={previewSignal ?? selectedSignal} canSend={canSend} onConfirm={() => setConfirmOpen(true)} />}
 
             {(tradeError || sendResult) && (
               <div className={`mt-4 rounded-xl border p-4 text-sm ${tradeError ? "border-rose-400/25 bg-rose-500/10 text-rose-100" : "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"}`}>
@@ -656,17 +711,97 @@ function NiftyMarketCard({ scope }: { scope: ApiRecord | null }) {
   );
 }
 
-function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymbol; signal: ApiRecord | null; selected: boolean; onSelect: () => void }) {
+function PreviewPanel({ preview, signal, canSend, onConfirm }: { preview: ApiRecord; signal: ApiRecord | null; canSend: boolean; onConfirm: () => void }) {
+  const source = asRecord(signal?.candle_source);
+  const structure = asRecord(signal?.market_structure_state);
+  const components = asRecord(signal?.strategy_components);
+  const audit = asRecord(signal?.approval_audit);
+  const blockers = blockersFromPreview(preview);
+  return (
+    <div className="mt-4 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-blue-100">Preview Status: {readText(preview, ["approval_status"], canSend ? "APPROVED" : "NEEDS_ATTENTION").replaceAll("_", " ")}</p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-blue-200">Read-only preview. No order sent.</p>
+        </div>
+        <button className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canSend} onClick={onConfirm} type="button">
+          Confirm Demo Order
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Trade Summary</p>
+          <div className="mt-3 grid gap-3">
+            <Metric label="Symbol" value={readText(preview, ["symbol"], readText(signal, ["symbol"], "Unavailable"))} compact />
+            <Metric label="Direction" value={readText(preview, ["side"], readText(signal, ["signal"], "WAIT"))} compact />
+            <Metric label="Entry" value={marketNumber(readNumber(preview, ["entry_estimate"], readNumber(signal, ["entry"], Number.NaN)), readText(preview, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+            <Metric label="Stop Loss" value={marketNumber(readNumber(preview, ["stop_loss"], readNumber(signal, ["stop_loss"], Number.NaN)), readText(preview, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+            <Metric label="Take Profit" value={marketNumber(readNumber(preview, ["take_profit"], readNumber(signal, ["take_profit"], Number.NaN)), readText(preview, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+            <Metric label="Risk / Reward" value={`${readNumber(signal, ["risk_reward"], 0).toFixed(2)}:1`} compact />
+            <Metric label="Confidence" value={percent(readNumber(signal, ["confidence"], Number.NaN))} compact />
+            <Metric label="Trend Bias" value={readText(structure, ["trend_bias"], "Unavailable").replaceAll("_", " ")} compact />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Market Information</p>
+          <div className="mt-3 grid gap-3">
+            <Metric label="Broker Source" value={readText(source, ["broker_source", "source"], readText(preview, ["broker_source", "source"], "Unavailable"))} compact />
+            <Metric label="Account Login" value={readText(source, ["account_login"], readText(preview, ["account_login"], "Unavailable"))} compact />
+            <Metric label="Server" value={readText(source, ["server"], readText(preview, ["server"], "Unavailable"))} compact />
+            <Metric label="Spread" value={marketNumber(readNumber(preview, ["spread"], Number.NaN), readText(preview, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+            <Metric label="Session" value={readText(components, ["session"], "Unavailable")} compact />
+            <Metric label="Last Candle" value={formatTradeTime(lastCandleTimestamp(signal))} compact />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Readiness Information</p>
+          <div className="mt-3 grid gap-3">
+            <Metric label="Readiness Decision" value={readText(preview, ["readiness_decision"], "BLOCKED").replaceAll("_", " ")} compact />
+            <Metric label="Approval Status" value={readText(preview, ["approval_status"], "BLOCKED").replaceAll("_", " ")} compact />
+            <Metric label="Duplicate Protection" value={readText(preview, ["duplicate_protection_status"], "BLOCKED").replaceAll("_", " ")} compact />
+            <Metric label="BOS / CHOCH" value={`${readText(audit, ["bos_result"], "Unknown")} / ${readText(audit, ["choch_result"], "Unknown")}`} compact />
+            <Metric label="Sweep / FVG / OB" value={`${readText(audit, ["liquidity_sweep_result"], "Unknown")} / ${readText(audit, ["fvg_result"], "Unknown")} / ${readText(audit, ["order_block_result"], "Unknown")}`} compact />
+            <Metric label="Final Reason" value={readText(audit, ["final_approval_reason"], readText(signal, ["setup_reason"], "Unavailable"))} compact />
+          </div>
+          {blockers.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {blockers.map((blocker) => (
+                <p key={blocker}>{blocker}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignalCard({
+  symbol,
+  signal,
+  selected,
+  canPreview,
+  onSelect,
+  onPreview,
+}: {
+  symbol: ScopedSymbol;
+  signal: ApiRecord | null;
+  selected: boolean;
+  canPreview: boolean;
+  onSelect: () => void;
+  onPreview: (signal: ApiRecord | null) => void;
+}) {
   const action = readText(signal, ["signal"], "WAIT").toUpperCase();
   const confidence = readNumber(signal, ["confidence"], Number.NaN);
   const riskReward = readNumber(signal, ["risk_reward"], Number.NaN);
   const actionable = action === "BUY" || action === "SELL";
   const marketStructure = asRecord(signal?.market_structure_state);
   return (
-    <button
+    <section
       className={`rounded-2xl border p-4 text-left transition ${selected ? "border-blue-400 bg-blue-500/10" : "border-slate-800 bg-[#0F172A] hover:border-slate-600"}`}
-      onClick={onSelect}
-      type="button"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -689,7 +824,17 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
         <Metric label="Structure" value={`${readText(marketStructure, ["higher_timeframe_bias"], "H4?")} / ${readText(marketStructure, ["intermediate_timeframe_bias"], "H1?")} / ${readText(marketStructure, ["lower_timeframe_bias"], "M15?")}`} compact />
       </div>
       <StrategyComponents components={asRecord(signal?.strategy_components)} />
-    </button>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <button className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" onClick={onSelect} type="button">
+          Select
+        </button>
+        {readText(signal, ["execution_status"], "") === "READY_FOR_PREVIEW" && readText(signal, ["risk_status"], "") === "APPROVED" && (
+          <button className="rounded-xl bg-blue-500 px-3 py-2 text-sm font-black text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canPreview} onClick={() => onPreview(signal)} type="button">
+            Preview Trade
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 

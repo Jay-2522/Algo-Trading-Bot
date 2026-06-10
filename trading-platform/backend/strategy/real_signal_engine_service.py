@@ -131,6 +131,7 @@ class RealSignalEngineService:
                 "volatility_quality": volatility["quality"],
             },
             "quality_score": score,
+            "approval_audit": self._approval_audit(signal_action, score, smc, trade_plan, session, spread, reasons),
             "candle_source": feed["candle_source"],
             "signal_hash": self._signal_hash(normalized, signal_action, trade_plan, score),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
@@ -397,6 +398,38 @@ class RealSignalEngineService:
             reasons.append(f"{direction} setup is tradeable: aligned trend, SMC confirmation, session, spread, and RR checks passed.")
         return reasons
 
+    def _approval_audit(
+        self,
+        signal_action: str,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        trade_plan: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+        reasons: list[str],
+    ) -> dict[str, Any]:
+        rr = self._number(trade_plan.get("risk_reward"))
+        approved = signal_action in {"BUY", "SELL"}
+        return {
+            "status": "APPROVED" if approved else ("REJECTED" if score["confidence"] >= self.watchlist_confidence else "WAIT"),
+            "final_decision": signal_action,
+            "final_approval_reason": self._reason_text(reasons),
+            "bos_result": "PASS" if smc["bos"] else "FAIL",
+            "choch_result": "PASS" if smc["choch"] else "FAIL",
+            "liquidity_sweep_result": "PASS" if smc["liquidity_sweep"] else "FAIL",
+            "fvg_result": "PASS" if smc["fvg"] else "FAIL",
+            "order_block_result": "PASS" if smc["order_block"] else "FAIL",
+            "rr_result": "PASS" if rr is not None and rr >= self.min_rr else "FAIL",
+            "rr": rr,
+            "confidence_result": "PASS" if score["confidence"] >= self.tradeable_confidence else "FAIL",
+            "confidence": score["confidence"],
+            "confidence_threshold": self.tradeable_confidence,
+            "session_result": "PASS" if session["valid"] else "FAIL",
+            "spread_result": "PASS" if spread["acceptable"] else "FAIL",
+            "approval_model": "weighted_smc_score",
+            "approval_note": "CHOCH and liquidity sweep add confidence but are not mandatory when weighted trend, BOS, FVG, order block, session, spread, volatility, and RR satisfy the approval threshold.",
+        }
+
     def _wait(self, symbol: str, reasons: list[str], risk_status: str = "NO_SIGNAL", feed: dict[str, Any] | None = None) -> dict[str, Any]:
         return {
             "symbol": symbol,
@@ -422,6 +455,12 @@ class RealSignalEngineService:
                 "session": None,
             },
             "quality_score": {"confidence": 0, "rating": "WAIT", "factors": {}},
+            "approval_audit": {
+                "status": risk_status,
+                "final_decision": "WAIT",
+                "final_approval_reason": self._reason_text(reasons),
+                "confidence_result": "INSUFFICIENT_DATA",
+            },
             "candle_source": (feed or {}).get("candle_source", {"symbol": symbol, "timeframes": {}}),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
             "simulation_only": True,

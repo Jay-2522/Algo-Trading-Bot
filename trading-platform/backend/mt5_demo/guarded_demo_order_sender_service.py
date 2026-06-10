@@ -378,6 +378,11 @@ class GuardedDemoOrderSenderService:
             "mt5_retcode": retcode,
             "mt5_comment": result.get("final_comment") or result.get("comment"),
             "profit_loss": 0,
+            "broker_source": payload.get("broker_source") or payload.get("broker_id"),
+            "signal_confidence": payload.get("signal_confidence"),
+            "signal_hash": payload.get("signal_hash"),
+            "setup_reason": payload.get("setup_reason"),
+            "strategy_metadata": payload.get("strategy_metadata"),
             "notes": "First controlled MT5 demo order executed through guarded sender.",
         }
 
@@ -432,6 +437,10 @@ class GuardedDemoOrderSenderService:
             "tp": self._float_or_none(payload.get("take_profit")),
             "account_login": str(getattr(account, "login", "")) if account else "",
             "server": str(getattr(account, "server", "")) if account else "",
+            "broker_source": str(payload.get("broker_source") or payload.get("broker_id") or ""),
+            "signal_confidence": self._float_or_none(payload.get("signal_confidence")),
+            "signal_hash": str(payload.get("signal_hash") or ""),
+            "setup_reason": str(payload.get("setup_reason") or ""),
             "environment": "DEMO",
             "mt5_result": mt5_result or {},
             "single_trade_limit": 1,

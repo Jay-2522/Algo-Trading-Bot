@@ -77,6 +77,9 @@ class ClientSignalEngine:
             return self.real_signal_service.latest(symbol)
         return self.real_signal_service.latest()
 
+    def debug(self, symbol: str) -> dict[str, Any]:
+        return self.real_signal_service.debug_signal(symbol)
+
     def _from_existing_center(self, symbol: str) -> dict[str, Any]:
         source = self.signal_center_service.signal_for_symbol(symbol)
         action = str(source.get("signal") or "WAIT").upper()

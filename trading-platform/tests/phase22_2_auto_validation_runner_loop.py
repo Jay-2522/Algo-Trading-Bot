@@ -161,6 +161,39 @@ async def verify_run_once_called_and_events_generated() -> bool:
         return show("run_once is called, events are generated, and WATCHLIST interval becomes 2s", passed, str(events))
 
 
+async def verify_allowed_symbols_only_and_scan_report() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals(
+            [
+                wait_signal("EURUSD", status_level="WAIT", signal_hash="eur-wait"),
+                wait_signal("XAUUSD", status_level="WATCHLIST", signal_hash="xau-watch"),
+                wait_signal("NIFTY50", status_level="WAIT", signal_hash="nifty-wait"),
+            ]
+        )
+        service, _ = make_service(signals, state_path=Path(tmp) / "state.json")
+        runner = AutoValidationRunner(service)
+        service.start()
+        await runner.run_tick()
+        status = service.status()
+        watched = status["current_signal_watched"]
+        decision = status["last_execution_decision"]
+        checked = decision["per_symbol_results"]
+        passed = (
+            watched["symbol"] in {"EURUSD", "XAUUSD"}
+            and watched["symbol"] != "NIFTY50"
+            and set(checked.keys()) == {"EURUSD", "XAUUSD"}
+            and decision["EURUSD"]["status"] == "WAIT"
+            and decision["XAUUSD"]["status"] == "WATCHLIST"
+            and decision["last_checked_symbol"] == "XAUUSD"
+            and decision["best_candidate_symbol"] == "XAUUSD"
+            and "NIFTY50" not in decision["watched_symbols"]
+            and "NIFTY50" not in decision["no_qualified_reason"]
+        )
+        return show("AUTO validation watches only allowed symbols and reports EURUSD/XAUUSD scan results", passed, str(decision))
+
+
 async def verify_no_overlapping_run_once_calls() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
@@ -252,6 +285,11 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Last Scan Time",
         "Next Scan Time",
         "Last Runner Error",
+        "Watching",
+        "Last Checked Symbol",
+        "Best Candidate Symbol",
+        "Why no symbol qualified",
+        "per_symbol_results",
     ]
     missing = [item for item in required if item not in service + runner + routes + main + dashboard]
     return show("Runner route/status wiring and dashboard fields exist", not missing, ", ".join(missing))
@@ -272,6 +310,7 @@ async def async_main() -> list[bool]:
     return [
         await verify_runner_lifecycle(),
         await verify_run_once_called_and_events_generated(),
+        await verify_allowed_symbols_only_and_scan_report(),
         await verify_no_overlapping_run_once_calls(),
         await verify_persisted_running_session_starts_on_backend_startup(),
         await verify_runner_errors_logged(),

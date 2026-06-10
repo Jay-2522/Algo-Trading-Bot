@@ -1060,6 +1060,13 @@ function AutoValidationPanel({
   const nextEligible = readText(status, ["next_eligible_time"], "");
   const runnerActive = readText(status, ["runner_active"], "false") === "true";
   const runnerError = readText(status, ["last_runner_error"], "");
+  const watchedSymbols = Array.isArray(decision?.watched_symbols) ? decision.watched_symbols.map(String) : Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String) : ["EURUSD", "XAUUSD"];
+  const perSymbolResults = asRecord(decision?.per_symbol_results);
+  const eurusdCheck = asRecord(perSymbolResults?.EURUSD ?? decision?.EURUSD);
+  const xauusdCheck = asRecord(perSymbolResults?.XAUUSD ?? decision?.XAUUSD);
+  const lastCheckedSymbol = readText(decision, ["last_checked_symbol"], "None");
+  const bestCandidateSymbol = readText(decision, ["best_candidate_symbol"], "None");
+  const noQualifiedReason = readText(decision, ["no_qualified_reason"], "Waiting for the next validation scan.");
   const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
@@ -1098,6 +1105,7 @@ function AutoValidationPanel({
         <Metric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
         <Metric label="Lot" value={String(readNumber(config, ["lot_size"], 0.01))} compact />
         <Metric label="Allowed Symbols" value={Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.join(", ") : "XAUUSD, EURUSD"} compact />
+        <Metric label="Watching" value={watchedSymbols.join(" + ")} compact />
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
         <Metric label="Next Eligible" value={nextEligible ? formatTradeTime(nextEligible) : "Now"} compact />
         <Metric label="Safety" value="Demo / Vantage Only" valueClass="text-emerald-300" compact />
@@ -1139,11 +1147,24 @@ function AutoValidationPanel({
           <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Current Signal Watched</p>
           <p className="mt-2 text-lg font-black text-white">{watched ? `${readText(watched, ["symbol"], "Signal")} ${readText(watched, ["signal"], "WAIT")}` : "None"}</p>
           <p className="mt-1 text-sm font-bold text-slate-400">{readText(watched, ["setup_reason", "reason"], "Waiting for qualified signal.")}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Metric label="Last Checked Symbol" value={lastCheckedSymbol} compact />
+            <Metric label="Best Candidate Symbol" value={bestCandidateSymbol} compact />
+          </div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Last Decision</p>
           <p className="mt-2 text-lg font-black text-white">{readText(decision, ["status"], "No decision yet")}</p>
           {blockers.length > 0 ? <p className="mt-1 text-sm font-bold text-amber-100">{blockers.join(", ")}</p> : <p className="mt-1 text-sm font-bold text-slate-400">No blocked reasons recorded.</p>}
+          <p className="mt-2 text-sm font-bold text-slate-400">Why no symbol qualified: {noQualifiedReason}</p>
+          <div className="mt-3 grid gap-2">
+            <p className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs font-bold text-slate-300">
+              EURUSD: {readText(eurusdCheck, ["status"], "Not checked")} / confidence {readText(eurusdCheck, ["confidence"], "Unavailable")} / {readText(eurusdCheck, ["blocking_reason"], "No result")}
+            </p>
+            <p className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs font-bold text-slate-300">
+              XAUUSD: {readText(xauusdCheck, ["status"], "Not checked")} / confidence {readText(xauusdCheck, ["confidence"], "Unavailable")} / {readText(xauusdCheck, ["blocking_reason"], "No result")}
+            </p>
+          </div>
           <p className={`mt-2 text-sm font-bold ${runnerError ? "text-rose-200" : "text-slate-500"}`}>Last Runner Error: {runnerError || "None"}</p>
         </div>
       </div>

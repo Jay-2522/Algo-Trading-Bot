@@ -1,4 +1,5 @@
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ SERVICE_PATH = PROJECT_ROOT / "backend/auto_validation/auto_validation_service.p
 ROUTES_PATH = PROJECT_ROOT / "backend/api/auto_validation_routes.py"
 DASHBOARD_PATH = PROJECT_ROOT / "frontend/components/dashboard/DashboardShell.tsx"
 API_PATH = PROJECT_ROOT / "frontend/lib/clientOperatingDashboardApi.ts"
+AUTO_VALIDATION_STATE_PATH = PROJECT_ROOT / "data/auto_validation/session_state.json"
 
 
 def show(name: str, passed: bool, detail: str = "") -> bool:
@@ -111,11 +113,14 @@ def make_service(current: dict[str, Any] | None = None, *, positions=None, trade
         journal_service=FakeJournal(trades),
         position_service=FakePositions(positions),
         mt5_demo_service=FakeAccount(account_type=account_type, server=server),
+        state_path=Path(tempfile.mkdtemp()) / "state.json",
     )
     return svc, guarded
 
 
 def verify_default_routes_and_config() -> bool:
+    if AUTO_VALIDATION_STATE_PATH.exists():
+        AUTO_VALIDATION_STATE_PATH.unlink()
     from backend.main import app
 
     client = TestClient(app)
@@ -174,7 +179,8 @@ def verify_risk_blocks() -> bool:
 
     symbol_service, _ = make_service(signal(symbol="GBPUSD", signal_hash="bad-symbol"))
     symbol_service.start()
-    checks.append("SYMBOL_NOT_ALLOWED" in symbol_service.run_once([signal(symbol="GBPUSD", signal_hash="bad-symbol")])["blockers"])
+    symbol_result = symbol_service.run_once([signal(symbol="GBPUSD", signal_hash="bad-symbol")])
+    checks.append(symbol_result["status"] == "NO_QUALIFIED_SIGNAL" and symbol_service.status()["current_signal_watched"] is None)
 
     lot_service, _ = make_service()
     lot_service.start({"lot_size": 0.02})

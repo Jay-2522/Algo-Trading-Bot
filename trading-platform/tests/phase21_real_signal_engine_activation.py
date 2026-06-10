@@ -70,6 +70,7 @@ def verify_files_and_routes() -> bool:
         "RealSignalEngineService",
         "REAL_SMC_MULTI_TIMEFRAME_SIGNAL_ENGINE",
         '@router.get("/latest")',
+        '@router.get("/debug/{symbol}")',
         "SMC_MULTI_TIMEFRAME_RULE_ENGINE",
     ]
     missing = [item for item in required if item not in route_text + client_text + REAL_ENGINE_PATH.read_text(encoding="utf-8")]
@@ -161,6 +162,45 @@ def verify_live_signal_routes() -> bool:
     return show("Live EURUSD/XAUUSD signal routes return real structured signals or honest WAIT", passed)
 
 
+def verify_debug_diagnostics_routes() -> bool:
+    from backend.main import app
+
+    client = TestClient(app)
+    responses = [client.get("/client-signals-engine/debug/EURUSD"), client.get("/client-signals-engine/debug/XAUUSD")]
+    required_components = {
+        "trend_alignment_score",
+        "bos_score",
+        "choch_score",
+        "liquidity_sweep_score",
+        "fvg_score",
+        "order_block_score",
+        "session_score",
+        "spread_score",
+        "volatility_score",
+        "rr_score",
+    }
+    valid = True
+    details = []
+    for response in responses:
+        payload = response.json()
+        details.append(payload.get("symbol"))
+        components = payload.get("confidence_components", {})
+        counts = payload.get("candles_analyzed", {})
+        raw_trend = payload.get("raw_trend_direction", {})
+        calculation = payload.get("final_confidence_calculation", {})
+        valid = valid and response.status_code == 200
+        valid = valid and required_components.issubset(set(components))
+        valid = valid and all(key in counts for key in ["total_m15_candles_analyzed", "total_h1_candles_analyzed", "total_h4_candles_analyzed"])
+        valid = valid and {"M15", "H1", "H4"}.issubset(set(raw_trend))
+        valid = valid and payload.get("market_regime") in {"trend", "range", "chop", "unknown"}
+        valid = valid and "final_confidence" in calculation and "formula" in calculation
+        valid = valid and "exact_reason_buy_not_generated" in payload and "exact_reason_sell_not_generated" in payload
+        valid = valid and payload.get("diagnostics_only") is True and payload.get("strategy_logic_changed") is False and payload.get("thresholds_changed") is False
+        valid = valid and components["rr_score"].get("included_in_confidence") is False
+        valid = valid and components["choch_score"].get("included_in_confidence") is False
+    return show("Debug diagnostics routes expose component scoring, trend, regime, candle counts, and rejection reasons", valid, ", ".join(details))
+
+
 def verify_dashboard_and_preview_integration() -> bool:
     dashboard = DASHBOARD_PATH.read_text(encoding="utf-8")
     api = API_PATH.read_text(encoding="utf-8")
@@ -203,6 +243,7 @@ def main() -> int:
         verify_sell_signal_generation(),
         verify_component_detectors_and_wait_honesty(),
         verify_live_signal_routes(),
+        verify_debug_diagnostics_routes(),
         verify_dashboard_and_preview_integration(),
         verify_no_unrestricted_order_send(),
     ]

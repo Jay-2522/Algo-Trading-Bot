@@ -41,6 +41,7 @@ class AutoValidationService:
 
     def status(self) -> dict[str, Any]:
         self._refresh_session_metrics()
+        self._clear_disallowed_watched_signal()
         return {
             "status": "READY",
             "mode": self.session["status"],
@@ -121,16 +122,21 @@ class AutoValidationService:
         halt = self._risk_halt_reason()
         if halt:
             return self._halt(halt)
-        signals = signals if signals is not None else self._load_signals()
+        signals = self._allowed_signals(signals if signals is not None else self._load_signals())
+        checked = [self._checked_symbol_result(signal) for signal in signals]
+        best_candidate = self._best_candidate(checked)
         for signal in signals:
             self._current_signal_watched = signal
             self._log("SIGNAL_EVALUATED", {"symbol": signal.get("symbol"), "signal_hash": signal.get("signal_hash")})
             if not self._ready(signal):
                 continue
             decision = self._execute_signal(signal)
+            decision.update(self._scan_context(checked, signal))
+            self._last_execution_decision = decision
+            self._save_state()
             if decision["status"] in {"ORDER_SENT", "HALTED_RISK", "BLOCKED"}:
                 return decision
-        decision = self._decision("NO_QUALIFIED_SIGNAL", ["NO_READY_APPROVED_SIGNAL"])
+        decision = self._decision("NO_QUALIFIED_SIGNAL", ["NO_READY_APPROVED_SIGNAL"], extra=self._scan_context(checked, best_candidate))
         self._log("NO_QUALIFIED_SIGNAL", decision)
         return decision
 
@@ -247,9 +253,11 @@ class AutoValidationService:
             return []
         payload = self.signal_provider.current(record_history=False)
         signals = payload.get("signals", [])
-        return signals if isinstance(signals, list) else []
+        return self._allowed_signals(signals if isinstance(signals, list) else [])
 
     def _current_signal(self, symbol: str) -> dict[str, Any] | None:
+        if symbol not in self._allowed_symbols():
+            return None
         if self.signal_provider is None:
             return None
         try:
@@ -302,6 +310,74 @@ class AutoValidationService:
             return []
         positions = result.get("positions", []) if isinstance(result, dict) else []
         return positions if isinstance(positions, list) else []
+
+    def _allowed_symbols(self) -> set[str]:
+        symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
+        return {str(symbol).upper() for symbol in symbols if str(symbol).upper()}
+
+    def _allowed_signals(self, signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        allowed = self._allowed_symbols()
+        return [signal for signal in signals if str(signal.get("symbol") or "").upper() in allowed]
+
+    def _clear_disallowed_watched_signal(self) -> None:
+        if not isinstance(self._current_signal_watched, dict):
+            return
+        if str(self._current_signal_watched.get("symbol") or "").upper() not in self._allowed_symbols():
+            self._current_signal_watched = None
+            self._save_state()
+
+    def _checked_symbol_result(self, signal: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(signal.get("symbol") or "").upper()
+        ready = self._ready(signal)
+        blockers = self._validate_signal(signal) if ready else self._readiness_blockers(signal)
+        confidence = self._number(signal.get("confidence"), 0)
+        return {
+            "symbol": symbol,
+            "status": signal.get("status_level") or signal.get("execution_status") or signal.get("signal") or "UNKNOWN",
+            "confidence": signal.get("confidence"),
+            "execution_status": signal.get("execution_status"),
+            "risk_status": signal.get("risk_status"),
+            "signal": signal.get("signal"),
+            "signal_hash": signal.get("signal_hash"),
+            "blocking_reason": ", ".join(blockers) if blockers else "QUALIFIED",
+            "blockers": blockers,
+            "ready_for_execution": ready and not blockers,
+            "score": confidence,
+            "what_needs_to_happen_next": signal.get("what_needs_to_happen_next"),
+            "missing_requirements": signal.get("missing_requirements") if isinstance(signal.get("missing_requirements"), list) else [],
+        }
+
+    def _readiness_blockers(self, signal: dict[str, Any]) -> list[str]:
+        blockers: list[str] = []
+        if signal.get("execution_status") != "READY_FOR_PREVIEW":
+            blockers.append("SIGNAL_NOT_READY_FOR_PREVIEW")
+        if signal.get("risk_status") != "APPROVED":
+            blockers.append("RISK_STATUS_NOT_APPROVED")
+        if str(signal.get("signal") or "").upper() not in {"BUY", "SELL"}:
+            blockers.append("NO_BUY_SELL_SIGNAL")
+        missing = signal.get("missing_requirements")
+        if isinstance(missing, list):
+            blockers.extend(str(item.get("code") or item.get("label") or item) for item in missing if item)
+        return sorted(set(blockers)) or ["NO_READY_APPROVED_SIGNAL"]
+
+    def _best_candidate(self, checked: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not checked:
+            return None
+        return sorted(checked, key=lambda item: (bool(item.get("ready_for_execution")), self._number(item.get("score"), 0)), reverse=True)[0]
+
+    def _scan_context(self, checked: list[dict[str, Any]], selected: dict[str, Any] | None) -> dict[str, Any]:
+        allowed = sorted(self._allowed_symbols())
+        per_symbol = {item["symbol"]: item for item in checked}
+        no_qualified = "; ".join(f"{item['symbol']}: {item['blocking_reason']}" for item in checked if item.get("blocking_reason")) or "NO_ALLOWED_SYMBOL_SIGNALS"
+        return {
+            "watched_symbols": allowed,
+            "last_checked_symbol": checked[-1]["symbol"] if checked else None,
+            "best_candidate_symbol": (selected or {}).get("symbol"),
+            "no_qualified_reason": no_qualified,
+            "per_symbol_results": per_symbol,
+            "EURUSD": per_symbol.get("EURUSD"),
+            "XAUUSD": per_symbol.get("XAUUSD"),
+        }
 
     def _refresh_session_metrics(self) -> None:
         trades = self.trades()
@@ -542,7 +618,7 @@ class AutoValidationService:
             if key in payload:
                 safe[key] = payload[key]
         safe["auto_validation_enabled"] = bool(payload.get("auto_validation_enabled", safe["auto_validation_enabled"]))
-        safe["allowed_symbols"] = [symbol for symbol in payload.get("allowed_symbols", safe["allowed_symbols"]) if symbol in {"XAUUSD", "EURUSD"}] or ["XAUUSD", "EURUSD"]
+        safe["allowed_symbols"] = [symbol for symbol in payload.get("allowed_symbols", safe["allowed_symbols"]) if symbol in {"XAUUSD", "EURUSD", "NIFTY50"}] or ["XAUUSD", "EURUSD"]
         safe["lot_size"] = min(float(payload.get("lot_size", 0.01)), 0.01)
         safe["broker_required"] = "VANTAGE_DEMO"
         safe["account_type_required"] = "DEMO"

@@ -46,6 +46,11 @@ async def get_client_signal_engine_diagnostics(symbol: str) -> dict:
     }
 
 
+@router.get("/debug/{symbol}")
+async def get_client_signal_engine_debug(symbol: str) -> dict:
+    return client_signal_engine.debug(symbol)
+
+
 @router.post("/refresh")
 async def refresh_client_signal_engine() -> dict:
     return client_signal_engine.refresh()

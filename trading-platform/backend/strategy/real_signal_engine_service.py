@@ -58,6 +58,112 @@ class RealSignalEngineService:
             "timestamp": self._timestamp(),
         }
 
+    def debug_signal(self, symbol: str) -> dict[str, Any]:
+        normalized = self._normalize_symbol(symbol)
+        if normalized not in self.symbols:
+            return {
+                "symbol": normalized,
+                "status": "UNSUPPORTED_SYMBOL",
+                "reason": "Unsupported real signal symbol.",
+                "simulation_only": True,
+                "live_execution_enabled": False,
+                "broker_execution_enabled": False,
+                "execution_allowed": False,
+                "timestamp": self._timestamp(),
+            }
+
+        feed = self._load_feed(normalized)
+        candle_counts = {timeframe: len(feed["timeframes"].get(timeframe, [])) for timeframe in self.timeframes}
+        if feed["blockers"]:
+            signal = self._wait(normalized, feed["blockers"], "INSUFFICIENT_DATA", feed=feed)
+            return {
+                "symbol": normalized,
+                "status": "INSUFFICIENT_DATA",
+                "signal": signal,
+                "exact_reason_buy_not_generated": self._reason_text(feed["blockers"]),
+                "exact_reason_sell_not_generated": self._reason_text(feed["blockers"]),
+                "candles_analyzed": self._candle_counts(candle_counts),
+                "market_regime": "unknown",
+                "raw_trend_direction": {"M15": "unknown", "H1": "unknown", "H4": "unknown"},
+                "confidence_components": self._empty_debug_components(),
+                "final_confidence_calculation": {"formula": "No confidence calculation because candle feed is insufficient.", "final_confidence": 0},
+                "diagnostics_only": True,
+                "strategy_logic_changed": False,
+                "thresholds_changed": False,
+                "simulation_only": True,
+                "live_execution_enabled": False,
+                "broker_execution_enabled": False,
+                "execution_allowed": False,
+                "timestamp": self._timestamp(),
+            }
+
+        tick = self.market_data_service.get_symbol_tick(normalized)
+        candles = feed["timeframes"]
+        contexts = {
+            "H4": self._timeframe_context(candles["H4"]),
+            "H1": self._timeframe_context(candles["H1"]),
+            "M15": self._timeframe_context(candles["M15"]),
+        }
+        direction = self._aligned_direction(contexts["H4"]["bias"], contexts["H1"]["bias"], contexts["M15"])
+        smc = self._smc_components(candles["M15"], direction)
+        session = self._session_context()
+        spread = self._spread_context(normalized, tick)
+        volatility = self._volatility_context(candles["M15"], normalized)
+        score = self._score_setup(direction, contexts["H4"], contexts["H1"], contexts["M15"], smc, session, spread, volatility)
+        trade_plan = self._trade_plan(normalized, direction, tick, candles["M15"], smc) if direction in {"BUY", "SELL"} else {}
+        reasons = self._reasons(direction, score, smc, session, spread, volatility)
+        if trade_plan.get("risk_reward") is None or trade_plan.get("risk_reward", 0) < self.min_rr:
+            reasons.append("Risk/reward is below the 1.5 minimum or trade plan is incomplete.")
+        missing_requirements = self._missing_requirements(direction, score, smc, trade_plan, session, spread)
+        signal = self.generate_signal(normalized)
+        confidence_components = self._debug_confidence_components(score, smc, session, spread, volatility, trade_plan)
+        final_calculation = self._debug_confidence_calculation(confidence_components, score)
+        direction_reasons = self._direction_rejection_reasons(direction, signal, reasons, missing_requirements)
+
+        return {
+            "symbol": normalized,
+            "status": "READY",
+            "signal": signal,
+            "candles_analyzed": self._candle_counts(candle_counts),
+            "market_regime": self._market_regime(contexts),
+            "raw_trend_direction": {
+                "M15": contexts["M15"]["bias"],
+                "H1": contexts["H1"]["bias"],
+                "H4": contexts["H4"]["bias"],
+            },
+            "raw_trend_strength": {
+                "M15": contexts["M15"]["strength"],
+                "H1": contexts["H1"]["strength"],
+                "H4": contexts["H4"]["strength"],
+            },
+            "aligned_direction": direction,
+            "smc_components": smc,
+            "session_context": session,
+            "spread_context": spread,
+            "volatility_context": volatility,
+            "trade_plan_before_wait_reset": trade_plan,
+            "confidence_components": confidence_components,
+            "final_confidence_calculation": final_calculation,
+            "missing_requirements": missing_requirements,
+            "exact_reason_buy_not_generated": direction_reasons["BUY"],
+            "exact_reason_sell_not_generated": direction_reasons["SELL"],
+            "diagnostic_summary": self._reason_text(reasons),
+            "thresholds": {
+                "tradeable_confidence": self.tradeable_confidence,
+                "watchlist_confidence": self.watchlist_confidence,
+                "minimum_risk_reward": self.min_rr,
+                "max_spread": self.max_spread[normalized],
+            },
+            "diagnostics_only": True,
+            "strategy_logic_changed": False,
+            "thresholds_changed": False,
+            "simulation_only": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
+            "timestamp": self._timestamp(),
+        }
+
     def generate_signal(self, symbol: str) -> dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
         if normalized not in self.symbols:
@@ -349,6 +455,110 @@ class RealSignalEngineService:
         else:
             rating = "TRADEABLE"
         return {"confidence": min(100, confidence), "rating": rating, "factors": factors}
+
+    def _debug_confidence_components(
+        self,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+        volatility: dict[str, Any],
+        trade_plan: dict[str, Any],
+    ) -> dict[str, Any]:
+        factors = score.get("factors", {})
+        rr = self._number(trade_plan.get("risk_reward"))
+        rr_pass = rr is not None and rr >= self.min_rr
+        return {
+            "trend_alignment_score": {"score": factors.get("trend_alignment", 0), "max_score": 20, "included_in_confidence": True},
+            "bos_score": {"score": factors.get("bos_strength", 0), "max_score": 15, "included_in_confidence": True, "detected": bool(smc["bos"])},
+            "choch_score": {
+                "score": 0,
+                "max_score": 0,
+                "included_in_confidence": False,
+                "detected": bool(smc["choch"]),
+                "note": "CHOCH is audited but is not part of the current confidence sum.",
+            },
+            "liquidity_sweep_score": {"score": factors.get("liquidity_sweep_quality", 0), "max_score": 15, "included_in_confidence": True, "detected": bool(smc["liquidity_sweep"])},
+            "fvg_score": {"score": factors.get("fvg_quality", 0), "max_score": 10, "included_in_confidence": True, "detected": bool(smc["fvg"])},
+            "order_block_score": {"score": factors.get("order_block_quality", 0), "max_score": 10, "included_in_confidence": True, "detected": bool(smc["order_block"])},
+            "session_score": {"score": factors.get("session_quality", 0), "max_score": 10, "included_in_confidence": True, "valid": bool(session["valid"]), "session": session["name"]},
+            "spread_score": {"score": factors.get("spread_quality", 0), "max_score": 10, "included_in_confidence": True, "acceptable": bool(spread["acceptable"]), "spread": spread.get("spread"), "max_spread": spread.get("max_spread")},
+            "volatility_score": {"score": factors.get("volatility_quality", 0), "max_score": 10, "included_in_confidence": True, "acceptable": bool(volatility["acceptable"]), "ratio": volatility.get("ratio")},
+            "rr_score": {
+                "score": 10 if rr_pass else 0,
+                "max_score": 10,
+                "included_in_confidence": False,
+                "risk_reward": rr,
+                "minimum_risk_reward": self.min_rr,
+                "passed": rr_pass,
+                "note": "RR is a final readiness gate but is not part of the current confidence sum.",
+            },
+        }
+
+    def _debug_confidence_calculation(self, confidence_components: dict[str, Any], score: dict[str, Any]) -> dict[str, Any]:
+        included = {key: value for key, value in confidence_components.items() if value.get("included_in_confidence") is True}
+        subtotal = round(sum(float(item.get("score", 0)) for item in included.values()), 2)
+        return {
+            "included_components": included,
+            "excluded_diagnostics": {key: value for key, value in confidence_components.items() if value.get("included_in_confidence") is False},
+            "formula": "trend_alignment + BOS + liquidity_sweep + FVG + order_block + session + spread + volatility",
+            "subtotal_before_cap": subtotal,
+            "cap": 100,
+            "final_confidence": score["confidence"],
+            "rating": score["rating"],
+            "tradeable_threshold": self.tradeable_confidence,
+            "confidence_gap_to_tradeable": max(0, self.tradeable_confidence - int(score["confidence"])),
+        }
+
+    def _empty_debug_components(self) -> dict[str, Any]:
+        names = [
+            "trend_alignment_score",
+            "bos_score",
+            "choch_score",
+            "liquidity_sweep_score",
+            "fvg_score",
+            "order_block_score",
+            "session_score",
+            "spread_score",
+            "volatility_score",
+            "rr_score",
+        ]
+        return {name: {"score": 0, "included_in_confidence": name not in {"choch_score", "rr_score"}} for name in names}
+
+    def _candle_counts(self, counts: dict[str, int]) -> dict[str, int]:
+        return {
+            "total_m15_candles_analyzed": counts.get("M15", 0),
+            "total_h1_candles_analyzed": counts.get("H1", 0),
+            "total_h4_candles_analyzed": counts.get("H4", 0),
+        }
+
+    def _market_regime(self, contexts: dict[str, dict[str, Any]]) -> str:
+        biases = [contexts[timeframe]["bias"] for timeframe in self.timeframes]
+        if all(bias == "bullish" for bias in biases) or all(bias == "bearish" for bias in biases):
+            return "trend"
+        if biases.count("ranging") >= 2:
+            return "range"
+        return "chop"
+
+    def _direction_rejection_reasons(
+        self,
+        direction: str,
+        signal: dict[str, Any],
+        reasons: list[str],
+        missing_requirements: list[dict[str, Any]],
+    ) -> dict[str, str]:
+        base = self._reason_text(reasons)
+        missing = ", ".join(str(item.get("code") or item.get("label")) for item in missing_requirements)
+        suffix = f" Missing requirements: {missing}." if missing else ""
+        if signal.get("signal") == "BUY":
+            return {"BUY": "BUY generated.", "SELL": f"SELL not generated because aligned direction is BUY.{suffix}"}
+        if signal.get("signal") == "SELL":
+            return {"BUY": f"BUY not generated because aligned direction is SELL.{suffix}", "SELL": "SELL generated."}
+        if direction == "BUY":
+            return {"BUY": f"BUY candidate failed readiness. {base}{suffix}", "SELL": f"SELL not generated because aligned direction is BUY.{suffix}"}
+        if direction == "SELL":
+            return {"BUY": f"BUY not generated because aligned direction is SELL.{suffix}", "SELL": f"SELL candidate failed readiness. {base}{suffix}"}
+        return {"BUY": f"BUY not generated because M15/H1/H4 trend alignment does not support BUY. {base}{suffix}", "SELL": f"SELL not generated because M15/H1/H4 trend alignment does not support SELL. {base}{suffix}"}
 
     def _trade_plan(self, symbol: str, direction: str, tick: dict[str, Any], candles: list[dict[str, Any]], smc: dict[str, Any]) -> dict[str, Any]:
         entry_key = "ask" if direction == "BUY" else "bid"

@@ -15,6 +15,7 @@ class RealSignalEngineService:
     tradeable_confidence = 75
     watchlist_confidence = 60
     max_spread = {"EURUSD": 0.0003, "XAUUSD": 1.0}
+    auto_validation_confidence = 65
 
     def __init__(
         self,
@@ -35,6 +36,20 @@ class RealSignalEngineService:
                 "wait_below": self.watchlist_confidence,
                 "watchlist": [self.watchlist_confidence, self.tradeable_confidence - 1],
                 "tradeable": self.tradeable_confidence,
+            },
+            "strategy_profiles": {
+                "PRODUCTION": {
+                    "min_confidence": self.tradeable_confidence,
+                    "bos_contributes_to_confidence": True,
+                    "liquidity_sweep_contributes_to_confidence": True,
+                    "unchanged": True,
+                },
+                "AUTO_VALIDATION": {
+                    "min_confidence": self.auto_validation_confidence,
+                    "bos_mandatory": False,
+                    "liquidity_sweep_mandatory": False,
+                    "requires": ["BUY_OR_SELL", "FVG", "ORDER_BLOCK", "SESSION_VALID", "SL_TP_VALID", "RR_1_5", "SPREAD_ACCEPTABLE_OR_STALE_WITHIN_GRACE"],
+                },
             },
             "minimum_risk_reward": self.min_rr,
             "simulation_only": True,
@@ -164,14 +179,16 @@ class RealSignalEngineService:
             "timestamp": self._timestamp(),
         }
 
-    def generate_signal(self, symbol: str) -> dict[str, Any]:
+    def generate_signal(self, symbol: str, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
+        profile = self._strategy_profile(strategy_profile)
         if normalized not in self.symbols:
             return self._wait(normalized, ["Unsupported real signal symbol."], "INSUFFICIENT_DATA")
 
         feed = self._load_feed(normalized)
         if feed["blockers"]:
             signal = self._wait(normalized, feed["blockers"], "INSUFFICIENT_DATA", feed=feed)
+            signal["strategy_profile"] = profile
             self._latest[normalized] = signal
             return signal
 
@@ -192,30 +209,34 @@ class RealSignalEngineService:
         if trade_plan.get("risk_reward") is None or trade_plan.get("risk_reward", 0) < self.min_rr:
             reasons.append("Risk/reward is below the 1.5 minimum or trade plan is incomplete.")
 
-        tradeable = (
+        production_tradeable = (
             direction in {"BUY", "SELL"}
             and score["confidence"] >= self.tradeable_confidence
             and trade_plan.get("risk_reward", 0) >= self.min_rr
             and spread["acceptable"]
             and session["valid"]
         )
+        auto_tradeable = self._auto_validation_tradeable(direction, score, smc, trade_plan, session, spread)
+        tradeable = auto_tradeable if profile == "AUTO_VALIDATION" else production_tradeable
         signal_action = direction if tradeable else "WAIT"
         execution_status = "READY_FOR_PREVIEW" if tradeable else "WAITING"
-        risk_status = "APPROVED" if tradeable else ("REJECTED" if score["confidence"] >= self.watchlist_confidence else "NO_SIGNAL")
+        profile_confidence = self.auto_validation_confidence if profile == "AUTO_VALIDATION" else self.watchlist_confidence
+        risk_status = "APPROVED" if tradeable else ("REJECTED" if score["confidence"] >= profile_confidence else "NO_SIGNAL")
+        missing_requirements = self._auto_validation_missing_requirements(direction, score, smc, trade_plan, session, spread) if profile == "AUTO_VALIDATION" else self._missing_requirements(direction, score, smc, trade_plan, session, spread)
         if signal_action == "WAIT":
             trade_plan = {}
-        missing_requirements = self._missing_requirements(direction, score, smc, trade_plan, session, spread)
-        status_level = self._status_level(signal_action, score, missing_requirements)
+        status_level = self._status_level(signal_action, score, missing_requirements) if profile == "PRODUCTION" else self._profile_status_level(signal_action, score, missing_requirements, self.auto_validation_confidence)
+        profile_reasons = self._profile_reasons(profile, reasons, missing_requirements)
 
         signal = {
             "symbol": normalized,
             "signal": signal_action,
             "status_level": status_level,
             "confidence": score["confidence"] if score["confidence"] >= self.watchlist_confidence else None,
-            "reason": self._reason_text(reasons),
-            "what_needs_to_happen_next": self._next_steps(missing_requirements, score),
+            "reason": self._reason_text(profile_reasons),
+            "what_needs_to_happen_next": self._next_steps(missing_requirements, score, self.auto_validation_confidence if profile == "AUTO_VALIDATION" else self.tradeable_confidence),
             "missing_requirements": missing_requirements,
-            "setup_reason": self._reason_text(reasons),
+            "setup_reason": self._reason_text(profile_reasons),
             "entry": trade_plan.get("entry"),
             "stop_loss": trade_plan.get("stop_loss"),
             "take_profit": trade_plan.get("take_profit"),
@@ -242,10 +263,12 @@ class RealSignalEngineService:
                 "volatility_quality": volatility["quality"],
             },
             "quality_score": score,
-            "approval_audit": self._approval_audit(signal_action, score, smc, trade_plan, session, spread, reasons, missing_requirements),
+            "approval_audit": self._profile_approval_audit(profile, signal_action, score, smc, trade_plan, session, spread, profile_reasons, missing_requirements),
             "candle_source": feed["candle_source"],
             "signal_hash": self._signal_hash(normalized, signal_action, trade_plan, score),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
+            "strategy_profile": profile,
+            "production_rules_unchanged": profile == "PRODUCTION",
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -254,6 +277,9 @@ class RealSignalEngineService:
         }
         self._latest[normalized] = signal
         return signal
+
+    def _strategy_profile(self, strategy_profile: str) -> str:
+        return "AUTO_VALIDATION" if str(strategy_profile or "").upper() == "AUTO_VALIDATION" else "PRODUCTION"
 
     def analyze_from_candles(self, symbol: str, timeframes: dict[str, list[dict[str, Any]]], tick: dict[str, Any] | None = None) -> dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
@@ -418,14 +444,28 @@ class RealSignalEngineService:
     def _spread_context(self, symbol: str, tick: dict[str, Any]) -> dict[str, Any]:
         spread = self._number(tick.get("spread"))
         max_spread = self.max_spread[symbol]
-        acceptable = tick.get("status") == "OK" and spread is not None and spread <= max_spread
+        status = str(tick.get("status") or "").upper()
+        stale_age = self._number(tick.get("stale_age_seconds"))
+        if stale_age is None:
+            stale_age = 999999
+        stale = status == "STALE_TICK" or bool(tick.get("stale"))
+        acceptable = status in {"OK", "TICK_AVAILABLE_DIRECT"} and spread is not None and spread <= max_spread
+        stale_within_grace = stale and spread is not None and spread <= max_spread and stale_age <= 10
         if acceptable and spread <= max_spread * 0.5:
             quality = 1.0
-        elif acceptable:
+        elif acceptable or stale_within_grace:
             quality = 0.7
         else:
             quality = 0.0
-        return {"spread": spread, "acceptable": acceptable, "quality": quality, "max_spread": max_spread}
+        return {
+            "spread": spread,
+            "acceptable": acceptable,
+            "stale_within_grace": stale_within_grace,
+            "stale_age_seconds": stale_age,
+            "status": status,
+            "quality": quality,
+            "max_spread": max_spread,
+        }
 
     def _volatility_context(self, candles: list[dict[str, Any]], symbol: str) -> dict[str, Any]:
         atr = self._atr(candles[-20:])
@@ -648,6 +688,53 @@ class RealSignalEngineService:
             "approval_note": "CHOCH and liquidity sweep add confidence but are not mandatory when weighted trend, BOS, FVG, order block, session, spread, volatility, and RR satisfy the approval threshold.",
         }
 
+    def _profile_approval_audit(
+        self,
+        profile: str,
+        signal_action: str,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        trade_plan: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+        reasons: list[str],
+        missing_requirements: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        audit = self._approval_audit(signal_action, score, smc, trade_plan, session, spread, reasons, missing_requirements)
+        if profile != "AUTO_VALIDATION":
+            audit["strategy_profile"] = "PRODUCTION"
+            audit["production_rules_unchanged"] = True
+            return audit
+
+        threshold = self.auto_validation_confidence
+        audit.update(
+            {
+                "strategy_profile": "AUTO_VALIDATION",
+                "status": "APPROVED" if signal_action in {"BUY", "SELL"} else ("REJECTED" if score["confidence"] >= threshold else "WAIT"),
+                "confidence_result": "PASS" if score["confidence"] >= threshold else "FAIL",
+                "confidence_threshold": threshold,
+                "confidence_gap_to_65": max(0, threshold - int(score["confidence"])),
+                "bos_mandatory": False,
+                "liquidity_sweep_mandatory": False,
+                "spread_result": "PASS" if spread["acceptable"] or spread.get("stale_within_grace") else "FAIL",
+                "spread_stale_within_grace": bool(spread.get("stale_within_grace")),
+                "auto_validation_rules": {
+                    "min_confidence": threshold,
+                    "bos_mandatory": False,
+                    "liquidity_sweep_mandatory": False,
+                    "requires_buy_or_sell": True,
+                    "requires_fvg": True,
+                    "requires_order_block": True,
+                    "requires_session_valid": True,
+                    "requires_sl_tp_valid": True,
+                    "min_rr": self.min_rr,
+                    "requires_spread_acceptable_or_stale_within_grace": True,
+                },
+                "approval_note": "AUTO_VALIDATION is demo-only: BOS and liquidity sweep are confidence contributors, not hard gates. Production approval remains unchanged.",
+            }
+        )
+        return audit
+
     def _missing_requirements(
         self,
         direction: str,
@@ -685,6 +772,78 @@ class RealSignalEngineService:
             missing.append({"code": "SL_TP_INVALID", "label": "SELL SL/TP placement is invalid or incomplete."})
         return missing
 
+    def _auto_validation_tradeable(
+        self,
+        direction: str,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        trade_plan: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+    ) -> bool:
+        rr = self._number(trade_plan.get("risk_reward"))
+        return (
+            direction in {"BUY", "SELL"}
+            and int(score.get("confidence", 0)) >= self.auto_validation_confidence
+            and bool(smc.get("fvg"))
+            and bool(smc.get("order_block"))
+            and bool(session.get("valid"))
+            and self._sl_tp_valid(direction, trade_plan)
+            and rr is not None
+            and rr >= self.min_rr
+            and (bool(spread.get("acceptable")) or bool(spread.get("stale_within_grace")))
+        )
+
+    def _auto_validation_missing_requirements(
+        self,
+        direction: str,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        trade_plan: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        missing: list[dict[str, Any]] = []
+        confidence_gap = max(0, self.auto_validation_confidence - int(score["confidence"]))
+        if confidence_gap > 0:
+            missing.append({"code": "CONFIDENCE_GAP", "label": f"Confidence needs +{confidence_gap} to reach 65.", "gap": confidence_gap})
+        if direction not in {"BUY", "SELL"}:
+            missing.append({"code": "TREND_ALIGNMENT_MISSING", "label": "AUTO validation requires a BUY or SELL direction."})
+        if not smc.get("fvg"):
+            missing.append({"code": "FVG_MISSING", "label": "AUTO validation requires FVG confirmation."})
+        if not smc.get("order_block"):
+            missing.append({"code": "ORDER_BLOCK_MISSING", "label": "AUTO validation requires order block confirmation."})
+        rr = self._number(trade_plan.get("risk_reward"))
+        if rr is None:
+            missing.append({"code": "RR_MISSING", "label": "AUTO validation requires a complete trade plan with RR."})
+        elif rr < self.min_rr:
+            missing.append({"code": "RR_LOW", "label": f"Risk/reward {rr:.2f}:1 is below {self.min_rr:.2f}:1.", "rr": rr})
+        if not (spread.get("acceptable") or spread.get("stale_within_grace")):
+            missing.append(
+                {
+                    "code": "SPREAD_TOO_HIGH",
+                    "label": "AUTO validation requires spread acceptable or stale within grace.",
+                    "spread": spread.get("spread"),
+                    "max_spread": spread.get("max_spread"),
+                    "stale_within_grace": spread.get("stale_within_grace"),
+                }
+            )
+        if not session.get("valid"):
+            missing.append({"code": "SESSION_INVALID", "label": "AUTO validation requires a valid London/New York session."})
+        if not self._sl_tp_valid(direction, trade_plan):
+            missing.append({"code": "SL_TP_INVALID", "label": "AUTO validation requires valid SL/TP placement."})
+        return missing
+
+    def _sl_tp_valid(self, direction: str, trade_plan: dict[str, Any]) -> bool:
+        entry = self._number(trade_plan.get("entry"))
+        stop_loss = self._number(trade_plan.get("stop_loss"))
+        take_profit = self._number(trade_plan.get("take_profit"))
+        if direction == "BUY":
+            return bool(entry and stop_loss and take_profit and stop_loss < entry < take_profit)
+        if direction == "SELL":
+            return bool(entry and stop_loss and take_profit and take_profit < entry < stop_loss)
+        return False
+
     def _status_level(self, signal_action: str, score: dict[str, Any], missing_requirements: list[dict[str, Any]]) -> str:
         if signal_action in {"BUY", "SELL"}:
             return "READY_FOR_PREVIEW"
@@ -695,12 +854,36 @@ class RealSignalEngineService:
             return "REJECTED"
         return "WAIT"
 
-    def _next_steps(self, missing_requirements: list[dict[str, Any]], score: dict[str, Any]) -> str:
+    def _profile_status_level(self, signal_action: str, score: dict[str, Any], missing_requirements: list[dict[str, Any]], threshold: int) -> str:
+        if signal_action in {"BUY", "SELL"}:
+            return "READY_FOR_PREVIEW"
+        confidence = int(score.get("confidence", 0))
+        if confidence >= threshold:
+            return "WATCHLIST"
+        if any(item.get("code") in {"SPREAD_TOO_HIGH", "SL_TP_INVALID", "RR_MISSING", "RR_LOW"} for item in missing_requirements):
+            return "REJECTED"
+        return "WAIT"
+
+    def _profile_reasons(self, profile: str, reasons: list[str], missing_requirements: list[dict[str, Any]]) -> list[str]:
+        if profile != "AUTO_VALIDATION":
+            return reasons
+        if not missing_requirements:
+            return ["AUTO_VALIDATION profile approved for demo validation: direction, FVG, order block, session, SL/TP, RR, and spread checks passed without requiring BOS or liquidity sweep."]
+        filtered = [
+            reason
+            for reason in reasons
+            if "Liquidity sweep" not in reason and "Break of structure" not in reason and "tradeable threshold is 75" not in reason
+        ]
+        filtered.insert(0, "AUTO_VALIDATION profile active: BOS and liquidity sweep are not hard gates for demo validation.")
+        return filtered
+
+    def _next_steps(self, missing_requirements: list[dict[str, Any]], score: dict[str, Any], confidence_threshold: int | None = None) -> str:
+        threshold = confidence_threshold or self.tradeable_confidence
         if not missing_requirements:
             return "All preview requirements are currently satisfied."
         priority = [item["code"] for item in missing_requirements[:3]]
         names = {
-            "CONFIDENCE_GAP": f"confidence to improve by {max(0, self.tradeable_confidence - int(score['confidence']))}",
+            "CONFIDENCE_GAP": f"confidence to improve by {max(0, threshold - int(score['confidence']))}",
             "BOS_MISSING": "BOS confirmation",
             "LIQUIDITY_SWEEP_MISSING": "liquidity sweep",
             "RR_MISSING": "valid RR",
@@ -715,7 +898,7 @@ class RealSignalEngineService:
             needed = readable[0]
         else:
             needed = ", ".join(readable[:-1]) + f" and {readable[-1]}"
-        return f"Need {needed}. Current confidence {score['confidence']}/75."
+        return f"Need {needed}. Current confidence {score['confidence']}/{threshold}."
 
     def _wait(self, symbol: str, reasons: list[str], risk_status: str = "NO_SIGNAL", feed: dict[str, Any] | None = None) -> dict[str, Any]:
         return {

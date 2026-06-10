@@ -15,6 +15,8 @@ RUNNER_PATH = PROJECT_ROOT / "backend/auto_validation/auto_validation_runner.py"
 ROUTES_PATH = PROJECT_ROOT / "backend/api/auto_validation_routes.py"
 MAIN_PATH = PROJECT_ROOT / "backend/main.py"
 DASHBOARD_PATH = PROJECT_ROOT / "frontend/components/dashboard/DashboardShell.tsx"
+CLIENT_ENGINE_PATH = PROJECT_ROOT / "backend/strategy/client_signal_engine.py"
+REAL_ENGINE_PATH = PROJECT_ROOT / "backend/strategy/real_signal_engine_service.py"
 
 
 def show(name: str, passed: bool, detail: str = "") -> bool:
@@ -34,6 +36,15 @@ def wait_signal(symbol: str = "XAUUSD", *, status_level: str = "WATCHLIST", sign
         "setup_reason": "Runner test signal is not executable.",
         "missing_requirements": [{"code": "BOS_MISSING", "label": "BOS confirmation is missing."}],
         "what_needs_to_happen_next": "Wait for a fully approved setup.",
+        "strategy_profile": "AUTO_VALIDATION",
+        "strategy_components": {
+            "liquidity_sweep": False,
+            "bos": False,
+            "choch": False,
+            "fvg": True,
+            "order_block": True,
+            "session_valid": True,
+        },
         "entry": None,
         "stop_loss": None,
         "take_profit": None,
@@ -66,14 +77,20 @@ class FakeSignals:
     def __init__(self, signals: list[dict[str, Any]] | None = None, *, fail: bool = False) -> None:
         self.signals = signals or [wait_signal()]
         self.fail = fail
+        self.requested_profiles: list[str] = []
 
     def current(self, record_history: bool = False) -> dict[str, Any]:
         if self.fail:
             raise RuntimeError("signal provider failed")
         return {"signals": self.signals}
 
-    def signal_for_symbol(self, symbol: str, record_history: bool = False) -> dict[str, Any]:
-        return next((signal for signal in self.signals if signal.get("symbol") == symbol), wait_signal(symbol))
+    def signal_for_symbol(self, symbol: str, record_history: bool = False, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
+        if self.fail:
+            raise RuntimeError("signal provider failed")
+        self.requested_profiles.append(strategy_profile)
+        signal = dict(next((signal for signal in self.signals if signal.get("symbol") == symbol), wait_signal(symbol)))
+        signal.setdefault("strategy_profile", strategy_profile)
+        return signal
 
 
 class FakeGuarded:
@@ -214,6 +231,7 @@ async def verify_allowed_symbols_only_and_scan_report() -> bool:
             and decision["best_candidate_symbol"] == "XAUUSD"
             and "NIFTY50" not in decision["watched_symbols"]
             and "NIFTY50" not in decision["no_qualified_reason"]
+            and signals.requested_profiles == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
         )
         return show("AUTO validation watches only allowed symbols and reports EURUSD/XAUUSD scan results", passed, str(decision))
 
@@ -246,6 +264,105 @@ async def verify_recoverable_market_data_failure_does_not_halt() -> bool:
             and "MT5_DISCONNECTED" not in decision["XAUUSD"]["blockers"]
         )
         return show("Single-symbol tick failure is recoverable and does not halt AUTO validation", passed, str(status["mt5_health"]))
+
+
+async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        relaxed = ready_signal("XAUUSD", signal_hash="xau-auto-validation-relaxed")
+        relaxed.update(
+            {
+                "confidence": 68,
+                "strategy_components": {
+                    "liquidity_sweep": False,
+                    "bos": False,
+                    "choch": False,
+                    "fvg": True,
+                    "order_block": True,
+                    "session_valid": True,
+                },
+                "quality_score": {"confidence": 68},
+            }
+        )
+        signals = FakeSignals([relaxed])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        payload = guarded.calls[0] if guarded.calls else {}
+        passed = (
+            result["status"] == "ORDER_SENT"
+            and len(guarded.calls) == 1
+            and payload.get("strategy_profile") == "AUTO_VALIDATION"
+            and payload.get("lot") == 0.01
+            and payload.get("live_execution_enabled") is False
+            and payload.get("broker_execution_enabled") is False
+            and signals.requested_profiles[:2] == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
+        )
+        return show("AUTO_VALIDATION allows demo-only 68 confidence setup without BOS/liquidity hard gates", passed, str(payload))
+
+
+def verify_production_profile_stays_strict() -> bool:
+    from backend.strategy.client_signal_engine import ClientSignalEngine
+
+    class RecordingRealSignalEngine:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def generate_signal(self, symbol: str, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
+            self.calls.append(strategy_profile)
+            confidence = 68
+            return {
+                "symbol": symbol,
+                "signal": "WAIT",
+                "status_level": "WATCHLIST",
+                "confidence": confidence,
+                "risk_status": "REJECTED",
+                "execution_status": "WAITING",
+                "missing_requirements": [{"code": "CONFIDENCE_GAP", "gap": 75 - confidence}],
+                "strategy_profile": strategy_profile,
+                "simulation_only": True,
+                "live_execution_enabled": False,
+                "broker_execution_enabled": False,
+            }
+
+        def status(self) -> dict[str, Any]:
+            return {"strategy_profiles": {"PRODUCTION": {"min_confidence": 75}}}
+
+    class NoopHistory:
+        def record(self, signal: dict[str, Any]) -> None:
+            return None
+
+        def history(self, limit: int = 500) -> list[dict[str, Any]]:
+            return []
+
+        def history_for_symbol(self, symbol: str, limit: int = 100) -> list[dict[str, Any]]:
+            return []
+
+    real = RecordingRealSignalEngine()
+    engine = ClientSignalEngine(real_signal_service=real, history_service=NoopHistory())  # type: ignore[arg-type]
+    signal = engine.signal_for_symbol("XAUUSD", record_history=False)
+    passed = real.calls == ["PRODUCTION"] and signal["strategy_profile"] == "PRODUCTION" and signal["signal"] == "WAIT"
+    return show("Production client signal path still uses PRODUCTION profile by default", passed, str({"calls": real.calls, "signal": signal}))
+
+
+def verify_journal_stores_strategy_profile() -> bool:
+    from backend.trade_journal.persistent_trade_journal_service import PersistentTradeJournalService
+
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = PersistentTradeJournalService(Path(tmp) / "journal.json")
+        record = journal.record_order_sent(
+            {
+                "trade_id": "profile-test",
+                "symbol": "XAUUSD",
+                "side": "BUY",
+                "lot": 0.01,
+                "strategy_profile": "AUTO_VALIDATION",
+                "strategy_metadata": {"strategy_profile": "AUTO_VALIDATION"},
+            }
+        )
+        passed = record.get("strategy_profile") == "AUTO_VALIDATION"
+        return show("Journal stores strategy_profile", passed, str(record))
 
 
 async def verify_mt5_disconnect_requires_three_failed_health_checks() -> bool:
@@ -403,15 +520,37 @@ async def verify_persisted_running_session_starts_on_backend_startup() -> bool:
 async def verify_runner_errors_logged() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
-    with tempfile.TemporaryDirectory() as tmp:
-        service, _ = make_service(FakeSignals(fail=True), state_path=Path(tmp) / "state.json")
-        runner = AutoValidationRunner(service, default_interval_seconds=0.05, watchlist_interval_seconds=0.03)
-        service.start()
-        result = await runner.run_tick()
-        events = [event["event"] for event in service.events]
-        status = service.status()
-        passed = result["status"] == "RUNNER_ERROR" and "RUNNER_ERROR" in events and status["last_runner_error"] == "signal provider failed"
-        return show("Runner errors are logged and do not crash backend", passed, str(events))
+    class FailingService:
+        def __init__(self) -> None:
+            self.events: list[dict[str, Any]] = []
+            self.runner_state: dict[str, Any] = {}
+            self.session = {"status": "RUNNING"}
+            self.config = {"auto_validation_enabled": True}
+
+        def should_auto_start_runner(self) -> bool:
+            return True
+
+        def watched_signal_is_watchlist(self) -> bool:
+            return False
+
+        def waiting_for_mt5_reconnect(self) -> bool:
+            return False
+
+        def run_once(self) -> dict[str, Any]:
+            raise RuntimeError("run_once failed")
+
+        def log_runner_error(self, message: str) -> None:
+            self.events.append({"event": "RUNNER_ERROR", "details": {"error": message}})
+
+        def update_runner_state(self, **updates: Any) -> None:
+            self.runner_state.update(updates)
+
+    service = FailingService()
+    runner = AutoValidationRunner(service)  # type: ignore[arg-type]
+    result = await runner.run_tick()
+    events = [event["event"] for event in service.events]
+    passed = result["status"] == "RUNNER_ERROR" and "RUNNER_ERROR" in events and service.runner_state.get("last_runner_error") == "run_once failed"
+    return show("Runner errors are logged and do not crash backend", passed, str(events))
 
 
 def verify_code_wiring_and_dashboard() -> bool:
@@ -420,6 +559,8 @@ def verify_code_wiring_and_dashboard() -> bool:
     routes = ROUTES_PATH.read_text(encoding="utf-8")
     main = MAIN_PATH.read_text(encoding="utf-8")
     dashboard = DASHBOARD_PATH.read_text(encoding="utf-8")
+    client_engine = CLIENT_ENGINE_PATH.read_text(encoding="utf-8")
+    real_engine = REAL_ENGINE_PATH.read_text(encoding="utf-8")
     required = [
         "AutoValidationRunner",
         "auto_validation_runner.start()",
@@ -441,8 +582,12 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Best Candidate Symbol",
         "Why no symbol qualified",
         "per_symbol_results",
+        "Strategy Profile",
+        "AUTO_VALIDATION",
+        "strategy_profile",
+        "auto_validation_confidence = 65",
     ]
-    missing = [item for item in required if item not in service + runner + routes + main + dashboard]
+    missing = [item for item in required if item not in service + runner + routes + main + dashboard + client_engine + real_engine]
     return show("Runner route/status wiring and dashboard fields exist", not missing, ", ".join(missing))
 
 
@@ -463,6 +608,7 @@ async def async_main() -> list[bool]:
         await verify_run_once_called_and_events_generated(),
         await verify_allowed_symbols_only_and_scan_report(),
         await verify_recoverable_market_data_failure_does_not_halt(),
+        await verify_auto_validation_profile_loosened_rules_fire_demo_order(),
         await verify_mt5_disconnect_requires_three_failed_health_checks(),
         await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
         await verify_mt5_disconnect_timeout_halts_only_after_timeout(),
@@ -476,7 +622,7 @@ def main() -> int:
     print("Phase 22.2 AUTO Validation Runner Loop Verification")
     print("=" * 78)
     checks = asyncio.run(async_main())
-    checks.extend([verify_code_wiring_and_dashboard(), verify_no_unrestricted_order_send()])
+    checks.extend([verify_production_profile_stays_strict(), verify_journal_stores_strategy_profile(), verify_code_wiring_and_dashboard(), verify_no_unrestricted_order_send()])
     print("=" * 78)
     print("PASS" if all(checks) else "FAIL")
     return 0 if all(checks) else 1

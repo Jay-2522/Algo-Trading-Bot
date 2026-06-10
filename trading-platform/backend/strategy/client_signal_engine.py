@@ -36,8 +36,8 @@ class ClientSignalEngine:
             "timestamp": self._timestamp(),
         }
 
-    def current(self, record_history: bool = True) -> dict[str, Any]:
-        signals = [self.signal_for_symbol(symbol, record_history=record_history) for symbol in self.scoped_symbols]
+    def current(self, record_history: bool = True, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
+        signals = [self.signal_for_symbol(symbol, record_history=record_history, strategy_profile=strategy_profile) for symbol in self.scoped_symbols]
         execution_mode_decisions = [self.execution_mode_service.observe_signal(signal) for signal in signals] if self.execution_mode_service is not None else []
         return {
             "status": "READY",
@@ -54,12 +54,12 @@ class ClientSignalEngine:
     def refresh(self) -> dict[str, Any]:
         return self.current(record_history=True)
 
-    def signal_for_symbol(self, symbol: str, record_history: bool = True) -> dict[str, Any]:
+    def signal_for_symbol(self, symbol: str, record_history: bool = True, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
         normalized = str(symbol or "").strip().upper()
         if normalized == "NIFTY50":
             signal = self._nifty_pending()
         elif normalized in {"EURUSD", "XAUUSD"}:
-            signal = self.real_signal_service.generate_signal(normalized)
+            signal = self.real_signal_service.generate_signal(normalized, strategy_profile=strategy_profile)
         else:
             signal = self._wait(normalized, "Unsupported client dashboard symbol.", "INSUFFICIENT_DATA", "BLOCKED")
         if record_history:

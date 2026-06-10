@@ -36,7 +36,8 @@ def signal(**overrides: Any) -> dict[str, Any]:
         "signal_hash": "phase22-1-signal",
         "setup_reason": "Qualified validation setup.",
         "market_structure_state": {"trend_bias": "BUY"},
-        "strategy_components": {"bos": True, "choch": True, "fvg": True, "liquidity_sweep": True, "order_block": True},
+        "strategy_profile": "AUTO_VALIDATION",
+        "strategy_components": {"bos": True, "choch": True, "fvg": True, "liquidity_sweep": True, "order_block": True, "session_valid": True},
         "candle_source": {"broker_source": "VANTAGE_DEMO", "source": "VANTAGE_DEMO", "account_login": "123", "server": "VantageMarkets-Demo", "account_type": "DEMO"},
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "live_execution_enabled": False,
@@ -53,8 +54,8 @@ class FakeSignals:
     def current(self, record_history: bool = False) -> dict[str, Any]:
         return {"signals": [self.current_signal]}
 
-    def signal_for_symbol(self, symbol: str, record_history: bool = False) -> dict[str, Any]:
-        return {**self.current_signal, "symbol": symbol}
+    def signal_for_symbol(self, symbol: str, record_history: bool = False, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
+        return {**self.current_signal, "symbol": symbol, "strategy_profile": strategy_profile}
 
 
 class FakeMarket:
@@ -122,7 +123,13 @@ def verify_default_routes_and_config() -> bool:
     if AUTO_VALIDATION_STATE_PATH.exists():
         AUTO_VALIDATION_STATE_PATH.unlink()
     from backend.main import app
+    from backend.api.auto_validation_routes import auto_validation_service
 
+    auto_validation_service.config = auto_validation_service._default_config()
+    auto_validation_service.session = auto_validation_service._empty_session()
+    auto_validation_service.events = []
+    auto_validation_service._last_execution_decision = None
+    auto_validation_service._current_signal_watched = None
     client = TestClient(app)
     payload = client.get("/auto-validation/status").json()
     route_text = "\n".join(route.path for route in app.routes)

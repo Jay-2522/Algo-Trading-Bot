@@ -1091,6 +1091,7 @@ function AutoValidationPanel({
   const reconnectTimeout = readNumber(config, ["mt5_disconnect_timeout_seconds"], 600);
   const reconnectElapsed = lastDisconnectAt ? Math.max(0, Math.floor((Date.now() - new Date(lastDisconnectAt).getTime()) / 1000)) : 0;
   const reconnectRemaining = lastDisconnectAt ? Math.max(0, reconnectTimeout - reconnectElapsed) : reconnectTimeout;
+  const activeStrategyProfile = readText(config, ["strategy_profile"], readText(status, ["strategy_profile"], "AUTO_VALIDATION"));
   const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
@@ -1130,6 +1131,7 @@ function AutoValidationPanel({
         <Metric label="Lot" value={String(readNumber(config, ["lot_size"], 0.01))} compact />
         <Metric label="Allowed Symbols" value={Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.join(", ") : "XAUUSD, EURUSD"} compact />
         <Metric label="Watching" value={watchedSymbols.join(" + ")} compact />
+        <Metric label="Strategy Profile" value={activeStrategyProfile} valueClass="text-blue-200" compact />
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
         <Metric label="Next Eligible" value={nextEligible ? formatTradeTime(nextEligible) : "Now"} compact />
         <Metric label="Safety" value="Demo / Vantage Only" valueClass="text-emerald-300" compact />

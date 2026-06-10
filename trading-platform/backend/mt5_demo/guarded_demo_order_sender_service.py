@@ -363,6 +363,8 @@ class GuardedDemoOrderSenderService:
     def _journal_payload(self, result: dict[str, Any], payload: dict[str, Any], executed_price: float | None = None) -> dict[str, Any]:
         ticket = str(result.get("ticket") or "0")
         retcode = str(result.get("retcode") or "")
+        metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
+        strategy_profile = payload.get("strategy_profile") or metadata.get("strategy_profile")
         return {
             "trade_id": f"mt5_demo_{ticket}" if ticket != "0" else f"mt5_demo_rejected_{result.get('request_id')}",
             "source": "MT5_DEMO",
@@ -384,6 +386,7 @@ class GuardedDemoOrderSenderService:
             "signal_confidence": payload.get("signal_confidence"),
             "signal_hash": payload.get("signal_hash"),
             "setup_reason": payload.get("setup_reason"),
+            "strategy_profile": strategy_profile,
             "strategy_metadata": payload.get("strategy_metadata"),
             "notes": "First controlled MT5 demo order executed through guarded sender.",
         }

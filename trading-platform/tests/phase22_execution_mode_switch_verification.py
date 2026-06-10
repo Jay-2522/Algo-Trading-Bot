@@ -91,7 +91,9 @@ def new_service(signal: dict[str, Any]):
 
 def verify_routes_and_default_mode() -> bool:
     from backend.main import app
+    from backend.api.execution_mode_routes import execution_mode_service
 
+    execution_mode_service.set_config({"execution_mode": "APPROVAL"})
     client = TestClient(app)
     status = client.get("/execution-mode/status")
     payload = status.json()

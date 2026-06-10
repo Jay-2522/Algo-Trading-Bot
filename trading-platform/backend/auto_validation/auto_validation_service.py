@@ -71,6 +71,8 @@ class AutoValidationService:
         payload = payload or {}
         self.config = {**self.config, **self._safe_config(payload)}
         self.config["auto_validation_enabled"] = True
+        self.config["strategy_profile"] = "AUTO_VALIDATION"
+        self.config["min_confidence"] = 65
         self.session = {
             **self._empty_session(),
             "session_id": f"auto-validation-{uuid4()}",
@@ -216,6 +218,10 @@ class AutoValidationService:
             blockers.append("LOT_SIZE_EXCEEDS_0_01")
         if signal.get("execution_status") != "READY_FOR_PREVIEW" or signal.get("risk_status") != "APPROVED":
             blockers.append("SIGNAL_NOT_READY_APPROVED")
+        if self.config.get("strategy_profile") == "AUTO_VALIDATION":
+            if str(signal.get("strategy_profile") or "").upper() != "AUTO_VALIDATION":
+                blockers.append("STRATEGY_PROFILE_MISMATCH")
+            blockers.extend(self._auto_validation_profile_blockers(signal))
         if self._number(signal.get("confidence"), 0) < float(config["min_confidence"]):
             blockers.append("CONFIDENCE_BELOW_MINIMUM")
         if self._number(signal.get("risk_reward"), 0) < float(config["min_rr"]):
@@ -234,7 +240,7 @@ class AutoValidationService:
             blockers.append("COOLDOWN_ACTIVE")
         if self.mt5_health_state.get("status") == "MT5_DISCONNECTED":
             blockers.append("MT5_DISCONNECTED")
-        if tick.get("status") not in {"OK", "TICK_AVAILABLE_DIRECT"}:
+        if tick.get("status") not in {"OK", "TICK_AVAILABLE_DIRECT"} and not self._tick_stale_within_grace(symbol, tick):
             blockers.append("SYMBOL_TICK_UNAVAILABLE")
             self._log("TEMPORARY_MARKET_DATA_FAILURE", {"symbol": symbol, "reason": "SYMBOL_TICK_UNAVAILABLE", "tick_status": tick.get("status"), "mt5_health": self.mt5_health_state})
         if tick.get("spread") is None:
@@ -248,6 +254,7 @@ class AutoValidationService:
 
     def _guarded_payload(self, signal: dict[str, Any]) -> dict[str, Any]:
         source = signal.get("candle_source") if isinstance(signal.get("candle_source"), dict) else {}
+        strategy_profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
         return {
             "symbol": str(signal.get("symbol") or "").upper(),
             "side": str(signal.get("signal") or "").upper(),
@@ -261,7 +268,9 @@ class AutoValidationService:
             "signal_hash": signal.get("signal_hash"),
             "signal_timestamp": signal.get("timestamp"),
             "setup_reason": signal.get("setup_reason") or signal.get("reason"),
+            "strategy_profile": strategy_profile,
             "strategy_metadata": {
+                "strategy_profile": strategy_profile,
                 "market_structure_state": signal.get("market_structure_state") or {},
                 "strategy_components": signal.get("strategy_components") or {},
                 "quality_score": signal.get("quality_score") or {},
@@ -287,21 +296,31 @@ class AutoValidationService:
     def _load_signals(self) -> list[dict[str, Any]]:
         if self.signal_provider is None:
             return []
-        payload = self.signal_provider.current(record_history=False)
-        signals = payload.get("signals", [])
-        return self._allowed_signals(signals if isinstance(signals, list) else [])
+        signals = [signal for symbol in sorted(self._allowed_symbols()) if (signal := self._signal_for_symbol(symbol)) is not None]
+        return self._allowed_signals(signals)
 
     def _current_signal(self, symbol: str) -> dict[str, Any] | None:
         if symbol not in self._allowed_symbols():
             return None
+        return self._signal_for_symbol(symbol)
+
+    def _signal_for_symbol(self, symbol: str) -> dict[str, Any] | None:
         if self.signal_provider is None:
             return None
+        profile = str(self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
         try:
-            return self.signal_provider.signal_for_symbol(symbol, record_history=False)
+            signal = self.signal_provider.signal_for_symbol(symbol, record_history=False, strategy_profile=profile)
         except TypeError:
-            return self.signal_provider.signal_for_symbol(symbol)
+            try:
+                signal = self.signal_provider.signal_for_symbol(symbol, record_history=False)
+            except TypeError:
+                signal = self.signal_provider.signal_for_symbol(symbol)
         except Exception:
             return None
+        if isinstance(signal, dict):
+            signal.setdefault("strategy_profile", profile)
+            return signal
+        return None
 
     def _account_status(self, signal: dict[str, Any]) -> dict[str, Any]:
         if self.mt5_demo_service is not None:
@@ -432,6 +451,7 @@ class AutoValidationService:
             "signal_hash": signal.get("signal_hash"),
             "blocking_reason": ", ".join(blockers) if blockers else "QUALIFIED",
             "blockers": blockers,
+            "strategy_profile": signal.get("strategy_profile") or self.config.get("strategy_profile"),
             "market_data_status": tick_status.get("status", self.mt5_health_state.get("status")),
             "ready_for_execution": ready and not blockers,
             "score": confidence,
@@ -452,6 +472,49 @@ class AutoValidationService:
             blockers.extend(str(item.get("code") or item.get("label") or item) for item in missing if item)
         return sorted(set(blockers)) or ["NO_READY_APPROVED_SIGNAL"]
 
+    def _auto_validation_profile_blockers(self, signal: dict[str, Any]) -> list[str]:
+        blockers: list[str] = []
+        components = signal.get("strategy_components") if isinstance(signal.get("strategy_components"), dict) else {}
+        if not components.get("fvg"):
+            blockers.append("FVG_REQUIRED")
+        if not components.get("order_block"):
+            blockers.append("ORDER_BLOCK_REQUIRED")
+        if not components.get("session_valid"):
+            blockers.append("SESSION_VALID_REQUIRED")
+        if str(signal.get("signal") or "").upper() not in {"BUY", "SELL"}:
+            blockers.append("BUY_OR_SELL_REQUIRED")
+        if self._number(signal.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.5)):
+            blockers.append("RR_BELOW_MINIMUM")
+        if not self._signal_sl_tp_valid(signal):
+            blockers.append("SL_TP_REQUIRED")
+        symbol = str(signal.get("symbol") or "").upper()
+        tick = self._tick(symbol)
+        max_spread = 1.0 if symbol == "XAUUSD" else 0.0003
+        spread = self._number(tick.get("spread"), None)
+        spread_ok = spread is not None and spread <= max_spread
+        if not (tick.get("status") in {"OK", "TICK_AVAILABLE_DIRECT"} and spread_ok) and not self._tick_stale_within_grace(symbol, tick):
+            blockers.append("SPREAD_NOT_ACCEPTABLE_OR_STALE_WITHIN_GRACE")
+        return blockers
+
+    def _signal_sl_tp_valid(self, signal: dict[str, Any]) -> bool:
+        direction = str(signal.get("signal") or "").upper()
+        entry = self._number(signal.get("entry"), None)
+        stop_loss = self._number(signal.get("stop_loss"), None)
+        take_profit = self._number(signal.get("take_profit"), None)
+        if direction == "BUY":
+            return bool(entry and stop_loss and take_profit and stop_loss < entry < take_profit)
+        if direction == "SELL":
+            return bool(entry and stop_loss and take_profit and take_profit < entry < stop_loss)
+        return False
+
+    def _tick_stale_within_grace(self, symbol: str, tick: dict[str, Any]) -> bool:
+        if str(tick.get("status") or "").upper() != "STALE_TICK":
+            return False
+        spread = self._number(tick.get("spread"), None)
+        max_spread = 1.0 if symbol == "XAUUSD" else 0.0003
+        stale_age = self._number(tick.get("stale_age_seconds"), 999999)
+        return spread is not None and spread <= max_spread and stale_age <= 10
+
     def _best_candidate(self, checked: list[dict[str, Any]]) -> dict[str, Any] | None:
         if not checked:
             return None
@@ -470,6 +533,7 @@ class AutoValidationService:
             "EURUSD": per_symbol.get("EURUSD"),
             "XAUUSD": per_symbol.get("XAUUSD"),
             "mt5_health": copy.deepcopy(self.mt5_health_state),
+            "strategy_profile": self.config.get("strategy_profile"),
             "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
             "xauusd_confidence_timeline": self._confidence_timeline.get("XAUUSD", [])[-20:],
         }
@@ -562,6 +626,7 @@ class AutoValidationService:
             "mt5_order_sent": False,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
+            "strategy_profile": self.config.get("strategy_profile"),
             "timestamp": self._timestamp(),
             **(extra or {}),
         }
@@ -801,6 +866,8 @@ class AutoValidationService:
             return
         if isinstance(data.get("config"), dict):
             self.config = {**self._default_config(), **data["config"]}
+            self.config["strategy_profile"] = "AUTO_VALIDATION"
+            self.config["min_confidence"] = 65
             self.config["live_execution_enabled"] = False
             self.config["broker_execution_enabled"] = False
         if isinstance(data.get("session"), dict):
@@ -848,7 +915,8 @@ class AutoValidationService:
             "max_daily_trades": 30,
             "max_daily_loss_amount": 100.0,
             "max_total_drawdown_amount": 150.0,
-            "min_confidence": 75,
+            "min_confidence": 65,
+            "strategy_profile": "AUTO_VALIDATION",
             "min_rr": 1.5,
             "require_sl_tp": True,
             "cooldown_after_trade_minutes": 15,
@@ -875,6 +943,8 @@ class AutoValidationService:
         safe["lot_size"] = min(float(payload.get("lot_size", 0.01)), 0.01)
         safe["broker_required"] = "VANTAGE_DEMO"
         safe["account_type_required"] = "DEMO"
+        safe["strategy_profile"] = "AUTO_VALIDATION"
+        safe["min_confidence"] = 65
         safe["live_execution_enabled"] = False
         safe["broker_execution_enabled"] = False
         return safe

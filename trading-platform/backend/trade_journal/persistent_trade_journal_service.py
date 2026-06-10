@@ -202,6 +202,8 @@ class PersistentTradeJournalService:
         now = utc_now_iso()
         existing = self.get_trade(str(payload.get("trade_id"))) if payload.get("trade_id") else None
         created_at = existing.get("created_at") if existing else now
+        strategy_metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else (existing or {}).get("strategy_metadata", {})
+        strategy_profile = self._text(payload.get("strategy_profile")) or self._text(strategy_metadata.get("strategy_profile")) or (existing or {}).get("strategy_profile", "")
         return {
             "trade_id": self._text(payload.get("trade_id")) or f"trade_{uuid4().hex[:12]}",
             "source": self._enum(payload.get("source"), TRADE_SOURCES, "SIMULATION"),
@@ -225,7 +227,8 @@ class PersistentTradeJournalService:
             "signal_confidence": self._number_or_none(payload.get("signal_confidence")) if payload.get("signal_confidence") is not None else (existing or {}).get("signal_confidence"),
             "signal_hash": self._text(payload.get("signal_hash")) or (existing or {}).get("signal_hash", ""),
             "setup_reason": self._text(payload.get("setup_reason")) or (existing or {}).get("setup_reason", ""),
-            "strategy_metadata": payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else (existing or {}).get("strategy_metadata", {}),
+            "strategy_profile": strategy_profile,
+            "strategy_metadata": strategy_metadata,
             "opened_at": self._text(payload.get("opened_at")),
             "closed_at": self._text(payload.get("closed_at")),
             "close_price": self._number_or_none(payload.get("close_price")),

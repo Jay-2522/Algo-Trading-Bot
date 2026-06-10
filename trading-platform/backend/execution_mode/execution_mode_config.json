@@ -1,0 +1,19 @@
+{
+  "allowed_brokers": [
+    "VANTAGE_DEMO"
+  ],
+  "allowed_symbols": [
+    "EURUSD",
+    "XAUUSD"
+  ],
+  "approval_required": false,
+  "auto_enabled": true,
+  "broker_execution_enabled": false,
+  "execution_mode": "AUTO",
+  "live_execution_enabled": false,
+  "max_lot_per_trade": 0.01,
+  "require_duplicate_check": true,
+  "require_rr_minimum": 1.5,
+  "require_sl_tp": true,
+  "updated_at": "2026-06-10T14:28:02.426962+00:00"
+}

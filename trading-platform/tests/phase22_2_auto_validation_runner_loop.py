@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 import sys
 import tempfile
 import time
@@ -271,8 +272,77 @@ async def verify_mt5_disconnect_requires_three_failed_health_checks() -> bool:
             and second["status"] != "MT5_DISCONNECTED"
             and third["status"] == "MT5_DISCONNECTED"
             and third["consecutive_failed_health_checks"] == 3
+            and service.session["status"] == "WAITING_FOR_MT5_RECONNECT"
+            and guarded.calls == []
         )
-        return show("MT5 disconnect is confirmed only after 3 failed health checks", passed, str(third))
+        return show("MT5 disconnect pauses for reconnect after 3 failed health checks without orders", passed, str({"health": third, "session": service.session}))
+
+
+async def verify_mt5_reconnect_auto_resumes_and_uses_10s_interval() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    class MutableAccount:
+        connected = False
+
+        def get_status(self) -> dict[str, Any]:
+            if self.connected:
+                return {"account_type": "DEMO", "server": "VantageMarkets-Demo", "login": "123", "terminal_running": True, "status": "CONNECTED"}
+            return {"account_type": "DEMO", "server": "", "login": "", "terminal_running": False, "status": "NOT_CONNECTED"}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        service, guarded = make_service(FakeSignals([wait_signal("XAUUSD", status_level="WATCHLIST", signal_hash="xau-reconnect")]), state_path=Path(tmp) / "state.json")
+        account = MutableAccount()
+        service.mt5_demo_service = account
+        guarded.failed_ticks.update({"EURUSD", "XAUUSD"})
+        runner = AutoValidationRunner(service)
+        service.start()
+        await runner.run_tick()
+        await runner.run_tick()
+        await runner.run_tick()
+        waiting = service.status()
+        waiting_ok = waiting["session"]["status"] == "WAITING_FOR_MT5_RECONNECT" and waiting["runner_interval_seconds"] == 10.0
+
+        account.connected = True
+        guarded.failed_ticks.clear()
+        await runner.run_tick()
+        events = [event["event"] for event in service.events]
+        status = service.status()
+        passed = (
+            waiting_ok
+            and status["session"]["status"] == "RUNNING"
+            and "MT5_RECONNECTED" in events
+            and status["mt5_health"]["status"] == "MT5_CONNECTED"
+            and guarded.calls == []
+        )
+        return show("MT5 reconnect auto-resumes RUNNING and reconnect polling uses 10s interval", passed, str({"events": events[-5:], "session": status["session"]}))
+
+
+async def verify_mt5_disconnect_timeout_halts_only_after_timeout() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    class DisconnectedAccount:
+        def get_status(self) -> dict[str, Any]:
+            return {"account_type": "DEMO", "server": "", "login": "", "terminal_running": False, "status": "NOT_CONNECTED"}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-timeout")]), state_path=Path(tmp) / "state.json")
+        guarded.failed_ticks.update({"EURUSD", "XAUUSD"})
+        service.mt5_demo_service = DisconnectedAccount()
+        service.start({"mt5_disconnect_timeout_seconds": 1})
+        runner = AutoValidationRunner(service)
+        await runner.run_tick()
+        await runner.run_tick()
+        await runner.run_tick()
+        waiting = service.session["status"] == "WAITING_FOR_MT5_RECONNECT"
+        service.session["last_mt5_disconnect_at"] = (datetime.now(timezone.utc) - timedelta(seconds=2)).isoformat()
+        await runner.run_tick()
+        passed = (
+            waiting
+            and service.session["status"] == "HALTED_RISK"
+            and service.session["reason_stopped"] == "MT5_DISCONNECT_TIMEOUT"
+            and guarded.calls == []
+        )
+        return show("MT5 disconnect becomes HALTED_RISK only after configurable timeout", passed, str(service.session))
 
 
 async def verify_no_overlapping_run_once_calls() -> bool:
@@ -394,6 +464,8 @@ async def async_main() -> list[bool]:
         await verify_allowed_symbols_only_and_scan_report(),
         await verify_recoverable_market_data_failure_does_not_halt(),
         await verify_mt5_disconnect_requires_three_failed_health_checks(),
+        await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
+        await verify_mt5_disconnect_timeout_halts_only_after_timeout(),
         await verify_no_overlapping_run_once_calls(),
         await verify_persisted_running_session_starts_on_backend_startup(),
         await verify_runner_errors_logged(),

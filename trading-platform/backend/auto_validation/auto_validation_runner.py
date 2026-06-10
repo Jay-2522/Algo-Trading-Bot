@@ -11,10 +11,11 @@ from backend.auto_validation.auto_validation_service import AutoValidationServic
 class AutoValidationRunner:
     """Async polling loop for the AUTO validation service."""
 
-    def __init__(self, service: AutoValidationService, default_interval_seconds: float = 3.0, watchlist_interval_seconds: float = 2.0) -> None:
+    def __init__(self, service: AutoValidationService, default_interval_seconds: float = 3.0, watchlist_interval_seconds: float = 2.0, reconnect_interval_seconds: float = 10.0) -> None:
         self.service = service
         self.default_interval_seconds = default_interval_seconds
         self.watchlist_interval_seconds = watchlist_interval_seconds
+        self.reconnect_interval_seconds = reconnect_interval_seconds
         self._task: asyncio.Task[None] | None = None
         self._run_once_in_progress = False
         self._stop_requested = False
@@ -119,6 +120,9 @@ class AutoValidationRunner:
             self._publish_state()
 
     def _next_interval(self) -> float:
+        waiting_for_reconnect = getattr(self.service, "waiting_for_mt5_reconnect", lambda: False)
+        if waiting_for_reconnect():
+            return self.reconnect_interval_seconds
         return self.watchlist_interval_seconds if self.service.watched_signal_is_watchlist() else self.default_interval_seconds
 
     def _publish_state(self) -> None:

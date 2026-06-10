@@ -1077,6 +1077,11 @@ function AutoValidationPanel({
   const lastCheckedSymbol = readText(decision, ["last_checked_symbol"], "None");
   const bestCandidateSymbol = readText(decision, ["best_candidate_symbol"], "None");
   const noQualifiedReason = readText(decision, ["no_qualified_reason"], "Waiting for the next validation scan.");
+  const lastDisconnectAt = readText(session, ["last_mt5_disconnect_at"], "");
+  const reconnectAttempts = readNumber(session, ["mt5_reconnect_attempts"], 0);
+  const reconnectTimeout = readNumber(config, ["mt5_disconnect_timeout_seconds"], 600);
+  const reconnectElapsed = lastDisconnectAt ? Math.max(0, Math.floor((Date.now() - new Date(lastDisconnectAt).getTime()) / 1000)) : 0;
+  const reconnectRemaining = lastDisconnectAt ? Math.max(0, reconnectTimeout - reconnectElapsed) : reconnectTimeout;
   const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
@@ -1087,19 +1092,19 @@ function AutoValidationPanel({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <SectionTitle eyebrow="AUTO Demo Validation" title={`30-Trade Bot Test: ${mode === "IDLE" ? "OFF" : mode}`} />
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || mode === "RUNNING"} onClick={() => onAction("start")} type="button">
+          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("start")} type="button">
             Start 30-Trade Validation
           </button>
-          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || mode !== "RUNNING"} onClick={() => onAction("pause")} type="button">
+          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("pause")} type="button">
             Pause
           </button>
           <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || mode !== "PAUSED"} onClick={() => onAction("resume")} type="button">
             Resume
           </button>
-          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED"].includes(mode)} onClick={() => onAction("stop")} type="button">
+          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("stop")} type="button">
             Stop
           </button>
-          <button className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED"].includes(mode)} onClick={() => onAction("emergency-stop")} type="button">
+          <button className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("emergency-stop")} type="button">
             Emergency Stop
           </button>
         </div>
@@ -1129,6 +1134,9 @@ function AutoValidationPanel({
         <Metric label="Health Failures" value={String(readNumber(mt5Health, ["consecutive_failed_health_checks"], 0))} compact />
         <Metric label="Last Tick Symbol" value={readText(mt5Health, ["last_successful_tick_symbol"], "None")} compact />
         <Metric label="Last Tick Time" value={formatTradeTime(readText(mt5Health, ["last_tick_time"], ""))} compact />
+        <Metric label="Reconnect Timer" value={mode === "WAITING_FOR_MT5_RECONNECT" ? `${reconnectRemaining}s left` : "Inactive"} valueClass={mode === "WAITING_FOR_MT5_RECONNECT" ? "text-amber-200" : "text-slate-400"} compact />
+        <Metric label="Last Disconnect" value={formatTradeTime(lastDisconnectAt)} compact />
+        <Metric label="Reconnect Attempts" value={String(reconnectAttempts)} compact />
       </div>
 
       <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">

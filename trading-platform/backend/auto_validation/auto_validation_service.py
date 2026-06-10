@@ -86,7 +86,7 @@ class AutoValidationService:
         return self.status()
 
     def pause(self) -> dict[str, Any]:
-        if self.session["status"] == "RUNNING":
+        if self.session["status"] in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
             self.session["status"] = "PAUSED"
             self._log("SESSION_PAUSED")
             self._save_state()
@@ -100,7 +100,7 @@ class AutoValidationService:
         return self.status()
 
     def stop(self, reason: str = "Stopped manually.") -> dict[str, Any]:
-        if self.session["status"] in {"RUNNING", "PAUSED"}:
+        if self.session["status"] in {"RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT"}:
             self.session["status"] = "STOPPED"
             self.session["stopped_at"] = self._timestamp()
             self.session["reason_stopped"] = reason
@@ -123,10 +123,23 @@ class AutoValidationService:
         return dict(self.session)
 
     def run_once(self, signals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        if self.session["status"] != "RUNNING" or self.config["auto_validation_enabled"] is not True:
+        if self.session["status"] not in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} or self.config["auto_validation_enabled"] is not True:
             return self._decision("IDLE", ["AUTO_VALIDATION_NOT_RUNNING"])
         self._refresh_session_metrics()
         mt5_health = self._mt5_health_check()
+        if self.session["status"] == "WAITING_FOR_MT5_RECONNECT":
+            if mt5_health.get("status") == "MT5_CONNECTED":
+                self.session["status"] = "RUNNING"
+                self.session["paused_reason"] = ""
+                self.session["mt5_disconnect_recovered_at"] = self._timestamp()
+                self._log("MT5_RECONNECTED", {"mt5_health": mt5_health, "reconnect_attempts": self.session.get("mt5_reconnect_attempts", 0)})
+                self._save_state()
+            elif self._mt5_disconnect_timed_out():
+                return self._halt("MT5_DISCONNECT_TIMEOUT")
+            else:
+                return self._decision("WAITING_FOR_MT5_RECONNECT", ["MT5_DISCONNECTED"], extra={"mt5_health": copy.deepcopy(mt5_health)})
+        elif mt5_health.get("status") == "MT5_DISCONNECTED":
+            return self._pause_for_mt5_disconnect(mt5_health)
         halt = self._risk_halt_reason()
         if halt:
             return self._halt(halt)
@@ -386,6 +399,8 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
         if not connected:
+            if self.session.get("status") == "WAITING_FOR_MT5_RECONNECT":
+                self.session["mt5_reconnect_attempts"] = int(self.session.get("mt5_reconnect_attempts") or 0) + 1
             self._log("TEMPORARY_MARKET_DATA_FAILURE", {"mt5_health": self.mt5_health_state})
         self._save_state()
         return self.mt5_health_state
@@ -506,6 +521,27 @@ class AutoValidationService:
             return "MAX_DRAWDOWN_REACHED"
         return None
 
+    def _pause_for_mt5_disconnect(self, mt5_health: dict[str, Any]) -> dict[str, Any]:
+        if not self.session.get("last_mt5_disconnect_at"):
+            self.session["last_mt5_disconnect_at"] = self._timestamp()
+        self.session["status"] = "WAITING_FOR_MT5_RECONNECT"
+        self.session["paused_reason"] = "MT5_DISCONNECTED"
+        self.session["mt5_reconnect_attempts"] = int(self.session.get("mt5_reconnect_attempts") or 0) + 1
+        self._log("MT5_DISCONNECT_DETECTED", {"mt5_health": mt5_health, "timeout_seconds": self.config.get("mt5_disconnect_timeout_seconds")})
+        self._save_state()
+        return self._decision("WAITING_FOR_MT5_RECONNECT", ["MT5_DISCONNECTED"], extra={"mt5_health": copy.deepcopy(mt5_health)})
+
+    def _mt5_disconnect_timed_out(self) -> bool:
+        started = self.session.get("last_mt5_disconnect_at")
+        if not started:
+            return False
+        try:
+            started_at = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        timeout = float(self.config.get("mt5_disconnect_timeout_seconds", 600))
+        return datetime.now(timezone.utc) >= started_at + timedelta(seconds=timeout)
+
     def _halt(self, reason: str) -> dict[str, Any]:
         self.session["status"] = "COMPLETED" if reason == "TARGET_COMPLETED" else "HALTED_RISK"
         self.session["stopped_at"] = self._timestamp()
@@ -563,6 +599,7 @@ class AutoValidationService:
     def _halt_blocker(self, blockers: list[str]) -> bool:
         halts = {
             "LIVE_ACCOUNT_DETECTED",
+            "DEMO_ACCOUNT_REQUIRED",
             "NON_VANTAGE_BROKER_DETECTED",
             "LOT_SIZE_EXCEEDS_0_01",
             "SL_TP_REQUIRED",
@@ -570,7 +607,7 @@ class AutoValidationService:
             "MAX_DAILY_TRADE_LIMIT_REACHED",
             "MAX_DRAWDOWN_REACHED",
             "MAX_DAILY_LOSS_REACHED",
-            "MT5_DISCONNECTED",
+            "MT5_DISCONNECT_TIMEOUT",
             "GUARDED_SENDER_REJECTED",
         }
         return any(item in halts for item in blockers)
@@ -586,7 +623,10 @@ class AutoValidationService:
         self.runner_state.update(updates)
 
     def should_auto_start_runner(self) -> bool:
-        return self.session.get("status") == "RUNNING" and self.config.get("auto_validation_enabled") is True
+        return self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} and self.config.get("auto_validation_enabled") is True
+
+    def waiting_for_mt5_reconnect(self) -> bool:
+        return self.session.get("status") == "WAITING_FOR_MT5_RECONNECT"
 
     def watched_signal_is_watchlist(self) -> bool:
         watched = self._current_signal_watched if isinstance(self._current_signal_watched, dict) else {}
@@ -746,6 +786,10 @@ class AutoValidationService:
             "worst_setup_type": "Unavailable",
             "equity_curve": [],
             "reason_stopped": "",
+            "paused_reason": "",
+            "last_mt5_disconnect_at": None,
+            "mt5_disconnect_recovered_at": None,
+            "mt5_reconnect_attempts": 0,
         }
 
     def _load_state(self) -> None:
@@ -771,7 +815,7 @@ class AutoValidationService:
             self._last_hash_change_audit = data["last_hash_change_audit"]
         if isinstance(data.get("confidence_timeline"), dict):
             self._confidence_timeline = data["confidence_timeline"]
-        if self.session.get("status") == "RUNNING":
+        if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
             self.config["auto_validation_enabled"] = True
 
     def _save_state(self) -> None:
@@ -809,6 +853,7 @@ class AutoValidationService:
             "require_sl_tp": True,
             "cooldown_after_trade_minutes": 15,
             "stop_after_target_reached": True,
+            "mt5_disconnect_timeout_seconds": 600,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
         }
@@ -821,6 +866,7 @@ class AutoValidationService:
             "max_total_drawdown_amount",
             "cooldown_after_trade_minutes",
             "max_daily_trades",
+            "mt5_disconnect_timeout_seconds",
         ]:
             if key in payload:
                 safe[key] = payload[key]

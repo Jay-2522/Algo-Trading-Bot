@@ -24,6 +24,7 @@ from backend.mt5_demo.mt5_strategy_feed_adapter import MT5StrategyFeedAdapter
 from backend.mt5_demo.mt5_risk_qualification_service import MT5RiskQualificationService
 from backend.mt5_demo.mt5_execution_gate_validation_service import MT5ExecutionGateValidationService
 from backend.mt5_demo.vantage_xauusd_demo_validation_service import VantageXAUUSDDemoValidationService
+from backend.strategy.real_signal_engine_service import RealSignalEngineService
 
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
@@ -104,6 +105,10 @@ guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     simulator_service=demo_execution_simulator_service,
     readiness_service=demo_execution_readiness_service,
 )
+real_signal_engine_service = RealSignalEngineService(
+    backfill_service=historical_backfill_service,
+    market_data_service=market_data_service,
+)
 vantage_xauusd_demo_validation_service = VantageXAUUSDDemoValidationService(
     mt5_demo_service=service,
     market_data_service=market_data_service,
@@ -111,6 +116,7 @@ vantage_xauusd_demo_validation_service = VantageXAUUSDDemoValidationService(
     guarded_sender_service=guarded_demo_order_sender_service,
     position_sync_service=mt5_demo_position_sync_service,
     lifecycle_service=mt5_trade_lifecycle_service,
+    signal_engine_service=real_signal_engine_service,
 )
 
 

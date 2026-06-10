@@ -19,6 +19,7 @@ class VantageXAUUSDDemoValidationService:
         guarded_sender_service: Any,
         position_sync_service: Any,
         lifecycle_service: Any,
+        signal_engine_service: Any | None = None,
     ) -> None:
         self.mt5_demo_service = mt5_demo_service
         self.market_data_service = market_data_service
@@ -26,6 +27,7 @@ class VantageXAUUSDDemoValidationService:
         self.guarded_sender_service = guarded_sender_service
         self.position_sync_service = position_sync_service
         self.lifecycle_service = lifecycle_service
+        self.signal_engine_service = signal_engine_service
         self._latest_preview: dict[str, Any] | None = None
         self._latest_order: dict[str, Any] | None = None
         self._test_order_attempted = False
@@ -63,6 +65,7 @@ class VantageXAUUSDDemoValidationService:
             "signal_confidence": self._float_or_none(payload.get("signal_confidence")),
             "signal_hash": payload.get("signal_hash"),
             "setup_reason": payload.get("setup_reason"),
+            "signal_revalidation": readiness["signal_revalidation"],
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -215,6 +218,8 @@ class VantageXAUUSDDemoValidationService:
             blockers.append("LIVE_EXECUTION_FLAG_MUST_BE_FALSE")
         if payload.get("broker_execution_enabled") is True:
             blockers.append("BROKER_EXECUTION_MUST_REMAIN_DISABLED")
+        signal_revalidation = self._revalidate_signal(payload, symbol, side)
+        blockers.extend(signal_revalidation["blockers"])
         return {
             "account": account,
             "tick": tick,
@@ -222,7 +227,60 @@ class VantageXAUUSDDemoValidationService:
             "broker_detected": self._broker_detected(account),
             "blockers": sorted(set(blockers)),
             "duplicate_blocked": "DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED" in blockers,
+            "signal_revalidation": signal_revalidation,
         }
+
+    def _revalidate_signal(self, payload: dict[str, Any], symbol: str, side: str) -> dict[str, Any]:
+        signal_timestamp = payload.get("signal_timestamp")
+        signal_hash = str(payload.get("signal_hash") or "")
+        ai_payload = bool(signal_timestamp or signal_hash or payload.get("signal_confidence") is not None)
+        if not ai_payload:
+            return {"status": "SKIPPED_NON_AI_PREVIEW", "blockers": [], "age_seconds": None}
+
+        blockers: list[str] = []
+        age_seconds = self._signal_age_seconds(signal_timestamp)
+        if age_seconds is None:
+            blockers.append("SIGNAL_TIMESTAMP_REQUIRED")
+        elif age_seconds < 0:
+            blockers.append("SIGNAL_TIMESTAMP_IN_FUTURE")
+        elif age_seconds > 30:
+            blockers.append("SIGNAL_EXPIRED")
+
+        current_signal = self.signal_engine_service.generate_signal(symbol) if self.signal_engine_service is not None and symbol in self.supported_symbols else None
+        if current_signal is not None:
+            if current_signal.get("execution_status") != "READY_FOR_PREVIEW":
+                blockers.append("SIGNAL_NO_LONGER_READY_FOR_PREVIEW")
+            if current_signal.get("risk_status") != "APPROVED":
+                blockers.append("SIGNAL_NO_LONGER_APPROVED")
+            if str(current_signal.get("signal") or "").upper() != side:
+                blockers.append("SIGNAL_DIRECTION_CHANGED")
+            if signal_hash and current_signal.get("signal_hash") != signal_hash:
+                blockers.append("SIGNAL_HASH_CHANGED")
+
+        return {
+            "status": "PASSED" if not blockers else "BLOCKED",
+            "blockers": sorted(set(blockers)),
+            "age_seconds": round(age_seconds, 2) if age_seconds is not None else None,
+            "max_age_seconds": 30,
+            "current_signal": {
+                "signal": current_signal.get("signal"),
+                "execution_status": current_signal.get("execution_status"),
+                "risk_status": current_signal.get("risk_status"),
+                "signal_hash": current_signal.get("signal_hash"),
+                "timestamp": current_signal.get("timestamp"),
+            }
+            if current_signal is not None
+            else None,
+        }
+
+    def _signal_age_seconds(self, value: Any) -> float | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+        except ValueError:
+            return None
+        return (datetime.now(timezone.utc) - parsed).total_seconds()
 
     def _broker_detected(self, account: dict[str, Any]) -> str | None:
         server = str(account.get("server") or "").lower()

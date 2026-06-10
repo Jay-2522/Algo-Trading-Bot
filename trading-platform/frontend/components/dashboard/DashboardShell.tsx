@@ -6,6 +6,8 @@ import Link from "next/link";
 
 import {
   fetchClientOperatingDashboard,
+  fetchClientMarketPrices,
+  fetchClientSignals,
   previewClientDemoTrade,
   sendGuardedClientDemoTrade,
   syncClientLifecycle,
@@ -34,6 +36,9 @@ type DashboardData = {
 };
 
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
+type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
+
+const READY_SIGNAL_HOLD_SECONDS = 30;
 
 const emptyData: DashboardData = {
   account: null,
@@ -179,6 +184,20 @@ function blockersFromPreview(preview: ApiRecord | null): string[] {
   return cleanBlockers(blockedReasons);
 }
 
+function readySignal(signal: ApiRecord | null): boolean {
+  return readText(signal, ["execution_status"], "") === "READY_FOR_PREVIEW" && readText(signal, ["risk_status"], "") === "APPROVED";
+}
+
+function signalHoldRemaining(signal: ApiRecord | null, nowMs: number): number {
+  const expiresAt = readNumber(signal, ["hold_expires_at_ms"], Number.NaN);
+  if (!Number.isFinite(expiresAt)) return 0;
+  return Math.max(0, Math.ceil((expiresAt - nowMs) / 1000));
+}
+
+function staleSignalBlockers(blockers: string[]): boolean {
+  return blockers.some((blocker) => blocker.includes("signal expired") || blocker.includes("signal no longer") || blocker.includes("signal hash changed") || blocker.includes("signal timestamp"));
+}
+
 function lastCandleTimestamp(signal: ApiRecord | null): string {
   const source = asRecord(signal?.candle_source);
   const timeframes = asRecord(source?.timeframes);
@@ -223,7 +242,11 @@ export function DashboardShell(_: {
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [workingAction, setWorkingAction] = useState<string | null>(null);
+  const [heldReadySignals, setHeldReadySignals] = useState<HeldSignals>({});
+  const [nowMs, setNowMs] = useState(Date.now());
   const requestInFlight = useRef(false);
+  const priceRequestInFlight = useRef(false);
+  const signalRequestInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
     if (requestInFlight.current) return;
@@ -257,14 +280,77 @@ export function DashboardShell(_: {
     }
   }, []);
 
+  const refreshPrices = useCallback(async () => {
+    if (priceRequestInFlight.current) return;
+    priceRequestInFlight.current = true;
+    try {
+      const prices = await fetchClientMarketPrices();
+      setData((current) => ({
+        ...current,
+        eurusdTick: asRecord(prices.eurusdTick),
+        xauusdTick: asRecord(prices.xauusdTick),
+      }));
+    } finally {
+      priceRequestInFlight.current = false;
+    }
+  }, []);
+
+  const refreshSignals = useCallback(async () => {
+    if (signalRequestInFlight.current) return;
+    signalRequestInFlight.current = true;
+    try {
+      const signals = await fetchClientSignals();
+      setData((current) => ({
+        ...current,
+        clientSignals: recordsFrom(signals, "signals"),
+      }));
+    } finally {
+      signalRequestInFlight.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => void refresh(), 5000);
+    const interval = window.setInterval(() => void refreshPrices(), 1000);
     return () => window.clearInterval(interval);
-  }, [refresh]);
+  }, [refreshPrices]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => void refreshSignals(), 5000);
+    return () => window.clearInterval(interval);
+  }, [refreshSignals]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setHeldReadySignals((current) => {
+      const next: HeldSignals = { ...current };
+      const now = Date.now();
+      for (const symbol of ["EURUSD", "XAUUSD"] as const) {
+        const live = data.clientSignals.find((signal) => readText(signal, ["symbol"], "") === symbol) ?? null;
+        const existing = next[symbol] ?? null;
+        const existingHash = readText(existing, ["signal_hash"], "");
+        const liveHash = readText(live, ["signal_hash"], "");
+        const existingRemaining = signalHoldRemaining(existing, now);
+        if (readySignal(live) && (existingRemaining <= 0 || existingHash !== liveHash)) {
+          next[symbol] = {
+            ...live,
+            hold_started_at_ms: now,
+            hold_expires_at_ms: now + READY_SIGNAL_HOLD_SECONDS * 1000,
+          };
+        } else if (existing && existingRemaining <= 0) {
+          delete next[symbol];
+        }
+      }
+      return next;
+    });
+  }, [data.clientSignals]);
 
   useEffect(() => {
     setPreview(null);
@@ -273,11 +359,18 @@ export function DashboardShell(_: {
     setTradeError(null);
   }, [selectedSymbol]);
 
+  const displayedSignals = useMemo(() => {
+    return data.clientSignals.map((signal) => {
+      const symbol = readText(signal, ["symbol"], "") as ScopedSymbol;
+      const held = heldReadySignals[symbol] ?? null;
+      return held && signalHoldRemaining(held, nowMs) > 0 ? held : signal;
+    });
+  }, [data.clientSignals, heldReadySignals, nowMs]);
   const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
   const marketOpen = isMarketOpen(data.eurusdTick);
   const openTradeExists = data.openPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
   const approvalReady = preview?.approved_for_future_demo_order === true || readText(preview, ["readiness_decision"], "") === "READY_FOR_GUARDED_DEMO_TEST";
-  const selectedSignal = data.clientSignals.find((signal) => readText(signal, ["symbol"], "") === selectedSymbol) ?? null;
+  const selectedSignal = displayedSignals.find((signal) => readText(signal, ["symbol"], "") === selectedSymbol) ?? null;
   const signalAction = readText(selectedSignal, ["signal"], "WAIT").toUpperCase();
   const signalEntry = readNumber(selectedSignal, ["entry"], Number.NaN);
   const stopLoss = readNumber(selectedSignal, ["stop_loss"], Number.NaN);
@@ -292,8 +385,8 @@ export function DashboardShell(_: {
   const previewSource = asRecord(previewSignal?.candle_source);
   const canSend =
     approvalReady &&
-    readText(previewSignal, ["execution_status"], "") === "READY_FOR_PREVIEW" &&
-    readText(previewSignal, ["risk_status"], "") === "APPROVED" &&
+    readySignal(previewSignal) &&
+    signalHoldRemaining(previewSignal, nowMs) > 0 &&
     readText(previewSource, ["broker_source", "source"], readText(preview, ["broker_source", "source"], "")) === "VANTAGE_DEMO" &&
     readText(previewSource, ["account_type"], readText(preview, ["account_type"], "")) === "DEMO" &&
     previewBlockers.length === 0 &&
@@ -320,6 +413,7 @@ export function DashboardShell(_: {
     risk_reward_ratio: readNumber(signal, ["risk_reward"], rr),
     signal_confidence: readNumber(signal, ["confidence"], Number.NaN),
     signal_hash: readText(signal, ["signal_hash"], ""),
+    signal_timestamp: readText(signal, ["timestamp"], ""),
     setup_reason: readText(signal, ["setup_reason", "reason"], ""),
     strategy_metadata: {
       market_structure_state: asRecord(signal?.market_structure_state) ?? {},
@@ -339,8 +433,8 @@ export function DashboardShell(_: {
     const signalRr = readNumber(signal, ["risk_reward"], Number.NaN);
     return (
       ["EURUSD", "XAUUSD"].includes(symbol) &&
-      readText(signal, ["execution_status"], "") === "READY_FOR_PREVIEW" &&
-      readText(signal, ["risk_status"], "") === "APPROVED" &&
+      readySignal(signal) &&
+      signalHoldRemaining(signal, nowMs) > 0 &&
       Number.isFinite(entry) &&
       entry > 0 &&
       Number.isFinite(sl) &&
@@ -368,6 +462,11 @@ export function DashboardShell(_: {
       const result = await previewClientDemoTrade(orderPayload(signal));
       setPreview(result);
       setPreviewSignal(signal);
+      const blockers = blockersFromPreview(result);
+      if (staleSignalBlockers(blockers)) {
+        setTradeError("Signal expired or changed. Refreshed the signal before preview.");
+        await refreshSignals();
+      }
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "Preview failed.");
     } finally {
@@ -382,6 +481,11 @@ export function DashboardShell(_: {
       const result = await sendGuardedClientDemoTrade(orderPayload(previewSignal ?? selectedSignal));
       setSendResult(result);
       setConfirmOpen(false);
+      if (staleSignalBlockers(blockersFromPreview(result))) {
+        setTradeError("Signal expired or changed before confirm. Refreshed the signal.");
+        await refreshSignals();
+        return;
+      }
       if (readText(result, ["status"], "") === "DEMO_ORDER_SENT") {
         await syncClientPositionsToJournal();
         await syncClientLifecycle();
@@ -474,14 +578,14 @@ export function DashboardShell(_: {
               </div>
             </section>
           </div>
-          <p className="mt-3 text-xs text-slate-500">{lastUpdated ? `Auto-refresh every 5 seconds. Last updated ${lastUpdated}.` : "Preparing dashboard data."}</p>
+          <p className="mt-3 text-xs text-slate-500">{lastUpdated ? `Prices refresh every 1s. AI signals refresh every 5s. Last full update ${lastUpdated}.` : "Preparing dashboard data."}</p>
         </header>
 
         <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
           <SectionTitle eyebrow="Market Overview" title="Scoped Instruments" />
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <MarketCard title="EURUSD" tick={data.eurusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "EURUSD") ?? null} />
-            <MarketCard title="XAUUSD" tick={data.xauusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} signal={data.clientSignals.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} />
+            <MarketCard title="XAUUSD" tick={data.xauusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} signal={displayedSignals.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} />
             <NiftyMarketCard scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "NIFTY50") ?? null} />
           </div>
         </section>
@@ -492,11 +596,12 @@ export function DashboardShell(_: {
             {(["EURUSD", "XAUUSD", "NIFTY50"] as const).map((symbol) => (
               <SignalCard
                 key={symbol}
-                canPreview={canPreviewSignal(data.clientSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null)}
+                canPreview={canPreviewSignal(displayedSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null)}
                 onPreview={(signal) => void handlePreview(signal)}
                 selected={selectedSymbol === symbol}
-                signal={data.clientSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null}
+                signal={displayedSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null}
                 symbol={symbol}
+                validForSeconds={signalHoldRemaining(displayedSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null, nowMs)}
                 onSelect={() => setSelectedSymbol(symbol)}
               />
             ))}
@@ -562,7 +667,7 @@ export function DashboardShell(_: {
               </div>
             </div>
 
-            {preview && <PreviewPanel preview={preview} signal={previewSignal ?? selectedSignal} canSend={canSend} onConfirm={() => setConfirmOpen(true)} />}
+            {preview && <PreviewPanel preview={preview} signal={previewSignal ?? selectedSignal} canSend={canSend} validForSeconds={signalHoldRemaining(previewSignal ?? selectedSignal, nowMs)} onConfirm={() => setConfirmOpen(true)} />}
 
             {(tradeError || sendResult) && (
               <div className={`mt-4 rounded-xl border p-4 text-sm ${tradeError ? "border-rose-400/25 bg-rose-500/10 text-rose-100" : "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"}`}>
@@ -711,7 +816,7 @@ function NiftyMarketCard({ scope }: { scope: ApiRecord | null }) {
   );
 }
 
-function PreviewPanel({ preview, signal, canSend, onConfirm }: { preview: ApiRecord; signal: ApiRecord | null; canSend: boolean; onConfirm: () => void }) {
+function PreviewPanel({ preview, signal, canSend, validForSeconds, onConfirm }: { preview: ApiRecord; signal: ApiRecord | null; canSend: boolean; validForSeconds: number; onConfirm: () => void }) {
   const source = asRecord(signal?.candle_source);
   const structure = asRecord(signal?.market_structure_state);
   const components = asRecord(signal?.strategy_components);
@@ -761,6 +866,7 @@ function PreviewPanel({ preview, signal, canSend, onConfirm }: { preview: ApiRec
           <div className="mt-3 grid gap-3">
             <Metric label="Readiness Decision" value={readText(preview, ["readiness_decision"], "BLOCKED").replaceAll("_", " ")} compact />
             <Metric label="Approval Status" value={readText(preview, ["approval_status"], "BLOCKED").replaceAll("_", " ")} compact />
+            <Metric label="Signal Validity" value={validForSeconds > 0 ? `Valid for ${validForSeconds}s` : "Expired"} compact />
             <Metric label="Duplicate Protection" value={readText(preview, ["duplicate_protection_status"], "BLOCKED").replaceAll("_", " ")} compact />
             <Metric label="BOS / CHOCH" value={`${readText(audit, ["bos_result"], "Unknown")} / ${readText(audit, ["choch_result"], "Unknown")}`} compact />
             <Metric label="Sweep / FVG / OB" value={`${readText(audit, ["liquidity_sweep_result"], "Unknown")} / ${readText(audit, ["fvg_result"], "Unknown")} / ${readText(audit, ["order_block_result"], "Unknown")}`} compact />
@@ -784,6 +890,7 @@ function SignalCard({
   signal,
   selected,
   canPreview,
+  validForSeconds,
   onSelect,
   onPreview,
 }: {
@@ -791,6 +898,7 @@ function SignalCard({
   signal: ApiRecord | null;
   selected: boolean;
   canPreview: boolean;
+  validForSeconds: number;
   onSelect: () => void;
   onPreview: (signal: ApiRecord | null) => void;
 }) {
@@ -812,6 +920,7 @@ function SignalCard({
           {readText(signal, ["execution_status"], "WAITING")}
         </span>
       </div>
+      {readySignal(signal) && validForSeconds > 0 && <p className="mt-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Valid for {validForSeconds}s</p>}
       <p className="mt-3 min-h-10 text-sm font-semibold text-slate-300">{readText(signal, ["setup_reason", "reason"], symbol === "NIFTY50" ? "Indian market integration pending." : "No confirmed setup available.")}</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Metric label="Confidence" value={Number.isFinite(confidence) ? `${confidence.toFixed(0)}%` : "Unavailable"} compact />
@@ -828,7 +937,7 @@ function SignalCard({
         <button className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" onClick={onSelect} type="button">
           Select
         </button>
-        {readText(signal, ["execution_status"], "") === "READY_FOR_PREVIEW" && readText(signal, ["risk_status"], "") === "APPROVED" && (
+        {readySignal(signal) && validForSeconds > 0 && (
           <button className="rounded-xl bg-blue-500 px-3 py-2 text-sm font-black text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canPreview} onClick={() => onPreview(signal)} type="button">
             Preview Trade
           </button>

@@ -11,6 +11,7 @@ export type ClientOrderPayload = {
   signal_confidence?: number;
   signal_hash?: string;
   setup_reason?: string;
+  signal_timestamp?: string;
   strategy_metadata?: ApiRecord;
 };
 
@@ -99,6 +100,11 @@ function guardedPayload(payload: ClientOrderPayload): ApiRecord {
 export function previewClientDemoTrade(payload: ClientOrderPayload) {
   const symbolPath = payload.symbol.toLowerCase();
   return postJson<ApiRecord>(`/mt5-demo/vantage/${symbolPath}/test-order/preview`, guardedPayload(payload));
+}
+
+export async function fetchClientMarketPrices() {
+  const [eurusdTick, xauusdTick] = await Promise.all([fetchJson<ApiRecord>("/mt5-demo/market-data/tick/EURUSD"), fetchJson<ApiRecord>("/mt5-demo/market-data/tick/XAUUSD")]);
+  return { eurusdTick, xauusdTick };
 }
 
 export function sendGuardedClientDemoTrade(payload: ClientOrderPayload) {

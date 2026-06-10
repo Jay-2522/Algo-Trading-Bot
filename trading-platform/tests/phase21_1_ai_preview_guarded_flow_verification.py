@@ -46,6 +46,12 @@ def verify_dashboard_preview_flow() -> bool:
     dashboard = DASHBOARD_PATH.read_text(encoding="utf-8")
     api = API_PATH.read_text(encoding="utf-8")
     required_dashboard = [
+        "fetchClientMarketPrices",
+        "fetchClientSignals",
+        "1000",
+        "5000",
+        "READY_SIGNAL_HOLD_SECONDS = 30",
+        "Valid for",
         "Preview Trade",
         "PreviewPanel",
         "Confirm Demo Order",
@@ -56,11 +62,14 @@ def verify_dashboard_preview_flow() -> bool:
         "syncClientLifecycle",
         "broker_source",
         "lastCandleTimestamp",
+        "staleSignalBlockers",
+        "refreshSignals",
     ]
     required_api = [
         "/mt5-demo/vantage/${symbolPath}/test-order/preview",
         "/mt5-demo/vantage/${symbolPath}/test-order",
         "signal_confidence",
+        "signal_timestamp",
         "strategy_metadata",
     ]
     missing = [item for item in required_dashboard if item not in dashboard] + [item for item in required_api if item not in api]
@@ -78,6 +87,10 @@ def verify_vantage_preview_readiness_fields() -> bool:
         '"broker_source"',
         '"signal_confidence"',
         '"strategy_metadata"',
+        "_revalidate_signal",
+        "SIGNAL_EXPIRED",
+        "SIGNAL_NO_LONGER_READY_FOR_PREVIEW",
+        "SIGNAL_HASH_CHANGED",
     ]
     missing = [item for item in required if item not in text]
     return show("Vantage preview exposes readiness and duplicate-protection fields", not missing, ", ".join(missing))

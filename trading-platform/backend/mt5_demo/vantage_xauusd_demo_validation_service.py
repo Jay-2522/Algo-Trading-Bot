@@ -6,6 +6,7 @@ class VantageXAUUSDDemoValidationService:
     """Vantage XAUUSD demo validation wrapper around the existing guarded sender."""
 
     symbol = "XAUUSD"
+    supported_symbols = {"EURUSD", "XAUUSD"}
     broker = "VANTAGE_DEMO"
     max_lot = 0.01
     max_spread = 1.0
@@ -33,13 +34,14 @@ class VantageXAUUSDDemoValidationService:
         payload = payload or {}
         readiness = self._readiness(payload, require_confirm=False)
         side = str(payload.get("side") or payload.get("action") or "BUY").strip().upper()
+        symbol = readiness["symbol"]
         tick = readiness["tick"]
         entry = self._entry_estimate(side, tick)
         result = {
             "would_send": False,
             "broker": self.broker,
             "broker_detected": readiness["broker_detected"],
-            "symbol": self.symbol,
+            "symbol": symbol,
             "side": side,
             "lot": self._float_or_none(payload.get("lot")) or self.max_lot,
             "entry_estimate": entry,
@@ -77,10 +79,11 @@ class VantageXAUUSDDemoValidationService:
             return result
 
         side = str(payload.get("side") or payload.get("action")).strip().upper()
+        symbol = readiness["symbol"]
         tick = readiness["tick"]
         guarded_payload = {
             "environment": "DEMO",
-            "symbol": self.symbol,
+            "symbol": symbol,
             "action": side,
             "lot": self.max_lot,
             "entry_price": self._entry_estimate(side, tick),
@@ -95,7 +98,8 @@ class VantageXAUUSDDemoValidationService:
             "broker_execution_enabled": False,
             "execution_allowed": False,
             "broker_id": self.broker,
-            "allow_xauusd_vantage_demo_test": True,
+            "allow_xauusd_vantage_demo_test": symbol == "XAUUSD",
+            "allow_eurusd_vantage_demo_test": symbol == "EURUSD",
             "execute_single_demo_order_now": True,
         }
         approval_payload = {
@@ -153,7 +157,8 @@ class VantageXAUUSDDemoValidationService:
 
     def _readiness(self, payload: dict[str, Any], require_confirm: bool) -> dict[str, Any]:
         account = self.mt5_demo_service.get_status()
-        tick = self.market_data_service.get_symbol_tick(self.symbol)
+        symbol = str(payload.get("symbol") or self.symbol).strip().upper()
+        tick = self.market_data_service.get_symbol_tick(symbol if symbol in self.supported_symbols else self.symbol)
         side = str(payload.get("side") or payload.get("action") or "").strip().upper()
         lot = self._float_or_none(payload.get("lot"))
         stop_loss = self._float_or_none(payload.get("stop_loss") or payload.get("sl"))
@@ -165,8 +170,8 @@ class VantageXAUUSDDemoValidationService:
             blockers.append("VANTAGE_DEMO_ACCOUNT_REQUIRED")
         if account.get("account_type") != "DEMO":
             blockers.append("DEMO_ACCOUNT_REQUIRED")
-        if str(payload.get("symbol") or self.symbol).strip().upper() != self.symbol:
-            blockers.append("XAUUSD_SYMBOL_REQUIRED")
+        if symbol not in self.supported_symbols:
+            blockers.append("SUPPORTED_SYMBOL_REQUIRED")
         if require_confirm and payload.get("confirm") is not True:
             blockers.append("EXPLICIT_CONFIRM_TRUE_REQUIRED")
         if side not in {"BUY", "SELL"}:
@@ -184,7 +189,7 @@ class VantageXAUUSDDemoValidationService:
         elif side == "SELL" and stop_loss is not None and take_profit is not None and not (take_profit < entry < stop_loss):
             blockers.append("INVALID_SELL_SL_TP_PLACEMENT")
         if tick.get("status") != "OK":
-            blockers.append("XAUUSD_TICK_NOT_READY")
+            blockers.append(f"{symbol}_TICK_NOT_READY")
         if tick.get("spread") is None:
             blockers.append("SPREAD_UNAVAILABLE")
         elif float(tick["spread"]) > self.max_spread:
@@ -198,6 +203,7 @@ class VantageXAUUSDDemoValidationService:
         return {
             "account": account,
             "tick": tick,
+            "symbol": symbol if symbol in self.supported_symbols else self.symbol,
             "broker_detected": self._broker_detected(account),
             "blockers": sorted(set(blockers)),
         }

@@ -100,6 +100,9 @@ class MT5MarketDataService:
             return self._candle_error_payload(normalized, normalized_timeframe, count, "MT5_UNAVAILABLE", error)
 
         try:
+            account = mt5.account_info()
+            source = self._source_from_account(account)
+            account_type = self._account_type(account)
             availability = self._symbol_availability(normalized)
             if availability["classification"] in {"SYMBOL_NOT_FOUND", "SYMBOL_HIDDEN"}:
                 return self._candle_error_payload(normalized, normalized_timeframe, count, availability["classification"], availability["message"])
@@ -120,7 +123,11 @@ class MT5MarketDataService:
                 "count": len(candles),
                 "requested_count": count,
                 "candles": candles,
-                "source": "MT5_DEMO",
+                "source": source,
+                "broker_source": source,
+                "account_login": str(getattr(account, "login", "")) if account else "",
+                "server": str(getattr(account, "server", "")) if account else "",
+                "account_type": account_type,
                 "status": "OK",
                 "simulation_only": True,
                 "live_execution_enabled": False,

@@ -1,7 +1,7 @@
 export type ApiRecord = Record<string, unknown>;
 
 export type ClientOrderPayload = {
-  symbol: "EURUSD";
+  symbol: "EURUSD" | "XAUUSD";
   action: "BUY" | "SELL";
   lot: 0.01;
   entry_price: number;
@@ -92,13 +92,15 @@ function guardedPayload(payload: ClientOrderPayload): ApiRecord {
 }
 
 export function previewClientDemoTrade(payload: ClientOrderPayload) {
-  return postJson<ApiRecord>("/mt5-demo/demo-approval-workflow/run", guardedPayload(payload));
+  const symbolPath = payload.symbol.toLowerCase();
+  return postJson<ApiRecord>(`/mt5-demo/vantage/${symbolPath}/test-order/preview`, guardedPayload(payload));
 }
 
 export function sendGuardedClientDemoTrade(payload: ClientOrderPayload) {
-  return postJson<ApiRecord>("/mt5-demo/guarded-demo-order/send", {
+  const symbolPath = payload.symbol.toLowerCase();
+  return postJson<ApiRecord>(`/mt5-demo/vantage/${symbolPath}/test-order`, {
     ...guardedPayload(payload),
-    execute_single_demo_order_now: true,
+    confirm: true,
   });
 }
 

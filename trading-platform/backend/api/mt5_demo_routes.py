@@ -169,6 +169,18 @@ async def send_vantage_xauusd_test_order(payload: dict[str, Any] = Body(default_
     return vantage_xauusd_demo_validation_service.send_test_order(payload)
 
 
+@router.post("/vantage/eurusd/test-order/preview")
+async def preview_vantage_eurusd_test_order(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    payload["symbol"] = "EURUSD"
+    return vantage_xauusd_demo_validation_service.preview(payload)
+
+
+@router.post("/vantage/eurusd/test-order")
+async def send_vantage_eurusd_test_order(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
+    payload["symbol"] = "EURUSD"
+    return vantage_xauusd_demo_validation_service.send_test_order(payload)
+
+
 @router.get("/market-data/tick/{symbol}")
 async def get_mt5_demo_symbol_tick(symbol: str) -> dict:
     return market_data_service.get_symbol_tick(symbol)

@@ -182,7 +182,7 @@ function tradeStatusMessages(marketOpen: boolean, openTradeExists: boolean, sign
   if (!numeric(signal, ["stop_loss"])) messages.push({ ok: false, text: "Stop Loss Required" });
   if (!numeric(signal, ["take_profit"])) messages.push({ ok: false, text: "Take Profit Required" });
   if (openTradeExists) messages.push({ ok: false, text: "Existing Demo Position Active" });
-  if (signal && readText(signal, ["symbol"], "") !== "EURUSD") messages.push({ ok: false, text: "EURUSD Demo Execution Only" });
+  if (signal && !["EURUSD", "XAUUSD"].includes(readText(signal, ["symbol"], ""))) messages.push({ ok: false, text: "Vantage EURUSD/XAUUSD Demo Only" });
   if (signal && !formValid) messages.push({ ok: false, text: "Check SL / TP Placement" });
   if (messages.length === 1) messages.push({ ok: true, text: "Trade Ready" });
   return messages;
@@ -259,16 +259,17 @@ export function DashboardShell(_: {
   const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
   const marketOpen = isMarketOpen(data.eurusdTick);
   const openTradeExists = data.openPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
-  const approvalReady = preview?.approved_for_future_demo_order === true;
+  const approvalReady = preview?.approved_for_future_demo_order === true || readText(preview, ["readiness_decision"], "") === "READY_FOR_GUARDED_DEMO_TEST";
   const selectedSignal = data.clientSignals.find((signal) => readText(signal, ["symbol"], "") === selectedSymbol) ?? null;
   const signalAction = readText(selectedSignal, ["signal"], "WAIT").toUpperCase();
   const signalEntry = readNumber(selectedSignal, ["entry"], Number.NaN);
   const stopLoss = readNumber(selectedSignal, ["stop_loss"], Number.NaN);
   const takeProfit = readNumber(selectedSignal, ["take_profit"], Number.NaN);
   const rr = readNumber(selectedSignal, ["risk_reward"], Number.NaN);
-  const selectedMarketOpen = selectedSymbol === "EURUSD" ? marketOpen : false;
-  const signalExecutable = selectedSymbol === "EURUSD" && (signalAction === "BUY" || signalAction === "SELL");
-  const formValid = signalExecutable && Number.isFinite(signalEntry) && signalEntry > 0 && Number.isFinite(stopLoss) && stopLoss > 0 && Number.isFinite(takeProfit) && takeProfit > 0 && Number.isFinite(rr) && rr > 0;
+  const signalReadyForPreview = readText(selectedSignal, ["execution_status"], "") === "READY_FOR_PREVIEW";
+  const selectedMarketOpen = selectedSymbol === "EURUSD" ? marketOpen : isMarketOpen(data.xauusdTick);
+  const signalExecutable = (selectedSymbol === "EURUSD" || selectedSymbol === "XAUUSD") && (signalAction === "BUY" || signalAction === "SELL");
+  const formValid = signalReadyForPreview && signalExecutable && Number.isFinite(signalEntry) && signalEntry > 0 && Number.isFinite(stopLoss) && stopLoss > 0 && Number.isFinite(takeProfit) && takeProfit > 0 && Number.isFinite(rr) && rr >= 1.5;
   const canPreview = selectedMarketOpen && !openTradeExists && formValid && !workingAction;
   const canSend = canPreview && approvalReady;
   const totalTrades = readNumber(data.journalSummary, ["total_trades"], 0);
@@ -283,7 +284,7 @@ export function DashboardShell(_: {
   const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
 
   const orderPayload = (): ClientOrderPayload => ({
-    symbol: "EURUSD",
+    symbol: selectedSymbol === "XAUUSD" ? "XAUUSD" : "EURUSD",
     action: signalAction as "BUY" | "SELL",
     lot: 0.01,
     entry_price: signalEntry,
@@ -295,7 +296,7 @@ export function DashboardShell(_: {
     setTradeError(null);
     setSendResult(null);
     if (!canPreview) {
-      setTradeError("Preview is blocked until a EURUSD AI signal is ready, the market is open, SL/TP are valid, and no demo position is open.");
+      setTradeError("Preview is blocked until an AI signal is ready, the market is open, SL/TP are valid, and no demo position is open.");
       return;
     }
     setWorkingAction("preview");
@@ -660,6 +661,7 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
   const confidence = readNumber(signal, ["confidence"], Number.NaN);
   const riskReward = readNumber(signal, ["risk_reward"], Number.NaN);
   const actionable = action === "BUY" || action === "SELL";
+  const marketStructure = asRecord(signal?.market_structure_state);
   return (
     <button
       className={`rounded-2xl border p-4 text-left transition ${selected ? "border-blue-400 bg-blue-500/10" : "border-slate-800 bg-[#0F172A] hover:border-slate-600"}`}
@@ -675,7 +677,7 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
           {readText(signal, ["execution_status"], "WAITING")}
         </span>
       </div>
-      <p className="mt-3 min-h-10 text-sm font-semibold text-slate-300">{readText(signal, ["reason"], symbol === "NIFTY50" ? "Indian market integration pending." : "No confirmed setup available.")}</p>
+      <p className="mt-3 min-h-10 text-sm font-semibold text-slate-300">{readText(signal, ["setup_reason", "reason"], symbol === "NIFTY50" ? "Indian market integration pending." : "No confirmed setup available.")}</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Metric label="Confidence" value={Number.isFinite(confidence) ? `${confidence.toFixed(0)}%` : "Unavailable"} compact />
         <Metric label="Entry" value={marketNumber(readNumber(signal, ["entry"], Number.NaN), symbol === "XAUUSD" ? 2 : 5)} compact />
@@ -683,6 +685,8 @@ function SignalCard({ symbol, signal, selected, onSelect }: { symbol: ScopedSymb
         <Metric label="Take Profit" value={marketNumber(readNumber(signal, ["take_profit"], Number.NaN), symbol === "XAUUSD" ? 2 : 5)} compact />
         <Metric label="Risk / Reward" value={Number.isFinite(riskReward) ? `${riskReward.toFixed(2)}:1` : "Unavailable"} compact />
         <Metric label="Risk Status" value={readText(signal, ["risk_status"], "NO_SIGNAL").replaceAll("_", " ")} compact />
+        <Metric label="Trend Bias" value={readText(marketStructure, ["trend_bias"], "Unavailable").replaceAll("_", " ")} compact />
+        <Metric label="Structure" value={`${readText(marketStructure, ["higher_timeframe_bias"], "H4?")} / ${readText(marketStructure, ["intermediate_timeframe_bias"], "H1?")} / ${readText(marketStructure, ["lower_timeframe_bias"], "M15?")}`} compact />
       </div>
       <StrategyComponents components={asRecord(signal?.strategy_components)} />
     </button>
@@ -697,17 +701,35 @@ function StrategyComponents({ components }: { components: ApiRecord | null }) {
     ["FVG", components?.fvg],
     ["Order Block", components?.order_block],
     ["Session Valid", components?.session_valid],
+    ["Bias", components?.bias],
+    ["Session", components?.session],
   ] as const;
   return (
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
       {items.map(([label, value]) => (
         <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0B1220] px-3 py-2 text-xs font-bold" key={label}>
           <span className="text-slate-300">{label}</span>
-          <span className={value === true ? "text-emerald-300" : value === false ? "text-rose-300" : "text-slate-500"}>{value === true ? "Yes" : value === false ? "No" : "Unavailable"}</span>
+          <span className={componentTone(value)}>{componentLabel(value)}</span>
         </div>
       ))}
     </div>
   );
+}
+
+function componentLabel(value: unknown): string {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  if (typeof value === "string" && value.trim()) return value.replaceAll("_", " ");
+  if (typeof value === "number" && Number.isFinite(value)) return value.toFixed(2);
+  return "Unavailable";
+}
+
+function componentTone(value: unknown): string {
+  if (value === true) return "text-emerald-300";
+  if (value === false) return "text-rose-300";
+  if (typeof value === "string" && value.trim()) return "text-sky-200";
+  if (typeof value === "number" && Number.isFinite(value)) return "text-slate-200";
+  return "text-slate-500";
 }
 
 function BrokerAccountCard({ brokerId, account, copyPlan }: { brokerId: "STARTRADER" | "FXPRO" | "VANTAGE"; account: ApiRecord | null; copyPlan: ApiRecord | null }) {

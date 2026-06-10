@@ -18,6 +18,11 @@ class SignalHistoryService:
             "timestamp": signal.get("timestamp") or self._timestamp(),
             "confidence": signal.get("confidence"),
             "execution_status": signal.get("execution_status"),
+            "setup_reason": signal.get("setup_reason") or signal.get("reason"),
+            "risk_reward": signal.get("risk_reward"),
+            "signal_hash": signal.get("signal_hash"),
+            "setup_type": self._setup_type(signal),
+            "strategy_components": signal.get("strategy_components"),
         }
         history = self.history()
         history.append(entry)
@@ -41,3 +46,12 @@ class SignalHistoryService:
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _setup_type(self, signal: dict[str, Any]) -> str:
+        components = signal.get("strategy_components") or {}
+        active = [
+            name
+            for name in ["liquidity_sweep", "bos", "choch", "fvg", "order_block"]
+            if components.get(name) is True
+        ]
+        return "+".join(active) if active else "WAIT"

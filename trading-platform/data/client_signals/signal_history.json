@@ -1,709 +1,2189 @@
 [
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:27.882026+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:07:43.737045+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "335860658dd364e1",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:27.904652+00:00",
+    "timestamp": "2026-06-10T08:07:43.756273+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:33.181011+00:00",
+    "timestamp": "2026-06-10T08:07:48.720546+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:33.192008+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:07:48.986671+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "9d38cc4da82f10b6",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:33.211997+00:00",
+    "timestamp": "2026-06-10T08:07:49.006667+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:38.646592+00:00",
+    "timestamp": "2026-06-10T08:07:53.576775+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:38.662603+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:07:53.811225+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "702b22da0825962d",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:38.683083+00:00",
+    "timestamp": "2026-06-10T08:07:53.832225+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:42.968225+00:00",
+    "timestamp": "2026-06-10T08:07:58.583845+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:42.991042+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:07:58.798247+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "cea17dedba6933b8",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:43.012225+00:00",
+    "timestamp": "2026-06-10T08:07:58.815592+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:48.512732+00:00",
+    "timestamp": "2026-06-10T08:08:03.191587+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:48.527747+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:03.431314+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "abc40053ded00bf3",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:48.551602+00:00",
+    "timestamp": "2026-06-10T08:08:03.459411+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:53.765094+00:00",
+    "timestamp": "2026-06-10T08:08:08.510713+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:53.778094+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:08.763484+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "b68b4cc6c60f08a7",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:53.801100+00:00",
+    "timestamp": "2026-06-10T08:08:08.775603+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:58.842123+00:00",
+    "timestamp": "2026-06-10T08:08:13.861760+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:58.853565+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:14.087753+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "e4d651208c11a598",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:39:58.873611+00:00",
+    "timestamp": "2026-06-10T08:08:14.107952+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:03.503207+00:00",
+    "timestamp": "2026-06-10T08:08:18.868151+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:03.523935+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:19.090370+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "1633d952662cdc7b",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:03.544932+00:00",
+    "timestamp": "2026-06-10T08:08:19.117383+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:08.622907+00:00",
+    "timestamp": "2026-06-10T08:08:23.697196+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:08.640534+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:23.938021+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "2db6688d4b036a55",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:08.660526+00:00",
+    "timestamp": "2026-06-10T08:08:23.955924+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:13.192113+00:00",
+    "timestamp": "2026-06-10T08:08:27.908344+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:13.218771+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:28.155050+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "97a2f1f14eb60628",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:13.240842+00:00",
+    "timestamp": "2026-06-10T08:08:28.176490+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:18.734977+00:00",
+    "timestamp": "2026-06-10T08:08:32.894865+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:18.751102+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:33.110653+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "ff17f60988785d78",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:18.772988+00:00",
+    "timestamp": "2026-06-10T08:08:33.135646+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:23.194856+00:00",
+    "timestamp": "2026-06-10T08:08:37.921325+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:23.207865+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:38.156587+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "c682c2a5925d69a0",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:23.236377+00:00",
+    "timestamp": "2026-06-10T08:08:38.180393+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:28.711472+00:00",
+    "timestamp": "2026-06-10T08:08:44.099149+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:28.722479+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:44.343583+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "035b39c3113d60a8",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:28.743480+00:00",
+    "timestamp": "2026-06-10T08:08:44.378686+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:33.478556+00:00",
+    "timestamp": "2026-06-10T08:08:48.207872+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:33.489600+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:48.439262+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "b35071611b408590",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:33.510066+00:00",
+    "timestamp": "2026-06-10T08:08:48.452265+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:38.640486+00:00",
+    "timestamp": "2026-06-10T08:08:52.931677+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:38.656361+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:53.146789+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "1f4868974cb1cb3d",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:38.680368+00:00",
+    "timestamp": "2026-06-10T08:08:53.156903+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:42.857736+00:00",
+    "timestamp": "2026-06-10T08:08:58.870362+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:42.872301+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:08:59.089178+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "05e8fb3d82bf7301",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:42.894296+00:00",
+    "timestamp": "2026-06-10T08:08:59.109018+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:48.678226+00:00",
+    "timestamp": "2026-06-10T08:09:03.523139+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:48.699752+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:03.750379+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "de043e6103433908",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:48.722984+00:00",
+    "timestamp": "2026-06-10T08:09:03.771485+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:53.348167+00:00",
+    "timestamp": "2026-06-10T08:09:08.885377+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:53.359606+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:09.130688+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "50408eb9a6a6ebee",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:53.370334+00:00",
+    "timestamp": "2026-06-10T08:09:09.156116+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:58.697403+00:00",
+    "timestamp": "2026-06-10T08:09:13.880694+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:58.712918+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:14.103088+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "38cc329433b6ddbc",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:40:58.735303+00:00",
+    "timestamp": "2026-06-10T08:09:14.119090+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:03.142841+00:00",
+    "timestamp": "2026-06-10T08:09:18.551296+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:03.164062+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:18.770092+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "c0044dff6a28142f",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:03.187670+00:00",
+    "timestamp": "2026-06-10T08:09:18.783203+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:08.310806+00:00",
+    "timestamp": "2026-06-10T08:09:23.585030+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:08.325413+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:23.815880+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "b77ab319e934df42",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:08.345748+00:00",
+    "timestamp": "2026-06-10T08:09:23.830880+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:13.133210+00:00",
+    "timestamp": "2026-06-10T08:09:28.409807+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:13.145345+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:28.628877+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "90db6da341712adf",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:13.169102+00:00",
+    "timestamp": "2026-06-10T08:09:28.656400+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:18.232195+00:00",
+    "timestamp": "2026-06-10T08:09:33.531188+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:18.255418+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:33.770290+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "b9ece572bc4d0b7d",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:18.275959+00:00",
+    "timestamp": "2026-06-10T08:09:33.793115+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:23.551795+00:00",
+    "timestamp": "2026-06-10T08:09:38.702962+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:23.563230+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:38.930255+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "d947d4e21854aff8",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:23.585241+00:00",
+    "timestamp": "2026-06-10T08:09:38.950253+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:27.970477+00:00",
+    "timestamp": "2026-06-10T08:09:43.192741+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:27.989046+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:43.431979+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "b452424bc94661f5",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:28.009042+00:00",
+    "timestamp": "2026-06-10T08:09:43.442330+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:33.695696+00:00",
+    "timestamp": "2026-06-10T08:09:48.889226+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:33.717943+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:49.116267+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "b0635c7f5166e6da",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:33.741614+00:00",
+    "timestamp": "2026-06-10T08:09:49.136283+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:38.310100+00:00",
+    "timestamp": "2026-06-10T08:09:53.533685+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:38.323121+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:09:53.771052+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "931ccf1f7d1ad9fb",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:38.333211+00:00",
+    "timestamp": "2026-06-10T08:09:53.794966+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:43.702007+00:00",
+    "timestamp": "2026-06-10T08:10:01.762037+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:43.727036+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:01.997325+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "cc072e40d6e3e43c",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:43.746027+00:00",
+    "timestamp": "2026-06-10T08:10:02.021755+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:48.950802+00:00",
+    "timestamp": "2026-06-10T08:10:09.565449+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:48.965932+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:09.811956+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "2307f6584da0eee0",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:48.986527+00:00",
+    "timestamp": "2026-06-10T08:10:09.833949+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:53.635314+00:00",
+    "timestamp": "2026-06-10T08:10:13.530988+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:53.656400+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:13.775686+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "8241eb281e5af79a",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:53.676404+00:00",
+    "timestamp": "2026-06-10T08:10:13.798694+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:58.138138+00:00",
+    "timestamp": "2026-06-10T08:10:18.838138+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:58.152100+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:19.077325+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "3168253a4231e241",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:41:58.171139+00:00",
+    "timestamp": "2026-06-10T08:10:19.097349+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:03.670631+00:00",
+    "timestamp": "2026-06-10T08:10:23.718729+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:03.684741+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:23.949946+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "788372c841a34a87",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:03.703739+00:00",
+    "timestamp": "2026-06-10T08:10:23.967273+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:08.050350+00:00",
+    "timestamp": "2026-06-10T08:10:28.319013+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:08.066465+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:28.546482+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "d881f4df3b2fe6c9",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:08.088191+00:00",
+    "timestamp": "2026-06-10T08:10:28.573480+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   },
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:13.758118+00:00",
+    "timestamp": "2026-06-10T08:10:33.686003+00:00",
     "confidence": null,
-    "execution_status": "WAITING"
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "6902284852a0d6fb",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:13.785684+00:00",
-    "confidence": null,
-    "execution_status": "WAITING"
+    "signal": "SELL",
+    "timestamp": "2026-06-10T08:10:33.903735+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "a58b6acce6e99ec2",
+    "setup_type": "bos+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": true,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
   },
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T07:42:13.806681+00:00",
+    "timestamp": "2026-06-10T08:10:33.921733+00:00",
     "confidence": null,
-    "execution_status": "BLOCKED"
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
   }
 ]

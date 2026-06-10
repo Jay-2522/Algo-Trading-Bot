@@ -17,6 +17,11 @@ async def get_current_client_signal_engine_signals() -> dict:
     return client_signal_engine.current()
 
 
+@router.get("/latest")
+async def get_latest_client_signal_engine_signals() -> dict:
+    return client_signal_engine.latest()
+
+
 @router.post("/refresh")
 async def refresh_client_signal_engine() -> dict:
     return client_signal_engine.refresh()

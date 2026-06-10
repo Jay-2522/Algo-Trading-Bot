@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.strategy.client_signal_center_service import ClientSignalCenterService
+from backend.strategy.real_signal_engine_service import RealSignalEngineService
 from backend.strategy.signal_history_service import SignalHistoryService
 
 
@@ -13,16 +14,19 @@ class ClientSignalEngine:
     def __init__(
         self,
         signal_center_service: ClientSignalCenterService | None = None,
+        real_signal_service: RealSignalEngineService | None = None,
         history_service: SignalHistoryService | None = None,
     ) -> None:
         self.signal_center_service = signal_center_service or ClientSignalCenterService()
+        self.real_signal_service = real_signal_service or RealSignalEngineService()
         self.history_service = history_service or SignalHistoryService()
 
     def status(self) -> dict[str, Any]:
         return {
             "status": "READY",
-            "mode": "STRATEGY_OUTPUT_NORMALIZATION_ONLY",
+            "mode": "REAL_SMC_MULTI_TIMEFRAME_SIGNAL_ENGINE",
             "symbols": list(self.scoped_symbols),
+            "strategy_engine": self.real_signal_service.status(),
             "history_count": len(self.history_service.history(500)),
             "simulation_only": True,
             "live_execution_enabled": False,
@@ -51,7 +55,7 @@ class ClientSignalEngine:
         if normalized == "NIFTY50":
             signal = self._nifty_pending()
         elif normalized in {"EURUSD", "XAUUSD"}:
-            signal = self._from_existing_center(normalized)
+            signal = self.real_signal_service.generate_signal(normalized)
         else:
             signal = self._wait(normalized, "Unsupported client dashboard symbol.", "INSUFFICIENT_DATA", "BLOCKED")
         if record_history:
@@ -63,6 +67,11 @@ class ClientSignalEngine:
 
     def history_for_symbol(self, symbol: str, limit: int = 100) -> list[dict[str, Any]]:
         return self.history_service.history_for_symbol(symbol, limit)
+
+    def latest(self, symbol: str | None = None) -> dict[str, Any]:
+        if symbol:
+            return self.real_signal_service.latest(symbol)
+        return self.real_signal_service.latest()
 
     def _from_existing_center(self, symbol: str) -> dict[str, Any]:
         source = self.signal_center_service.signal_for_symbol(symbol)

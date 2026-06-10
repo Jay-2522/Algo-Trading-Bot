@@ -28,6 +28,7 @@ def verify_signal_audit_route() -> bool:
     response = client.get("/client-signals-engine/diagnostics/XAUUSD")
     payload = response.json()
     audit = payload.get("approval_audit", {})
+    missing = payload.get("missing_requirements", [])
     required = [
         "bos_result",
         "choch_result",
@@ -38,7 +39,13 @@ def verify_signal_audit_route() -> bool:
         "confidence_result",
         "final_approval_reason",
     ]
-    passed = response.status_code == 200 and all(item in audit for item in required)
+    passed = (
+        response.status_code == 200
+        and payload.get("status_level") in {"WAIT", "WATCHLIST", "READY_FOR_PREVIEW", "REJECTED"}
+        and isinstance(payload.get("what_needs_to_happen_next"), str)
+        and isinstance(missing, list)
+        and all(item in audit for item in required)
+    )
     return show("Signal diagnostics explain approve/wait/reject decisions", passed, str(audit))
 
 
@@ -52,6 +59,10 @@ def verify_dashboard_preview_flow() -> bool:
         "5000",
         "READY_SIGNAL_HOLD_SECONDS = 30",
         "Valid for",
+        "What needs to happen next?",
+        "Missing Requirements",
+        "watchlistSignal",
+        "2000",
         "Preview Trade",
         "PreviewPanel",
         "Confirm Demo Order",

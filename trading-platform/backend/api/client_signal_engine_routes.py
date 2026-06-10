@@ -28,9 +28,12 @@ async def get_client_signal_engine_diagnostics(symbol: str) -> dict:
     return {
         "symbol": signal.get("symbol"),
         "signal": signal.get("signal"),
+        "status_level": signal.get("status_level"),
         "risk_status": signal.get("risk_status"),
         "execution_status": signal.get("execution_status"),
         "setup_reason": signal.get("setup_reason"),
+        "what_needs_to_happen_next": signal.get("what_needs_to_happen_next"),
+        "missing_requirements": signal.get("missing_requirements"),
         "approval_audit": signal.get("approval_audit"),
         "strategy_components": signal.get("strategy_components"),
         "quality_score": signal.get("quality_score"),

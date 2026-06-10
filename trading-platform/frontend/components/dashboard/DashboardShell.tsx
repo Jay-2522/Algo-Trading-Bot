@@ -8,8 +8,11 @@ import {
   fetchClientOperatingDashboard,
   fetchClientMarketPrices,
   fetchClientSignals,
+  approveExecutionModeSignal,
   previewClientDemoTrade,
+  rejectExecutionModeSignal,
   sendGuardedClientDemoTrade,
+  setExecutionMode,
   syncClientLifecycle,
   syncClientPositionsToJournal,
   type ApiRecord,
@@ -33,6 +36,7 @@ type DashboardData = {
   journalSummary: ApiRecord | null;
   outcomeSummary: ApiRecord | null;
   guardedStatus: ApiRecord | null;
+  executionMode: ApiRecord | null;
 };
 
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
@@ -56,6 +60,7 @@ const emptyData: DashboardData = {
   journalSummary: null,
   outcomeSummary: null,
   guardedStatus: null,
+  executionMode: null,
 };
 
 function asRecord(value: unknown): ApiRecord | null {
@@ -188,6 +193,10 @@ function readySignal(signal: ApiRecord | null): boolean {
   return readText(signal, ["execution_status"], "") === "READY_FOR_PREVIEW" && readText(signal, ["risk_status"], "") === "APPROVED";
 }
 
+function watchlistSignal(signal: ApiRecord | null): boolean {
+  return readText(signal, ["status_level"], "").toUpperCase() === "WATCHLIST";
+}
+
 function signalHoldRemaining(signal: ApiRecord | null, nowMs: number): number {
   const expiresAt = readNumber(signal, ["hold_expires_at_ms"], Number.NaN);
   if (!Number.isFinite(expiresAt)) return 0;
@@ -255,25 +264,28 @@ export function DashboardShell(_: {
     try {
       const result = await fetchClientOperatingDashboard();
       const payload = result.data;
-      setData({
-        account: asRecord(payload.account),
-        eurusdTick: asRecord(payload.eurusdTick),
-        xauusdTick: asRecord(payload.xauusdTick),
-        marketScope: Array.isArray(payload.marketScope) ? (payload.marketScope.filter((item) => asRecord(item)) as ApiRecord[]) : [],
-        clientSignals: recordsFrom(payload.clientSignals, "signals"),
-        brokerAccounts: recordsFrom(payload.brokerAccounts, "accounts"),
-        brokerCopyPlans: recordsFrom(payload.brokerCopyReadiness, "plans"),
-        currentTerminalAccount: asRecord(asRecord(payload.brokerAccounts)?.current_terminal_account),
-        vantageXauusdStatus: asRecord(payload.vantageXauusdStatus),
-        vantageXauusdPreview: asRecord(payload.vantageXauusdPreview),
-        openPositions: recordsFrom(payload.openPositions, "positions"),
-        recentTrades: Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : [],
-        journalSummary: asRecord(payload.journalSummary),
-        outcomeSummary: asRecord(payload.outcomeSummary),
-        guardedStatus: asRecord(payload.guardedStatus),
-      });
+      setData((current) => ({
+        account: "account" in payload ? asRecord(payload.account) : current.account,
+        eurusdTick: "eurusdTick" in payload ? asRecord(payload.eurusdTick) : current.eurusdTick,
+        xauusdTick: "xauusdTick" in payload ? asRecord(payload.xauusdTick) : current.xauusdTick,
+        marketScope: "marketScope" in payload && Array.isArray(payload.marketScope) ? (payload.marketScope.filter((item) => asRecord(item)) as ApiRecord[]) : current.marketScope,
+        clientSignals: "clientSignals" in payload ? recordsFrom(payload.clientSignals, "signals") : current.clientSignals,
+        brokerAccounts: "brokerAccounts" in payload ? recordsFrom(payload.brokerAccounts, "accounts") : current.brokerAccounts,
+        brokerCopyPlans: "brokerCopyReadiness" in payload ? recordsFrom(payload.brokerCopyReadiness, "plans") : current.brokerCopyPlans,
+        currentTerminalAccount: "brokerAccounts" in payload ? asRecord(asRecord(payload.brokerAccounts)?.current_terminal_account) : current.currentTerminalAccount,
+        vantageXauusdStatus: "vantageXauusdStatus" in payload ? asRecord(payload.vantageXauusdStatus) : current.vantageXauusdStatus,
+        vantageXauusdPreview: "vantageXauusdPreview" in payload ? asRecord(payload.vantageXauusdPreview) : current.vantageXauusdPreview,
+        openPositions: "openPositions" in payload ? recordsFrom(payload.openPositions, "positions") : current.openPositions,
+        recentTrades: "recentTrades" in payload && Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : current.recentTrades,
+        journalSummary: "journalSummary" in payload ? asRecord(payload.journalSummary) : current.journalSummary,
+        outcomeSummary: "outcomeSummary" in payload ? asRecord(payload.outcomeSummary) : current.outcomeSummary,
+        guardedStatus: "guardedStatus" in payload ? asRecord(payload.guardedStatus) : current.guardedStatus,
+        executionMode: "executionMode" in payload ? asRecord(payload.executionMode) : current.executionMode,
+      }));
       setErrors(result.errors);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
     } finally {
       setLoading(false);
       requestInFlight.current = false;
@@ -285,11 +297,16 @@ export function DashboardShell(_: {
     priceRequestInFlight.current = true;
     try {
       const prices = await fetchClientMarketPrices();
-      setData((current) => ({
-        ...current,
-        eurusdTick: asRecord(prices.eurusdTick),
-        xauusdTick: asRecord(prices.xauusdTick),
-      }));
+      if (prices.ok) {
+        setData((current) => ({
+          ...current,
+          eurusdTick: asRecord(prices.eurusdTick),
+          xauusdTick: asRecord(prices.xauusdTick),
+        }));
+      }
+      setErrors(prices.errors);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
     } finally {
       priceRequestInFlight.current = false;
     }
@@ -300,10 +317,15 @@ export function DashboardShell(_: {
     signalRequestInFlight.current = true;
     try {
       const signals = await fetchClientSignals();
-      setData((current) => ({
-        ...current,
-        clientSignals: recordsFrom(signals, "signals"),
-      }));
+      if (signals.ok) {
+        setData((current) => ({
+          ...current,
+          clientSignals: recordsFrom(signals.signals, "signals"),
+        }));
+      }
+      setErrors(signals.errors);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
     } finally {
       signalRequestInFlight.current = false;
     }
@@ -322,6 +344,12 @@ export function DashboardShell(_: {
     const interval = window.setInterval(() => void refreshSignals(), 5000);
     return () => window.clearInterval(interval);
   }, [refreshSignals]);
+
+  useEffect(() => {
+    if (!data.clientSignals.some((signal) => watchlistSignal(signal))) return;
+    const interval = window.setInterval(() => void refreshSignals(), 2000);
+    return () => window.clearInterval(interval);
+  }, [data.clientSignals, refreshSignals]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -515,6 +543,37 @@ export function DashboardShell(_: {
     }
   }
 
+  async function handleExecutionModeChange(mode: "AUTO" | "APPROVAL") {
+    setWorkingAction(`execution-mode-${mode.toLowerCase()}`);
+    setTradeError(null);
+    try {
+      const result = await setExecutionMode(mode);
+      setData((current) => ({ ...current, executionMode: result }));
+      await refreshSignals();
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : "Execution mode update failed.");
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
+  async function handleApprovalDecision(action: "approve" | "reject", approvalId: string) {
+    setWorkingAction(`${action}-${approvalId}`);
+    setTradeError(null);
+    try {
+      if (action === "approve") {
+        await approveExecutionModeSignal(approvalId);
+      } else {
+        await rejectExecutionModeSignal(approvalId);
+      }
+      await refresh();
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : `Signal ${action} failed.`);
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#050816] text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -580,6 +639,15 @@ export function DashboardShell(_: {
           </div>
           <p className="mt-3 text-xs text-slate-500">{lastUpdated ? `Prices refresh every 1s. AI signals refresh every 5s. Last full update ${lastUpdated}.` : "Preparing dashboard data."}</p>
         </header>
+
+        <ExecutionModePanel
+          mode={data.executionMode}
+          nowMs={nowMs}
+          workingAction={workingAction}
+          onApprove={(approvalId) => void handleApprovalDecision("approve", approvalId)}
+          onReject={(approvalId) => void handleApprovalDecision("reject", approvalId)}
+          onSetMode={(mode) => void handleExecutionModeChange(mode)}
+        />
 
         <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
           <SectionTitle eyebrow="Market Overview" title="Scoped Instruments" />
@@ -717,7 +785,8 @@ export function DashboardShell(_: {
           </div>
           {errors.length > 0 && (
             <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-              Some dashboard data is unavailable. Values marked unavailable are not estimated.
+              <strong className="block text-amber-50">Backend unavailable</strong>
+              Some dashboard data is unavailable. Last successful values remain visible where available.
             </div>
           )}
         </section>
@@ -765,6 +834,117 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
       <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</p>
       <strong className={`mt-2 block break-words ${compact ? "text-base" : "text-xl"} ${valueClass}`}>{value}</strong>
     </div>
+  );
+}
+
+function ExecutionModePanel({
+  mode,
+  nowMs,
+  workingAction,
+  onApprove,
+  onReject,
+  onSetMode,
+}: {
+  mode: ApiRecord | null;
+  nowMs: number;
+  workingAction: string | null;
+  onApprove: (approvalId: string) => void;
+  onReject: (approvalId: string) => void;
+  onSetMode: (mode: "AUTO" | "APPROVAL") => void;
+}) {
+  const config = asRecord(mode?.config);
+  const executionMode = readText(config, ["execution_mode"], readText(mode, ["execution_mode"], "APPROVAL")) as "AUTO" | "APPROVAL";
+  const pending = Array.isArray(mode?.pending_approvals) ? (mode.pending_approvals.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const safety = asRecord(mode?.safety_flags);
+  const blockedAutoAttempts = Array.isArray(mode?.blocked_auto_attempts) ? (mode.blocked_auto_attempts.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const lastAuto = asRecord(mode?.last_auto_executed_signal);
+  const allowedSymbols = Array.isArray(safety?.allowed_symbols) ? safety.allowed_symbols.join(", ") : "EURUSD, XAUUSD";
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <SectionTitle eyebrow="Execution Mode" title={`Current Mode: ${executionMode}`} />
+        <div className="flex flex-wrap gap-2">
+          <button className={`rounded-xl px-4 py-2 text-sm font-black ${executionMode === "APPROVAL" ? "bg-emerald-500 text-slate-950" : "border border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"}`} disabled={workingAction !== null} onClick={() => onSetMode("APPROVAL")} type="button">
+            Approval Mode
+          </button>
+          <button className={`rounded-xl px-4 py-2 text-sm font-black ${executionMode === "AUTO" ? "bg-amber-400 text-slate-950" : "border border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"}`} disabled={workingAction !== null} onClick={() => onSetMode("AUTO")} type="button">
+            Auto Mode
+          </button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <Metric label="Demo Only" value={readText(safety, ["demo_only"], "true") === "true" ? "Yes" : "No"} compact />
+        <Metric label="Live Trading" value={readText(config, ["live_execution_enabled"], "false") === "true" ? "Enabled" : "Disabled"} valueClass="text-emerald-300" compact />
+        <Metric label="Broker Execution" value={readText(config, ["broker_execution_enabled"], "false") === "true" ? "Enabled" : "Disabled"} valueClass="text-emerald-300" compact />
+        <Metric label="Max Lot" value={String(readNumber(config, ["max_lot_per_trade"], 0.01))} compact />
+        <Metric label="Allowed Symbols" value={allowedSymbols} compact />
+      </div>
+      {executionMode === "AUTO" ? (
+        <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/10 p-4">
+          <p className="text-sm font-black uppercase tracking-[0.16em] text-amber-200">Auto Mode Active</p>
+          <p className="mt-2 text-sm font-bold text-amber-50">Ready approved signals are revalidated and sent only through the guarded demo sender. Live and broker execution remain disabled.</p>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <Metric label="Last Auto Signal" value={lastAuto ? `${readText(lastAuto, ["symbol"], "Signal")} ${readText(lastAuto, ["signal_hash"], "")}` : "None yet"} compact />
+            <Metric label="Blocked Auto Attempts" value={String(blockedAutoAttempts.length)} compact />
+          </div>
+          {blockedAutoAttempts.length > 0 && (
+            <div className="mt-3 grid gap-2">
+              {blockedAutoAttempts.slice(0, 3).map((item, index) => (
+                <p className="rounded-lg border border-amber-400/20 bg-[#0F172A] px-3 py-2 text-xs font-bold text-amber-100" key={`${readText(item, ["signal_hash"], "blocked")}-${index}`}>
+                  {readText(item, ["event"], "BLOCKED")} {readText(item, ["symbol"], "")}: {Array.isArray(asRecord(item.details)?.blockers) ? (asRecord(item.details)?.blockers as unknown[]).join(", ") : "See audit history."}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Pending Approvals</p>
+          {pending.length === 0 ? (
+            <EmptyState text="No signals are pending manual approval." />
+          ) : (
+            <div className="mt-3 grid gap-3">
+              {pending.map((approval) => {
+                const signal = asRecord(approval.signal);
+                const approvalId = readText(approval, ["approval_id"], "");
+                const expiresAt = new Date(readText(approval, ["expires_at"], ""));
+                const remaining = Number.isNaN(expiresAt.getTime()) ? 0 : Math.max(0, Math.ceil((expiresAt.getTime() - nowMs) / 1000));
+                return (
+                  <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4" key={approvalId}>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-200">Pending Approval</p>
+                        <h3 className="mt-1 text-xl font-black text-white">
+                          {readText(approval, ["symbol"], readText(signal, ["symbol"], "Signal"))} {readText(approval, ["action"], readText(signal, ["signal"], ""))}
+                        </h3>
+                        <p className="mt-1 text-sm font-bold text-slate-400">Expires in {remaining}s</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={!approvalId || workingAction !== null || remaining <= 0} onClick={() => onApprove(approvalId)} type="button">
+                          Approve
+                        </button>
+                        <button className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:border-slate-700 disabled:text-slate-500" disabled={!approvalId || workingAction !== null} onClick={() => onReject(approvalId)} type="button">
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                      <Metric label="Entry" value={marketNumber(readNumber(approval, ["entry"], Number.NaN), readText(approval, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+                      <Metric label="SL" value={marketNumber(readNumber(approval, ["stop_loss"], Number.NaN), readText(approval, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+                      <Metric label="TP" value={marketNumber(readNumber(approval, ["take_profit"], Number.NaN), readText(approval, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+                      <Metric label="RR" value={`${readNumber(approval, ["risk_reward"], 0).toFixed(2)}:1`} compact />
+                      <Metric label="Confidence" value={percent(readNumber(approval, ["confidence"], Number.NaN))} compact />
+                      <Metric label="Broker" value={readText(approval, ["broker"], "VANTAGE_DEMO")} compact />
+                    </div>
+                    <p className="mt-3 text-xs font-bold text-slate-500">Account: {readText(asRecord(approval.account), ["account_login"], "Unavailable")}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -907,6 +1087,8 @@ function SignalCard({
   const riskReward = readNumber(signal, ["risk_reward"], Number.NaN);
   const actionable = action === "BUY" || action === "SELL";
   const marketStructure = asRecord(signal?.market_structure_state);
+  const statusLevel = readText(signal, ["status_level"], readText(signal, ["execution_status"], "WAIT")).toUpperCase();
+  const missingRequirements = Array.isArray(signal?.missing_requirements) ? (signal.missing_requirements.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   return (
     <section
       className={`rounded-2xl border p-4 text-left transition ${selected ? "border-blue-400 bg-blue-500/10" : "border-slate-800 bg-[#0F172A] hover:border-slate-600"}`}
@@ -916,12 +1098,16 @@ function SignalCard({
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{symbol}</p>
           <strong className={`mt-2 block text-2xl ${actionable ? "text-emerald-300" : "text-slate-100"}`}>{action}</strong>
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(readText(signal, ["execution_status"], "WAITING"))}`}>
-          {readText(signal, ["execution_status"], "WAITING")}
+        <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(statusLevel)}`}>
+          {statusLevel}
         </span>
       </div>
       {readySignal(signal) && validForSeconds > 0 && <p className="mt-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Valid for {validForSeconds}s</p>}
       <p className="mt-3 min-h-10 text-sm font-semibold text-slate-300">{readText(signal, ["setup_reason", "reason"], symbol === "NIFTY50" ? "Indian market integration pending." : "No confirmed setup available.")}</p>
+      <div className="mt-3 rounded-xl border border-slate-800 bg-[#0B1220] p-3">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">What needs to happen next?</p>
+        <p className="mt-2 text-sm font-bold text-sky-100">{readText(signal, ["what_needs_to_happen_next"], "Waiting for strategy confirmation.")}</p>
+      </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Metric label="Confidence" value={Number.isFinite(confidence) ? `${confidence.toFixed(0)}%` : "Unavailable"} compact />
         <Metric label="Entry" value={marketNumber(readNumber(signal, ["entry"], Number.NaN), symbol === "XAUUSD" ? 2 : 5)} compact />
@@ -933,6 +1119,16 @@ function SignalCard({
         <Metric label="Structure" value={`${readText(marketStructure, ["higher_timeframe_bias"], "H4?")} / ${readText(marketStructure, ["intermediate_timeframe_bias"], "H1?")} / ${readText(marketStructure, ["lower_timeframe_bias"], "M15?")}`} compact />
       </div>
       <StrategyComponents components={asRecord(signal?.strategy_components)} />
+      {missingRequirements.length > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-200">Missing Requirements</p>
+          <div className="mt-2 grid gap-1 text-xs font-bold text-amber-100">
+            {missingRequirements.slice(0, 6).map((item) => (
+              <p key={readText(item, ["code"], readText(item, ["label"], "Requirement"))}>{readText(item, ["label"], readText(item, ["code"], "Requirement missing"))}</p>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <button className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" onClick={onSelect} type="button">
           Select

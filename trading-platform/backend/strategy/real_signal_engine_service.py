@@ -98,12 +98,17 @@ class RealSignalEngineService:
         risk_status = "APPROVED" if tradeable else ("REJECTED" if score["confidence"] >= self.watchlist_confidence else "NO_SIGNAL")
         if signal_action == "WAIT":
             trade_plan = {}
+        missing_requirements = self._missing_requirements(direction, score, smc, trade_plan, session, spread)
+        status_level = self._status_level(signal_action, score, missing_requirements)
 
         signal = {
             "symbol": normalized,
             "signal": signal_action,
+            "status_level": status_level,
             "confidence": score["confidence"] if score["confidence"] >= self.watchlist_confidence else None,
             "reason": self._reason_text(reasons),
+            "what_needs_to_happen_next": self._next_steps(missing_requirements, score),
+            "missing_requirements": missing_requirements,
             "setup_reason": self._reason_text(reasons),
             "entry": trade_plan.get("entry"),
             "stop_loss": trade_plan.get("stop_loss"),
@@ -131,7 +136,7 @@ class RealSignalEngineService:
                 "volatility_quality": volatility["quality"],
             },
             "quality_score": score,
-            "approval_audit": self._approval_audit(signal_action, score, smc, trade_plan, session, spread, reasons),
+            "approval_audit": self._approval_audit(signal_action, score, smc, trade_plan, session, spread, reasons, missing_requirements),
             "candle_source": feed["candle_source"],
             "signal_hash": self._signal_hash(normalized, signal_action, trade_plan, score),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
@@ -407,6 +412,7 @@ class RealSignalEngineService:
         session: dict[str, Any],
         spread: dict[str, Any],
         reasons: list[str],
+        missing_requirements: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         rr = self._number(trade_plan.get("risk_reward"))
         approved = signal_action in {"BUY", "SELL"}
@@ -423,19 +429,93 @@ class RealSignalEngineService:
             "rr": rr,
             "confidence_result": "PASS" if score["confidence"] >= self.tradeable_confidence else "FAIL",
             "confidence": score["confidence"],
+            "confidence_gap_to_75": max(0, self.tradeable_confidence - int(score["confidence"])),
             "confidence_threshold": self.tradeable_confidence,
             "session_result": "PASS" if session["valid"] else "FAIL",
             "spread_result": "PASS" if spread["acceptable"] else "FAIL",
+            "missing_requirements": missing_requirements or [],
             "approval_model": "weighted_smc_score",
             "approval_note": "CHOCH and liquidity sweep add confidence but are not mandatory when weighted trend, BOS, FVG, order block, session, spread, volatility, and RR satisfy the approval threshold.",
         }
+
+    def _missing_requirements(
+        self,
+        direction: str,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        trade_plan: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        missing: list[dict[str, Any]] = []
+        confidence_gap = max(0, self.tradeable_confidence - int(score["confidence"]))
+        if confidence_gap > 0:
+            missing.append({"code": "CONFIDENCE_GAP", "label": f"Confidence needs +{confidence_gap} to reach 75.", "gap": confidence_gap})
+        if direction not in {"BUY", "SELL"}:
+            missing.append({"code": "TREND_ALIGNMENT_MISSING", "label": "M15/H1/H4 trend alignment is missing."})
+        if not smc["bos"]:
+            missing.append({"code": "BOS_MISSING", "label": "BOS confirmation is missing."})
+        if not smc["liquidity_sweep"]:
+            missing.append({"code": "LIQUIDITY_SWEEP_MISSING", "label": "Liquidity sweep is missing."})
+        rr = self._number(trade_plan.get("risk_reward"))
+        if rr is None:
+            missing.append({"code": "RR_MISSING", "label": "Risk/reward is missing because the trade plan is incomplete."})
+        elif rr < self.min_rr:
+            missing.append({"code": "RR_LOW", "label": f"Risk/reward {rr:.2f}:1 is below {self.min_rr:.2f}:1.", "rr": rr})
+        if not spread["acceptable"]:
+            missing.append({"code": "SPREAD_TOO_HIGH", "label": "Spread is too high or unavailable.", "spread": spread.get("spread"), "max_spread": spread.get("max_spread")})
+        if not session["valid"]:
+            missing.append({"code": "SESSION_INVALID", "label": "Current time is outside the valid London/New York session."})
+        entry = self._number(trade_plan.get("entry"))
+        stop_loss = self._number(trade_plan.get("stop_loss"))
+        take_profit = self._number(trade_plan.get("take_profit"))
+        if direction == "BUY" and not (entry and stop_loss and take_profit and stop_loss < entry < take_profit):
+            missing.append({"code": "SL_TP_INVALID", "label": "BUY SL/TP placement is invalid or incomplete."})
+        if direction == "SELL" and not (entry and stop_loss and take_profit and take_profit < entry < stop_loss):
+            missing.append({"code": "SL_TP_INVALID", "label": "SELL SL/TP placement is invalid or incomplete."})
+        return missing
+
+    def _status_level(self, signal_action: str, score: dict[str, Any], missing_requirements: list[dict[str, Any]]) -> str:
+        if signal_action in {"BUY", "SELL"}:
+            return "READY_FOR_PREVIEW"
+        confidence = int(score.get("confidence", 0))
+        if self.watchlist_confidence <= confidence < self.tradeable_confidence:
+            return "WATCHLIST"
+        if any(item.get("code") in {"SPREAD_TOO_HIGH", "SL_TP_INVALID"} for item in missing_requirements):
+            return "REJECTED"
+        return "WAIT"
+
+    def _next_steps(self, missing_requirements: list[dict[str, Any]], score: dict[str, Any]) -> str:
+        if not missing_requirements:
+            return "All preview requirements are currently satisfied."
+        priority = [item["code"] for item in missing_requirements[:3]]
+        names = {
+            "CONFIDENCE_GAP": f"confidence to improve by {max(0, self.tradeable_confidence - int(score['confidence']))}",
+            "BOS_MISSING": "BOS confirmation",
+            "LIQUIDITY_SWEEP_MISSING": "liquidity sweep",
+            "RR_MISSING": "valid RR",
+            "RR_LOW": "higher RR",
+            "SPREAD_TOO_HIGH": "spread to narrow",
+            "SESSION_INVALID": "valid London/New York session",
+            "SL_TP_INVALID": "valid SL/TP placement",
+            "TREND_ALIGNMENT_MISSING": "M15/H1/H4 trend alignment",
+        }
+        readable = [names.get(code, code.replace("_", " ").lower()) for code in priority]
+        if len(readable) == 1:
+            needed = readable[0]
+        else:
+            needed = ", ".join(readable[:-1]) + f" and {readable[-1]}"
+        return f"Need {needed}. Current confidence {score['confidence']}/75."
 
     def _wait(self, symbol: str, reasons: list[str], risk_status: str = "NO_SIGNAL", feed: dict[str, Any] | None = None) -> dict[str, Any]:
         return {
             "symbol": symbol,
             "signal": "WAIT",
+            "status_level": "REJECTED" if risk_status in {"INSUFFICIENT_DATA", "REJECTED"} else "WAIT",
             "confidence": None,
             "reason": self._reason_text(reasons),
+            "what_needs_to_happen_next": self._reason_text(reasons),
+            "missing_requirements": [{"code": "INSUFFICIENT_DATA", "label": self._reason_text(reasons)}],
             "setup_reason": self._reason_text(reasons),
             "entry": None,
             "stop_loss": None,
@@ -460,6 +540,7 @@ class RealSignalEngineService:
                 "final_decision": "WAIT",
                 "final_approval_reason": self._reason_text(reasons),
                 "confidence_result": "INSUFFICIENT_DATA",
+                "missing_requirements": [{"code": "INSUFFICIENT_DATA", "label": self._reason_text(reasons)}],
             },
             "candle_source": (feed or {}).get("candle_source", {"symbol": symbol, "timeframes": {}}),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",

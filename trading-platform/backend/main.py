@@ -26,6 +26,7 @@ from backend.api.demo_validation_routes import router as demo_validation_router
 from backend.api.deployment_routes import router as deployment_router
 from backend.api.execution_confirmation_routes import router as execution_confirmation_router
 from backend.api.execution_dashboard_routes import router as execution_dashboard_router
+from backend.api.execution_mode_routes import router as execution_mode_router
 from backend.api.execution_risk_routes import router as execution_risk_router
 from backend.api.execution_routes import router as execution_router
 from backend.api.execution_queue_routes import router as execution_queue_router
@@ -124,6 +125,7 @@ app.include_router(demo_validation_router)
 app.include_router(deployment_router)
 app.include_router(execution_confirmation_router)
 app.include_router(execution_dashboard_router)
+app.include_router(execution_mode_router)
 app.include_router(execution_risk_router)
 app.include_router(strategy_router)
 app.include_router(strategy_execution_bridge_router)

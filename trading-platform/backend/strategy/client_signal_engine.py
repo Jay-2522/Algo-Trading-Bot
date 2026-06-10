@@ -20,6 +20,7 @@ class ClientSignalEngine:
         self.signal_center_service = signal_center_service or ClientSignalCenterService()
         self.real_signal_service = real_signal_service or RealSignalEngineService()
         self.history_service = history_service or SignalHistoryService()
+        self.execution_mode_service: Any | None = None
 
     def status(self) -> dict[str, Any]:
         return {
@@ -37,9 +38,12 @@ class ClientSignalEngine:
 
     def current(self, record_history: bool = True) -> dict[str, Any]:
         signals = [self.signal_for_symbol(symbol, record_history=record_history) for symbol in self.scoped_symbols]
+        execution_mode_decisions = [self.execution_mode_service.observe_signal(signal) for signal in signals] if self.execution_mode_service is not None else []
         return {
             "status": "READY",
             "signals": signals,
+            "execution_mode": self.execution_mode_service.status() if self.execution_mode_service is not None else None,
+            "execution_mode_decisions": execution_mode_decisions,
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,

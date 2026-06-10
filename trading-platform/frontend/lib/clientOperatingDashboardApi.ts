@@ -92,6 +92,7 @@ export async function fetchClientOperatingDashboard() {
     outcomeSummary: fetchJson<ApiRecord>("/analytics/outcomes/summary", {}),
     guardedStatus: fetchJson<ApiRecord>("/mt5-demo/guarded-demo-order/status", {}),
     executionMode: fetchJson<ApiRecord>("/execution-mode/status", {}),
+    autoValidation: fetchJson<ApiRecord>("/auto-validation/status", {}),
   };
 
   const entries = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise] as const));
@@ -202,4 +203,24 @@ export function approveExecutionModeSignal(approvalId: string) {
 
 export function rejectExecutionModeSignal(approvalId: string, reason = "Rejected from dashboard.") {
   return postJson<ApiRecord>("/execution-mode/reject-signal", { approval_id: approvalId, reason });
+}
+
+export function startAutoValidation() {
+  return postJson<ApiRecord>("/auto-validation/start", {});
+}
+
+export function pauseAutoValidation() {
+  return postJson<ApiRecord>("/auto-validation/pause");
+}
+
+export function resumeAutoValidation() {
+  return postJson<ApiRecord>("/auto-validation/resume");
+}
+
+export function stopAutoValidation(reason = "Stopped from dashboard.") {
+  return postJson<ApiRecord>("/auto-validation/stop", { reason });
+}
+
+export function emergencyStopAutoValidation() {
+  return postJson<ApiRecord>("/auto-validation/emergency-stop");
 }

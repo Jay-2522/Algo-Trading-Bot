@@ -220,6 +220,8 @@ class PersistentTradeJournalService:
             "account_login": self._text(payload.get("account_login")),
             "server": self._text(payload.get("server")),
             "broker_source": self._text(payload.get("broker_source")) or (existing or {}).get("broker_source", ""),
+            "validation_session_id": self._text(payload.get("validation_session_id")) or (existing or {}).get("validation_session_id", ""),
+            "execution_mode": self._text(payload.get("execution_mode")) or (existing or {}).get("execution_mode", ""),
             "signal_confidence": self._number_or_none(payload.get("signal_confidence")) if payload.get("signal_confidence") is not None else (existing or {}).get("signal_confidence"),
             "signal_hash": self._text(payload.get("signal_hash")) or (existing or {}).get("signal_hash", ""),
             "setup_reason": self._text(payload.get("setup_reason")) or (existing or {}).get("setup_reason", ""),

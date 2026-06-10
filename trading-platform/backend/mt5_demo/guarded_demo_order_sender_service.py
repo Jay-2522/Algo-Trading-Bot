@@ -379,6 +379,8 @@ class GuardedDemoOrderSenderService:
             "mt5_comment": result.get("final_comment") or result.get("comment"),
             "profit_loss": 0,
             "broker_source": payload.get("broker_source") or payload.get("broker_id"),
+            "validation_session_id": payload.get("validation_session_id"),
+            "execution_mode": payload.get("execution_mode"),
             "signal_confidence": payload.get("signal_confidence"),
             "signal_hash": payload.get("signal_hash"),
             "setup_reason": payload.get("setup_reason"),

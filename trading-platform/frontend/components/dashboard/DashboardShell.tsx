@@ -9,10 +9,15 @@ import {
   fetchClientMarketPrices,
   fetchClientSignals,
   approveExecutionModeSignal,
+  emergencyStopAutoValidation,
   previewClientDemoTrade,
+  pauseAutoValidation,
   rejectExecutionModeSignal,
+  resumeAutoValidation,
   sendGuardedClientDemoTrade,
   setExecutionMode,
+  startAutoValidation,
+  stopAutoValidation,
   syncClientLifecycle,
   syncClientPositionsToJournal,
   type ApiRecord,
@@ -37,6 +42,7 @@ type DashboardData = {
   outcomeSummary: ApiRecord | null;
   guardedStatus: ApiRecord | null;
   executionMode: ApiRecord | null;
+  autoValidation: ApiRecord | null;
 };
 
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
@@ -61,6 +67,7 @@ const emptyData: DashboardData = {
   outcomeSummary: null,
   guardedStatus: null,
   executionMode: null,
+  autoValidation: null,
 };
 
 function asRecord(value: unknown): ApiRecord | null {
@@ -281,6 +288,7 @@ export function DashboardShell(_: {
         outcomeSummary: "outcomeSummary" in payload ? asRecord(payload.outcomeSummary) : current.outcomeSummary,
         guardedStatus: "guardedStatus" in payload ? asRecord(payload.guardedStatus) : current.guardedStatus,
         executionMode: "executionMode" in payload ? asRecord(payload.executionMode) : current.executionMode,
+        autoValidation: "autoValidation" in payload ? asRecord(payload.autoValidation) : current.autoValidation,
       }));
       setErrors(result.errors);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
@@ -574,6 +582,28 @@ export function DashboardShell(_: {
     }
   }
 
+  async function handleAutoValidationAction(action: "start" | "pause" | "resume" | "stop" | "emergency-stop") {
+    setWorkingAction(`auto-validation-${action}`);
+    setTradeError(null);
+    try {
+      const result =
+        action === "start"
+          ? await startAutoValidation()
+          : action === "pause"
+            ? await pauseAutoValidation()
+            : action === "resume"
+              ? await resumeAutoValidation()
+              : action === "emergency-stop"
+                ? await emergencyStopAutoValidation()
+                : await stopAutoValidation();
+      setData((current) => ({ ...current, autoValidation: result }));
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : "AUTO validation action failed.");
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#050816] text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -647,6 +677,12 @@ export function DashboardShell(_: {
           onApprove={(approvalId) => void handleApprovalDecision("approve", approvalId)}
           onReject={(approvalId) => void handleApprovalDecision("reject", approvalId)}
           onSetMode={(mode) => void handleExecutionModeChange(mode)}
+        />
+
+        <AutoValidationPanel
+          status={data.autoValidation}
+          workingAction={workingAction}
+          onAction={(action) => void handleAutoValidationAction(action)}
         />
 
         <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
@@ -944,6 +980,76 @@ function ExecutionModePanel({
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+function AutoValidationPanel({
+  status,
+  workingAction,
+  onAction,
+}: {
+  status: ApiRecord | null;
+  workingAction: string | null;
+  onAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+}) {
+  const session = asRecord(status?.session);
+  const config = asRecord(status?.config);
+  const watched = asRecord(status?.current_signal_watched);
+  const decision = asRecord(status?.last_execution_decision);
+  const mode = readText(session, ["status"], "OFF");
+  const blockers = Array.isArray(status?.blocked_reasons) ? status.blocked_reasons.map(String) : [];
+  const nextEligible = readText(status, ["next_eligible_time"], "");
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <SectionTitle eyebrow="AUTO Demo Validation" title={`30-Trade Bot Test: ${mode === "IDLE" ? "OFF" : mode}`} />
+        <div className="flex flex-wrap gap-2">
+          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || mode === "RUNNING"} onClick={() => onAction("start")} type="button">
+            Start 30-Trade Validation
+          </button>
+          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || mode !== "RUNNING"} onClick={() => onAction("pause")} type="button">
+            Pause
+          </button>
+          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || mode !== "PAUSED"} onClick={() => onAction("resume")} type="button">
+            Resume
+          </button>
+          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED"].includes(mode)} onClick={() => onAction("stop")} type="button">
+            Stop
+          </button>
+          <button className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED"].includes(mode)} onClick={() => onAction("emergency-stop")} type="button">
+            Emergency Stop
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <Metric label="Target Trades" value={String(readNumber(session, ["target_closed_trades"], readNumber(config, ["target_closed_trades"], 30)))} compact />
+        <Metric label="Completed" value={String(readNumber(session, ["current_closed_trades"], 0))} compact />
+        <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
+        <Metric label="Wins / Losses" value={`${readNumber(session, ["wins"], 0)} / ${readNumber(session, ["losses"], 0)}`} compact />
+        <Metric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
+        <Metric label="Net P&L" value={money(readNumber(session, ["net_pnl"], 0))} valueClass={pnlClass(readNumber(session, ["net_pnl"], 0))} compact />
+        <Metric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
+        <Metric label="Lot" value={String(readNumber(config, ["lot_size"], 0.01))} compact />
+        <Metric label="Allowed Symbols" value={Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.join(", ") : "XAUUSD, EURUSD"} compact />
+        <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
+        <Metric label="Next Eligible" value={nextEligible ? formatTradeTime(nextEligible) : "Now"} compact />
+        <Metric label="Safety" value="Demo / Vantage Only" valueClass="text-emerald-300" compact />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Current Signal Watched</p>
+          <p className="mt-2 text-lg font-black text-white">{watched ? `${readText(watched, ["symbol"], "Signal")} ${readText(watched, ["signal"], "WAIT")}` : "None"}</p>
+          <p className="mt-1 text-sm font-bold text-slate-400">{readText(watched, ["setup_reason", "reason"], "Waiting for qualified signal.")}</p>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Last Execution Decision</p>
+          <p className="mt-2 text-lg font-black text-white">{readText(decision, ["status"], "No decision yet")}</p>
+          {blockers.length > 0 ? <p className="mt-1 text-sm font-bold text-amber-100">{blockers.join(", ")}</p> : <p className="mt-1 text-sm font-bold text-slate-400">No blocked reasons recorded.</p>}
+        </div>
+      </div>
     </section>
   );
 }

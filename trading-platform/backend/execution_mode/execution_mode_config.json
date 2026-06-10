@@ -6,10 +6,10 @@
     "EURUSD",
     "XAUUSD"
   ],
-  "approval_required": false,
-  "auto_enabled": true,
+  "approval_required": true,
+  "auto_enabled": false,
   "broker_execution_enabled": false,
-  "execution_mode": "AUTO",
+  "execution_mode": "APPROVAL",
   "live_execution_enabled": false,
   "max_lot_per_trade": 0.01,
   "require_duplicate_check": true,

@@ -209,6 +209,11 @@ export function startAutoValidation() {
   return postJson<ApiRecord>("/auto-validation/start", {});
 }
 
+export async function fetchAutoValidationStatus() {
+  const result = await fetchJson<ApiRecord>("/auto-validation/status", {}, 5000);
+  return { errors: result.error ? [result.error] : [], ok: result.ok, status: result.ok ? result.data : null };
+}
+
 export function pauseAutoValidation() {
   return postJson<ApiRecord>("/auto-validation/pause");
 }

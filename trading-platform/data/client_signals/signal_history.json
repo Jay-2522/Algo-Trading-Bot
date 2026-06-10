@@ -1,31 +1,8 @@
 [
   {
-    "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:05.252903+00:00",
-    "confidence": 70,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
-    "risk_reward": null,
-    "signal_hash": "cfda732878e1e0d7",
-    "setup_type": "fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": false,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London/New York overlap",
-      "spread_quality": 1.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:05.267920+00:00",
+    "timestamp": "2026-06-10T14:54:35.242501+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -44,7 +21,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:07.946139+00:00",
+    "timestamp": "2026-06-10T14:54:37.938906+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -67,7 +44,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:08.173226+00:00",
+    "timestamp": "2026-06-10T14:54:38.159043+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -90,7 +67,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:08.196363+00:00",
+    "timestamp": "2026-06-10T14:54:38.175937+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -109,7 +86,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:11.262648+00:00",
+    "timestamp": "2026-06-10T14:54:40.964492+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -132,7 +109,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:11.501718+00:00",
+    "timestamp": "2026-06-10T14:54:41.218626+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -155,7 +132,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:11.524734+00:00",
+    "timestamp": "2026-06-10T14:54:41.232908+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -174,7 +151,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:13.934538+00:00",
+    "timestamp": "2026-06-10T14:54:43.952531+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -197,7 +174,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:14.172897+00:00",
+    "timestamp": "2026-06-10T14:54:44.168897+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -220,7 +197,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:14.185789+00:00",
+    "timestamp": "2026-06-10T14:54:44.177029+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -239,7 +216,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:16.939323+00:00",
+    "timestamp": "2026-06-10T14:54:46.963302+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -262,7 +239,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:17.182130+00:00",
+    "timestamp": "2026-06-10T14:54:47.198822+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -285,7 +262,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:17.199135+00:00",
+    "timestamp": "2026-06-10T14:54:47.212829+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -304,7 +281,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:19.941861+00:00",
+    "timestamp": "2026-06-10T14:54:49.947489+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -327,7 +304,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:20.166080+00:00",
+    "timestamp": "2026-06-10T14:54:50.169573+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -350,7 +327,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:20.178067+00:00",
+    "timestamp": "2026-06-10T14:54:50.202551+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -369,7 +346,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:22.949902+00:00",
+    "timestamp": "2026-06-10T14:54:52.927960+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -392,7 +369,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:23.184539+00:00",
+    "timestamp": "2026-06-10T14:54:53.167404+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -415,7 +392,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:23.201657+00:00",
+    "timestamp": "2026-06-10T14:54:53.184304+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -434,7 +411,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:25.942247+00:00",
+    "timestamp": "2026-06-10T14:54:55.946321+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -457,7 +434,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:26.177263+00:00",
+    "timestamp": "2026-06-10T14:54:56.179572+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -480,7 +457,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:26.204261+00:00",
+    "timestamp": "2026-06-10T14:54:56.190683+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -499,7 +476,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:28.962148+00:00",
+    "timestamp": "2026-06-10T14:54:58.916406+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -522,7 +499,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:29.202243+00:00",
+    "timestamp": "2026-06-10T14:54:59.143106+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -545,7 +522,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:29.215250+00:00",
+    "timestamp": "2026-06-10T14:54:59.165114+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -564,7 +541,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:31.948145+00:00",
+    "timestamp": "2026-06-10T14:55:01.956022+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -587,7 +564,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:32.180117+00:00",
+    "timestamp": "2026-06-10T14:55:02.198160+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -610,7 +587,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:32.204119+00:00",
+    "timestamp": "2026-06-10T14:55:02.225073+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -629,7 +606,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:34.977782+00:00",
+    "timestamp": "2026-06-10T14:55:04.949367+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -652,7 +629,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:35.224972+00:00",
+    "timestamp": "2026-06-10T14:55:05.167567+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -675,7 +652,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:35.240994+00:00",
+    "timestamp": "2026-06-10T14:55:05.179043+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -694,7 +671,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:37.943568+00:00",
+    "timestamp": "2026-06-10T14:55:07.943556+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -717,7 +694,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:38.166313+00:00",
+    "timestamp": "2026-06-10T14:55:08.171853+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -740,7 +717,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:38.180320+00:00",
+    "timestamp": "2026-06-10T14:55:08.187864+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -759,7 +736,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:40.961844+00:00",
+    "timestamp": "2026-06-10T14:55:11.275574+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -782,7 +759,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:41.194566+00:00",
+    "timestamp": "2026-06-10T14:55:11.499155+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -805,7 +782,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:41.212562+00:00",
+    "timestamp": "2026-06-10T14:55:11.520162+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -824,7 +801,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:43.945118+00:00",
+    "timestamp": "2026-06-10T14:55:13.931379+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -847,7 +824,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:44.171142+00:00",
+    "timestamp": "2026-06-10T14:55:14.153624+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -870,7 +847,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:44.198132+00:00",
+    "timestamp": "2026-06-10T14:55:14.164585+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -889,7 +866,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:46.960749+00:00",
+    "timestamp": "2026-06-10T14:55:16.946531+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -912,7 +889,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:47.193759+00:00",
+    "timestamp": "2026-06-10T14:55:17.192603+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -935,7 +912,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:47.209779+00:00",
+    "timestamp": "2026-06-10T14:55:17.207637+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -954,7 +931,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:49.935662+00:00",
+    "timestamp": "2026-06-10T14:55:19.926439+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -977,7 +954,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:50.157967+00:00",
+    "timestamp": "2026-06-10T14:55:20.143840+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1000,7 +977,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:50.173980+00:00",
+    "timestamp": "2026-06-10T14:55:20.153949+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1019,7 +996,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:52.961270+00:00",
+    "timestamp": "2026-06-10T14:55:22.946121+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1042,7 +1019,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:53.208823+00:00",
+    "timestamp": "2026-06-10T14:55:23.185716+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1065,7 +1042,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:53.225836+00:00",
+    "timestamp": "2026-06-10T14:55:23.203717+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1084,7 +1061,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:55.941692+00:00",
+    "timestamp": "2026-06-10T14:55:25.954774+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1107,7 +1084,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:56.176735+00:00",
+    "timestamp": "2026-06-10T14:55:26.162828+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1130,7 +1107,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:56.191175+00:00",
+    "timestamp": "2026-06-10T14:55:26.187827+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1149,7 +1126,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:58.956254+00:00",
+    "timestamp": "2026-06-10T14:55:28.939636+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1172,7 +1149,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:59.193127+00:00",
+    "timestamp": "2026-06-10T14:55:29.188908+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1195,7 +1172,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:37:59.208126+00:00",
+    "timestamp": "2026-06-10T14:55:29.201917+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1214,7 +1191,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:01.940412+00:00",
+    "timestamp": "2026-06-10T14:55:31.928971+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1237,7 +1214,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:02.174876+00:00",
+    "timestamp": "2026-06-10T14:55:32.142187+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1260,7 +1237,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:02.190877+00:00",
+    "timestamp": "2026-06-10T14:55:32.152196+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1279,7 +1256,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:04.953309+00:00",
+    "timestamp": "2026-06-10T14:55:34.956316+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1302,7 +1279,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:05.189654+00:00",
+    "timestamp": "2026-06-10T14:55:35.194914+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1325,7 +1302,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:05.206654+00:00",
+    "timestamp": "2026-06-10T14:55:35.208805+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1344,7 +1321,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:07.550147+00:00",
+    "timestamp": "2026-06-10T14:55:37.945732+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1367,7 +1344,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:07.791779+00:00",
+    "timestamp": "2026-06-10T14:55:38.144882+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1390,7 +1367,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:07.806762+00:00",
+    "timestamp": "2026-06-10T14:55:38.157965+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1409,7 +1386,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:10.953945+00:00",
+    "timestamp": "2026-06-10T14:55:40.956290+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1432,7 +1409,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:11.189609+00:00",
+    "timestamp": "2026-06-10T14:55:41.185938+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1455,7 +1432,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:11.211609+00:00",
+    "timestamp": "2026-06-10T14:55:41.201936+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1474,7 +1451,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:14.292765+00:00",
+    "timestamp": "2026-06-10T14:55:43.944526+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1497,7 +1474,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:14.510794+00:00",
+    "timestamp": "2026-06-10T14:55:44.160676+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1520,7 +1497,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:14.528080+00:00",
+    "timestamp": "2026-06-10T14:55:44.175222+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1539,7 +1516,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:16.286839+00:00",
+    "timestamp": "2026-06-10T14:55:46.950441+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1562,7 +1539,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:16.500628+00:00",
+    "timestamp": "2026-06-10T14:55:47.187455+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1585,7 +1562,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:16.515639+00:00",
+    "timestamp": "2026-06-10T14:55:47.202598+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1604,7 +1581,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:19.103136+00:00",
+    "timestamp": "2026-06-10T14:55:49.942364+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1627,7 +1604,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:19.343849+00:00",
+    "timestamp": "2026-06-10T14:55:50.182096+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1650,7 +1627,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:19.357861+00:00",
+    "timestamp": "2026-06-10T14:55:50.196537+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1669,7 +1646,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:21.275184+00:00",
+    "timestamp": "2026-06-10T14:55:52.946059+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1692,7 +1669,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:21.503740+00:00",
+    "timestamp": "2026-06-10T14:55:53.199386+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1715,7 +1692,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:21.520976+00:00",
+    "timestamp": "2026-06-10T14:55:53.210508+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1734,7 +1711,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:24.284905+00:00",
+    "timestamp": "2026-06-10T14:55:55.950955+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1757,7 +1734,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:24.493323+00:00",
+    "timestamp": "2026-06-10T14:55:56.192392+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1780,7 +1757,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:24.506308+00:00",
+    "timestamp": "2026-06-10T14:55:56.215918+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1799,7 +1776,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:26.280721+00:00",
+    "timestamp": "2026-06-10T14:55:58.933857+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1822,7 +1799,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:26.519320+00:00",
+    "timestamp": "2026-06-10T14:55:59.184839+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1845,7 +1822,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:26.532339+00:00",
+    "timestamp": "2026-06-10T14:55:59.207964+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1864,7 +1841,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:29.270892+00:00",
+    "timestamp": "2026-06-10T14:56:01.941545+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1887,7 +1864,7 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:29.490751+00:00",
+    "timestamp": "2026-06-10T14:56:02.163695+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1910,7 +1887,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:29.508754+00:00",
+    "timestamp": "2026-06-10T14:56:02.184820+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1929,7 +1906,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:31.272403+00:00",
+    "timestamp": "2026-06-10T14:56:04.923245+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -1952,17 +1929,17 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:31.485920+00:00",
+    "timestamp": "2026-06-10T14:56:05.157887+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
     "risk_reward": null,
     "signal_hash": "cfda732878e1e0d7",
-    "setup_type": "fvg+order_block",
+    "setup_type": "choch+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": false,
       "bos": false,
-      "choch": false,
+      "choch": true,
       "fvg": true,
       "order_block": true,
       "session_valid": true,
@@ -1975,7 +1952,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:31.499928+00:00",
+    "timestamp": "2026-06-10T14:56:05.167876+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1994,7 +1971,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:34.101029+00:00",
+    "timestamp": "2026-06-10T14:56:07.968676+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -2017,17 +1994,17 @@
   {
     "symbol": "XAUUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:34.330118+00:00",
+    "timestamp": "2026-06-10T14:56:08.187758+00:00",
     "confidence": 70,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
     "risk_reward": null,
     "signal_hash": "cfda732878e1e0d7",
-    "setup_type": "fvg+order_block",
+    "setup_type": "choch+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": false,
       "bos": false,
-      "choch": false,
+      "choch": true,
       "fvg": true,
       "order_block": true,
       "session_valid": true,
@@ -2040,7 +2017,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:34.354119+00:00",
+    "timestamp": "2026-06-10T14:56:08.204729+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -2059,7 +2036,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:36.267237+00:00",
+    "timestamp": "2026-06-10T14:56:11.290886+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -2081,18 +2058,18 @@
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:36.481906+00:00",
-    "confidence": 70,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
-    "risk_reward": null,
-    "signal_hash": "cfda732878e1e0d7",
-    "setup_type": "fvg+order_block",
+    "signal": "SELL",
+    "timestamp": "2026-06-10T14:56:11.521303+00:00",
+    "confidence": 85,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "9b546cbbbd8b33d6",
+    "setup_type": "bos+choch+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": false,
-      "bos": false,
-      "choch": false,
+      "bos": true,
+      "choch": true,
       "fvg": true,
       "order_block": true,
       "session_valid": true,
@@ -2105,7 +2082,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:36.497363+00:00",
+    "timestamp": "2026-06-10T14:56:11.543424+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -2124,7 +2101,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:39.069683+00:00",
+    "timestamp": "2026-06-10T14:57:11.272665+00:00",
     "confidence": null,
     "execution_status": "WAITING",
     "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
@@ -2146,18 +2123,18 @@
   },
   {
     "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:39.276885+00:00",
-    "confidence": 70,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 70; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
-    "risk_reward": null,
-    "signal_hash": "cfda732878e1e0d7",
-    "setup_type": "fvg+order_block",
+    "signal": "SELL",
+    "timestamp": "2026-06-10T14:57:11.484020+00:00",
+    "confidence": 85,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Liquidity sweep not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "88cc4ed9199e62e7",
+    "setup_type": "bos+choch+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": false,
-      "bos": false,
-      "choch": false,
+      "bos": true,
+      "choch": true,
       "fvg": true,
       "order_block": true,
       "session_valid": true,
@@ -2170,7 +2147,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-10T14:38:39.288896+00:00",
+    "timestamp": "2026-06-10T14:57:11.533888+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -2184,6 +2161,29 @@
       "fvg": null,
       "order_block": null,
       "session_valid": null
+    }
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-10T14:58:11.133848+00:00",
+    "confidence": null,
+    "execution_status": "WAITING",
+    "setup_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 30; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "risk_reward": null,
+    "signal_hash": "d733d4b55612b4ca",
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": false,
+      "order_block": false,
+      "session_valid": true,
+      "bias": "ranging",
+      "session": "London/New York overlap",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
     }
   }
 ]

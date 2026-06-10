@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from backend.api.ai_routes import router as ai_router
 from backend.api.account_routing_routes import router as account_routing_router
 from backend.api.analytics_routes import router as analytics_router
-from backend.api.auto_validation_routes import router as auto_validation_router
+from backend.api.auto_validation_routes import auto_validation_runner, router as auto_validation_router
 from backend.api.backtesting_routes import router as backtesting_router
 from backend.api.backup_routes import router as backup_router
 from backend.api.broker_account_routes import router as broker_account_router
@@ -74,7 +74,9 @@ async def lifespan(app: FastAPI):
     """Structured application lifecycle hooks."""
 
     logger.info("Starting %s in %s environment", settings.app_name, settings.environment)
+    auto_validation_runner.start_if_running()
     yield
+    await auto_validation_runner.shutdown()
     if trading_loop_service.get_status().running:
         await trading_loop_service.stop_loop()
     logger.info("Shutting down %s", settings.app_name)

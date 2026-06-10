@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import copy
+import json
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_STATE_PATH = PROJECT_ROOT / "data" / "auto_validation" / "session_state.json"
 
 
 class AutoValidationService:
@@ -16,19 +21,23 @@ class AutoValidationService:
         journal_service: Any | None = None,
         position_service: Any | None = None,
         mt5_demo_service: Any | None = None,
+        state_path: Path | None = None,
     ) -> None:
         self.signal_provider = signal_provider
         self.guarded_execution_service = guarded_execution_service
         self.journal_service = journal_service
         self.position_service = position_service
         self.mt5_demo_service = mt5_demo_service
+        self.state_path = state_path or DEFAULT_STATE_PATH
         self.config = self._default_config()
         self.session = self._empty_session()
         self.events: list[dict[str, Any]] = []
+        self.runner_state = self._empty_runner_state()
         self._seen_signal_hashes: set[str] = set()
         self._last_trade_time: datetime | None = None
         self._last_execution_decision: dict[str, Any] | None = None
         self._current_signal_watched: dict[str, Any] | None = None
+        self._load_state()
 
     def status(self) -> dict[str, Any]:
         self._refresh_session_metrics()
@@ -42,6 +51,7 @@ class AutoValidationService:
             "blocked_reasons": self._last_execution_decision.get("blockers", []) if isinstance(self._last_execution_decision, dict) else [],
             "next_eligible_time": self._next_eligible_time(),
             "events": self.events[-50:],
+            **self.runner_state,
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -64,18 +74,21 @@ class AutoValidationService:
         self._last_trade_time = None
         self._last_execution_decision = None
         self._log("SESSION_STARTED", {"session_id": self.session["session_id"]})
+        self._save_state()
         return self.status()
 
     def pause(self) -> dict[str, Any]:
         if self.session["status"] == "RUNNING":
             self.session["status"] = "PAUSED"
             self._log("SESSION_PAUSED")
+            self._save_state()
         return self.status()
 
     def resume(self) -> dict[str, Any]:
         if self.session["status"] == "PAUSED":
             self.session["status"] = "RUNNING"
             self._log("SESSION_RESUMED")
+            self._save_state()
         return self.status()
 
     def stop(self, reason: str = "Stopped manually.") -> dict[str, Any]:
@@ -85,6 +98,7 @@ class AutoValidationService:
             self.session["reason_stopped"] = reason
             self.config["auto_validation_enabled"] = False
             self._log("SESSION_STOPPED", {"reason": reason})
+            self._save_state()
         return self.status()
 
     def emergency_stop(self) -> dict[str, Any]:
@@ -116,7 +130,9 @@ class AutoValidationService:
             decision = self._execute_signal(signal)
             if decision["status"] in {"ORDER_SENT", "HALTED_RISK", "BLOCKED"}:
                 return decision
-        return self._decision("NO_QUALIFIED_SIGNAL", ["NO_READY_APPROVED_SIGNAL"])
+        decision = self._decision("NO_QUALIFIED_SIGNAL", ["NO_READY_APPROVED_SIGNAL"])
+        self._log("NO_QUALIFIED_SIGNAL", decision)
+        return decision
 
     def _execute_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         blockers = self._validate_signal(signal)
@@ -141,6 +157,7 @@ class AutoValidationService:
         decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True})
         self._log("ORDER_SENT", decision)
         self._refresh_session_metrics()
+        self._save_state()
         return decision
 
     def _validate_signal(self, signal: dict[str, Any]) -> list[str]:
@@ -322,6 +339,7 @@ class AutoValidationService:
             self.session["reason_stopped"] = "TARGET_COMPLETED"
             self.config["auto_validation_enabled"] = False
             self._log("TARGET_COMPLETED")
+            self._save_state()
 
     def _risk_halt_reason(self) -> str | None:
         if self.session["current_closed_trades"] >= int(self.config["target_closed_trades"]):
@@ -338,6 +356,7 @@ class AutoValidationService:
         self.session["reason_stopped"] = reason
         self.config["auto_validation_enabled"] = False
         self._log("RISK_HALT_TRIGGERED" if reason != "TARGET_COMPLETED" else "TARGET_COMPLETED", {"reason": reason})
+        self._save_state()
         return self._decision("HALTED_RISK" if reason != "TARGET_COMPLETED" else "COMPLETED", [reason])
 
     def _decision(self, status: str, blockers: list[str], signal: dict[str, Any] | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -355,6 +374,7 @@ class AutoValidationService:
             **(extra or {}),
         }
         self._last_execution_decision = decision
+        self._save_state()
         return decision
 
     def _daily_trade_count(self) -> int:
@@ -401,6 +421,32 @@ class AutoValidationService:
 
     def _log(self, event: str, details: dict[str, Any] | None = None) -> None:
         self.events.append({"event": event, "details": details or {}, "timestamp": self._timestamp()})
+        self._save_state()
+
+    def log_runner_error(self, message: str) -> None:
+        self._log("RUNNER_ERROR", {"error": message})
+
+    def update_runner_state(self, **updates: Any) -> None:
+        self.runner_state.update(updates)
+
+    def should_auto_start_runner(self) -> bool:
+        return self.session.get("status") == "RUNNING" and self.config.get("auto_validation_enabled") is True
+
+    def watched_signal_is_watchlist(self) -> bool:
+        watched = self._current_signal_watched if isinstance(self._current_signal_watched, dict) else {}
+        quality = watched.get("quality_score") if isinstance(watched.get("quality_score"), dict) else {}
+        return str(watched.get("status_level") or quality.get("rating") or "").upper() == "WATCHLIST"
+
+    def _empty_runner_state(self) -> dict[str, Any]:
+        return {
+            "runner_active": False,
+            "runner_last_tick_at": None,
+            "runner_next_tick_at": None,
+            "runner_interval_seconds": 3,
+            "run_once_in_progress": False,
+            "last_run_once_duration_ms": None,
+            "last_runner_error": "",
+        }
 
     def _empty_session(self) -> dict[str, Any]:
         return {
@@ -424,6 +470,43 @@ class AutoValidationService:
             "equity_curve": [],
             "reason_stopped": "",
         }
+
+    def _load_state(self) -> None:
+        try:
+            if not self.state_path.exists():
+                return
+            data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if isinstance(data.get("config"), dict):
+            self.config = {**self._default_config(), **data["config"]}
+            self.config["live_execution_enabled"] = False
+            self.config["broker_execution_enabled"] = False
+        if isinstance(data.get("session"), dict):
+            self.session = {**self._empty_session(), **data["session"]}
+        if isinstance(data.get("events"), list):
+            self.events = [event for event in data["events"] if isinstance(event, dict)][-500:]
+        if isinstance(data.get("last_execution_decision"), dict):
+            self._last_execution_decision = data["last_execution_decision"]
+        if isinstance(data.get("current_signal_watched"), dict):
+            self._current_signal_watched = data["current_signal_watched"]
+        if self.session.get("status") == "RUNNING":
+            self.config["auto_validation_enabled"] = True
+
+    def _save_state(self) -> None:
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "config": self.config,
+                "session": self.session,
+                "events": self.events[-500:],
+                "last_execution_decision": self._last_execution_decision,
+                "current_signal_watched": self._current_signal_watched,
+                "updated_at": self._timestamp(),
+            }
+            self.state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError:
+            pass
 
     def _default_config(self) -> dict[str, Any]:
         return {

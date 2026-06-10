@@ -10,6 +10,7 @@ import {
   fetchClientSignals,
   approveExecutionModeSignal,
   emergencyStopAutoValidation,
+  fetchAutoValidationStatus,
   previewClientDemoTrade,
   pauseAutoValidation,
   rejectExecutionModeSignal,
@@ -339,6 +340,20 @@ export function DashboardShell(_: {
     }
   }, []);
 
+  const refreshAutoValidation = useCallback(async () => {
+    try {
+      const result = await fetchAutoValidationStatus();
+      if (result.ok) {
+        setData((current) => ({ ...current, autoValidation: asRecord(result.status) }));
+      }
+      if (result.errors.length > 0) {
+        setErrors(result.errors);
+      }
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -352,6 +367,11 @@ export function DashboardShell(_: {
     const interval = window.setInterval(() => void refreshSignals(), 5000);
     return () => window.clearInterval(interval);
   }, [refreshSignals]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => void refreshAutoValidation(), 3000);
+    return () => window.clearInterval(interval);
+  }, [refreshAutoValidation]);
 
   useEffect(() => {
     if (!data.clientSignals.some((signal) => watchlistSignal(signal))) return;
@@ -1038,6 +1058,8 @@ function AutoValidationPanel({
   const mode = readText(session, ["status"], "OFF");
   const blockers = Array.isArray(status?.blocked_reasons) ? status.blocked_reasons.map(String) : [];
   const nextEligible = readText(status, ["next_eligible_time"], "");
+  const runnerActive = readText(status, ["runner_active"], "false") === "true";
+  const runnerError = readText(status, ["last_runner_error"], "");
   const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
@@ -1079,6 +1101,12 @@ function AutoValidationPanel({
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
         <Metric label="Next Eligible" value={nextEligible ? formatTradeTime(nextEligible) : "Now"} compact />
         <Metric label="Safety" value="Demo / Vantage Only" valueClass="text-emerald-300" compact />
+        <Metric label="Runner" value={runnerActive ? "Active" : "Inactive"} valueClass={runnerActive ? "text-emerald-300" : "text-slate-400"} compact />
+        <Metric label="Last Scan Time" value={formatTradeTime(readText(status, ["runner_last_tick_at"], ""))} compact />
+        <Metric label="Next Scan Time" value={formatTradeTime(readText(status, ["runner_next_tick_at"], ""))} compact />
+        <Metric label="Scan Interval" value={`${readNumber(status, ["runner_interval_seconds"], 3)}s`} compact />
+        <Metric label="Run In Progress" value={readText(status, ["run_once_in_progress"], "false") === "true" ? "Yes" : "No"} compact />
+        <Metric label="Last Duration" value={`${readNumber(status, ["last_run_once_duration_ms"], 0)}ms`} compact />
       </div>
 
       <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
@@ -1113,9 +1141,10 @@ function AutoValidationPanel({
           <p className="mt-1 text-sm font-bold text-slate-400">{readText(watched, ["setup_reason", "reason"], "Waiting for qualified signal.")}</p>
         </div>
         <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Last Execution Decision</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Last Decision</p>
           <p className="mt-2 text-lg font-black text-white">{readText(decision, ["status"], "No decision yet")}</p>
           {blockers.length > 0 ? <p className="mt-1 text-sm font-bold text-amber-100">{blockers.join(", ")}</p> : <p className="mt-1 text-sm font-bold text-slate-400">No blocked reasons recorded.</p>}
+          <p className={`mt-2 text-sm font-bold ${runnerError ? "text-rose-200" : "text-slate-500"}`}>Last Runner Error: {runnerError || "None"}</p>
         </div>
       </div>
     </section>

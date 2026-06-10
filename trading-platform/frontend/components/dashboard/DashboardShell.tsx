@@ -110,19 +110,27 @@ function marketNumber(value: number | null | undefined, digits = 5): string {
 }
 
 function isMarketOpen(tick: ApiRecord | null): boolean {
-  return readText(tick, ["status"], "").toUpperCase() === "OK" && readText(tick, ["freshness"], "").toUpperCase() === "READY";
+  return readText(tick, ["market_status", "status"], "").toUpperCase() === "MARKET_READY" || (readText(tick, ["status"], "").toUpperCase() === "OK" && readText(tick, ["freshness"], "").toUpperCase() === "READY");
 }
 
 function marketLabel(tick: ApiRecord | null): string {
-  const status = readText(tick, ["status"], "").toUpperCase();
+  const status = readText(tick, ["market_status", "status"], "").toUpperCase();
   if (status === "SYMBOL_NOT_AVAILABLE" || status === "SYMBOL_UNAVAILABLE") return "Symbol Not Available";
-  return isMarketOpen(tick) ? "Market Ready" : "Market Closed / Feed Offline";
+  if (status === "STALE_TICK") return "Stale Tick";
+  if (status === "SYMBOL_TICK_UNAVAILABLE") return "Tick Unavailable";
+  if (status === "FEED_OFFLINE") return "Feed Offline";
+  if (status === "MARKET_CLOSED") return "Market Closed";
+  return isMarketOpen(tick) ? "Market Ready" : "Tick Pending";
 }
 
 function xauusdReadinessLabel(tick: ApiRecord | null, signal: ApiRecord | null): string {
-  const status = readText(tick, ["status"], "").toUpperCase();
+  const status = readText(tick, ["market_status", "status"], "").toUpperCase();
   if (status === "SYMBOL_NOT_AVAILABLE" || status === "SYMBOL_UNAVAILABLE") return "Symbol Not Available";
-  if (!isMarketOpen(tick)) return "Market Closed / Feed Offline";
+  if (status === "STALE_TICK") return "Stale Tick";
+  if (status === "SYMBOL_TICK_UNAVAILABLE") return "Tick Unavailable";
+  if (status === "FEED_OFFLINE") return "Feed Offline";
+  if (status === "MARKET_CLOSED") return "Market Closed";
+  if (!isMarketOpen(tick)) return "Tick Pending";
   const action = readText(signal, ["signal"], "WAIT").toUpperCase();
   if (action === "BUY" || action === "SELL") return "Ready for Future Demo Test";
   return "Waiting for Strategy Setup";
@@ -131,6 +139,7 @@ function xauusdReadinessLabel(tick: ApiRecord | null, signal: ApiRecord | null):
 function statusTone(status: string): string {
   const text = status.toUpperCase();
   if (text.includes("OPEN") || text.includes("CONNECTED") || text.includes("READY") || text.includes("DEMO")) return "text-emerald-300 border-emerald-400/30 bg-emerald-400/10";
+  if (text.includes("STALE") || text.includes("PENDING") || text.includes("UNAVAILABLE")) return "text-amber-200 border-amber-400/30 bg-amber-400/10";
   if (text.includes("CLOSED") || text.includes("OFFLINE") || text.includes("BLOCK") || text.includes("ERROR")) return "text-rose-300 border-rose-400/30 bg-rose-400/10";
   return "text-sky-200 border-sky-400/30 bg-sky-400/10";
 }
@@ -1226,7 +1235,9 @@ function MarketCard({ title, tick, scope, signal = null }: { title: string; tick
   const bid = readNumber(tick, ["bid"], Number.NaN);
   const ask = readNumber(tick, ["ask"], Number.NaN);
   const spread = readNumber(tick, ["spread"], Number.NaN);
-  const feedUnavailable = !tick || readText(tick, ["status"], "").toUpperCase() !== "OK";
+  const marketStatus = readText(tick, ["market_status", "status"], "").toUpperCase();
+  const stale = marketStatus === "STALE_TICK" || readText(tick, ["stale"], "false") === "true";
+  const feedUnavailable = !tick || ["SYMBOL_TICK_UNAVAILABLE", "FEED_OFFLINE", "MARKET_CLOSED"].includes(marketStatus);
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex items-start justify-between gap-3">
@@ -1242,8 +1253,9 @@ function MarketCard({ title, tick, scope, signal = null }: { title: string; tick
         <Metric label="Source" value={readText(scope, ["source"], "MT5_DEMO")} compact />
         <Metric label="Last Update" value={formatTradeTime(readText(tick, ["timestamp"], ""))} compact />
       </div>
+      {stale ? <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm font-bold text-amber-100">Showing last known prices while the latest tick recovers.</p> : null}
       {title === "XAUUSD" ? <p className="mt-3 text-sm font-bold text-slate-400">XAUUSD execution is not enabled today; valid setups are classified for a future guarded demo test.</p> : null}
-      {feedUnavailable ? <p className="mt-3 text-sm font-bold text-slate-400">Market feed unavailable.</p> : null}
+      {feedUnavailable ? <p className="mt-3 text-sm font-bold text-slate-400">{marketStatus === "MARKET_CLOSED" ? "Market-hours logic confirms the market is closed." : "Market feed unavailable after repeated tick failures."}</p> : null}
     </section>
   );
 }

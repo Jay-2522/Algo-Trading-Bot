@@ -17,6 +17,12 @@ class MT5MarketDataService:
 
     supported_symbols = {"EURUSD", "XAUUSD"}
     supported_timeframes = {"M1", "M5", "M15", "H1", "H4", "D1"}
+    stale_grace_seconds = 10
+    failed_tick_threshold = 3
+
+    def __init__(self) -> None:
+        self._last_good_ticks: dict[str, dict[str, Any]] = {}
+        self._failed_tick_reads: dict[str, int] = {}
 
     def get_market_data_status(self) -> dict[str, Any]:
         state = self._read_connection_state()
@@ -45,7 +51,7 @@ class MT5MarketDataService:
 
         initialized, error = self._initialize()
         if not initialized:
-            return self._error_payload(normalized, "MT5_UNAVAILABLE", error)
+            return self._temporary_tick_failure_payload(normalized, "MT5_UNAVAILABLE", error)
 
         try:
             account = mt5.account_info()
@@ -58,8 +64,15 @@ class MT5MarketDataService:
             info = mt5.symbol_info(normalized)
             recovery = self._recover_tick_quote(normalized, tick, info, availability)
             if recovery["tick_recovery_status"] == "TICK_STILL_UNAVAILABLE":
-                return self._stale_tick_payload(normalized, recovery, availability, source)
-            return {
+                return self._temporary_tick_failure_payload(
+                    normalized,
+                    "SYMBOL_TICK_UNAVAILABLE",
+                    self._tick_unavailable_message(normalized, availability, "SYMBOL_TICK_UNAVAILABLE"),
+                    recovery,
+                    availability,
+                    source,
+                )
+            payload = {
                 "symbol": normalized,
                 "bid": recovery["bid"],
                 "ask": recovery["ask"],
@@ -69,6 +82,9 @@ class MT5MarketDataService:
                 "source": source,
                 "quote_source": recovery["source"],
                 "status": "OK",
+                "market_status": "MARKET_READY",
+                "stale": False,
+                "consecutive_failed_tick_reads": 0,
                 "tick_recovery_status": recovery["tick_recovery_status"],
                 "simulation_only": True,
                 "live_execution_enabled": False,
@@ -80,8 +96,10 @@ class MT5MarketDataService:
                 "mt5_last_error": availability["last_error"],
                 "terminal_memory_warning": self._terminal_memory_warning(availability.get("last_error")),
             }
+            self._record_successful_tick(normalized, payload)
+            return payload
         except Exception as exc:  # pragma: no cover - depends on terminal state
-            return self._error_payload(normalized, "TICK_READ_FAILED", str(exc))
+            return self._temporary_tick_failure_payload(normalized, "TICK_READ_FAILED", str(exc))
         finally:
             mt5.shutdown()
 
@@ -154,6 +172,9 @@ class MT5MarketDataService:
             "freshness": tick.get("freshness", "OFFLINE"),
             "source": "MT5_DEMO",
             "status": tick.get("status", "UNAVAILABLE"),
+            "market_status": tick.get("market_status"),
+            "stale": tick.get("stale", False),
+            "consecutive_failed_tick_reads": tick.get("consecutive_failed_tick_reads", 0),
             "error": tick.get("error"),
             "message": tick.get("message"),
             "simulation_only": True,
@@ -458,6 +479,9 @@ class MT5MarketDataService:
             "freshness": "OFFLINE",
             "source": "MT5_DEMO",
             "status": status,
+            "market_status": status if status in {"SYMBOL_TICK_UNAVAILABLE", "FEED_OFFLINE", "MARKET_CLOSED"} else "SYMBOL_TICK_UNAVAILABLE",
+            "stale": False,
+            "consecutive_failed_tick_reads": self._failed_tick_reads.get(symbol, 0),
             "error": True,
             "message": message,
             "simulation_only": True,
@@ -465,6 +489,60 @@ class MT5MarketDataService:
             "broker_execution_enabled": False,
             "execution_allowed": False,
         }
+
+    def _temporary_tick_failure_payload(
+        self,
+        symbol: str,
+        status: str,
+        message: str,
+        recovery: dict[str, Any] | None = None,
+        availability: dict[str, Any] | None = None,
+        source: str = "MT5_DEMO",
+    ) -> dict[str, Any]:
+        failures = self._failed_tick_reads.get(symbol, 0) + 1
+        self._failed_tick_reads[symbol] = failures
+        cached = self._last_good_ticks.get(symbol)
+        age = self._tick_age_seconds(cached)
+        if cached and failures < self.failed_tick_threshold and age <= self.stale_grace_seconds:
+            payload = dict(cached)
+            payload.update(
+                {
+                    "freshness": "STALE",
+                    "status": "STALE_TICK",
+                    "market_status": "STALE_TICK",
+                    "stale": True,
+                    "stale_age_seconds": round(age, 2),
+                    "consecutive_failed_tick_reads": failures,
+                    "error": "STALE_TICK",
+                    "message": message,
+                    "last_successful_tick_at": cached.get("timestamp"),
+                    "tick_recovery_status": (recovery or {}).get("tick_recovery_status", "TICK_STILL_UNAVAILABLE"),
+                    "symbol_availability": (availability or {}).get("classification", cached.get("symbol_availability")),
+                    "symbol_select_result": (availability or {}).get("symbol_select_result", cached.get("symbol_select_result")),
+                    "symbol_select_error": (availability or {}).get("last_error", cached.get("symbol_select_error")),
+                    "mt5_last_error": (availability or {}).get("last_error", cached.get("mt5_last_error")),
+                }
+            )
+            return payload
+        offline_status = "FEED_OFFLINE" if cached else "SYMBOL_TICK_UNAVAILABLE"
+        payload = self._stale_tick_payload(symbol, recovery or {}, availability, source)
+        payload.update(
+            {
+                "status": offline_status,
+                "market_status": offline_status,
+                "freshness": "OFFLINE",
+                "stale": bool(cached),
+                "stale_age_seconds": round(age, 2) if cached else None,
+                "consecutive_failed_tick_reads": failures,
+                "message": message,
+            }
+        )
+        if cached:
+            payload["bid"] = cached.get("bid")
+            payload["ask"] = cached.get("ask")
+            payload["spread"] = cached.get("spread")
+            payload["last_successful_tick_at"] = cached.get("timestamp")
+        return payload
 
     def _stale_tick_payload(
         self,
@@ -483,6 +561,9 @@ class MT5MarketDataService:
             "freshness": "OFFLINE",
             "source": source,
             "status": "SYMBOL_TICK_UNAVAILABLE",
+            "market_status": "SYMBOL_TICK_UNAVAILABLE",
+            "stale": False,
+            "consecutive_failed_tick_reads": self._failed_tick_reads.get(symbol, 0),
             "error": "STALE_TICK",
             "message": self._tick_unavailable_message(symbol, availability, "SYMBOL_TICK_UNAVAILABLE"),
             "tick_recovery_status": "TICK_STILL_UNAVAILABLE",
@@ -496,6 +577,19 @@ class MT5MarketDataService:
             "mt5_last_error": availability.get("last_error"),
             "terminal_memory_warning": self._terminal_memory_warning(availability.get("last_error")),
         }
+
+    def _record_successful_tick(self, symbol: str, payload: dict[str, Any]) -> None:
+        self._failed_tick_reads[symbol] = 0
+        self._last_good_ticks[symbol] = dict(payload)
+
+    def _tick_age_seconds(self, tick: dict[str, Any] | None) -> float:
+        if not tick:
+            return float("inf")
+        try:
+            timestamp = datetime.fromisoformat(str(tick.get("timestamp")).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return float("inf")
+        return max(0.0, (datetime.now(timezone.utc) - timestamp).total_seconds())
 
     def _candle_error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str) -> dict[str, Any]:
         return {

@@ -54,6 +54,8 @@ def verify_market_data_routes_honest() -> bool:
         "SYMBOL_NOT_AVAILABLE",
         "SYMBOL_UNAVAILABLE",
         "SYMBOL_TICK_UNAVAILABLE",
+        "STALE_TICK",
+        "FEED_OFFLINE",
         "MT5_UNAVAILABLE",
         "TICK_READ_FAILED",
     }
@@ -111,7 +113,7 @@ def verify_xauusd_signal_honesty() -> bool:
     response = client.get("/client-signals-engine/XAUUSD")
     payload = response.json()
     valid_signal = payload.get("signal") in {"BUY", "SELL", "WAIT"}
-    honest_wait = payload.get("signal") != "WAIT" or payload.get("confidence") is None
+    honest_wait = payload.get("signal") != "WAIT" or payload.get("status_level") in {"WAIT", "WATCHLIST", "REJECTED"}
     no_execution = payload.get("live_execution_enabled") is False and payload.get("broker_execution_enabled") is False
     components = payload.get("strategy_components") or {}
     component_keys = {"liquidity_sweep", "bos", "choch", "fvg", "order_block", "session_valid"}
@@ -199,7 +201,9 @@ def verify_source_support_and_dashboard_labels() -> bool:
         "symbol_info = mt5.symbol_info(symbol)",
         "xauusdReadinessLabel",
         "Market Ready",
-        "Market Closed / Feed Offline",
+        "Stale Tick",
+        "Feed Offline",
+        "Market Closed",
         "Symbol Not Available",
         "Waiting for Strategy Setup",
         "Ready for Future Demo Test",

@@ -94,6 +94,40 @@ def verify_unavailable_tick_remains_blocked() -> bool:
     return show("Unavailable XAUUSD quote remains honestly blocked", passed, str(blocked))
 
 
+def verify_tick_failure_debounce_uses_last_good_quote() -> bool:
+    from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
+
+    service = MT5MarketDataService()
+    service._record_successful_tick(
+        "XAUUSD",
+        {
+            "symbol": "XAUUSD",
+            "bid": 2350.12,
+            "ask": 2350.45,
+            "spread": 0.33,
+            "timestamp": service._timestamp(),
+            "freshness": "READY",
+            "source": "VANTAGE_DEMO",
+            "status": "OK",
+            "market_status": "MARKET_READY",
+        },
+    )
+    first = service._temporary_tick_failure_payload("XAUUSD", "SYMBOL_TICK_UNAVAILABLE", "temporary miss")
+    second = service._temporary_tick_failure_payload("XAUUSD", "SYMBOL_TICK_UNAVAILABLE", "temporary miss")
+    third = service._temporary_tick_failure_payload("XAUUSD", "SYMBOL_TICK_UNAVAILABLE", "temporary miss")
+    passed = (
+        first["status"] == "STALE_TICK"
+        and first["market_status"] == "STALE_TICK"
+        and first["bid"] == 2350.12
+        and first["ask"] == 2350.45
+        and second["status"] == "STALE_TICK"
+        and third["status"] == "FEED_OFFLINE"
+        and third["bid"] == 2350.12
+        and third["ask"] == 2350.45
+    )
+    return show("Temporary tick failures debounce to STALE_TICK before FEED_OFFLINE", passed, str({"first": first, "third": third}))
+
+
 def verify_source_contains_recovery_logic() -> bool:
     text = MARKET_DATA_PATH.read_text(encoding="utf-8")
     required = [
@@ -108,6 +142,10 @@ def verify_source_contains_recovery_logic() -> bool:
         "symbol_info_ask",
         "calculated_spread",
         "recovery_status",
+        "_temporary_tick_failure_payload",
+        "STALE_TICK",
+        "FEED_OFFLINE",
+        "MARKET_READY",
     ]
     missing = [item for item in required if item not in text]
     return show("Market-data service includes tick recovery classifications", not missing, ", ".join(missing))
@@ -142,8 +180,8 @@ def verify_live_route_shape() -> bool:
         honest = tick.get("bid", 0) > 0 and tick.get("ask", 0) > tick.get("bid", 0) and tick.get("spread", 0) > 0
         valid_recovery = tick.get("tick_recovery_status") in {"TICK_AVAILABLE_DIRECT", "TICK_AVAILABLE_FROM_SYMBOL_INFO"}
     else:
-        honest = tick.get("tick_recovery_status") == "TICK_STILL_UNAVAILABLE"
-        valid_recovery = tick.get("status") == "SYMBOL_TICK_UNAVAILABLE"
+        honest = tick.get("tick_recovery_status") == "TICK_STILL_UNAVAILABLE" or tick.get("status") in {"STALE_TICK", "FEED_OFFLINE"}
+        valid_recovery = tick.get("status") in {"SYMBOL_TICK_UNAVAILABLE", "STALE_TICK", "FEED_OFFLINE"}
     passed = (
         required_tick <= set(tick)
         and required_diagnostics <= set(diagnostics)
@@ -191,6 +229,7 @@ def main() -> int:
         verify_direct_tick_success_case(),
         verify_symbol_info_fallback_success_case(),
         verify_unavailable_tick_remains_blocked(),
+        verify_tick_failure_debounce_uses_last_good_quote(),
         verify_source_contains_recovery_logic(),
         verify_live_route_shape(),
         verify_no_fake_price_or_execution(),

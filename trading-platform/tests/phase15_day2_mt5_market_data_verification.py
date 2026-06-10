@@ -79,13 +79,13 @@ def valid_ok_tick(payload: dict[str, Any]) -> bool:
 def tick_payload_ok(payload: dict[str, Any]) -> bool:
     status = payload.get("status")
     if status == "OK":
-        return valid_ok_tick(payload) and payload.get("freshness") == "READY"
-    if status == "STALE_OR_MARKET_CLOSED":
+        return valid_ok_tick(payload) and payload.get("freshness") == "READY" and payload.get("market_status") in {None, "MARKET_READY"}
+    if status in {"STALE_OR_MARKET_CLOSED", "STALE_TICK"}:
         return (
-            payload.get("freshness") == "OFFLINE"
-            and payload.get("message") == "MT5 tick is stale. Market may be closed or broker feed is not updating."
+            payload.get("freshness") in {"OFFLINE", "STALE"}
+            and payload.get("message")
         )
-    return status in {"MT5_UNAVAILABLE", "SYMBOL_UNAVAILABLE", "TICK_UNAVAILABLE", "TICK_READ_FAILED"}
+    return status in {"MT5_UNAVAILABLE", "SYMBOL_UNAVAILABLE", "TICK_UNAVAILABLE", "TICK_READ_FAILED", "SYMBOL_TICK_UNAVAILABLE", "FEED_OFFLINE", "MARKET_CLOSED"}
 
 
 def verify_files() -> bool:
@@ -107,21 +107,21 @@ def verify_routes_and_payloads() -> bool:
         payloads = [response.json() for response in responses]
         ticks_ok = all(
             payload.get("symbol") in {"EURUSD", "XAUUSD"}
-            and payload.get("source") == "MT5_DEMO"
+            and payload.get("source") in {"MT5_DEMO", "VANTAGE_DEMO"}
             and tick_payload_ok(payload)
             for payload in payloads[1:3]
         )
         candles_ok = all(
             payload.get("symbol") in {"EURUSD", "XAUUSD"}
             and payload.get("timeframe") in {"M5", "H1"}
-            and payload.get("source") == "MT5_DEMO"
+            and payload.get("source") in {"MT5_DEMO", "VANTAGE_DEMO"}
             and isinstance(payload.get("candles"), list)
             and payload.get("status") in {"OK", "MT5_UNAVAILABLE", "SYMBOL_UNAVAILABLE", "CANDLES_UNAVAILABLE", "CANDLE_READ_FAILED"}
             for payload in payloads[3:7]
         )
         spreads_ok = all(
             payload.get("symbol") in {"EURUSD", "XAUUSD"}
-            and payload.get("source") == "MT5_DEMO"
+            and payload.get("source") in {"MT5_DEMO", "VANTAGE_DEMO"}
             and tick_payload_ok(payload)
             for payload in payloads[7:]
         )

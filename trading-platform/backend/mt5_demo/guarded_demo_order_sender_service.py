@@ -332,10 +332,19 @@ class GuardedDemoOrderSenderService:
     def _xauusd_vantage_runtime_allowed(self, payload: dict[str, Any], account_status: dict[str, Any]) -> bool:
         symbol = str(payload.get("symbol") or "").strip().upper()
         server = str(account_status.get("server") or "").lower()
+        broker = str(payload.get("broker_source") or payload.get("broker_id") or "").upper()
+        auto_validation = str(payload.get("strategy_profile") or "").upper() == "AUTO_VALIDATION"
+        auto_validation_safe = (
+            auto_validation
+            and broker == "VANTAGE_DEMO"
+            and payload.get("live_execution_enabled") is False
+            and payload.get("broker_execution_enabled") is False
+            and self._float_or_none(payload.get("lot")) == self.max_demo_lot
+        )
         return (
             symbol == "XAUUSD"
-            and payload.get("broker_id") == "VANTAGE_DEMO"
-            and payload.get("allow_xauusd_vantage_demo_test") is True
+            and broker == "VANTAGE_DEMO"
+            and (payload.get("allow_xauusd_vantage_demo_test") is True or auto_validation_safe)
             and account_status.get("account_type") == "DEMO"
             and "vantage" in server
         )
@@ -422,6 +431,7 @@ class GuardedDemoOrderSenderService:
         final_retcode: Any = None,
         final_comment: str | None = None,
     ) -> dict[str, Any]:
+        diagnostics = self._rejection_diagnostics(payload, [], comment, account=account, retcode=retcode)
         return {
             "request_id": f"guarded-demo-order-{uuid4()}",
             "status": status,
@@ -443,6 +453,9 @@ class GuardedDemoOrderSenderService:
             "account_login": str(getattr(account, "login", "")) if account else "",
             "server": str(getattr(account, "server", "")) if account else "",
             "broker_source": str(payload.get("broker_source") or payload.get("broker_id") or ""),
+            "strategy_profile": str(payload.get("strategy_profile") or ""),
+            "entry": self._float_or_none(payload.get("entry_price")),
+            "rr": self._risk_reward_ratio(payload),
             "signal_confidence": self._float_or_none(payload.get("signal_confidence")),
             "signal_hash": str(payload.get("signal_hash") or ""),
             "setup_reason": str(payload.get("setup_reason") or ""),
@@ -453,6 +466,7 @@ class GuardedDemoOrderSenderService:
             "simulation_only": False,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
+            **diagnostics,
             "timestamp": self._timestamp(),
         }
 
@@ -466,6 +480,7 @@ class GuardedDemoOrderSenderService:
     ) -> dict[str, Any]:
         symbol = str(payload.get("symbol") or "").strip().upper()
         lot = self._float_or_none(payload.get("lot")) or 0.0
+        diagnostics = self._rejection_diagnostics(payload, blockers, reason)
         return {
             "request_id": f"guarded-demo-order-{uuid4()}",
             "status": status,
@@ -479,6 +494,7 @@ class GuardedDemoOrderSenderService:
             "live_order_attempted": False,
             "reason": reason,
             "blockers": blockers,
+            **diagnostics,
             "single_trade_limit": 1,
             "execution_allowed": False,
             "simulation_only": True,
@@ -496,6 +512,37 @@ class GuardedDemoOrderSenderService:
             "sl": self._float_or_none(payload.get("stop_loss")),
             "tp": self._float_or_none(payload.get("take_profit")),
             "comment": "GUARDED_DEMO_PREPARE_ONLY",
+        }
+
+    def _rejection_diagnostics(self, payload: dict[str, Any], blockers: list[str], reason: str, account: Any = None, retcode: Any = None) -> dict[str, Any]:
+        account_status = {}
+        if account is not None:
+            account_status = {
+                "account_login": str(getattr(account, "login", "")),
+                "server": str(getattr(account, "server", "")),
+                "account_type": "DEMO" if "demo" in str(getattr(account, "server", "")).lower() else "",
+            }
+        else:
+            try:
+                account_status = self.mt5_demo_service.get_status()
+            except Exception:
+                account_status = {}
+        failed_guard = blockers[0] if blockers else ("MT5_RETCODE" if retcode not in {None, "", 0} else "")
+        return {
+            "rejection_code": failed_guard or ("DEMO_ORDER_REJECTED" if reason else ""),
+            "rejection_reason": reason,
+            "failed_guard": failed_guard,
+            "side": str(payload.get("side") or payload.get("action") or "").strip().upper(),
+            "entry": self._float_or_none(payload.get("entry_price")),
+            "sl": self._float_or_none(payload.get("stop_loss")),
+            "tp": self._float_or_none(payload.get("take_profit")),
+            "rr": self._risk_reward_ratio(payload),
+            "confidence": self._float_or_none(payload.get("signal_confidence")),
+            "broker": str(payload.get("broker_source") or payload.get("broker_id") or ""),
+            "account": account_status.get("login") or account_status.get("account_login") or "",
+            "server": account_status.get("server") or "",
+            "account_type": account_status.get("account_type") or "",
+            "strategy_profile": str(payload.get("strategy_profile") or ""),
         }
 
     def _float_or_none(self, value: Any) -> float | None:

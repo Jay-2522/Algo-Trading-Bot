@@ -37,6 +37,7 @@ class AutoValidationService:
         self._tick_cache: dict[str, dict[str, Any]] = {}
         self._confidence_timeline: dict[str, list[dict[str, Any]]] = {}
         self._last_hash_change_audit: dict[str, Any] | None = None
+        self._last_sender_rejection: dict[str, Any] | None = None
         self._seen_signal_hashes: set[str] = set()
         self._last_trade_time: datetime | None = None
         self._last_execution_decision: dict[str, Any] | None = None
@@ -58,6 +59,7 @@ class AutoValidationService:
             "events": self.events[-50:],
             "mt5_health": copy.deepcopy(self.mt5_health_state),
             "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
+            "last_sender_rejection": copy.deepcopy(self._last_sender_rejection),
             "confidence_timeline": copy.deepcopy(self._confidence_timeline),
             **self.runner_state,
             "simulation_only": True,
@@ -146,6 +148,7 @@ class AutoValidationService:
         if halt:
             return self._halt(halt)
         signals = self._allowed_signals(signals if signals is not None else self._load_signals())
+        self._record_execution_funnel_scan(signals)
         self._record_confidence_timeline(signals)
         checked = [self._checked_symbol_result(signal) for signal in signals]
         best_candidate = self._best_candidate(checked)
@@ -184,11 +187,16 @@ class AutoValidationService:
         if service is None:
             return self._halt("GUARDED_SENDER_UNAVAILABLE")
         payload = self._guarded_payload(signal)
+        self._increment_funnel("signals_sent_to_sender")
         result = service.send_test_order(payload)
         sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True
         if not sent:
-            self._log("ORDER_REJECTED", {"sender_result": result})
-            return self._halt("GUARDED_SENDER_REJECTED")
+            self._increment_funnel("signals_blocked_by_sender")
+            rejection = self._sender_rejection(result, payload)
+            self._last_sender_rejection = rejection
+            self._log("GUARDED_SENDER_REJECTED", rejection)
+            return self._decision("BLOCKED", ["GUARDED_SENDER_REJECTED"], signal, {"sender_result": result, "last_sender_rejection": rejection, "guarded_sender_used": bool(result.get("guarded_sender_used"))})
+        self._increment_funnel("orders_created")
         self._seen_signal_hashes.add(str(signal.get("signal_hash") or ""))
         self._last_trade_time = datetime.now(timezone.utc)
         decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True})
@@ -677,7 +685,6 @@ class AutoValidationService:
             "MAX_DRAWDOWN_REACHED",
             "MAX_DAILY_LOSS_REACHED",
             "MT5_DISCONNECT_TIMEOUT",
-            "GUARDED_SENDER_REJECTED",
         }
         return any(item in halts for item in blockers)
 
@@ -762,6 +769,21 @@ class AutoValidationService:
                 "reason_for_confidence_change": reason,
             }
             self._confidence_timeline[symbol] = (self._confidence_timeline.get(symbol, []) + [item])[-20:]
+
+    def _record_execution_funnel_scan(self, signals: list[dict[str, Any]]) -> None:
+        for signal in signals:
+            status = str(signal.get("status_level") or signal.get("execution_status") or signal.get("signal") or "").upper()
+            action = str(signal.get("signal") or "").upper()
+            self._increment_funnel("signals_scanned")
+            if action == "WAIT" or status == "WAIT":
+                self._increment_funnel("signals_wait")
+            if status == "WATCHLIST":
+                self._increment_funnel("signals_watchlist")
+            if status == "READY_FOR_PREVIEW" or self._ready(signal):
+                self._increment_funnel("signals_ready_for_preview")
+
+    def _increment_funnel(self, key: str, amount: int = 1) -> None:
+        self.session[key] = int(self.session.get(key) or 0) + amount
 
     def _hash_change_audit(self, original: dict[str, Any], current: dict[str, Any] | None) -> dict[str, Any]:
         original_hash = str(original.get("signal_hash") or "")
@@ -913,6 +935,13 @@ class AutoValidationService:
             "last_mt5_disconnect_at": None,
             "mt5_disconnect_recovered_at": None,
             "mt5_reconnect_attempts": 0,
+            "signals_scanned": 0,
+            "signals_wait": 0,
+            "signals_watchlist": 0,
+            "signals_ready_for_preview": 0,
+            "signals_sent_to_sender": 0,
+            "signals_blocked_by_sender": 0,
+            "orders_created": 0,
         }
 
     def _load_state(self) -> None:
@@ -938,6 +967,8 @@ class AutoValidationService:
             self._current_signal_watched = data["current_signal_watched"]
         if isinstance(data.get("last_hash_change_audit"), dict):
             self._last_hash_change_audit = data["last_hash_change_audit"]
+        if isinstance(data.get("last_sender_rejection"), dict):
+            self._last_sender_rejection = data["last_sender_rejection"]
         if isinstance(data.get("confidence_timeline"), dict):
             self._confidence_timeline = data["confidence_timeline"]
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
@@ -953,6 +984,7 @@ class AutoValidationService:
                 "last_execution_decision": self._last_execution_decision,
                 "current_signal_watched": self._current_signal_watched,
                 "last_hash_change_audit": self._last_hash_change_audit,
+                "last_sender_rejection": self._last_sender_rejection,
                 "confidence_timeline": self._confidence_timeline,
                 "updated_at": self._timestamp(),
             }
@@ -982,6 +1014,29 @@ class AutoValidationService:
             "mt5_disconnect_timeout_seconds": 600,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
+        }
+
+    def _sender_rejection(self, result: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        blockers = result.get("blockers") or result.get("blocked_reasons") or []
+        failed_guard = result.get("failed_guard") or (blockers[0] if isinstance(blockers, list) and blockers else result.get("status") or "UNKNOWN")
+        return {
+            "rejection_code": result.get("rejection_code") or failed_guard,
+            "rejection_reason": result.get("rejection_reason") or result.get("reason") or result.get("comment") or result.get("final_comment") or "Guarded sender rejected the demo order.",
+            "failed_guard": failed_guard,
+            "symbol": result.get("symbol") or payload.get("symbol"),
+            "side": result.get("side") or result.get("action") or payload.get("action") or payload.get("side"),
+            "lot": result.get("lot") or payload.get("lot"),
+            "entry": result.get("entry") or result.get("entry_price") or payload.get("entry_price"),
+            "sl": result.get("sl") or payload.get("stop_loss"),
+            "tp": result.get("tp") or payload.get("take_profit"),
+            "rr": result.get("rr") or payload.get("risk_reward_ratio"),
+            "confidence": result.get("confidence") or result.get("signal_confidence") or payload.get("signal_confidence"),
+            "broker": result.get("broker") or result.get("broker_source") or payload.get("broker_source") or payload.get("broker_id"),
+            "account": result.get("account_login") or payload.get("account_login"),
+            "server": result.get("server"),
+            "strategy_profile": result.get("strategy_profile") or payload.get("strategy_profile"),
+            "sender_status": result.get("status"),
+            "timestamp": self._timestamp(),
         }
 
     def _safe_config(self, payload: dict[str, Any]) -> dict[str, Any]:

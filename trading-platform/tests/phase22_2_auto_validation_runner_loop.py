@@ -116,6 +116,7 @@ class FakeGuarded:
         self.calls: list[dict[str, Any]] = []
         self.market_data_service = self
         self.failed_ticks: set[str] = set()
+        self.reject = False
 
     def get_symbol_tick(self, symbol: str) -> dict[str, Any]:
         if symbol in self.failed_ticks:
@@ -124,6 +125,16 @@ class FakeGuarded:
 
     def send_test_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
+        if self.reject:
+            return {
+                "status": "BLOCKED",
+                "mt5_order_sent": False,
+                "guarded_sender_used": True,
+                "rejection_code": "TEST_SENDER_BLOCK",
+                "rejection_reason": "Test sender rejection.",
+                "failed_guard": "TEST_SENDER_BLOCK",
+                "strategy_profile": payload.get("strategy_profile"),
+            }
         return {"status": "DEMO_ORDER_SENT", "mt5_order_sent": True}
 
 
@@ -216,6 +227,9 @@ async def verify_run_once_called_and_events_generated() -> bool:
             and status["last_execution_decision"]["status"] == "NO_QUALIFIED_SIGNAL"
             and status["runner_interval_seconds"] == 2.0
             and status["last_run_once_duration_ms"] is not None
+            and status["session"]["signals_scanned"] == 2
+            and status["session"]["signals_watchlist"] == 2
+            and status["session"]["signals_ready_for_preview"] == 0
         )
         return show("run_once is called, events are generated, and WATCHLIST interval becomes 2s", passed, str(events))
 
@@ -308,6 +322,7 @@ async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> boo
         service.start()
         result = await AutoValidationRunner(service).run_tick()
         payload = guarded.calls[0] if guarded.calls else {}
+        status = service.status()
         passed = (
             result["status"] == "ORDER_SENT"
             and len(guarded.calls) == 1
@@ -315,6 +330,11 @@ async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> boo
             and payload.get("lot") == 0.01
             and payload.get("live_execution_enabled") is False
             and payload.get("broker_execution_enabled") is False
+            and status["session"]["signals_scanned"] == 2
+            and status["session"]["signals_ready_for_preview"] == 1
+            and status["session"]["signals_sent_to_sender"] == 1
+            and status["session"]["signals_blocked_by_sender"] == 0
+            and status["session"]["orders_created"] == 1
             and signals.requested_profiles[:2] == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
         )
         return show("AUTO_VALIDATION allows demo-only 68 confidence setup without BOS/liquidity hard gates", passed, str(payload))
@@ -368,6 +388,31 @@ async def verify_auto_validation_material_hash_change_blocks() -> bool:
             and audit["minor_change"] is False
         )
         return show("AUTO_VALIDATION material stop-loss hash change blocks", passed, str({"events": events, "audit": audit}))
+
+
+async def verify_sender_rejection_does_not_halt_and_records_diagnostics() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="xau-sender-reject")])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        guarded.reject = True
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        status = service.status()
+        rejection = status["last_sender_rejection"]
+        events = [event["event"] for event in service.events]
+        passed = (
+            result["status"] == "BLOCKED"
+            and service.session["status"] == "RUNNING"
+            and "GUARDED_SENDER_REJECTED" in events
+            and status["session"]["signals_sent_to_sender"] == 1
+            and status["session"]["signals_blocked_by_sender"] == 1
+            and status["session"]["orders_created"] == 0
+            and rejection["rejection_code"] == "TEST_SENDER_BLOCK"
+            and rejection["failed_guard"] == "TEST_SENDER_BLOCK"
+        )
+        return show("Sender rejection records diagnostics and does not HALT_RISK", passed, str({"result": result, "rejection": rejection, "events": events}))
 
 
 def verify_production_profile_stays_strict() -> bool:
@@ -431,6 +476,49 @@ def verify_journal_stores_strategy_profile() -> bool:
         )
         passed = record.get("strategy_profile") == "AUTO_VALIDATION"
         return show("Journal stores strategy_profile", passed, str(record))
+
+
+def verify_guarded_sender_auto_validation_xauusd_guard_accepts() -> bool:
+    from backend.mt5_demo.guarded_demo_order_sender_service import GuardedDemoOrderSenderService
+
+    class DemoAccount:
+        def get_status(self) -> dict[str, Any]:
+            return {"status": "CONNECTED", "environment": "DEMO", "account_type": "DEMO", "server": "VantageMarkets-Demo", "login": "123"}
+
+    class Approved:
+        def get_latest(self) -> dict[str, Any]:
+            return {"approved_for_future_demo_order": True, "validation_passed": True, "simulation_passed": True, "overall_status": "READY"}
+
+        def get_latest_approval(self) -> dict[str, Any]:
+            return {"approved_for_future_demo_order": True}
+
+        def get_latest_audit(self) -> dict[str, Any]:
+            return {"overall_status": "READY"}
+
+    deps = Approved()
+    sender = GuardedDemoOrderSenderService(DemoAccount(), deps, deps, deps, deps, deps, deps)
+    payload = {
+        "environment": "DEMO",
+        "symbol": "XAUUSD",
+        "action": "SELL",
+        "lot": 0.01,
+        "entry_price": 2400.0,
+        "stop_loss": 2410.0,
+        "take_profit": 2380.0,
+        "manual_confirmation": True,
+        "acknowledge_demo_only": True,
+        "acknowledge_no_live_trading": True,
+        "acknowledge_single_trade_only": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+        "broker_source": "VANTAGE_DEMO",
+        "strategy_profile": "AUTO_VALIDATION",
+        "signal_confidence": 84,
+        "risk_reward_ratio": 2.0,
+    }
+    result = sender.prepare_order(payload)
+    passed = result["status"] == "PREPARED_BUT_NOT_SENT" and result["blockers"] == [] and result["strategy_profile"] == "AUTO_VALIDATION"
+    return show("Guarded sender allows valid AUTO_VALIDATION XAUUSD Vantage demo guard path", passed, str(result))
 
 
 async def verify_mt5_disconnect_requires_three_failed_health_checks() -> bool:
@@ -650,6 +738,18 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Best Candidate Symbol",
         "Why no symbol qualified",
         "per_symbol_results",
+        "Execution Funnel",
+        "signals_scanned",
+        "signals_wait",
+        "signals_watchlist",
+        "signals_ready_for_preview",
+        "signals_sent_to_sender",
+        "signals_blocked_by_sender",
+        "orders_created",
+        "Last Sender Rejection",
+        "rejection_code",
+        "rejection_reason",
+        "failed_guard",
         "Strategy Profile",
         "HASH_CHANGE_MINOR",
         "AUTO_VALIDATION",
@@ -680,6 +780,7 @@ async def async_main() -> list[bool]:
         await verify_auto_validation_profile_loosened_rules_fire_demo_order(),
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),
+        await verify_sender_rejection_does_not_halt_and_records_diagnostics(),
         await verify_mt5_disconnect_requires_three_failed_health_checks(),
         await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
         await verify_mt5_disconnect_timeout_halts_only_after_timeout(),
@@ -693,7 +794,7 @@ def main() -> int:
     print("Phase 22.2 AUTO Validation Runner Loop Verification")
     print("=" * 78)
     checks = asyncio.run(async_main())
-    checks.extend([verify_production_profile_stays_strict(), verify_journal_stores_strategy_profile(), verify_code_wiring_and_dashboard(), verify_no_unrestricted_order_send()])
+    checks.extend([verify_production_profile_stays_strict(), verify_journal_stores_strategy_profile(), verify_guarded_sender_auto_validation_xauusd_guard_accepts(), verify_code_wiring_and_dashboard(), verify_no_unrestricted_order_send()])
     print("=" * 78)
     print("PASS" if all(checks) else "FAIL")
     return 0 if all(checks) else 1

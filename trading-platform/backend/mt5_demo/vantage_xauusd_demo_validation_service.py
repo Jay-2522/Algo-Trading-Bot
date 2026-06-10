@@ -80,6 +80,7 @@ class VantageXAUUSDDemoValidationService:
         readiness = self._readiness(payload, require_confirm=True)
         preview = self.preview(payload)
         if readiness["blockers"]:
+            diagnostics = self._rejection_diagnostics(payload, readiness["blockers"], readiness, "Vantage demo validation blocked the order.")
             result = {
                 **preview,
                 "status": "BLOCKED",
@@ -87,6 +88,7 @@ class VantageXAUUSDDemoValidationService:
                 "mt5_order_sent": False,
                 "guarded_sender_used": False,
                 "blocked_reasons": readiness["blockers"],
+                **diagnostics,
             }
             self._latest_order = result
             return result
@@ -116,6 +118,7 @@ class VantageXAUUSDDemoValidationService:
             "signal_hash": payload.get("signal_hash"),
             "setup_reason": payload.get("setup_reason"),
             "strategy_metadata": payload.get("strategy_metadata"),
+            "strategy_profile": payload.get("strategy_profile"),
             "allow_xauusd_vantage_demo_test": symbol == "XAUUSD",
             "allow_eurusd_vantage_demo_test": symbol == "EURUSD",
             "execute_single_demo_order_now": True,
@@ -126,6 +129,8 @@ class VantageXAUUSDDemoValidationService:
         }
         approval = self.approval_workflow_service.run_workflow(approval_payload)
         if approval.get("approved_for_future_demo_order") is not True:
+            blockers = sorted(set([*readiness["blockers"], *approval.get("blockers", ["APPROVAL_WORKFLOW_NOT_APPROVED"])]))
+            diagnostics = self._rejection_diagnostics(payload, blockers, readiness, "Approval workflow blocked the guarded demo order.")
             result = {
                 **preview,
                 "status": "BLOCKED",
@@ -133,7 +138,8 @@ class VantageXAUUSDDemoValidationService:
                 "mt5_order_sent": False,
                 "guarded_sender_used": False,
                 "approval_result": approval,
-                "blocked_reasons": sorted(set([*readiness["blockers"], *approval.get("blockers", ["APPROVAL_WORKFLOW_NOT_APPROVED"])])),
+                "blocked_reasons": blockers,
+                **diagnostics,
             }
             self._latest_order = result
             return result
@@ -246,7 +252,13 @@ class VantageXAUUSDDemoValidationService:
         elif age_seconds > 30:
             blockers.append("SIGNAL_EXPIRED")
 
-        current_signal = self.signal_engine_service.generate_signal(symbol) if self.signal_engine_service is not None and symbol in self.supported_symbols else None
+        strategy_profile = str(payload.get("strategy_profile") or "").upper()
+        current_signal = None
+        if self.signal_engine_service is not None and symbol in self.supported_symbols:
+            try:
+                current_signal = self.signal_engine_service.generate_signal(symbol, strategy_profile=strategy_profile) if strategy_profile == "AUTO_VALIDATION" else self.signal_engine_service.generate_signal(symbol)
+            except TypeError:
+                current_signal = self.signal_engine_service.generate_signal(symbol)
         if current_signal is not None:
             if current_signal.get("execution_status") != "READY_FOR_PREVIEW":
                 blockers.append("SIGNAL_NO_LONGER_READY_FOR_PREVIEW")
@@ -254,8 +266,13 @@ class VantageXAUUSDDemoValidationService:
                 blockers.append("SIGNAL_NO_LONGER_APPROVED")
             if str(current_signal.get("signal") or "").upper() != side:
                 blockers.append("SIGNAL_DIRECTION_CHANGED")
-            if signal_hash and current_signal.get("signal_hash") != signal_hash:
+            if signal_hash and current_signal.get("signal_hash") != signal_hash and strategy_profile != "AUTO_VALIDATION":
                 blockers.append("SIGNAL_HASH_CHANGED")
+            if strategy_profile == "AUTO_VALIDATION":
+                if self._float_or_none(current_signal.get("risk_reward")) is not None and self._float_or_none(current_signal.get("risk_reward")) < 1.5:
+                    blockers.append("RR_BELOW_AUTO_VALIDATION_MINIMUM")
+                if self._float_or_none(current_signal.get("confidence")) is not None and self._float_or_none(current_signal.get("confidence")) < 65:
+                    blockers.append("CONFIDENCE_BELOW_AUTO_VALIDATION_MINIMUM")
 
         return {
             "status": "PASSED" if not blockers else "BLOCKED",
@@ -271,6 +288,29 @@ class VantageXAUUSDDemoValidationService:
             }
             if current_signal is not None
             else None,
+        }
+
+    def _rejection_diagnostics(self, payload: dict[str, Any], blockers: list[str], readiness: dict[str, Any], reason: str) -> dict[str, Any]:
+        account = readiness.get("account") if isinstance(readiness.get("account"), dict) else {}
+        tick = readiness.get("tick") if isinstance(readiness.get("tick"), dict) else {}
+        failed_guard = blockers[0] if blockers else "UNKNOWN"
+        return {
+            "rejection_code": failed_guard,
+            "rejection_reason": reason,
+            "failed_guard": failed_guard,
+            "symbol": readiness.get("symbol") or payload.get("symbol"),
+            "side": str(payload.get("side") or payload.get("action") or "").upper(),
+            "lot": self._float_or_none(payload.get("lot")),
+            "entry": self._entry_estimate(str(payload.get("side") or payload.get("action") or "").upper(), tick),
+            "sl": self._float_or_none(payload.get("stop_loss") or payload.get("sl")),
+            "tp": self._float_or_none(payload.get("take_profit") or payload.get("tp")),
+            "rr": self._float_or_none(payload.get("risk_reward_ratio") or payload.get("rr")),
+            "confidence": self._float_or_none(payload.get("signal_confidence")),
+            "broker": self.broker,
+            "account": account.get("login") or account.get("account_login"),
+            "server": account.get("server"),
+            "account_type": account.get("account_type"),
+            "strategy_profile": payload.get("strategy_profile"),
         }
 
     def _signal_age_seconds(self, value: Any) -> float | None:

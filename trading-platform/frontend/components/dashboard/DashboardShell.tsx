@@ -1075,6 +1075,7 @@ function AutoValidationPanel({
   const xauusdCheck = asRecord(perSymbolResults?.XAUUSD ?? decision?.XAUUSD);
   const mt5Health = asRecord(status?.mt5_health ?? decision?.mt5_health);
   const hashAudit = asRecord(status?.last_hash_change_audit ?? decision?.last_hash_change_audit);
+  const senderRejection = asRecord(status?.last_sender_rejection ?? decision?.last_sender_rejection);
   const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const hashEvent = readText(hashAudit, ["event"], readText(hashAudit, ["minor_change"], "false") === "true" ? "HASH_CHANGE_MINOR" : "No hash change");
   const confidenceTimeline = Array.isArray(status?.confidence_timeline)
@@ -1152,6 +1153,20 @@ function AutoValidationPanel({
       </div>
 
       <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Execution Funnel</p>
+          <h3 className="mt-1 text-xl font-black text-white">AUTO Validation Flow</h3>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <Metric label="Scanned" value={String(readNumber(session, ["signals_scanned"], 0))} compact />
+          <Metric label="Ready" value={String(readNumber(session, ["signals_ready_for_preview"], 0))} compact />
+          <Metric label="Sent" value={String(readNumber(session, ["signals_sent_to_sender"], 0))} compact />
+          <Metric label="Blocked" value={String(readNumber(session, ["signals_blocked_by_sender"], 0))} compact />
+          <Metric label="Opened" value={String(readNumber(session, ["orders_created"], 0))} compact />
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Validation Performance Dashboard</p>
@@ -1200,6 +1215,14 @@ function AutoValidationPanel({
             </p>
           </div>
           <p className={`mt-2 text-sm font-bold ${runnerError ? "text-rose-200" : "text-slate-500"}`}>Last Runner Error: {runnerError || "None"}</p>
+        </div>
+      </div>
+      <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Last Sender Rejection</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <Metric label="Code" value={readText(senderRejection, ["rejection_code"], "None")} compact />
+          <Metric label="Reason" value={readText(senderRejection, ["rejection_reason"], "None")} compact />
+          <Metric label="Failed Guard" value={readText(senderRejection, ["failed_guard"], "None")} compact />
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

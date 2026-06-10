@@ -75,7 +75,14 @@ class FakeGuarded:
     def send_test_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
         if self.reject:
-            return {"status": "BLOCKED", "mt5_order_sent": False, "guarded_sender_used": True}
+            return {
+                "status": "BLOCKED",
+                "mt5_order_sent": False,
+                "guarded_sender_used": True,
+                "rejection_code": "TEST_REJECTION",
+                "rejection_reason": "Sender rejected for test.",
+                "failed_guard": "TEST_REJECTION",
+            }
         return {"status": "DEMO_ORDER_SENT", "mt5_order_sent": True, "guarded_sender_used": True}
 
 
@@ -225,12 +232,19 @@ def verify_target_and_risk_halt() -> bool:
     return show("Target 30 closed trades completes session and risk halt stops session", passed)
 
 
-def verify_rejected_sender_halts() -> bool:
+def verify_rejected_sender_does_not_halt() -> bool:
     svc, guarded = make_service(signal(signal_hash="reject"))
     guarded.reject = True
     svc.start()
     result = svc.run_once([signal(signal_hash="reject")])
-    return show("Guarded sender rejection halts validation", result["status"] == "HALTED_RISK" and svc.session["status"] == "HALTED_RISK")
+    passed = (
+        result["status"] == "BLOCKED"
+        and "GUARDED_SENDER_REJECTED" in result["blockers"]
+        and svc.session["status"] == "RUNNING"
+        and svc.session["signals_blocked_by_sender"] == 1
+        and svc.status()["last_sender_rejection"]["failed_guard"] == "TEST_REJECTION"
+    )
+    return show("Guarded sender rejection is logged without halting validation", passed, str(result))
 
 
 def verify_validation_performance_metrics() -> bool:
@@ -333,7 +347,7 @@ def main() -> int:
         verify_guarded_execution_and_blocks(),
         verify_risk_blocks(),
         verify_target_and_risk_halt(),
-        verify_rejected_sender_halts(),
+        verify_rejected_sender_does_not_halt(),
         verify_validation_performance_metrics(),
         verify_dashboard_and_no_order_send(),
     ]

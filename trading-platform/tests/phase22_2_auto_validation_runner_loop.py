@@ -93,6 +93,24 @@ class FakeSignals:
         return signal
 
 
+class RevalidatingSignals:
+    def __init__(self, original: dict[str, Any], current: dict[str, Any]) -> None:
+        self.original = original
+        self.current = current
+        self.calls: dict[str, int] = {}
+        self.requested_profiles: list[str] = []
+
+    def signal_for_symbol(self, symbol: str, record_history: bool = False, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
+        self.requested_profiles.append(strategy_profile)
+        if symbol != self.original.get("symbol"):
+            return wait_signal(symbol, status_level="WAIT", signal_hash=f"{symbol.lower()}-wait")
+        count = self.calls.get(symbol, 0)
+        self.calls[symbol] = count + 1
+        signal = dict(self.original if count == 0 else self.current)
+        signal.setdefault("strategy_profile", strategy_profile)
+        return signal
+
+
 class FakeGuarded:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -300,6 +318,56 @@ async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> boo
             and signals.requested_profiles[:2] == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
         )
         return show("AUTO_VALIDATION allows demo-only 68 confidence setup without BOS/liquidity hard gates", passed, str(payload))
+
+
+async def verify_auto_validation_minor_hash_change_does_not_block() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        original = ready_signal("XAUUSD", signal_hash="xau-original-hash")
+        original.update({"confidence": 68, "entry": 2400.0, "take_profit": 2420.0})
+        current = dict(original)
+        current.update({"signal_hash": "xau-minor-hash", "confidence": 69, "entry": 2400.5, "take_profit": 2421.0})
+        signals = RevalidatingSignals(original, current)
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        events = [event["event"] for event in service.events]
+        audit = service.status()["last_hash_change_audit"]
+        passed = (
+            result["status"] == "ORDER_SENT"
+            and len(guarded.calls) == 1
+            and "HASH_CHANGE_MINOR" in events
+            and "SIGNAL_HASH_CHANGED" not in events
+            and audit["event"] == "HASH_CHANGE_MINOR"
+            and audit["minor_change"] is True
+            and audit["material_reasons"] == []
+        )
+        return show("AUTO_VALIDATION minor entry/TP/confidence hash drift does not block", passed, str({"events": events, "audit": audit}))
+
+
+async def verify_auto_validation_material_hash_change_blocks() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        original = ready_signal("XAUUSD", signal_hash="xau-original-material")
+        current = dict(original)
+        current.update({"signal_hash": "xau-material-hash", "stop_loss": 2388.0})
+        signals = RevalidatingSignals(original, current)
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        events = [event["event"] for event in service.events]
+        audit = service.status()["last_hash_change_audit"]
+        passed = (
+            result["status"] == "BLOCKED"
+            and guarded.calls == []
+            and "SIGNAL_HASH_CHANGED" in events
+            and "STOP_LOSS_CHANGED" in audit["material_reasons"]
+            and audit["event"] == "SIGNAL_HASH_CHANGED"
+            and audit["minor_change"] is False
+        )
+        return show("AUTO_VALIDATION material stop-loss hash change blocks", passed, str({"events": events, "audit": audit}))
 
 
 def verify_production_profile_stays_strict() -> bool:
@@ -583,6 +651,7 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Why no symbol qualified",
         "per_symbol_results",
         "Strategy Profile",
+        "HASH_CHANGE_MINOR",
         "AUTO_VALIDATION",
         "strategy_profile",
         "auto_validation_confidence = 65",
@@ -609,6 +678,8 @@ async def async_main() -> list[bool]:
         await verify_allowed_symbols_only_and_scan_report(),
         await verify_recoverable_market_data_failure_does_not_halt(),
         await verify_auto_validation_profile_loosened_rules_fire_demo_order(),
+        await verify_auto_validation_minor_hash_change_does_not_block(),
+        await verify_auto_validation_material_hash_change_blocks(),
         await verify_mt5_disconnect_requires_three_failed_health_checks(),
         await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
         await verify_mt5_disconnect_timeout_halts_only_after_timeout(),

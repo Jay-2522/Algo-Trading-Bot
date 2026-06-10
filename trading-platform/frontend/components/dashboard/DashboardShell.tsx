@@ -1076,6 +1076,7 @@ function AutoValidationPanel({
   const mt5Health = asRecord(status?.mt5_health ?? decision?.mt5_health);
   const hashAudit = asRecord(status?.last_hash_change_audit ?? decision?.last_hash_change_audit);
   const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const hashEvent = readText(hashAudit, ["event"], readText(hashAudit, ["minor_change"], "false") === "true" ? "HASH_CHANGE_MINOR" : "No hash change");
   const confidenceTimeline = Array.isArray(status?.confidence_timeline)
     ? []
     : Array.isArray(asRecord(status?.confidence_timeline)?.XAUUSD)
@@ -1205,6 +1206,7 @@ function AutoValidationPanel({
         <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Signal Hash Audit</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Metric label="Hash Status" value={hashEvent} valueClass={hashEvent === "HASH_CHANGE_MINOR" ? "text-emerald-300" : hashEvent === "SIGNAL_HASH_CHANGED" ? "text-amber-200" : "text-slate-300"} compact />
             <Metric label="Original Hash" value={readText(hashAudit, ["original_hash"], "None")} compact />
             <Metric label="Current Hash" value={readText(hashAudit, ["current_hash"], "None")} compact />
             <Metric label="Original Time" value={formatTradeTime(readText(hashAudit, ["original_signal_timestamp"], ""))} compact />

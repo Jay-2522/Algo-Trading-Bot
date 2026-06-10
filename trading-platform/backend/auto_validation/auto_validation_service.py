@@ -246,10 +246,14 @@ class AutoValidationService:
         if tick.get("spread") is None:
             blockers.append("SPREAD_UNAVAILABLE")
             self._log("TEMPORARY_MARKET_DATA_FAILURE", {"symbol": symbol, "reason": "SPREAD_UNAVAILABLE", "tick_status": tick.get("status"), "mt5_health": self.mt5_health_state})
-        if hash_audit.get("changed") and not hash_audit.get("informational_only"):
-            blockers.append("SIGNAL_HASH_CHANGED")
-            self._last_hash_change_audit = hash_audit
-            self._log("SIGNAL_HASH_CHANGED", hash_audit)
+        if hash_audit.get("changed"):
+            if hash_audit.get("minor_change"):
+                self._last_hash_change_audit = hash_audit
+                self._log("HASH_CHANGE_MINOR", hash_audit)
+            elif not hash_audit.get("informational_only"):
+                self._last_hash_change_audit = hash_audit
+                blockers.append("SIGNAL_HASH_CHANGED")
+                self._log("SIGNAL_HASH_CHANGED", hash_audit)
         return sorted(set(blockers))
 
     def _guarded_payload(self, signal: dict[str, Any]) -> dict[str, Any]:
@@ -775,7 +779,12 @@ class AutoValidationService:
             ("order_block", ["strategy_components", "order_block"]),
             ("FVG", ["strategy_components", "fvg"]),
             ("session", ["strategy_components", "session"]),
+            ("session_valid", ["strategy_components", "session_valid"]),
             ("signal_direction", ["signal"]),
+            ("rr", ["risk_reward"]),
+            ("status_level", ["status_level"]),
+            ("execution_status", ["execution_status"]),
+            ("risk_status", ["risk_status"]),
         ]
         changed_fields: list[dict[str, Any]] = []
         for label, path in fields:
@@ -787,16 +796,61 @@ class AutoValidationService:
         spread_current = current.get("spread")
         if spread_original != spread_current:
             changed_fields.append({"field": "spread", "original": spread_original, "current": spread_current})
-        informational = self._informational_hash_change_only(changed_fields)
+        auto_validation = str(original.get("strategy_profile") or current.get("strategy_profile") or self.config.get("strategy_profile") or "").upper() == "AUTO_VALIDATION"
+        if auto_validation:
+            classification = self._auto_validation_hash_classification(original, current, changed_fields)
+            informational = bool(classification["minor_change"])
+            minor_change = bool(classification["minor_change"])
+            material_reasons = classification["material_reasons"]
+        else:
+            informational = self._informational_hash_change_only(changed_fields)
+            minor_change = False
+            material_reasons = [] if informational else ["PRODUCTION_HASH_CHANGED"]
         return {
             "changed": True,
             "informational_only": informational,
+            "minor_change": minor_change,
+            "event": "HASH_CHANGE_MINOR" if minor_change else "SIGNAL_HASH_CHANGED",
+            "material_reasons": material_reasons,
             "original_hash": original_hash,
             "current_hash": current_hash,
             "changed_fields": changed_fields,
             "original_signal_timestamp": original.get("timestamp"),
             "revalidation_timestamp": current.get("timestamp") or self._timestamp(),
-            "root_cause": self._hash_root_cause(changed_fields, informational),
+            "root_cause": self._hash_root_cause(changed_fields, informational, material_reasons),
+        }
+
+    def _auto_validation_hash_classification(self, original: dict[str, Any], current: dict[str, Any], changed_fields: list[dict[str, Any]]) -> dict[str, Any]:
+        material: list[str] = []
+        original_direction = str(original.get("signal") or "").upper()
+        current_direction = str(current.get("signal") or "").upper()
+        if original_direction in {"BUY", "SELL"} and current_direction in {"BUY", "SELL"} and original_direction != current_direction:
+            material.append("SIGNAL_DIRECTION_CHANGED")
+        if self._number(original.get("stop_loss"), 0) != self._number(current.get("stop_loss"), 0):
+            material.append("STOP_LOSS_CHANGED")
+        if current_direction not in {"BUY", "SELL"}:
+            material.append("SETUP_BECAME_WAIT_OR_REJECTED")
+        if str(current.get("execution_status") or "").upper() != "READY_FOR_PREVIEW" or str(current.get("risk_status") or "").upper() != "APPROVED":
+            material.append("SETUP_BECAME_WAIT_OR_REJECTED")
+        if str(current.get("status_level") or "").upper() in {"WAIT", "REJECTED"}:
+            material.append("SETUP_BECAME_WAIT_OR_REJECTED")
+        components = current.get("strategy_components") if isinstance(current.get("strategy_components"), dict) else {}
+        if components.get("session_valid") is False:
+            material.append("SESSION_INVALID")
+        if self._number(current.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.5)):
+            material.append("RR_BELOW_THRESHOLD")
+        if self._number(current.get("confidence"), 0) < float(self.config.get("min_confidence", 65)):
+            material.append("CONFIDENCE_BELOW_AUTO_VALIDATION_THRESHOLD")
+
+        allowed_minor_fields = {"entry", "take_profit", "confidence", "spread"}
+        changed_names = {str(item.get("field")) for item in changed_fields}
+        unknown_material = sorted(changed_names - allowed_minor_fields - {"signal_direction", "stop_loss", "session_valid", "rr", "status_level", "execution_status", "risk_status"})
+        if unknown_material:
+            material.append("TRACKED_SETUP_FIELD_CHANGED")
+
+        return {
+            "minor_change": bool(changed_fields) and not material and changed_names.issubset(allowed_minor_fields),
+            "material_reasons": sorted(set(material)),
         }
 
     def _informational_hash_change_only(self, changed_fields: list[dict[str, Any]]) -> bool:
@@ -815,11 +869,15 @@ class AutoValidationService:
                 return False
         return True
 
-    def _hash_root_cause(self, changed_fields: list[dict[str, Any]], informational: bool) -> str:
+    def _hash_root_cause(self, changed_fields: list[dict[str, Any]], informational: bool, material_reasons: list[str] | None = None) -> str:
         if not changed_fields:
             return "Signal hash changed but tracked execution fields are unchanged."
         names = ", ".join(str(item.get("field")) for item in changed_fields)
-        prefix = "Informational hash drift" if informational else "Material signal revalidation change"
+        if informational:
+            prefix = "HASH_CHANGE_MINOR"
+        else:
+            reasons = ", ".join(material_reasons or ["material setup field changed"])
+            prefix = f"Material signal revalidation change ({reasons})"
         return f"{prefix}: {names} changed."
 
     def _nested(self, payload: dict[str, Any], path: list[str]) -> Any:

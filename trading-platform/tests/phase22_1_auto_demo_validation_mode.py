@@ -59,7 +59,7 @@ class FakeSignals:
 
 class FakeMarket:
     def __init__(self, tick: dict[str, Any] | None = None) -> None:
-        self.tick = tick or {"status": "OK", "spread": 0.25}
+        self.tick = tick or {"status": "OK", "bid": 1.1, "ask": 1.2, "spread": 0.25}
 
     def get_symbol_tick(self, symbol: str) -> dict[str, Any]:
         return self.tick
@@ -100,7 +100,7 @@ class FakeAccount:
         self.server = server
 
     def get_status(self) -> dict[str, Any]:
-        return {"account_type": self.account_type, "server": self.server, "login": "123", "status": "CONNECTED"}
+        return {"account_type": self.account_type, "server": self.server, "login": "123", "terminal_running": True, "status": "CONNECTED"}
 
 
 def make_service(current: dict[str, Any] | None = None, *, positions=None, trades=None, account_type="DEMO", server="VantageMarkets-Demo"):

@@ -1064,6 +1064,16 @@ function AutoValidationPanel({
   const perSymbolResults = asRecord(decision?.per_symbol_results);
   const eurusdCheck = asRecord(perSymbolResults?.EURUSD ?? decision?.EURUSD);
   const xauusdCheck = asRecord(perSymbolResults?.XAUUSD ?? decision?.XAUUSD);
+  const mt5Health = asRecord(status?.mt5_health ?? decision?.mt5_health);
+  const hashAudit = asRecord(status?.last_hash_change_audit ?? decision?.last_hash_change_audit);
+  const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const confidenceTimeline = Array.isArray(status?.confidence_timeline)
+    ? []
+    : Array.isArray(asRecord(status?.confidence_timeline)?.XAUUSD)
+      ? ((asRecord(status?.confidence_timeline)?.XAUUSD as unknown[]).filter((item) => asRecord(item)) as ApiRecord[])
+      : Array.isArray(decision?.xauusd_confidence_timeline)
+        ? (decision.xauusd_confidence_timeline.filter((item) => asRecord(item)) as ApiRecord[])
+        : [];
   const lastCheckedSymbol = readText(decision, ["last_checked_symbol"], "None");
   const bestCandidateSymbol = readText(decision, ["best_candidate_symbol"], "None");
   const noQualifiedReason = readText(decision, ["no_qualified_reason"], "Waiting for the next validation scan.");
@@ -1115,6 +1125,10 @@ function AutoValidationPanel({
         <Metric label="Scan Interval" value={`${readNumber(status, ["runner_interval_seconds"], 3)}s`} compact />
         <Metric label="Run In Progress" value={readText(status, ["run_once_in_progress"], "false") === "true" ? "Yes" : "No"} compact />
         <Metric label="Last Duration" value={`${readNumber(status, ["last_run_once_duration_ms"], 0)}ms`} compact />
+        <Metric label="MT5 Health" value={readText(mt5Health, ["status"], "Unknown")} valueClass={readText(mt5Health, ["status"], "") === "MT5_CONNECTED" ? "text-emerald-300" : "text-amber-200"} compact />
+        <Metric label="Health Failures" value={String(readNumber(mt5Health, ["consecutive_failed_health_checks"], 0))} compact />
+        <Metric label="Last Tick Symbol" value={readText(mt5Health, ["last_successful_tick_symbol"], "None")} compact />
+        <Metric label="Last Tick Time" value={formatTradeTime(readText(mt5Health, ["last_tick_time"], ""))} compact />
       </div>
 
       <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
@@ -1166,6 +1180,33 @@ function AutoValidationPanel({
             </p>
           </div>
           <p className={`mt-2 text-sm font-bold ${runnerError ? "text-rose-200" : "text-slate-500"}`}>Last Runner Error: {runnerError || "None"}</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Signal Hash Audit</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Metric label="Original Hash" value={readText(hashAudit, ["original_hash"], "None")} compact />
+            <Metric label="Current Hash" value={readText(hashAudit, ["current_hash"], "None")} compact />
+            <Metric label="Original Time" value={formatTradeTime(readText(hashAudit, ["original_signal_timestamp"], ""))} compact />
+            <Metric label="Revalidated Time" value={formatTradeTime(readText(hashAudit, ["revalidation_timestamp"], ""))} compact />
+          </div>
+          <p className="mt-3 text-sm font-bold text-slate-400">Changed Fields: {hashChangedFields.length > 0 ? hashChangedFields.map((item) => readText(item, ["field"], "field")).join(", ") : "None"}</p>
+          <p className="mt-1 text-sm font-bold text-slate-500">{readText(hashAudit, ["root_cause"], "No material hash change recorded.")}</p>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">XAUUSD Confidence Timeline</p>
+          {confidenceTimeline.length > 0 ? (
+            <div className="mt-3 max-h-56 overflow-auto">
+              {confidenceTimeline.slice(-20).map((item, index) => (
+                <p className="border-b border-slate-800 py-2 text-xs font-bold text-slate-300" key={`${readText(item, ["timestamp"], "scan")}-${index}`}>
+                  {formatTradeTime(readText(item, ["timestamp"], ""))}: confidence {readNumber(item, ["confidence"], 0)} | BOS {readText(item, ["bos"], "n/a")} | sweep {readText(item, ["liquidity_sweep"], "n/a")} | CHOCH {readText(item, ["choch"], "n/a")} | FVG {readText(item, ["fvg"], "n/a")} | OB {readText(item, ["order_block"], "n/a")} | spread {readText(item, ["spread"], "n/a")} | session {readText(item, ["session"], "n/a")} | {readText(item, ["reason_for_confidence_change"], "")}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="XAUUSD confidence timeline will appear after validation scans." />
+          )}
         </div>
       </div>
     </section>

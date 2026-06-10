@@ -33,6 +33,10 @@ class AutoValidationService:
         self.session = self._empty_session()
         self.events: list[dict[str, Any]] = []
         self.runner_state = self._empty_runner_state()
+        self.mt5_health_state = self._empty_mt5_health_state()
+        self._tick_cache: dict[str, dict[str, Any]] = {}
+        self._confidence_timeline: dict[str, list[dict[str, Any]]] = {}
+        self._last_hash_change_audit: dict[str, Any] | None = None
         self._seen_signal_hashes: set[str] = set()
         self._last_trade_time: datetime | None = None
         self._last_execution_decision: dict[str, Any] | None = None
@@ -52,6 +56,9 @@ class AutoValidationService:
             "blocked_reasons": self._last_execution_decision.get("blockers", []) if isinstance(self._last_execution_decision, dict) else [],
             "next_eligible_time": self._next_eligible_time(),
             "events": self.events[-50:],
+            "mt5_health": copy.deepcopy(self.mt5_health_state),
+            "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
+            "confidence_timeline": copy.deepcopy(self._confidence_timeline),
             **self.runner_state,
             "simulation_only": True,
             "live_execution_enabled": False,
@@ -119,12 +126,15 @@ class AutoValidationService:
         if self.session["status"] != "RUNNING" or self.config["auto_validation_enabled"] is not True:
             return self._decision("IDLE", ["AUTO_VALIDATION_NOT_RUNNING"])
         self._refresh_session_metrics()
+        mt5_health = self._mt5_health_check()
         halt = self._risk_halt_reason()
         if halt:
             return self._halt(halt)
         signals = self._allowed_signals(signals if signals is not None else self._load_signals())
+        self._record_confidence_timeline(signals)
         checked = [self._checked_symbol_result(signal) for signal in signals]
         best_candidate = self._best_candidate(checked)
+        blocked_decision: dict[str, Any] | None = None
         for signal in signals:
             self._current_signal_watched = signal
             self._log("SIGNAL_EVALUATED", {"symbol": signal.get("symbol"), "signal_hash": signal.get("signal_hash")})
@@ -134,8 +144,14 @@ class AutoValidationService:
             decision.update(self._scan_context(checked, signal))
             self._last_execution_decision = decision
             self._save_state()
-            if decision["status"] in {"ORDER_SENT", "HALTED_RISK", "BLOCKED"}:
+            if decision["status"] in {"ORDER_SENT", "HALTED_RISK"}:
                 return decision
+            if decision["status"] == "BLOCKED":
+                blocked_decision = decision
+                continue
+        if blocked_decision is not None:
+            self._log("NO_QUALIFIED_SIGNAL", blocked_decision)
+            return blocked_decision
         decision = self._decision("NO_QUALIFIED_SIGNAL", ["NO_READY_APPROVED_SIGNAL"], extra=self._scan_context(checked, best_candidate))
         self._log("NO_QUALIFIED_SIGNAL", decision)
         return decision
@@ -175,6 +191,7 @@ class AutoValidationService:
         tick = self._tick(symbol)
         current = self._current_signal(symbol)
         open_positions = self._open_positions()
+        hash_audit = self._hash_change_audit(signal, current)
 
         if account.get("account_type") != config["account_type_required"]:
             blockers.append("LIVE_ACCOUNT_DETECTED" if account.get("account_type") == "LIVE" else "DEMO_ACCOUNT_REQUIRED")
@@ -202,12 +219,18 @@ class AutoValidationService:
             blockers.append("MAX_DAILY_TRADE_LIMIT_REACHED")
         if self._cooldown_active():
             blockers.append("COOLDOWN_ACTIVE")
+        if self.mt5_health_state.get("status") == "MT5_DISCONNECTED":
+            blockers.append("MT5_DISCONNECTED")
         if tick.get("status") not in {"OK", "TICK_AVAILABLE_DIRECT"}:
-            blockers.append("MT5_DISCONNECT_DETECTED")
+            blockers.append("SYMBOL_TICK_UNAVAILABLE")
+            self._log("TEMPORARY_MARKET_DATA_FAILURE", {"symbol": symbol, "reason": "SYMBOL_TICK_UNAVAILABLE", "tick_status": tick.get("status"), "mt5_health": self.mt5_health_state})
         if tick.get("spread") is None:
             blockers.append("SPREAD_UNAVAILABLE")
-        if current is not None and current.get("signal_hash") != signal.get("signal_hash"):
+            self._log("TEMPORARY_MARKET_DATA_FAILURE", {"symbol": symbol, "reason": "SPREAD_UNAVAILABLE", "tick_status": tick.get("status"), "mt5_health": self.mt5_health_state})
+        if hash_audit.get("changed") and not hash_audit.get("informational_only"):
             blockers.append("SIGNAL_HASH_CHANGED")
+            self._last_hash_change_audit = hash_audit
+            self._log("SIGNAL_HASH_CHANGED", hash_audit)
         return sorted(set(blockers))
 
     def _guarded_payload(self, signal: dict[str, Any]) -> dict[str, Any]:
@@ -293,13 +316,26 @@ class AutoValidationService:
         return broker or None
 
     def _tick(self, symbol: str) -> dict[str, Any]:
+        cached = self._tick_cache.get(symbol)
+        if cached is not None:
+            return cached
         service = getattr(self.guarded_execution_service, "market_data_service", None)
         if service is None:
-            return {"status": "OK", "spread": 0.0}
+            tick = {"status": "OK", "spread": 0.0, "symbol": symbol, "timestamp": self._timestamp()}
+            self._tick_cache[symbol] = tick
+            return tick
         try:
-            return service.get_symbol_tick(symbol)
+            tick = service.get_symbol_tick(symbol)
+            if isinstance(tick, dict):
+                tick.setdefault("symbol", symbol)
+                tick.setdefault("timestamp", self._timestamp())
+                self._tick_cache[symbol] = tick
+                return tick
+            return {"status": "SYMBOL_TICK_UNAVAILABLE", "spread": None, "symbol": symbol, "timestamp": self._timestamp()}
         except Exception:
-            return {"status": "DISCONNECTED", "spread": None}
+            tick = {"status": "SYMBOL_TICK_UNAVAILABLE", "spread": None, "symbol": symbol, "timestamp": self._timestamp()}
+            self._tick_cache[symbol] = tick
+            return tick
 
     def _open_positions(self) -> list[dict[str, Any]]:
         if self.position_service is None:
@@ -314,6 +350,45 @@ class AutoValidationService:
     def _allowed_symbols(self) -> set[str]:
         symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
         return {str(symbol).upper() for symbol in symbols if str(symbol).upper()}
+
+    def _mt5_health_check(self) -> dict[str, Any]:
+        self._tick_cache = {}
+        status = self._account_status({})
+        terminal_running = bool(status.get("terminal_running", status.get("status") == "CONNECTED"))
+        account_login = str(status.get("login") or status.get("account_login") or "")
+        server = str(status.get("server") or "")
+        account_ok = bool(account_login and server)
+        valid_tick_symbol = ""
+        last_tick_time = None
+        symbol_statuses: dict[str, Any] = {}
+        for symbol in sorted(self._allowed_symbols()):
+            tick = self._tick(symbol)
+            valid_tick = tick.get("status") in {"OK", "TICK_AVAILABLE_DIRECT"} and self._number(tick.get("bid"), 0) > 0 and self._number(tick.get("ask"), 0) > 0
+            symbol_statuses[symbol] = {"status": "MT5_CONNECTED" if valid_tick else "SYMBOL_TICK_UNAVAILABLE", "tick": tick}
+            if valid_tick and not valid_tick_symbol:
+                valid_tick_symbol = symbol
+                last_tick_time = tick.get("timestamp") or self._timestamp()
+        connected = terminal_running and account_ok and bool(valid_tick_symbol)
+        previous_failures = int(self.mt5_health_state.get("consecutive_failed_health_checks") or 0)
+        failures = 0 if connected else previous_failures + 1
+        health_status = "MT5_CONNECTED" if connected else "MT5_DISCONNECTED" if failures >= 3 else "SYMBOL_TICK_UNAVAILABLE"
+        self.mt5_health_state = {
+            "status": health_status,
+            "terminal_running": terminal_running,
+            "account_login_present": bool(account_login),
+            "server_present": bool(server),
+            "account_login": account_login,
+            "server": server,
+            "consecutive_failed_health_checks": failures,
+            "last_successful_tick_symbol": valid_tick_symbol or self.mt5_health_state.get("last_successful_tick_symbol", ""),
+            "last_tick_time": last_tick_time or self.mt5_health_state.get("last_tick_time"),
+            "symbol_statuses": symbol_statuses,
+            "timestamp": self._timestamp(),
+        }
+        if not connected:
+            self._log("TEMPORARY_MARKET_DATA_FAILURE", {"mt5_health": self.mt5_health_state})
+        self._save_state()
+        return self.mt5_health_state
 
     def _allowed_signals(self, signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
         allowed = self._allowed_symbols()
@@ -331,6 +406,7 @@ class AutoValidationService:
         ready = self._ready(signal)
         blockers = self._validate_signal(signal) if ready else self._readiness_blockers(signal)
         confidence = self._number(signal.get("confidence"), 0)
+        tick_status = self.mt5_health_state.get("symbol_statuses", {}).get(symbol, {}) if isinstance(self.mt5_health_state.get("symbol_statuses"), dict) else {}
         return {
             "symbol": symbol,
             "status": signal.get("status_level") or signal.get("execution_status") or signal.get("signal") or "UNKNOWN",
@@ -341,6 +417,7 @@ class AutoValidationService:
             "signal_hash": signal.get("signal_hash"),
             "blocking_reason": ", ".join(blockers) if blockers else "QUALIFIED",
             "blockers": blockers,
+            "market_data_status": tick_status.get("status", self.mt5_health_state.get("status")),
             "ready_for_execution": ready and not blockers,
             "score": confidence,
             "what_needs_to_happen_next": signal.get("what_needs_to_happen_next"),
@@ -377,6 +454,9 @@ class AutoValidationService:
             "per_symbol_results": per_symbol,
             "EURUSD": per_symbol.get("EURUSD"),
             "XAUUSD": per_symbol.get("XAUUSD"),
+            "mt5_health": copy.deepcopy(self.mt5_health_state),
+            "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
+            "xauusd_confidence_timeline": self._confidence_timeline.get("XAUUSD", [])[-20:],
         }
 
     def _refresh_session_metrics(self) -> None:
@@ -490,7 +570,7 @@ class AutoValidationService:
             "MAX_DAILY_TRADE_LIMIT_REACHED",
             "MAX_DRAWDOWN_REACHED",
             "MAX_DAILY_LOSS_REACHED",
-            "MT5_DISCONNECT_DETECTED",
+            "MT5_DISCONNECTED",
             "GUARDED_SENDER_REJECTED",
         }
         return any(item in halts for item in blockers)
@@ -523,6 +603,127 @@ class AutoValidationService:
             "last_run_once_duration_ms": None,
             "last_runner_error": "",
         }
+
+    def _empty_mt5_health_state(self) -> dict[str, Any]:
+        return {
+            "status": "MT5_CONNECTED",
+            "terminal_running": False,
+            "account_login_present": False,
+            "server_present": False,
+            "account_login": "",
+            "server": "",
+            "consecutive_failed_health_checks": 0,
+            "last_successful_tick_symbol": "",
+            "last_tick_time": None,
+            "symbol_statuses": {},
+            "timestamp": None,
+        }
+
+    def _record_confidence_timeline(self, signals: list[dict[str, Any]]) -> None:
+        for signal in signals:
+            symbol = str(signal.get("symbol") or "").upper()
+            if symbol != "XAUUSD":
+                continue
+            components = signal.get("strategy_components") if isinstance(signal.get("strategy_components"), dict) else {}
+            audit = signal.get("approval_audit") if isinstance(signal.get("approval_audit"), dict) else {}
+            quality = signal.get("quality_score") if isinstance(signal.get("quality_score"), dict) else {}
+            factors = quality.get("factors") if isinstance(quality.get("factors"), dict) else {}
+            previous = self._confidence_timeline.get(symbol, [])[-1] if self._confidence_timeline.get(symbol) else {}
+            confidence = self._number(signal.get("confidence"), self._number(audit.get("confidence"), 0))
+            previous_confidence = self._number(previous.get("confidence"), confidence)
+            delta = round(confidence - previous_confidence, 2)
+            if delta > 0:
+                reason = f"Confidence increased by {delta} from prior scan."
+            elif delta < 0:
+                reason = f"Confidence decreased by {abs(delta)} from prior scan."
+            else:
+                reason = "Confidence unchanged from prior scan."
+            item = {
+                "timestamp": self._timestamp(),
+                "confidence": confidence,
+                "bos": components.get("bos"),
+                "liquidity_sweep": components.get("liquidity_sweep"),
+                "choch": components.get("choch"),
+                "fvg": components.get("fvg"),
+                "order_block": components.get("order_block"),
+                "spread": components.get("spread_quality"),
+                "session": components.get("session"),
+                "session_valid": components.get("session_valid"),
+                "factors": factors,
+                "reason_for_confidence_change": reason,
+            }
+            self._confidence_timeline[symbol] = (self._confidence_timeline.get(symbol, []) + [item])[-20:]
+
+    def _hash_change_audit(self, original: dict[str, Any], current: dict[str, Any] | None) -> dict[str, Any]:
+        original_hash = str(original.get("signal_hash") or "")
+        current_hash = str((current or {}).get("signal_hash") or "")
+        if not current or current_hash == original_hash:
+            return {"changed": False, "original_hash": original_hash, "current_hash": current_hash}
+        fields = [
+            ("entry", ["entry"]),
+            ("stop_loss", ["stop_loss"]),
+            ("take_profit", ["take_profit"]),
+            ("confidence", ["confidence"]),
+            ("trend_alignment", ["market_structure_state", "trend_bias"]),
+            ("BOS", ["strategy_components", "bos"]),
+            ("liquidity_sweep", ["strategy_components", "liquidity_sweep"]),
+            ("order_block", ["strategy_components", "order_block"]),
+            ("FVG", ["strategy_components", "fvg"]),
+            ("session", ["strategy_components", "session"]),
+            ("signal_direction", ["signal"]),
+        ]
+        changed_fields: list[dict[str, Any]] = []
+        for label, path in fields:
+            original_value = self._nested(original, path)
+            current_value = self._nested(current, path)
+            if original_value != current_value:
+                changed_fields.append({"field": label, "original": original_value, "current": current_value})
+        spread_original = original.get("spread")
+        spread_current = current.get("spread")
+        if spread_original != spread_current:
+            changed_fields.append({"field": "spread", "original": spread_original, "current": spread_current})
+        informational = self._informational_hash_change_only(changed_fields)
+        return {
+            "changed": True,
+            "informational_only": informational,
+            "original_hash": original_hash,
+            "current_hash": current_hash,
+            "changed_fields": changed_fields,
+            "original_signal_timestamp": original.get("timestamp"),
+            "revalidation_timestamp": current.get("timestamp") or self._timestamp(),
+            "root_cause": self._hash_root_cause(changed_fields, informational),
+        }
+
+    def _informational_hash_change_only(self, changed_fields: list[dict[str, Any]]) -> bool:
+        if not changed_fields:
+            return True
+        allowed = {"confidence", "spread"}
+        for item in changed_fields:
+            field = item.get("field")
+            if field not in allowed:
+                return False
+            original = self._number(item.get("original"), 0)
+            current = self._number(item.get("current"), 0)
+            if field == "confidence" and abs(current - original) > 2:
+                return False
+            if field == "spread" and abs(current - original) > max(abs(original) * 0.25, 0.0001):
+                return False
+        return True
+
+    def _hash_root_cause(self, changed_fields: list[dict[str, Any]], informational: bool) -> str:
+        if not changed_fields:
+            return "Signal hash changed but tracked execution fields are unchanged."
+        names = ", ".join(str(item.get("field")) for item in changed_fields)
+        prefix = "Informational hash drift" if informational else "Material signal revalidation change"
+        return f"{prefix}: {names} changed."
+
+    def _nested(self, payload: dict[str, Any], path: list[str]) -> Any:
+        value: Any = payload
+        for key in path:
+            if not isinstance(value, dict):
+                return None
+            value = value.get(key)
+        return value
 
     def _empty_session(self) -> dict[str, Any]:
         return {
@@ -566,6 +767,10 @@ class AutoValidationService:
             self._last_execution_decision = data["last_execution_decision"]
         if isinstance(data.get("current_signal_watched"), dict):
             self._current_signal_watched = data["current_signal_watched"]
+        if isinstance(data.get("last_hash_change_audit"), dict):
+            self._last_hash_change_audit = data["last_hash_change_audit"]
+        if isinstance(data.get("confidence_timeline"), dict):
+            self._confidence_timeline = data["confidence_timeline"]
         if self.session.get("status") == "RUNNING":
             self.config["auto_validation_enabled"] = True
 
@@ -578,6 +783,8 @@ class AutoValidationService:
                 "events": self.events[-500:],
                 "last_execution_decision": self._last_execution_decision,
                 "current_signal_watched": self._current_signal_watched,
+                "last_hash_change_audit": self._last_hash_change_audit,
+                "confidence_timeline": self._confidence_timeline,
                 "updated_at": self._timestamp(),
             }
             self.state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

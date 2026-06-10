@@ -41,6 +41,26 @@ def wait_signal(symbol: str = "XAUUSD", *, status_level: str = "WATCHLIST", sign
     }
 
 
+def ready_signal(symbol: str = "XAUUSD", *, signal_hash: str = "runner-ready") -> dict[str, Any]:
+    payload = wait_signal(symbol, status_level="READY", signal_hash=signal_hash)
+    payload.update(
+        {
+            "signal": "BUY",
+            "status_level": "READY_FOR_PREVIEW",
+            "confidence": 82,
+            "execution_status": "READY_FOR_PREVIEW",
+            "risk_status": "APPROVED",
+            "missing_requirements": [],
+            "what_needs_to_happen_next": "Ready for guarded demo validation.",
+            "entry": 2400.0 if symbol == "XAUUSD" else 1.1,
+            "stop_loss": 2390.0 if symbol == "XAUUSD" else 1.09,
+            "take_profit": 2420.0 if symbol == "XAUUSD" else 1.12,
+            "risk_reward": 2.0,
+        }
+    )
+    return payload
+
+
 class FakeSignals:
     def __init__(self, signals: list[dict[str, Any]] | None = None, *, fail: bool = False) -> None:
         self.signals = signals or [wait_signal()]
@@ -59,9 +79,12 @@ class FakeGuarded:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self.market_data_service = self
+        self.failed_ticks: set[str] = set()
 
     def get_symbol_tick(self, symbol: str) -> dict[str, Any]:
-        return {"status": "OK", "spread": 0.2}
+        if symbol in self.failed_ticks:
+            return {"status": "SYMBOL_TICK_UNAVAILABLE", "spread": None}
+        return {"status": "OK", "bid": 1.1, "ask": 1.2, "spread": 0.2}
 
     def send_test_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
@@ -80,7 +103,7 @@ class FakePositions:
 
 class FakeAccount:
     def get_status(self) -> dict[str, Any]:
-        return {"account_type": "DEMO", "server": "VantageMarkets-Demo"}
+        return {"account_type": "DEMO", "server": "VantageMarkets-Demo", "login": "123", "terminal_running": True, "status": "CONNECTED"}
 
 
 def make_service(signals: FakeSignals | None = None, state_path: Path | None = None):
@@ -192,6 +215,64 @@ async def verify_allowed_symbols_only_and_scan_report() -> bool:
             and "NIFTY50" not in decision["no_qualified_reason"]
         )
         return show("AUTO validation watches only allowed symbols and reports EURUSD/XAUUSD scan results", passed, str(decision))
+
+
+async def verify_recoverable_market_data_failure_does_not_halt() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals(
+            [
+                wait_signal("EURUSD", status_level="WATCHLIST", signal_hash="eur-watch"),
+                ready_signal("XAUUSD", signal_hash="xau-ready"),
+            ]
+        )
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        guarded.failed_ticks.add("XAUUSD")
+        runner = AutoValidationRunner(service)
+        service.start()
+        await runner.run_tick()
+        status = service.status()
+        decision = status["last_execution_decision"]
+        events = [event["event"] for event in service.events]
+        passed = (
+            service.session["status"] == "RUNNING"
+            and status["mt5_health"]["status"] == "MT5_CONNECTED"
+            and status["mt5_health"]["consecutive_failed_health_checks"] == 0
+            and status["mt5_health"]["last_successful_tick_symbol"] == "EURUSD"
+            and "TEMPORARY_MARKET_DATA_FAILURE" in events
+            and "SYMBOL_TICK_UNAVAILABLE" in decision["XAUUSD"]["blockers"]
+            and "MT5_DISCONNECTED" not in decision["XAUUSD"]["blockers"]
+        )
+        return show("Single-symbol tick failure is recoverable and does not halt AUTO validation", passed, str(status["mt5_health"]))
+
+
+async def verify_mt5_disconnect_requires_three_failed_health_checks() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    class DisconnectedAccount:
+        def get_status(self) -> dict[str, Any]:
+            return {"account_type": "DEMO", "server": "", "login": "", "terminal_running": False, "status": "NOT_CONNECTED"}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        service, guarded = make_service(FakeSignals([wait_signal("XAUUSD", status_level="WATCHLIST")]), state_path=Path(tmp) / "state.json")
+        guarded.failed_ticks.update({"EURUSD", "XAUUSD"})
+        service.mt5_demo_service = DisconnectedAccount()
+        runner = AutoValidationRunner(service)
+        service.start()
+        await runner.run_tick()
+        first = service.status()["mt5_health"]
+        await runner.run_tick()
+        second = service.status()["mt5_health"]
+        await runner.run_tick()
+        third = service.status()["mt5_health"]
+        passed = (
+            first["status"] != "MT5_DISCONNECTED"
+            and second["status"] != "MT5_DISCONNECTED"
+            and third["status"] == "MT5_DISCONNECTED"
+            and third["consecutive_failed_health_checks"] == 3
+        )
+        return show("MT5 disconnect is confirmed only after 3 failed health checks", passed, str(third))
 
 
 async def verify_no_overlapping_run_once_calls() -> bool:
@@ -311,6 +392,8 @@ async def async_main() -> list[bool]:
         await verify_runner_lifecycle(),
         await verify_run_once_called_and_events_generated(),
         await verify_allowed_symbols_only_and_scan_report(),
+        await verify_recoverable_market_data_failure_does_not_halt(),
+        await verify_mt5_disconnect_requires_three_failed_health_checks(),
         await verify_no_overlapping_run_once_calls(),
         await verify_persisted_running_session_starts_on_backend_startup(),
         await verify_runner_errors_logged(),

@@ -873,6 +873,44 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
+function ValidationEquityCurve({ points }: { points: ApiRecord[] }) {
+  const values = points.map((point) => readNumber(point, ["equity"], 0));
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  const range = max - min || 1;
+  const width = 360;
+  const height = 128;
+  const path = values
+    .map((value, index) => {
+      const x = values.length <= 1 ? width : (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+  const zeroY = height - ((0 - min) / range) * height;
+  const latest = values.at(-1) ?? 0;
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Equity Curve</p>
+          <p className={`mt-1 text-lg font-black ${pnlClass(latest)}`}>{money(latest)}</p>
+        </div>
+        <p className="text-xs font-bold text-slate-500">{points.length} closed trades</p>
+      </div>
+      {values.length > 0 ? (
+        <svg className="mt-3 h-32 w-full overflow-visible" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Validation equity curve">
+          <line x1="0" x2={width} y1={zeroY} y2={zeroY} stroke="#334155" strokeDasharray="4 4" strokeWidth="1" />
+          <path d={path} fill="none" stroke={latest >= 0 ? "#34d399" : "#fb7185"} strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+        </svg>
+      ) : (
+        <EmptyState text="Equity curve will appear after validation trades close." />
+      )}
+    </div>
+  );
+}
+
 function ExecutionModePanel({
   mode,
   nowMs,
@@ -1000,6 +1038,11 @@ function AutoValidationPanel({
   const mode = readText(session, ["status"], "OFF");
   const blockers = Array.isArray(status?.blocked_reasons) ? status.blocked_reasons.map(String) : [];
   const nextEligible = readText(status, ["next_eligible_time"], "");
+  const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
+  const wins = readNumber(session, ["wins"], 0);
+  const losses = readNumber(session, ["losses"], 0);
+  const netPnl = readNumber(session, ["net_pnl"], 0);
+  const equityCurve = Array.isArray(session?.equity_curve) ? (session.equity_curve.filter((point) => asRecord(point)) as ApiRecord[]) : [];
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1036,6 +1079,31 @@ function AutoValidationPanel({
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
         <Metric label="Next Eligible" value={nextEligible ? formatTradeTime(nextEligible) : "Now"} compact />
         <Metric label="Safety" value="Demo / Vantage Only" valueClass="text-emerald-300" compact />
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Validation Performance Dashboard</p>
+            <h3 className="mt-1 text-xl font-black text-white">Session Results</h3>
+          </div>
+          <p className="text-sm font-bold text-slate-500">Keeps the latest closed-trade performance visible during AUTO validation.</p>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <Metric label="Total Trades" value={String(totalTrades)} compact />
+          <Metric label="Wins" value={String(wins)} valueClass="text-emerald-300" compact />
+          <Metric label="Losses" value={String(losses)} valueClass="text-rose-300" compact />
+          <Metric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
+          <Metric label="Net P&L" value={money(netPnl)} valueClass={pnlClass(netPnl)} compact />
+          <Metric label="Average RR" value={`${readNumber(session, ["avg_rr", "average_rr"], 0).toFixed(2)}:1`} compact />
+          <Metric label="Profit Factor" value={readNumber(session, ["profit_factor"], 0).toFixed(2)} compact />
+          <Metric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
+          <Metric label="Best Setup Type" value={readText(session, ["best_setup_type"], "Unavailable")} compact />
+          <Metric label="Worst Setup Type" value={readText(session, ["worst_setup_type"], "Unavailable")} compact />
+        </div>
+        <div className="mt-4">
+          <ValidationEquityCurve points={equityCurve} />
+        </div>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

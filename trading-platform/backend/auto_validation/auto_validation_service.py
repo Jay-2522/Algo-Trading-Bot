@@ -292,16 +292,28 @@ class AutoValidationService:
         open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT"}]
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
         losses = [trade for trade in closed if trade.get("result") == "LOSS"]
-        pnl_values = [self._number(trade.get("net_pnl") or trade.get("profit_loss"), 0) for trade in closed]
+        pnl_values = [self._trade_pnl(trade) for trade in closed]
+        rr_values = [rr for rr in (self._trade_rr(trade) for trade in closed) if rr is not None]
+        gross_profit = sum(value for value in pnl_values if value > 0)
+        gross_loss = abs(sum(value for value in pnl_values if value < 0))
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0.0)
+        setup_performance = self._setup_performance(closed)
         self.session.update(
             {
+                "total_trades": len(trades),
                 "current_closed_trades": len(closed),
                 "current_open_trades": len(open_trades) + len(self._open_positions()),
                 "wins": len(wins),
                 "losses": len(losses),
                 "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
                 "net_pnl": round(sum(pnl_values), 2),
+                "avg_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
+                "average_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
+                "profit_factor": round(profit_factor, 2),
                 "max_drawdown": self._max_drawdown(pnl_values),
+                "best_setup_type": setup_performance["best_setup_type"],
+                "worst_setup_type": setup_performance["worst_setup_type"],
+                "equity_curve": self._equity_curve(closed),
             }
         )
         if self.session["status"] == "RUNNING" and self.session["current_closed_trades"] >= int(self.config["target_closed_trades"]):
@@ -403,7 +415,13 @@ class AutoValidationService:
             "losses": 0,
             "win_rate": 0.0,
             "net_pnl": 0.0,
+            "avg_rr": 0.0,
+            "average_rr": 0.0,
+            "profit_factor": 0.0,
             "max_drawdown": 0.0,
+            "best_setup_type": "Unavailable",
+            "worst_setup_type": "Unavailable",
+            "equity_curve": [],
             "reason_stopped": "",
         }
 
@@ -458,6 +476,73 @@ class AutoValidationService:
             peak = max(peak, equity)
             max_drawdown = max(max_drawdown, peak - equity)
         return round(max_drawdown, 2)
+
+    def _trade_pnl(self, trade: dict[str, Any]) -> float:
+        for key in ["net_pnl", "profit_loss", "realized_pnl", "total_pnl"]:
+            if key in trade:
+                return self._number(trade.get(key), 0)
+        return 0.0
+
+    def _trade_rr(self, trade: dict[str, Any]) -> float | None:
+        for key in ["risk_reward_ratio", "risk_reward", "rr"]:
+            if key in trade:
+                value = self._number(trade.get(key), 0)
+                return value if value > 0 else None
+        return None
+
+    def _setup_type(self, trade: dict[str, Any]) -> str:
+        direct = str(trade.get("setup_type") or "").strip()
+        if direct:
+            return direct
+        metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+        metadata_setup = str(metadata.get("setup_type") or "").strip()
+        if metadata_setup:
+            return metadata_setup
+        components = metadata.get("strategy_components") if isinstance(metadata.get("strategy_components"), dict) else {}
+        ordered = [
+            ("liquidity_sweep", "Sweep"),
+            ("bos", "BOS"),
+            ("choch", "CHOCH"),
+            ("fvg", "FVG"),
+            ("order_block", "OB"),
+        ]
+        active = [label for key, label in ordered if bool(components.get(key))]
+        return " + ".join(active) if active else "Unknown Setup"
+
+    def _setup_performance(self, closed: list[dict[str, Any]]) -> dict[str, str]:
+        grouped: dict[str, list[float]] = {}
+        for trade in closed:
+            grouped.setdefault(self._setup_type(trade), []).append(self._trade_pnl(trade))
+        if not grouped:
+            return {"best_setup_type": "Unavailable", "worst_setup_type": "Unavailable"}
+        ranked = sorted(
+            grouped.items(),
+            key=lambda item: (sum(item[1]) / len(item[1]), sum(item[1]), len(item[1])),
+        )
+        return {"best_setup_type": ranked[-1][0], "worst_setup_type": ranked[0][0]}
+
+    def _equity_curve(self, closed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        def sort_key(trade: dict[str, Any]) -> str:
+            return str(trade.get("closed_at") or trade.get("updated_at") or trade.get("created_at") or trade.get("timestamp") or "")
+
+        equity = 0.0
+        peak = 0.0
+        points: list[dict[str, Any]] = []
+        for index, trade in enumerate(sorted(closed, key=sort_key), start=1):
+            pnl = self._trade_pnl(trade)
+            equity += pnl
+            peak = max(peak, equity)
+            points.append(
+                {
+                    "trade_index": index,
+                    "trade_id": trade.get("trade_id") or trade.get("id") or f"trade-{index}",
+                    "timestamp": trade.get("closed_at") or trade.get("updated_at") or trade.get("created_at") or trade.get("timestamp"),
+                    "pnl": round(pnl, 2),
+                    "equity": round(equity, 2),
+                    "drawdown": round(peak - equity, 2),
+                }
+            )
+        return points
 
     def _number(self, value: Any, fallback: float) -> float:
         try:

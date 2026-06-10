@@ -220,6 +220,64 @@ def verify_rejected_sender_halts() -> bool:
     return show("Guarded sender rejection halts validation", result["status"] == "HALTED_RISK" and svc.session["status"] == "HALTED_RISK")
 
 
+def verify_validation_performance_metrics() -> bool:
+    trades = [
+        {
+            "validation_session_id": "placeholder",
+            "trade_id": "win-1",
+            "status": "CLOSED",
+            "result": "WIN",
+            "net_pnl": 120.0,
+            "risk_reward_ratio": 2.0,
+            "closed_at": "2026-01-01T00:00:00+00:00",
+            "strategy_metadata": {"strategy_components": {"bos": True, "fvg": True}},
+        },
+        {
+            "validation_session_id": "placeholder",
+            "trade_id": "loss-1",
+            "status": "CLOSED",
+            "result": "LOSS",
+            "net_pnl": -40.0,
+            "risk_reward_ratio": 1.5,
+            "closed_at": "2026-01-01T00:01:00+00:00",
+            "strategy_metadata": {"strategy_components": {"choch": True}},
+        },
+        {
+            "validation_session_id": "placeholder",
+            "trade_id": "win-2",
+            "status": "CLOSED",
+            "result": "WIN",
+            "net_pnl": 60.0,
+            "risk_reward_ratio": 3.0,
+            "closed_at": "2026-01-01T00:02:00+00:00",
+            "strategy_metadata": {"strategy_components": {"bos": True, "fvg": True}},
+        },
+        {"validation_session_id": "placeholder", "trade_id": "open-1", "status": "OPEN", "net_pnl": 0.0},
+    ]
+    svc, _ = make_service(trades=trades)
+    svc.start()
+    for trade in trades:
+        trade["validation_session_id"] = svc.session["session_id"]
+    summary = svc.summary()
+    equity = summary["equity_curve"]
+    passed = (
+        summary["total_trades"] == 4
+        and summary["current_closed_trades"] == 3
+        and summary["current_open_trades"] == 1
+        and summary["wins"] == 2
+        and summary["losses"] == 1
+        and summary["win_rate"] == 66.67
+        and summary["net_pnl"] == 140.0
+        and summary["avg_rr"] == 2.17
+        and summary["profit_factor"] == 4.5
+        and summary["max_drawdown"] == 40.0
+        and summary["best_setup_type"] == "BOS + FVG"
+        and summary["worst_setup_type"] == "CHOCH"
+        and [point["equity"] for point in equity] == [120.0, 80.0, 140.0]
+    )
+    return show("Validation performance metrics and equity curve are generated", passed, str(summary))
+
+
 def verify_dashboard_and_no_order_send() -> bool:
     service = SERVICE_PATH.read_text(encoding="utf-8")
     routes = ROUTES_PATH.read_text(encoding="utf-8")
@@ -234,6 +292,13 @@ def verify_dashboard_and_no_order_send() -> bool:
         "Emergency Stop",
         "validation_session_id",
         "AUTO_VALIDATION",
+        "Validation Performance Dashboard",
+        "Total Trades",
+        "Average RR",
+        "Profit Factor",
+        "Best Setup Type",
+        "Worst Setup Type",
+        "Equity Curve",
     ]
     missing = [item for item in required if item not in service + routes + dashboard + api]
     token = "mt5." + "order_send"
@@ -256,6 +321,7 @@ def main() -> int:
         verify_risk_blocks(),
         verify_target_and_risk_halt(),
         verify_rejected_sender_halts(),
+        verify_validation_performance_metrics(),
         verify_dashboard_and_no_order_send(),
     ]
     print("=" * 78)

@@ -1064,6 +1064,7 @@ function AutoValidationPanel({
   const config = asRecord(status?.config);
   const watched = asRecord(status?.current_signal_watched);
   const decision = asRecord(status?.last_execution_decision);
+  const watchedAudit = asRecord(watched?.approval_audit ?? decision?.approval_audit);
   const mode = readText(session, ["status"], "OFF");
   const blockers = Array.isArray(status?.blocked_reasons) ? status.blocked_reasons.map(String) : [];
   const nextEligible = readText(status, ["next_eligible_time"], "");
@@ -1095,6 +1096,12 @@ function AutoValidationPanel({
   const reconnectElapsed = lastDisconnectAt ? Math.max(0, Math.floor((Date.now() - new Date(lastDisconnectAt).getTime()) / 1000)) : 0;
   const reconnectRemaining = lastDisconnectAt ? Math.max(0, reconnectTimeout - reconnectElapsed) : reconnectTimeout;
   const activeStrategyProfile = readText(config, ["strategy_profile"], readText(status, ["strategy_profile"], "AUTO_VALIDATION"));
+  const slTpSource = readText(watched, ["sl_tp_source"], readText(watchedAudit, ["sl_tp_source"], "Unknown"));
+  const relaxedBlockers = Array.isArray(watchedAudit?.relaxed_blockers)
+    ? watchedAudit.relaxed_blockers.map((item) => readText(asRecord(item), ["code"], String(item))).filter(Boolean)
+    : Array.isArray(watchedAudit?.advisory_requirements)
+      ? watchedAudit.advisory_requirements.map((item) => readText(asRecord(item), ["code"], String(item))).filter(Boolean)
+      : [];
   const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
@@ -1135,6 +1142,8 @@ function AutoValidationPanel({
         <Metric label="Allowed Symbols" value={Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.join(", ") : "XAUUSD, EURUSD"} compact />
         <Metric label="Watching" value={watchedSymbols.join(" + ")} compact />
         <Metric label="Strategy Profile" value={activeStrategyProfile} valueClass="text-blue-200" compact />
+        <Metric label="SL/TP Source" value={slTpSource} valueClass={slTpSource === "DEMO_RISK_FALLBACK" ? "text-amber-200" : "text-emerald-300"} compact />
+        <Metric label="Advisory Blockers" value={relaxedBlockers.length ? relaxedBlockers.join(", ") : "None"} compact />
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
         <Metric label="Next Eligible" value={nextEligible ? formatTradeTime(nextEligible) : "Now"} compact />
         <Metric label="Safety" value="Demo / Vantage Only" valueClass="text-emerald-300" compact />

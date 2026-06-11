@@ -36,7 +36,7 @@ def signal(**overrides: Any) -> dict[str, Any]:
         "signal_hash": "phase22-1-signal",
         "setup_reason": "Qualified validation setup.",
         "market_structure_state": {"trend_bias": "BUY"},
-        "strategy_profile": "AUTO_VALIDATION",
+        "strategy_profile": "DEMO_COLLECTION",
         "strategy_components": {"bos": True, "choch": True, "fvg": True, "liquidity_sweep": True, "order_block": True, "session_valid": True},
         "candle_source": {"broker_source": "VANTAGE_DEMO", "source": "VANTAGE_DEMO", "account_login": "123", "server": "VantageMarkets-Demo", "account_type": "DEMO"},
         "timestamp": datetime.now(timezone.utc).isoformat(),

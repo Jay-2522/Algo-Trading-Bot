@@ -303,23 +303,34 @@ class VantageXAUUSDDemoValidationService:
         current_signal = None
         if self.signal_engine_service is not None and symbol in self.supported_symbols:
             try:
-                current_signal = self.signal_engine_service.generate_signal(symbol, strategy_profile=strategy_profile) if strategy_profile == "AUTO_VALIDATION" else self.signal_engine_service.generate_signal(symbol)
+                if strategy_profile in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
+                    current_signal = self.signal_engine_service.generate_signal(symbol, strategy_profile=strategy_profile)
+                else:
+                    current_signal = self.signal_engine_service.generate_signal(symbol)
             except TypeError:
                 current_signal = self.signal_engine_service.generate_signal(symbol)
         if current_signal is not None:
+            current_direction = str(current_signal.get("signal") or "").upper()
             if current_signal.get("execution_status") != "READY_FOR_PREVIEW":
                 blockers.append("SIGNAL_NO_LONGER_READY_FOR_PREVIEW")
             if current_signal.get("risk_status") != "APPROVED":
                 blockers.append("SIGNAL_NO_LONGER_APPROVED")
-            if str(current_signal.get("signal") or "").upper() != side:
+            if current_direction in {"BUY", "SELL"} and side in {"BUY", "SELL"} and current_direction != side:
                 blockers.append("SIGNAL_DIRECTION_CHANGED")
-            if signal_hash and current_signal.get("signal_hash") != signal_hash and strategy_profile != "AUTO_VALIDATION":
+            elif current_direction not in {"BUY", "SELL"}:
+                blockers.append("SIGNAL_NO_LONGER_HAS_DIRECTION")
+            if signal_hash and current_signal.get("signal_hash") != signal_hash and strategy_profile not in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
                 blockers.append("SIGNAL_HASH_CHANGED")
             if strategy_profile == "AUTO_VALIDATION":
                 if self._float_or_none(current_signal.get("risk_reward")) is not None and self._float_or_none(current_signal.get("risk_reward")) < 1.5:
                     blockers.append("RR_BELOW_AUTO_VALIDATION_MINIMUM")
                 if self._float_or_none(current_signal.get("confidence")) is not None and self._float_or_none(current_signal.get("confidence")) < 65:
                     blockers.append("CONFIDENCE_BELOW_AUTO_VALIDATION_MINIMUM")
+            if strategy_profile == "DEMO_COLLECTION":
+                if self._float_or_none(current_signal.get("risk_reward")) is not None and self._float_or_none(current_signal.get("risk_reward")) < 1.2:
+                    blockers.append("RR_BELOW_DEMO_COLLECTION_MINIMUM")
+                if self._float_or_none(current_signal.get("confidence")) is not None and self._float_or_none(current_signal.get("confidence")) < 55:
+                    blockers.append("CONFIDENCE_BELOW_DEMO_COLLECTION_MINIMUM")
 
         return {
             "status": "PASSED" if not blockers else "BLOCKED",
@@ -328,10 +339,12 @@ class VantageXAUUSDDemoValidationService:
             "max_age_seconds": 30,
             "current_signal": {
                 "signal": current_signal.get("signal"),
+                "requested_side": side,
                 "execution_status": current_signal.get("execution_status"),
                 "risk_status": current_signal.get("risk_status"),
                 "signal_hash": current_signal.get("signal_hash"),
                 "timestamp": current_signal.get("timestamp"),
+                "strategy_profile": current_signal.get("strategy_profile"),
             }
             if current_signal is not None
             else None,

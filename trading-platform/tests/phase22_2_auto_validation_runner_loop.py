@@ -89,7 +89,7 @@ class FakeSignals:
             raise RuntimeError("signal provider failed")
         self.requested_profiles.append(strategy_profile)
         signal = dict(next((signal for signal in self.signals if signal.get("symbol") == symbol), wait_signal(symbol)))
-        signal.setdefault("strategy_profile", strategy_profile)
+        signal["strategy_profile"] = strategy_profile
         return signal
 
 
@@ -107,7 +107,7 @@ class RevalidatingSignals:
         count = self.calls.get(symbol, 0)
         self.calls[symbol] = count + 1
         signal = dict(self.original if count == 0 else self.current)
-        signal.setdefault("strategy_profile", strategy_profile)
+        signal["strategy_profile"] = strategy_profile
         return signal
 
 
@@ -160,6 +160,46 @@ class FakePositions:
 class FakeAccount:
     def get_status(self) -> dict[str, Any]:
         return {"account_type": "DEMO", "server": "VantageMarkets-Demo", "login": "123", "terminal_running": True, "status": "CONNECTED"}
+
+
+class FakeApprovalWorkflow:
+    def run_workflow(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {"approved_for_future_demo_order": True, "blockers": []}
+
+
+class FakeVantageMarket:
+    def __init__(self, tick: dict[str, Any] | None = None) -> None:
+        self.tick = tick or {"symbol": "XAUUSD", "status": "OK", "bid": 2400.0, "ask": 2400.25, "spread": 0.25, "source": "VANTAGE_DEMO"}
+
+    def get_symbol_tick(self, symbol: str) -> dict[str, Any]:
+        return {**self.tick, "symbol": symbol}
+
+    def get_xauusd_diagnostics(self) -> dict[str, Any]:
+        return {"tick_available": True, "bid": self.tick.get("bid"), "ask": self.tick.get("ask"), "spread": self.tick.get("spread"), "source": "VANTAGE_DEMO", "readiness_result": "READY"}
+
+
+class FakeVantageSender:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def send_order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(payload)
+        return {"status": "DEMO_ORDER_SENT", "mt5_order_sent": True, "guarded_sender_used": True, "strategy_profile": payload.get("strategy_profile")}
+
+
+class FakeVantagePositions:
+    def get_open_positions_by_symbol(self, symbol: str) -> dict[str, Any]:
+        return {"positions": []}
+
+
+class RevalidationSignalEngine:
+    def __init__(self, signal: dict[str, Any]) -> None:
+        self.signal = signal
+        self.calls: list[tuple[str, str]] = []
+
+    def generate_signal(self, symbol: str, strategy_profile: str = "PRODUCTION") -> dict[str, Any]:
+        self.calls.append((symbol, strategy_profile))
+        return {**self.signal, "symbol": symbol, "strategy_profile": strategy_profile}
 
 
 def make_service(signals: FakeSignals | None = None, state_path: Path | None = None, positions: list[dict[str, Any]] | None = None, trades: list[dict[str, Any]] | None = None):
@@ -272,7 +312,7 @@ async def verify_allowed_symbols_only_and_scan_report() -> bool:
             and decision["best_candidate_symbol"] == "XAUUSD"
             and "NIFTY50" not in decision["watched_symbols"]
             and "NIFTY50" not in decision["no_qualified_reason"]
-            and signals.requested_profiles == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
+            and signals.requested_profiles == ["DEMO_COLLECTION", "DEMO_COLLECTION"]
         )
         return show("AUTO validation watches only allowed symbols and reports EURUSD/XAUUSD scan results", passed, str(decision))
 
@@ -328,7 +368,7 @@ async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> boo
         )
         signals = FakeSignals([relaxed])
         service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
-        service.start()
+        service.start({"strategy_profile": "AUTO_VALIDATION"})
         result = await AutoValidationRunner(service).run_tick()
         payload = guarded.calls[0] if guarded.calls else {}
         status = service.status()
@@ -347,6 +387,185 @@ async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> boo
             and signals.requested_profiles[:2] == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
         )
         return show("AUTO_VALIDATION allows demo-only 68 confidence setup without BOS/liquidity hard gates", passed, str(payload))
+
+
+async def verify_demo_collection_relaxed_directional_setup_opens() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        demo = ready_signal("XAUUSD", signal_hash="xau-demo-collection-open")
+        demo.update(
+            {
+                "confidence": 58,
+                "risk_reward": 1.2,
+                "strategy_components": {
+                    "liquidity_sweep": False,
+                    "bos": False,
+                    "choch": False,
+                    "fvg": False,
+                    "order_block": False,
+                    "session_valid": False,
+                },
+                "quality_score": {"confidence": 58},
+                "approval_audit": {
+                    "strategy_profile": "DEMO_COLLECTION",
+                    "relaxed_blockers": [
+                        {"code": "FVG_MISSING"},
+                        {"code": "ORDER_BLOCK_MISSING"},
+                        {"code": "SESSION_INVALID"},
+                    ],
+                    "sl_tp_source": "DEMO_RISK_FALLBACK",
+                },
+                "sl_tp_source": "DEMO_RISK_FALLBACK",
+                "demo_risk_model": {"model": "ATR_OR_FIXED_RISK", "min_rr": 1.2},
+            }
+        )
+        signals = FakeSignals([demo])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        payload = guarded.calls[0] if guarded.calls else {}
+        status = service.status()
+        passed = (
+            result["status"] == "ORDER_SENT"
+            and status["config"]["strategy_profile"] == "DEMO_COLLECTION"
+            and payload.get("strategy_profile") == "DEMO_COLLECTION"
+            and payload.get("strategy_metadata", {}).get("sl_tp_source") == "DEMO_RISK_FALLBACK"
+            and status["session"]["orders_created"] == 1
+            and signals.requested_profiles[:2] == ["DEMO_COLLECTION", "DEMO_COLLECTION"]
+        )
+        return show("DEMO_COLLECTION relaxed directional setup can reach OPENED = 1", passed, str({"payload": payload, "session": status["session"]}))
+
+
+async def verify_auto_validation_profile_remains_strict() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        strict = ready_signal("XAUUSD", signal_hash="xau-auto-validation-strict")
+        strict.update(
+            {
+                "confidence": 68,
+                "strategy_components": {
+                    "liquidity_sweep": False,
+                    "bos": False,
+                    "choch": False,
+                    "fvg": False,
+                    "order_block": False,
+                    "session_valid": False,
+                },
+            }
+        )
+        service, guarded = make_service(FakeSignals([strict]), state_path=Path(tmp) / "state.json")
+        service.start({"strategy_profile": "AUTO_VALIDATION"})
+        result = await AutoValidationRunner(service).run_tick()
+        passed = (
+            result["status"] == "BLOCKED"
+            and "FVG_REQUIRED" in result["blockers"]
+            and "ORDER_BLOCK_REQUIRED" in result["blockers"]
+            and "SESSION_VALID_REQUIRED" in result["blockers"]
+            and guarded.calls == []
+            and service.status()["config"]["strategy_profile"] == "AUTO_VALIDATION"
+        )
+        return show("AUTO_VALIDATION remains strict when explicitly selected", passed, str(result))
+
+
+def verify_real_engine_demo_collection_fallback_sl_tp() -> bool:
+    from backend.strategy.real_signal_engine_service import RealSignalEngineService
+
+    engine = RealSignalEngineService()
+    candles = [{"open": 2398.0, "high": 2402.0, "low": 2396.0, "close": 2400.0} for _ in range(40)]
+    plan = engine._demo_collection_trade_plan(  # type: ignore[attr-defined]
+        "XAUUSD",
+        "BUY",
+        {"status": "OK", "ask": 2400.0, "bid": 2399.8, "spread": 0.2},
+        candles,
+        {},
+    )
+    passed = (
+        plan.get("sl_tp_source") == "DEMO_RISK_FALLBACK"
+        and plan.get("entry") == 2400.0
+        and plan.get("stop_loss") < plan.get("entry") < plan.get("take_profit")
+        and plan.get("risk_reward") >= 1.2
+    )
+    return show("DEMO_COLLECTION generates fallback SL/TP from real tick plus ATR/fixed risk model", passed, str(plan))
+
+
+def _vantage_service_for_revalidation(current_signal: dict[str, Any]):
+    from backend.mt5_demo.vantage_xauusd_demo_validation_service import VantageXAUUSDDemoValidationService
+
+    sender = FakeVantageSender()
+    service = VantageXAUUSDDemoValidationService(
+        mt5_demo_service=FakeAccount(),
+        market_data_service=FakeVantageMarket(),
+        approval_workflow_service=FakeApprovalWorkflow(),
+        guarded_sender_service=sender,
+        position_sync_service=FakeVantagePositions(),
+        lifecycle_service=object(),
+        signal_engine_service=RevalidationSignalEngine(current_signal),
+    )
+    return service, sender
+
+
+def _demo_collection_vantage_payload(side: str = "SELL", **overrides: Any) -> dict[str, Any]:
+    payload = {
+        "symbol": "XAUUSD",
+        "side": side,
+        "action": side,
+        "lot": 0.01,
+        "stop_loss": 2410.0 if side == "SELL" else 2390.0,
+        "take_profit": 2380.0 if side == "SELL" else 2420.0,
+        "risk_reward_ratio": 2.0,
+        "signal_confidence": 68,
+        "signal_hash": "demo-original",
+        "signal_timestamp": datetime.now(timezone.utc).isoformat(),
+        "strategy_profile": "DEMO_COLLECTION",
+        "confirm": True,
+        "live_execution_enabled": False,
+        "broker_execution_enabled": False,
+        "validation_session_id": "demo-validation-test",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def verify_vantage_same_direction_minor_change_proceeds() -> bool:
+    current = ready_signal("XAUUSD", signal_hash="demo-current-minor")
+    current.update(
+        {
+            "signal": "SELL",
+            "entry": 2399.5,
+            "stop_loss": 2410.0,
+            "take_profit": 2379.0,
+            "risk_reward": 2.0,
+            "confidence": 69,
+            "strategy_profile": "DEMO_COLLECTION",
+        }
+    )
+    service, sender = _vantage_service_for_revalidation(current)
+    result = service.send_test_order(_demo_collection_vantage_payload("SELL", take_profit=2380.0))
+    blockers = result.get("blocked_reasons") or result.get("blockers") or []
+    passed = result["status"] == "DEMO_ORDER_SENT" and len(sender.calls) == 1 and "SIGNAL_DIRECTION_CHANGED" not in blockers
+    return show("Vantage revalidation permits same-direction entry/TP hash drift", passed, str({"result": result, "sender_calls": sender.calls}))
+
+
+def verify_vantage_buy_to_sell_direction_change_rejects() -> bool:
+    current = ready_signal("XAUUSD", signal_hash="demo-current-sell")
+    current.update({"signal": "SELL", "stop_loss": 2410.0, "take_profit": 2380.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
+    service, sender = _vantage_service_for_revalidation(current)
+    result = service.send_test_order(_demo_collection_vantage_payload("BUY", stop_loss=2390.0, take_profit=2420.0))
+    blockers = result.get("blocked_reasons") or result.get("blockers") or []
+    passed = result["status"] == "BLOCKED" and "SIGNAL_DIRECTION_CHANGED" in blockers and sender.calls == []
+    return show("Vantage revalidation rejects real BUY to SELL direction change", passed, str(result))
+
+
+def verify_vantage_sell_to_buy_direction_change_rejects() -> bool:
+    current = ready_signal("XAUUSD", signal_hash="demo-current-buy")
+    current.update({"signal": "BUY", "stop_loss": 2390.0, "take_profit": 2420.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
+    service, sender = _vantage_service_for_revalidation(current)
+    result = service.send_test_order(_demo_collection_vantage_payload("SELL"))
+    blockers = result.get("blocked_reasons") or result.get("blockers") or []
+    passed = result["status"] == "BLOCKED" and "SIGNAL_DIRECTION_CHANGED" in blockers and sender.calls == []
+    return show("Vantage revalidation rejects real SELL to BUY direction change", passed, str(result))
 
 
 async def verify_duplicate_same_active_signal_blocks() -> bool:
@@ -880,6 +1099,11 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Strategy Profile",
         "HASH_CHANGE_MINOR",
         "AUTO_VALIDATION",
+        "DEMO_COLLECTION",
+        "SL/TP Source",
+        "Advisory Blockers",
+        "DEMO_RISK_FALLBACK",
+        "relaxed_blockers",
         "strategy_profile",
         "auto_validation_confidence = 65",
     ]
@@ -905,6 +1129,8 @@ async def async_main() -> list[bool]:
         await verify_allowed_symbols_only_and_scan_report(),
         await verify_recoverable_market_data_failure_does_not_halt(),
         await verify_auto_validation_profile_loosened_rules_fire_demo_order(),
+        await verify_demo_collection_relaxed_directional_setup_opens(),
+        await verify_auto_validation_profile_remains_strict(),
         await verify_duplicate_same_active_signal_blocks(),
         await verify_closed_historical_trade_does_not_block_duplicate_check(),
         await verify_failed_sender_attempt_does_not_create_duplicate(),
@@ -926,7 +1152,17 @@ def main() -> int:
     print("Phase 22.2 AUTO Validation Runner Loop Verification")
     print("=" * 78)
     checks = asyncio.run(async_main())
-    checks.extend([verify_production_profile_stays_strict(), verify_journal_stores_strategy_profile(), verify_guarded_sender_auto_validation_xauusd_guard_accepts(), verify_code_wiring_and_dashboard(), verify_no_unrestricted_order_send()])
+    checks.extend([
+        verify_production_profile_stays_strict(),
+        verify_real_engine_demo_collection_fallback_sl_tp(),
+        verify_vantage_same_direction_minor_change_proceeds(),
+        verify_vantage_buy_to_sell_direction_change_rejects(),
+        verify_vantage_sell_to_buy_direction_change_rejects(),
+        verify_journal_stores_strategy_profile(),
+        verify_guarded_sender_auto_validation_xauusd_guard_accepts(),
+        verify_code_wiring_and_dashboard(),
+        verify_no_unrestricted_order_send(),
+    ])
     print("=" * 78)
     print("PASS" if all(checks) else "FAIL")
     return 0 if all(checks) else 1

@@ -76,8 +76,6 @@ class AutoValidationService:
         payload = payload or {}
         self.config = {**self.config, **self._safe_config(payload)}
         self.config["auto_validation_enabled"] = True
-        self.config["strategy_profile"] = "AUTO_VALIDATION"
-        self.config["min_confidence"] = 65
         self.session = {
             **self._empty_session(),
             "session_id": f"auto-validation-{uuid4()}",
@@ -233,10 +231,11 @@ class AutoValidationService:
             blockers.append("LOT_SIZE_EXCEEDS_0_01")
         if signal.get("execution_status") != "READY_FOR_PREVIEW" or signal.get("risk_status") != "APPROVED":
             blockers.append("SIGNAL_NOT_READY_APPROVED")
-        if self.config.get("strategy_profile") == "AUTO_VALIDATION":
-            if str(signal.get("strategy_profile") or "").upper() != "AUTO_VALIDATION":
+        active_profile = str(self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
+        if active_profile in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
+            if str(signal.get("strategy_profile") or "").upper() != active_profile:
                 blockers.append("STRATEGY_PROFILE_MISMATCH")
-            blockers.extend(self._auto_validation_profile_blockers(signal))
+            blockers.extend(self._profile_blockers(signal, active_profile))
         if self._number(signal.get("confidence"), 0) < float(config["min_confidence"]):
             blockers.append("CONFIDENCE_BELOW_MINIMUM")
         if self._number(signal.get("risk_reward"), 0) < float(config["min_rr"]):
@@ -273,7 +272,7 @@ class AutoValidationService:
 
     def _guarded_payload(self, signal: dict[str, Any]) -> dict[str, Any]:
         source = signal.get("candle_source") if isinstance(signal.get("candle_source"), dict) else {}
-        strategy_profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
+        strategy_profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
         return {
             "symbol": str(signal.get("symbol") or "").upper(),
             "side": str(signal.get("signal") or "").upper(),
@@ -295,6 +294,8 @@ class AutoValidationService:
                 "quality_score": signal.get("quality_score") or {},
                 "approval_audit": signal.get("approval_audit") or {},
                 "candle_source": signal.get("candle_source") or {},
+                "sl_tp_source": signal.get("sl_tp_source"),
+                "demo_risk_model": signal.get("demo_risk_model"),
             },
             "validation_session_id": self.session["session_id"],
             "execution_mode": "AUTO_VALIDATION",
@@ -326,7 +327,7 @@ class AutoValidationService:
     def _signal_for_symbol(self, symbol: str) -> dict[str, Any] | None:
         if self.signal_provider is None:
             return None
-        profile = str(self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
+        profile = str(self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
         try:
             signal = self.signal_provider.signal_for_symbol(symbol, record_history=False, strategy_profile=profile)
         except TypeError:
@@ -491,15 +492,16 @@ class AutoValidationService:
             blockers.extend(str(item.get("code") or item.get("label") or item) for item in missing if item)
         return sorted(set(blockers)) or ["NO_READY_APPROVED_SIGNAL"]
 
-    def _auto_validation_profile_blockers(self, signal: dict[str, Any]) -> list[str]:
+    def _profile_blockers(self, signal: dict[str, Any], profile: str) -> list[str]:
         blockers: list[str] = []
         components = signal.get("strategy_components") if isinstance(signal.get("strategy_components"), dict) else {}
-        if not components.get("fvg"):
-            blockers.append("FVG_REQUIRED")
-        if not components.get("order_block"):
-            blockers.append("ORDER_BLOCK_REQUIRED")
-        if not components.get("session_valid"):
-            blockers.append("SESSION_VALID_REQUIRED")
+        if profile == "AUTO_VALIDATION":
+            if not components.get("fvg"):
+                blockers.append("FVG_REQUIRED")
+            if not components.get("order_block"):
+                blockers.append("ORDER_BLOCK_REQUIRED")
+            if not components.get("session_valid"):
+                blockers.append("SESSION_VALID_REQUIRED")
         if str(signal.get("signal") or "").upper() not in {"BUY", "SELL"}:
             blockers.append("BUY_OR_SELL_REQUIRED")
         if self._number(signal.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.5)):
@@ -511,7 +513,11 @@ class AutoValidationService:
         max_spread = 1.0 if symbol == "XAUUSD" else 0.0003
         spread = self._number(tick.get("spread"), None)
         spread_ok = spread is not None and spread <= max_spread
-        if not (tick.get("status") in {"OK", "TICK_AVAILABLE_DIRECT"} and spread_ok) and not self._tick_stale_within_grace(symbol, tick):
+        live_tick_ok = tick.get("status") in {"OK", "TICK_AVAILABLE_DIRECT"} and spread_ok
+        if profile == "DEMO_COLLECTION":
+            if not live_tick_ok:
+                blockers.append("VALID_TICK_SPREAD_REQUIRED")
+        elif not live_tick_ok and not self._tick_stale_within_grace(symbol, tick):
             blockers.append("SPREAD_NOT_ACCEPTABLE_OR_STALE_WITHIN_GRACE")
         return blockers
 
@@ -824,8 +830,8 @@ class AutoValidationService:
         spread_current = current.get("spread")
         if spread_original != spread_current:
             changed_fields.append({"field": "spread", "original": spread_original, "current": spread_current})
-        auto_validation = str(original.get("strategy_profile") or current.get("strategy_profile") or self.config.get("strategy_profile") or "").upper() == "AUTO_VALIDATION"
-        if auto_validation:
+        auto_profile = str(original.get("strategy_profile") or current.get("strategy_profile") or self.config.get("strategy_profile") or "").upper() in {"AUTO_VALIDATION", "DEMO_COLLECTION"}
+        if auto_profile:
             classification = self._auto_validation_hash_classification(original, current, changed_fields)
             informational = bool(classification["minor_change"])
             minor_change = bool(classification["minor_change"])
@@ -868,7 +874,7 @@ class AutoValidationService:
         if self._number(current.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.5)):
             material.append("RR_BELOW_THRESHOLD")
         if self._number(current.get("confidence"), 0) < float(self.config.get("min_confidence", 65)):
-            material.append("CONFIDENCE_BELOW_AUTO_VALIDATION_THRESHOLD")
+            material.append("CONFIDENCE_BELOW_PROFILE_THRESHOLD")
 
         allowed_minor_fields = {"entry", "take_profit", "confidence", "spread"}
         changed_names = {str(item.get("field")) for item in changed_fields}
@@ -959,8 +965,13 @@ class AutoValidationService:
             return
         if isinstance(data.get("config"), dict):
             self.config = {**self._default_config(), **data["config"]}
-            self.config["strategy_profile"] = "AUTO_VALIDATION"
-            self.config["min_confidence"] = 65
+            self.config["strategy_profile"] = self._normalize_profile(self.config.get("strategy_profile"))
+            if self.config["strategy_profile"] == "DEMO_COLLECTION":
+                self.config["min_confidence"] = 55
+                self.config["min_rr"] = 1.2
+            elif self.config["strategy_profile"] == "AUTO_VALIDATION":
+                self.config["min_confidence"] = 65
+                self.config["min_rr"] = 1.5
             self.config["live_execution_enabled"] = False
             self.config["broker_execution_enabled"] = False
         if isinstance(data.get("session"), dict):
@@ -1017,9 +1028,9 @@ class AutoValidationService:
             "max_daily_trades": 30,
             "max_daily_loss_amount": 100.0,
             "max_total_drawdown_amount": 150.0,
-            "min_confidence": 65,
-            "strategy_profile": "AUTO_VALIDATION",
-            "min_rr": 1.5,
+            "min_confidence": 55,
+            "strategy_profile": "DEMO_COLLECTION",
+            "min_rr": 1.2,
             "require_sl_tp": True,
             "cooldown_after_trade_minutes": 15,
             "stop_after_target_reached": True,
@@ -1052,7 +1063,7 @@ class AutoValidationService:
         }
 
     def _duplicate_key(self, signal: dict[str, Any]) -> str:
-        profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
+        profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
         symbol = str(signal.get("symbol") or "").upper()
         side = str(signal.get("signal") or "").upper()
         session_id = str(self.session.get("session_id") or "")
@@ -1063,7 +1074,7 @@ class AutoValidationService:
         key = self._duplicate_key(signal)
         symbol = str(signal.get("symbol") or "").upper()
         side = str(signal.get("signal") or "").upper()
-        profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
+        profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
         signal_hash = str(signal.get("signal_hash") or "")
         active_positions = [
             item for item in open_positions
@@ -1125,11 +1136,20 @@ class AutoValidationService:
         safe["lot_size"] = min(float(payload.get("lot_size", 0.01)), 0.01)
         safe["broker_required"] = "VANTAGE_DEMO"
         safe["account_type_required"] = "DEMO"
-        safe["strategy_profile"] = "AUTO_VALIDATION"
-        safe["min_confidence"] = 65
+        safe["strategy_profile"] = self._normalize_profile(payload.get("strategy_profile", safe.get("strategy_profile")))
+        if safe["strategy_profile"] == "DEMO_COLLECTION":
+            safe["min_confidence"] = 55
+            safe["min_rr"] = 1.2
+        else:
+            safe["min_confidence"] = 65
+            safe["min_rr"] = 1.5
         safe["live_execution_enabled"] = False
         safe["broker_execution_enabled"] = False
         return safe
+
+    def _normalize_profile(self, value: Any) -> str:
+        profile = str(value or "").upper()
+        return profile if profile in {"AUTO_VALIDATION", "DEMO_COLLECTION"} else "DEMO_COLLECTION"
 
     def _max_drawdown(self, pnl_values: list[float]) -> float:
         peak = 0.0

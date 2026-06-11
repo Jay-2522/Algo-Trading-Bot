@@ -16,6 +16,8 @@ class RealSignalEngineService:
     watchlist_confidence = 60
     max_spread = {"EURUSD": 0.0003, "XAUUSD": 1.0}
     auto_validation_confidence = 65
+    demo_collection_confidence = 55
+    demo_collection_min_rr = 1.2
 
     def __init__(
         self,
@@ -49,6 +51,16 @@ class RealSignalEngineService:
                     "bos_mandatory": False,
                     "liquidity_sweep_mandatory": False,
                     "requires": ["BUY_OR_SELL", "FVG", "ORDER_BLOCK", "SESSION_VALID", "SL_TP_VALID", "RR_1_5", "SPREAD_ACCEPTABLE_OR_STALE_WITHIN_GRACE"],
+                },
+                "DEMO_COLLECTION": {
+                    "min_confidence": self.demo_collection_confidence,
+                    "min_rr": self.demo_collection_min_rr,
+                    "bos_mandatory": False,
+                    "liquidity_sweep_mandatory": False,
+                    "fvg_mandatory": False,
+                    "order_block_mandatory": False,
+                    "session_filter": "ADVISORY_ONLY",
+                    "requires": ["DIRECTIONAL_BIAS", "VALID_TICK_SPREAD", "SL_TP_VALID_OR_DEMO_RISK_FALLBACK", "RR_1_2"],
                 },
             },
             "minimum_risk_reward": self.min_rr,
@@ -198,6 +210,8 @@ class RealSignalEngineService:
         h1 = self._timeframe_context(candles["H1"])
         m15 = self._timeframe_context(candles["M15"])
         direction = self._aligned_direction(h4["bias"], h1["bias"], m15)
+        if profile == "DEMO_COLLECTION" and direction not in {"BUY", "SELL"}:
+            direction = self._demo_collection_direction(h4, h1, m15)
         smc = self._smc_components(candles["M15"], direction)
         session = self._session_context()
         spread = self._spread_context(normalized, tick)
@@ -205,6 +219,8 @@ class RealSignalEngineService:
         score = self._score_setup(direction, h4, h1, m15, smc, session, spread, volatility)
         reasons = self._reasons(direction, score, smc, session, spread, volatility)
         trade_plan = self._trade_plan(normalized, direction, tick, candles["M15"], smc) if direction in {"BUY", "SELL"} else {}
+        if profile == "DEMO_COLLECTION":
+            trade_plan = self._demo_collection_trade_plan(normalized, direction, tick, candles["M15"], trade_plan)
 
         if trade_plan.get("risk_reward") is None or trade_plan.get("risk_reward", 0) < self.min_rr:
             reasons.append("Risk/reward is below the 1.5 minimum or trade plan is incomplete.")
@@ -217,22 +233,28 @@ class RealSignalEngineService:
             and session["valid"]
         )
         auto_tradeable = self._auto_validation_tradeable(direction, score, smc, trade_plan, session, spread)
-        tradeable = auto_tradeable if profile == "AUTO_VALIDATION" else production_tradeable
+        demo_collection_tradeable = self._demo_collection_tradeable(direction, score, trade_plan, spread)
+        tradeable = demo_collection_tradeable if profile == "DEMO_COLLECTION" else auto_tradeable if profile == "AUTO_VALIDATION" else production_tradeable
         signal_action = direction if tradeable else "WAIT"
         execution_status = "READY_FOR_PREVIEW" if tradeable else "WAITING"
-        profile_confidence = self.auto_validation_confidence if profile == "AUTO_VALIDATION" else self.watchlist_confidence
+        profile_confidence = self._profile_confidence(profile)
         risk_status = "APPROVED" if tradeable else ("REJECTED" if score["confidence"] >= profile_confidence else "NO_SIGNAL")
-        missing_requirements = self._auto_validation_missing_requirements(direction, score, smc, trade_plan, session, spread) if profile == "AUTO_VALIDATION" else self._missing_requirements(direction, score, smc, trade_plan, session, spread)
+        if profile == "DEMO_COLLECTION":
+            missing_requirements = self._demo_collection_missing_requirements(direction, score, smc, trade_plan, session, spread)
+        elif profile == "AUTO_VALIDATION":
+            missing_requirements = self._auto_validation_missing_requirements(direction, score, smc, trade_plan, session, spread)
+        else:
+            missing_requirements = self._missing_requirements(direction, score, smc, trade_plan, session, spread)
         if signal_action == "WAIT":
             trade_plan = {}
-        status_level = self._status_level(signal_action, score, missing_requirements) if profile == "PRODUCTION" else self._profile_status_level(signal_action, score, missing_requirements, self.auto_validation_confidence)
+        status_level = self._status_level(signal_action, score, missing_requirements) if profile == "PRODUCTION" else self._profile_status_level(signal_action, score, missing_requirements, profile_confidence)
         profile_reasons = self._profile_reasons(profile, reasons, missing_requirements)
 
         signal = {
             "symbol": normalized,
             "signal": signal_action,
             "status_level": status_level,
-            "confidence": score["confidence"] if score["confidence"] >= self.watchlist_confidence else None,
+            "confidence": score["confidence"] if score["confidence"] >= min(self.watchlist_confidence, profile_confidence) else None,
             "reason": self._reason_text(profile_reasons),
             "what_needs_to_happen_next": self._next_steps(missing_requirements, score, self.auto_validation_confidence if profile == "AUTO_VALIDATION" else self.tradeable_confidence),
             "missing_requirements": missing_requirements,
@@ -241,6 +263,8 @@ class RealSignalEngineService:
             "stop_loss": trade_plan.get("stop_loss"),
             "take_profit": trade_plan.get("take_profit"),
             "risk_reward": trade_plan.get("risk_reward"),
+            "sl_tp_source": trade_plan.get("sl_tp_source"),
+            "demo_risk_model": trade_plan.get("demo_risk_model"),
             "risk_status": risk_status,
             "execution_status": execution_status,
             "market_structure_state": {
@@ -279,7 +303,10 @@ class RealSignalEngineService:
         return signal
 
     def _strategy_profile(self, strategy_profile: str) -> str:
-        return "AUTO_VALIDATION" if str(strategy_profile or "").upper() == "AUTO_VALIDATION" else "PRODUCTION"
+        profile = str(strategy_profile or "").upper()
+        if profile in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
+            return profile
+        return "PRODUCTION"
 
     def analyze_from_candles(self, symbol: str, timeframes: dict[str, list[dict[str, Any]]], tick: dict[str, Any] | None = None) -> dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
@@ -701,6 +728,38 @@ class RealSignalEngineService:
         missing_requirements: list[dict[str, Any]],
     ) -> dict[str, Any]:
         audit = self._approval_audit(signal_action, score, smc, trade_plan, session, spread, reasons, missing_requirements)
+        if profile == "DEMO_COLLECTION":
+            threshold = self.demo_collection_confidence
+            advisory = self._demo_collection_advisory_requirements(smc, session)
+            audit.update(
+                {
+                    "strategy_profile": "DEMO_COLLECTION",
+                    "status": "APPROVED" if signal_action in {"BUY", "SELL"} else ("REJECTED" if score["confidence"] >= threshold else "WAIT"),
+                    "confidence_result": "PASS" if score["confidence"] >= threshold else "FAIL",
+                    "confidence_threshold": threshold,
+                    "confidence_gap_to_55": max(0, threshold - int(score["confidence"])),
+                    "rr_result": "PASS" if self._number(trade_plan.get("risk_reward")) is not None and self._number(trade_plan.get("risk_reward")) >= self.demo_collection_min_rr else "FAIL",
+                    "min_rr": self.demo_collection_min_rr,
+                    "sl_tp_source": trade_plan.get("sl_tp_source") or "UNAVAILABLE",
+                    "demo_risk_model": trade_plan.get("demo_risk_model"),
+                    "advisory_requirements": advisory,
+                    "relaxed_blockers": advisory,
+                    "demo_collection_rules": {
+                        "min_confidence": threshold,
+                        "bos_mandatory": False,
+                        "liquidity_sweep_mandatory": False,
+                        "fvg_mandatory": False,
+                        "order_block_mandatory": False,
+                        "session_filter": "ADVISORY_ONLY",
+                        "requires_directional_bias": True,
+                        "requires_valid_tick_spread": True,
+                        "requires_sl_tp_valid_or_demo_risk_fallback": True,
+                        "min_rr": self.demo_collection_min_rr,
+                    },
+                    "approval_note": "DEMO_COLLECTION is demo-only: FVG, order block, BOS, liquidity sweep, and session are advisory so the 30-trade validation can collect real demo outcomes. Production remains unchanged.",
+                }
+            )
+            return audit
         if profile != "AUTO_VALIDATION":
             audit["strategy_profile"] = "PRODUCTION"
             audit["production_rules_unchanged"] = True
@@ -834,6 +893,126 @@ class RealSignalEngineService:
             missing.append({"code": "SL_TP_INVALID", "label": "AUTO validation requires valid SL/TP placement."})
         return missing
 
+    def _demo_collection_direction(self, h4: dict[str, Any], h1: dict[str, Any], m15: dict[str, Any]) -> str:
+        biases = [h4.get("bias"), h1.get("bias"), m15.get("bias")]
+        bullish = biases.count("bullish")
+        bearish = biases.count("bearish")
+        if bullish > bearish and bullish > 0:
+            return "BUY"
+        if bearish > bullish and bearish > 0:
+            return "SELL"
+        return "WAIT"
+
+    def _demo_collection_trade_plan(
+        self,
+        symbol: str,
+        direction: str,
+        tick: dict[str, Any],
+        candles: list[dict[str, Any]],
+        trade_plan: dict[str, Any],
+    ) -> dict[str, Any]:
+        if direction not in {"BUY", "SELL"}:
+            return trade_plan
+        rr = self._number(trade_plan.get("risk_reward"))
+        if self._sl_tp_valid(direction, trade_plan) and rr is not None and rr >= self.demo_collection_min_rr:
+            return {**trade_plan, "sl_tp_source": trade_plan.get("sl_tp_source") or "STRATEGY", "demo_risk_model": None}
+        entry_key = "ask" if direction == "BUY" else "bid"
+        entry = self._number(tick.get(entry_key))
+        if entry is None or entry <= 0:
+            return trade_plan
+        atr = self._atr(candles[-20:]) if candles else 0
+        fallback_risk = max(atr * 0.8, entry * (0.001 if symbol == "XAUUSD" else 0.0008))
+        if fallback_risk <= 0:
+            return trade_plan
+        digits = 2 if symbol == "XAUUSD" else 5
+        if direction == "BUY":
+            stop_loss = entry - fallback_risk
+            take_profit = entry + fallback_risk * self.demo_collection_min_rr
+        else:
+            stop_loss = entry + fallback_risk
+            take_profit = entry - fallback_risk * self.demo_collection_min_rr
+        risk = abs(entry - stop_loss)
+        rr_value = abs(take_profit - entry) / risk if risk > 0 else 0
+        return {
+            "entry": round(entry, digits),
+            "stop_loss": round(stop_loss, digits),
+            "take_profit": round(take_profit, digits),
+            "risk_reward": round(rr_value, 2),
+            "sl_tp_source": "DEMO_RISK_FALLBACK",
+            "demo_risk_model": {
+                "model": "ATR_OR_FIXED_RISK",
+                "atr": round(atr, digits),
+                "risk_distance": round(fallback_risk, digits),
+                "min_rr": self.demo_collection_min_rr,
+            },
+        }
+
+    def _demo_collection_tradeable(
+        self,
+        direction: str,
+        score: dict[str, Any],
+        trade_plan: dict[str, Any],
+        spread: dict[str, Any],
+    ) -> bool:
+        rr = self._number(trade_plan.get("risk_reward"))
+        return (
+            direction in {"BUY", "SELL"}
+            and int(score.get("confidence", 0)) >= self.demo_collection_confidence
+            and self._sl_tp_valid(direction, trade_plan)
+            and rr is not None
+            and rr >= self.demo_collection_min_rr
+            and bool(spread.get("acceptable"))
+        )
+
+    def _demo_collection_missing_requirements(
+        self,
+        direction: str,
+        score: dict[str, Any],
+        smc: dict[str, Any],
+        trade_plan: dict[str, Any],
+        session: dict[str, Any],
+        spread: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        missing: list[dict[str, Any]] = []
+        confidence_gap = max(0, self.demo_collection_confidence - int(score["confidence"]))
+        if confidence_gap > 0:
+            missing.append({"code": "CONFIDENCE_GAP", "label": f"Confidence needs +{confidence_gap} to reach 55.", "gap": confidence_gap})
+        if direction not in {"BUY", "SELL"}:
+            missing.append({"code": "DIRECTIONAL_BIAS_MISSING", "label": "DEMO_COLLECTION requires a BUY or SELL directional bias."})
+        rr = self._number(trade_plan.get("risk_reward"))
+        if rr is None:
+            missing.append({"code": "RR_MISSING", "label": "DEMO_COLLECTION requires RR from strategy plan or fallback demo risk model."})
+        elif rr < self.demo_collection_min_rr:
+            missing.append({"code": "RR_LOW", "label": f"Risk/reward {rr:.2f}:1 is below {self.demo_collection_min_rr:.2f}:1.", "rr": rr})
+        if not spread.get("acceptable"):
+            missing.append({"code": "SPREAD_TOO_HIGH", "label": "DEMO_COLLECTION requires a live acceptable tick/spread.", "spread": spread.get("spread"), "max_spread": spread.get("max_spread")})
+        if not self._sl_tp_valid(direction, trade_plan):
+            missing.append({"code": "SL_TP_INVALID", "label": "DEMO_COLLECTION requires valid SL/TP placement from strategy or fallback demo risk model."})
+        for advisory in self._demo_collection_advisory_requirements(smc, session):
+            missing.append({**advisory, "advisory": True})
+        return missing
+
+    def _demo_collection_advisory_requirements(self, smc: dict[str, Any], session: dict[str, Any]) -> list[dict[str, Any]]:
+        advisory: list[dict[str, Any]] = []
+        if not smc.get("bos"):
+            advisory.append({"code": "BOS_MISSING", "label": "BOS missing; advisory only in DEMO_COLLECTION."})
+        if not smc.get("liquidity_sweep"):
+            advisory.append({"code": "LIQUIDITY_SWEEP_MISSING", "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."})
+        if not smc.get("fvg"):
+            advisory.append({"code": "FVG_MISSING", "label": "FVG missing; advisory only in DEMO_COLLECTION."})
+        if not smc.get("order_block"):
+            advisory.append({"code": "ORDER_BLOCK_MISSING", "label": "Order block missing; advisory only in DEMO_COLLECTION."})
+        if not session.get("valid"):
+            advisory.append({"code": "SESSION_INVALID", "label": "Session invalid; advisory only in DEMO_COLLECTION."})
+        return advisory
+
+    def _profile_confidence(self, profile: str) -> int:
+        if profile == "DEMO_COLLECTION":
+            return self.demo_collection_confidence
+        if profile == "AUTO_VALIDATION":
+            return self.auto_validation_confidence
+        return self.watchlist_confidence
+
     def _sl_tp_valid(self, direction: str, trade_plan: dict[str, Any]) -> bool:
         entry = self._number(trade_plan.get("entry"))
         stop_loss = self._number(trade_plan.get("stop_loss"))
@@ -865,6 +1044,11 @@ class RealSignalEngineService:
         return "WAIT"
 
     def _profile_reasons(self, profile: str, reasons: list[str], missing_requirements: list[dict[str, Any]]) -> list[str]:
+        if profile == "DEMO_COLLECTION":
+            hard_missing = [item for item in missing_requirements if not item.get("advisory")]
+            if not hard_missing:
+                return ["DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only."]
+            return ["DEMO_COLLECTION profile active: FVG, order block, BOS, liquidity sweep, and session are advisory; demo collection still requires direction, tick/spread, SL/TP, and RR >= 1.2."]
         if profile != "AUTO_VALIDATION":
             return reasons
         if not missing_requirements:
@@ -892,6 +1076,9 @@ class RealSignalEngineService:
             "SESSION_INVALID": "valid London/New York session",
             "SL_TP_INVALID": "valid SL/TP placement",
             "TREND_ALIGNMENT_MISSING": "M15/H1/H4 trend alignment",
+            "DIRECTIONAL_BIAS_MISSING": "directional bias",
+            "FVG_MISSING": "FVG confirmation",
+            "ORDER_BLOCK_MISSING": "order block confirmation",
         }
         readable = [names.get(code, code.replace("_", " ").lower()) for code in priority]
         if len(readable) == 1:

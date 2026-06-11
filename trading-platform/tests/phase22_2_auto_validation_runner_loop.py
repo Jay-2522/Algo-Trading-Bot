@@ -708,7 +708,7 @@ async def verify_cooldown_is_separate_from_duplicate() -> bool:
         signals = FakeSignals([first_signal])
         service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
         runner = AutoValidationRunner(service)
-        service.start({"cooldown_after_trade_minutes": 15})
+        service.start({"strategy_profile": "AUTO_VALIDATION", "cooldown_after_trade_minutes": 15})
         first = await runner.run_tick()
         signals.signals = [second_signal]
         second = await runner.run_tick()
@@ -729,7 +729,11 @@ async def verify_open_position_blocks_duplicate() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
     with tempfile.TemporaryDirectory() as tmp:
-        positions = [{"symbol": "XAUUSD", "ticket": "123", "volume": 0.01}]
+        positions = [
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "123", "volume": 0.01},
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "124", "volume": 0.01},
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "125", "volume": 0.01},
+        ]
         service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-open-position")]), state_path=Path(tmp) / "state.json", positions=positions)
         service.start()
         result = await AutoValidationRunner(service).run_tick()
@@ -741,16 +745,17 @@ async def verify_open_position_blocks_duplicate() -> bool:
             result["status"] == "BLOCKED"
             and "DUPLICATE_SIGNAL_BLOCKED" in result["blockers"]
             and duplicate["duplicate_source"] == "open_mt5_position"
-            and duplicate["open_positions_count"] == 1
-            and session["current_open_trades"] == 1
-            and session["open_trades"] == 1
-            and session["total_trades"] == 1
-            and session["opened"] == 1
-            and session["orders_created"] == 1
-            and sync["mt5_open_positions_detected"] == 1
-            and sync["auto_owned_open_positions"] == 1
+            and duplicate["open_positions_count"] == 3
+            and duplicate["same_side_open_positions_count"] == 3
+            and session["current_open_trades"] == 3
+            and session["open_trades"] == 3
+            and session["total_trades"] == 3
+            and session["opened"] == 3
+            and session["orders_created"] == 3
+            and sync["mt5_open_positions_detected"] == 3
+            and sync["auto_owned_open_positions"] == 3
             and sync["unmatched_open_positions"] == 0
-            and sync["open_position_tickets"] == ["123"]
+            and sync["open_position_tickets"] == ["123", "124", "125"]
             and guarded.calls == []
         )
         return show("Genuine open position blocks duplicate AUTO signal and syncs open telemetry", passed, str({"result": result, "duplicate": duplicate, "session": session, "sync": sync}))

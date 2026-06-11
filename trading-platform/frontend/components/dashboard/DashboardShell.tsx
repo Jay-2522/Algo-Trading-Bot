@@ -259,6 +259,7 @@ export function DashboardShell(_: {
 }) {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [errors, setErrors] = useState<string[]>([]);
+  const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<ScopedSymbol>("EURUSD");
@@ -273,6 +274,7 @@ export function DashboardShell(_: {
   const requestInFlight = useRef(false);
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
+  const autoValidationRequestInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
     if (requestInFlight.current) return;
@@ -301,9 +303,11 @@ export function DashboardShell(_: {
         autoValidation: "autoValidation" in payload ? asRecord(payload.autoValidation) : current.autoValidation,
       }));
       setErrors(result.errors);
+      setPanelErrors((current) => ({ ...current, dashboard: result.errors[0] ?? "" }));
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
+      setPanelErrors((current) => ({ ...current, dashboard: error instanceof Error ? error.message : "Backend unavailable" }));
     } finally {
       setLoading(false);
       requestInFlight.current = false;
@@ -323,8 +327,10 @@ export function DashboardShell(_: {
         }));
       }
       setErrors(prices.errors);
+      setPanelErrors((current) => ({ ...current, prices: prices.errors[0] ?? "" }));
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
+      setPanelErrors((current) => ({ ...current, prices: error instanceof Error ? error.message : "Backend unavailable" }));
     } finally {
       priceRequestInFlight.current = false;
     }
@@ -342,14 +348,18 @@ export function DashboardShell(_: {
         }));
       }
       setErrors(signals.errors);
+      setPanelErrors((current) => ({ ...current, signals: signals.errors[0] ?? "" }));
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
+      setPanelErrors((current) => ({ ...current, signals: error instanceof Error ? error.message : "Backend unavailable" }));
     } finally {
       signalRequestInFlight.current = false;
     }
   }, []);
 
   const refreshAutoValidation = useCallback(async () => {
+    if (autoValidationRequestInFlight.current) return;
+    autoValidationRequestInFlight.current = true;
     try {
       const result = await fetchAutoValidationStatus();
       if (result.ok) {
@@ -358,8 +368,12 @@ export function DashboardShell(_: {
       if (result.errors.length > 0) {
         setErrors(result.errors);
       }
+      setPanelErrors((current) => ({ ...current, autoValidation: result.errors[0] ?? "" }));
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
+      setPanelErrors((current) => ({ ...current, autoValidation: error instanceof Error ? error.message : "Backend unavailable" }));
+    } finally {
+      autoValidationRequestInFlight.current = false;
     }
   }, []);
 
@@ -710,6 +724,7 @@ export function DashboardShell(_: {
 
         <AutoValidationPanel
           status={data.autoValidation}
+          pollError={panelErrors.autoValidation ?? ""}
           workingAction={workingAction}
           onAction={(action) => void handleAutoValidationAction(action)}
         />
@@ -1053,10 +1068,12 @@ function ExecutionModePanel({
 
 function AutoValidationPanel({
   status,
+  pollError,
   workingAction,
   onAction,
 }: {
   status: ApiRecord | null;
+  pollError: string;
   workingAction: string | null;
   onAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
 }) {
@@ -1104,6 +1121,8 @@ function AutoValidationPanel({
       ? watchedAudit.advisory_requirements.map((item) => readText(asRecord(item), ["code"], String(item))).filter(Boolean)
       : [];
   const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
+  const targetValidationTrades = readNumber(session, ["target_validation_trades"], readNumber(config, ["target_validation_trades", "target_closed_trades"], 30));
+  const remainingTrades = readNumber(session, ["remaining_trades_to_target"], Math.max(0, targetValidationTrades - readNumber(session, ["current_closed_trades"], 0)));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
   const netPnl = readNumber(session, ["net_pnl"], 0);
@@ -1132,9 +1151,13 @@ function AutoValidationPanel({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <Metric label="Target Trades" value={String(readNumber(session, ["target_closed_trades"], readNumber(config, ["target_closed_trades"], 30)))} compact />
+        <Metric label="Target Trades" value={String(targetValidationTrades)} compact />
+        <Metric label="Remaining to 30" value={String(remainingTrades)} compact />
         <Metric label="Completed" value={String(readNumber(session, ["current_closed_trades"], 0))} compact />
         <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
+        <Metric label="Open Trade Limit" value={String(readNumber(config, ["max_open_trades_total"], 0))} compact />
+        <Metric label="Per-Symbol Limit" value={String(readNumber(config, ["max_open_trades_per_symbol"], 0))} compact />
+        <Metric label="Daily Demo Trades" value={`${readNumber(session, ["daily_demo_trade_count"], 0)} / ${readNumber(config, ["max_daily_demo_trades", "max_daily_trades"], 30)}`} compact />
         <Metric label="Wins / Losses" value={`${readNumber(session, ["wins"], 0)} / ${readNumber(session, ["losses"], 0)}`} compact />
         <Metric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
         <Metric label="Net P&L" value={money(readNumber(session, ["net_pnl"], 0))} valueClass={pnlClass(readNumber(session, ["net_pnl"], 0))} compact />
@@ -1143,6 +1166,7 @@ function AutoValidationPanel({
         <Metric label="Allowed Symbols" value={Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.join(", ") : "XAUUSD, EURUSD"} compact />
         <Metric label="Watching" value={watchedSymbols.join(" + ")} compact />
         <Metric label="Strategy Profile" value={activeStrategyProfile} valueClass="text-blue-200" compact />
+        <Metric label="Session Started By" value={readText(session, ["session_started_by"], "Not started")} compact />
         <Metric label="SL/TP Source" value={slTpSource} valueClass={slTpSource === "DEMO_RISK_FALLBACK" ? "text-amber-200" : "text-emerald-300"} compact />
         <Metric label="Advisory Blockers" value={relaxedBlockers.length ? relaxedBlockers.join(", ") : "None"} compact />
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
@@ -1162,6 +1186,11 @@ function AutoValidationPanel({
         <Metric label="Last Disconnect" value={formatTradeTime(lastDisconnectAt)} compact />
         <Metric label="Reconnect Attempts" value={String(reconnectAttempts)} compact />
       </div>
+      {pollError ? (
+        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
+          AUTO status stale: {pollError}
+        </div>
+      ) : null}
 
       <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
         <div>

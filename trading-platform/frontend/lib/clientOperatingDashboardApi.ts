@@ -40,9 +40,9 @@ function isFetchJsonResult<T>(value: unknown): value is FetchJsonResult<T> {
   return typeof value === "object" && value !== null && "ok" in value && "data" in value;
 }
 
-async function fetchJson<T>(endpoint: string, fallback: T, timeoutMs?: number): Promise<FetchJsonResult<T>> {
+async function fetchJson<T>(endpoint: string, fallback: T, timeoutMs = 5000): Promise<FetchJsonResult<T>> {
   const controller = new AbortController();
-  const timeout = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(buildApiUrl(endpoint), { cache: "no-store", signal: controller.signal });
     if (!response.ok) {
@@ -52,7 +52,7 @@ async function fetchJson<T>(endpoint: string, fallback: T, timeoutMs?: number): 
   } catch (error) {
     return { data: fallback, error: fetchFailureMessage(endpoint, error), ok: false };
   } finally {
-    if (timeout) clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 }
 
@@ -92,7 +92,7 @@ export async function fetchClientOperatingDashboard() {
     outcomeSummary: fetchJson<ApiRecord>("/analytics/outcomes/summary", {}),
     guardedStatus: fetchJson<ApiRecord>("/mt5-demo/guarded-demo-order/status", {}),
     executionMode: fetchJson<ApiRecord>("/execution-mode/status", {}),
-    autoValidation: fetchJson<ApiRecord>("/auto-validation/status", {}),
+    autoValidation: fetchJson<ApiRecord>("/auto-validation/status", {}, 2500),
   };
 
   const entries = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise] as const));
@@ -210,7 +210,7 @@ export function startAutoValidation() {
 }
 
 export async function fetchAutoValidationStatus() {
-  const result = await fetchJson<ApiRecord>("/auto-validation/status", {}, 5000);
+  const result = await fetchJson<ApiRecord>("/auto-validation/status", {}, 2500);
   return { errors: result.error ? [result.error] : [], ok: result.ok, status: result.ok ? result.data : null };
 }
 

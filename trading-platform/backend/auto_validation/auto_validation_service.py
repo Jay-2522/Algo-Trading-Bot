@@ -87,6 +87,8 @@ class AutoValidationService:
             "started_at": self._timestamp(),
             "status": "RUNNING",
             "target_closed_trades": int(self.config["target_closed_trades"]),
+            "target_validation_trades": int(self.config["target_validation_trades"]),
+            "session_started_by": str(payload.get("session_started_by") or "user_click"),
         }
         self._seen_signal_hashes = set()
         self._sent_signal_keys = set()
@@ -268,15 +270,16 @@ class AutoValidationService:
             blockers.append("RR_BELOW_MINIMUM")
         if config["require_sl_tp"] and not all(self._number(signal.get(key), 0) > 0 for key in ["entry", "stop_loss", "take_profit"]):
             blockers.append("SL_TP_REQUIRED")
+        same_symbol_positions = [item for item in open_positions if str(item.get("symbol") or "").upper() == symbol]
         if duplicate_check["final_duplicate_decision"] is True:
             blockers.append("DUPLICATE_SIGNAL_BLOCKED")
         if len(open_positions) >= int(config["max_open_trades_total"]):
             blockers.append("MAX_OPEN_TRADES_TOTAL_REACHED")
-        if len([item for item in open_positions if str(item.get("symbol") or "").upper() == symbol]) >= int(config["max_open_trades_per_symbol"]):
+        if len(same_symbol_positions) >= int(config["max_open_trades_per_symbol"]):
             blockers.append("MAX_OPEN_TRADES_PER_SYMBOL_REACHED")
-        if self._daily_trade_count() >= int(config["max_daily_trades"]):
+        if self._daily_trade_count() >= int(config["max_daily_demo_trades"]):
             blockers.append("MAX_DAILY_TRADE_LIMIT_REACHED")
-        if self._cooldown_active():
+        if active_profile != "DEMO_COLLECTION" and self._cooldown_active():
             blockers.append("COOLDOWN_ACTIVE")
         if self.mt5_health_state.get("status") == "MT5_DISCONNECTED":
             blockers.append("MT5_DISCONNECTED")
@@ -553,6 +556,20 @@ class AutoValidationService:
     def _position_ticket(self, position: dict[str, Any]) -> str:
         return str(position.get("ticket") or position.get("mt5_ticket") or "")
 
+    def _position_side(self, position: dict[str, Any]) -> str:
+        raw = position.get("side") or position.get("action") or position.get("type")
+        if isinstance(raw, str):
+            text = raw.upper()
+            if "BUY" in text or text == "0":
+                return "BUY"
+            if "SELL" in text or text == "1":
+                return "SELL"
+        if raw == 0:
+            return "BUY"
+        if raw == 1:
+            return "SELL"
+        return ""
+
     def _allowed_symbols(self) -> set[str]:
         symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
         return {str(symbol).upper() for symbol in symbols if str(symbol).upper()}
@@ -726,6 +743,8 @@ class AutoValidationService:
         mt5_open_ticket_keys = {self._position_ticket(position) for position in mt5_open_positions if self._position_ticket(position)}
         open_trade_count = len(open_trades) + len(mt5_open_ticket_keys - open_ticket_keys)
         opened_count = max(int(self.session.get("opened") or 0), int(self.session.get("orders_created") or 0), open_trade_count)
+        daily_demo_trade_count = self._daily_trade_count()
+        target_trades = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
         losses = [trade for trade in closed if trade.get("result") == "LOSS"]
         pnl_values = [self._trade_pnl(trade) for trade in closed]
@@ -737,9 +756,12 @@ class AutoValidationService:
         self.session.update(
             {
                 "total_trades": len(closed) + open_trade_count,
+                "target_validation_trades": target_trades,
                 "current_closed_trades": len(closed),
                 "current_open_trades": open_trade_count,
                 "open_trades": open_trade_count,
+                "daily_demo_trade_count": daily_demo_trade_count,
+                "remaining_trades_to_target": max(0, target_trades - len(closed)),
                 "opened": opened_count,
                 "orders_created": opened_count,
                 "wins": len(wins),
@@ -755,7 +777,7 @@ class AutoValidationService:
                 "equity_curve": self._equity_curve(closed),
             }
         )
-        if self.session["status"] == "RUNNING" and self.session["current_closed_trades"] >= int(self.config["target_closed_trades"]):
+        if self.session["status"] == "RUNNING" and self.session["current_closed_trades"] >= target_trades:
             self.session["status"] = "COMPLETED"
             self.session["stopped_at"] = self._timestamp()
             self.session["reason_stopped"] = "TARGET_COMPLETED"
@@ -764,7 +786,7 @@ class AutoValidationService:
             self._save_state()
 
     def _risk_halt_reason(self) -> str | None:
-        if self.session["current_closed_trades"] >= int(self.config["target_closed_trades"]):
+        if self.session["current_closed_trades"] >= int(self.config.get("target_validation_trades") or self.config["target_closed_trades"]):
             return "TARGET_COMPLETED"
         if self.session["net_pnl"] <= -abs(float(self.config["max_daily_loss_amount"])):
             return "MAX_DAILY_LOSS_REACHED"
@@ -875,6 +897,11 @@ class AutoValidationService:
     def should_auto_start_runner(self) -> bool:
         return self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} and self.config.get("auto_validation_enabled") is True
 
+    def mark_backend_startup_resume(self) -> None:
+        if self.should_auto_start_runner() and self.session.get("session_started_by") == "persisted_resume":
+            self.session["session_started_by"] = "backend_startup_resume"
+            self._save_state()
+
     def waiting_for_mt5_reconnect(self) -> bool:
         return self.session.get("status") == "WAITING_FOR_MT5_RECONNECT"
 
@@ -908,6 +935,24 @@ class AutoValidationService:
             "symbol_statuses": {},
             "timestamp": None,
         }
+
+    def _persisted_session_stale(self, updated_at: str) -> bool:
+        if not updated_at:
+            return True
+        try:
+            parsed = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        return datetime.now(timezone.utc) - parsed > timedelta(minutes=30)
+
+    def _seconds_since(self, timestamp: str, now: datetime | None = None) -> float:
+        if not timestamp:
+            return float("inf")
+        try:
+            parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError:
+            return float("inf")
+        return max(0.0, ((now or datetime.now(timezone.utc)) - parsed).total_seconds())
 
     def _empty_open_position_sync_diagnostics(self) -> dict[str, Any]:
         return {
@@ -1187,9 +1232,13 @@ class AutoValidationService:
             "stopped_at": None,
             "status": "IDLE",
             "target_closed_trades": 30,
+            "target_validation_trades": 30,
+            "session_started_by": "",
             "current_closed_trades": 0,
             "current_open_trades": 0,
             "open_trades": 0,
+            "daily_demo_trade_count": 0,
+            "remaining_trades_to_target": 30,
             "wins": 0,
             "losses": 0,
             "win_rate": 0.0,
@@ -1236,9 +1285,17 @@ class AutoValidationService:
             if self.config["strategy_profile"] == "DEMO_COLLECTION":
                 self.config["min_confidence"] = 55
                 self.config["min_rr"] = 1.2
+                self.config["target_validation_trades"] = 30
+                self.config["target_closed_trades"] = 30
+                self.config["max_open_trades_total"] = 5
+                self.config["max_open_trades_per_symbol"] = 3
+                self.config["max_daily_demo_trades"] = 30
+                self.config["max_daily_trades"] = 30
             elif self.config["strategy_profile"] == "AUTO_VALIDATION":
                 self.config["min_confidence"] = 65
                 self.config["min_rr"] = 1.5
+                self.config["max_open_trades_total"] = 1
+                self.config["max_open_trades_per_symbol"] = 1
             self.config["live_execution_enabled"] = False
             self.config["broker_execution_enabled"] = False
         if isinstance(data.get("session"), dict):
@@ -1264,7 +1321,16 @@ class AutoValidationService:
         if isinstance(data.get("confidence_timeline"), dict):
             self._confidence_timeline = data["confidence_timeline"]
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
-            self.config["auto_validation_enabled"] = True
+            updated_at = str(data.get("updated_at") or self.session.get("started_at") or "")
+            if self._persisted_session_stale(updated_at):
+                self.session["status"] = "STOPPED"
+                self.session["stopped_at"] = self._timestamp()
+                self.session["reason_stopped"] = "STALE_PERSISTED_SESSION_RESET"
+                self.session["session_started_by"] = ""
+                self.config["auto_validation_enabled"] = False
+            else:
+                self.session["session_started_by"] = "persisted_resume"
+                self.config["auto_validation_enabled"] = True
 
     def _save_state(self) -> None:
         try:
@@ -1292,13 +1358,16 @@ class AutoValidationService:
         return {
             "auto_validation_enabled": False,
             "target_closed_trades": 30,
+            "target_validation_trades": 30,
             "allowed_symbols": ["XAUUSD", "EURUSD"],
             "broker_required": "VANTAGE_DEMO",
             "account_type_required": "DEMO",
             "lot_size": 0.01,
-            "max_open_trades_total": 1,
-            "max_open_trades_per_symbol": 1,
+            "max_open_trades_total": 5,
+            "max_open_trades_per_symbol": 3,
             "max_daily_trades": 30,
+            "max_daily_demo_trades": 30,
+            "duplicate_recent_seconds": 60,
             "max_daily_loss_amount": 100.0,
             "max_total_drawdown_amount": 150.0,
             "min_confidence": 55,
@@ -1353,8 +1422,15 @@ class AutoValidationService:
             item for item in open_positions
             if str(item.get("symbol") or "").upper() == symbol
         ]
+        same_side_positions = [
+            item for item in active_positions
+            if self._position_side(item) == side
+        ]
         pending_records = []
         matching_records = []
+        recent_same_side_records = []
+        duplicate_window_seconds = float(self.config.get("duplicate_recent_seconds", 60))
+        now = datetime.now(timezone.utc)
         for trade in self.trades():
             metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
             trade_symbol = str(trade.get("symbol") or "").upper()
@@ -1367,23 +1443,39 @@ class AutoValidationService:
                 matching_records.append(trade)
                 if status in {"OPEN", "SENT", "PENDING"}:
                     pending_records.append(trade)
+            if trade_symbol == symbol and trade_side == side and trade_profile == profile and trade_session_id == str(self.session.get("session_id") or "") and status in {"OPEN", "SENT", "PENDING"}:
+                timestamp = str(trade.get("opened_at") or trade.get("created_at") or trade.get("updated_at") or "")
+                if self._seconds_since(timestamp, now) <= duplicate_window_seconds:
+                    recent_same_side_records.append(trade)
         active_signal_sent = key in self._sent_signal_keys
-        duplicate = bool(active_positions or pending_records or active_signal_sent)
-        if active_positions:
+        demo_collection = profile == "DEMO_COLLECTION"
+        same_side_position_limit_reached = len(same_side_positions) >= int(self.config.get("max_open_trades_per_symbol") or 1)
+        if demo_collection:
+            duplicate = bool(pending_records or active_signal_sent or recent_same_side_records or same_side_position_limit_reached)
+        else:
+            duplicate = bool(active_positions or pending_records or active_signal_sent)
+        if not demo_collection and active_positions:
             source = "open_mt5_position"
         elif pending_records:
             source = "active_journal_record"
         elif active_signal_sent:
             source = "same_active_signal_already_sent"
+        elif demo_collection and recent_same_side_records:
+            source = "recent_same_symbol_side_duplicate"
+        elif demo_collection and same_side_position_limit_reached:
+            source = "open_mt5_position"
         else:
             source = "none"
         return {
             "duplicate_key": key,
             "duplicate_source": source,
             "open_positions_count": len(active_positions),
+            "same_side_open_positions_count": len(same_side_positions),
             "pending_orders_count": len(pending_records),
             "matching_journal_records": len(matching_records),
+            "recent_same_side_records": len(recent_same_side_records),
             "cooldown_active": self._cooldown_active(),
+            "same_side_position_limit_reached": same_side_position_limit_reached,
             "final_duplicate_decision": duplicate,
             "symbol": symbol,
             "side": side,
@@ -1396,10 +1488,15 @@ class AutoValidationService:
         safe = dict(self.config)
         for key in [
             "target_closed_trades",
+            "target_validation_trades",
             "max_daily_loss_amount",
             "max_total_drawdown_amount",
             "cooldown_after_trade_minutes",
             "max_daily_trades",
+            "max_daily_demo_trades",
+            "max_open_trades_total",
+            "max_open_trades_per_symbol",
+            "duplicate_recent_seconds",
             "mt5_disconnect_timeout_seconds",
         ]:
             if key in payload:
@@ -1410,12 +1507,24 @@ class AutoValidationService:
         safe["broker_required"] = "VANTAGE_DEMO"
         safe["account_type_required"] = "DEMO"
         safe["strategy_profile"] = self._normalize_profile(payload.get("strategy_profile", safe.get("strategy_profile")))
+        safe["target_validation_trades"] = int(safe.get("target_validation_trades") or safe.get("target_closed_trades") or 30)
+        safe["target_closed_trades"] = int(safe["target_validation_trades"])
+        safe["max_daily_demo_trades"] = int(safe.get("max_daily_demo_trades") or safe.get("max_daily_trades") or 30)
+        safe["max_daily_trades"] = int(safe["max_daily_demo_trades"])
         if safe["strategy_profile"] == "DEMO_COLLECTION":
             safe["min_confidence"] = 55
             safe["min_rr"] = 1.2
+            safe["max_open_trades_total"] = int(payload.get("max_open_trades_total", 5))
+            safe["max_open_trades_per_symbol"] = int(payload.get("max_open_trades_per_symbol", 3))
+            safe["max_daily_demo_trades"] = int(payload.get("max_daily_demo_trades", 30))
+            safe["max_daily_trades"] = int(safe["max_daily_demo_trades"])
+            safe["target_validation_trades"] = int(payload.get("target_validation_trades", 30))
+            safe["target_closed_trades"] = int(safe["target_validation_trades"])
         else:
             safe["min_confidence"] = 65
             safe["min_rr"] = 1.5
+            safe["max_open_trades_total"] = 1
+            safe["max_open_trades_per_symbol"] = 1
         safe["live_execution_enabled"] = False
         safe["broker_execution_enabled"] = False
         return safe

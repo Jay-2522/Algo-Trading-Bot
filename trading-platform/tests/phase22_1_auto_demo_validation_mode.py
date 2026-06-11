@@ -168,7 +168,15 @@ def verify_default_routes_and_config() -> bool:
         "/auto-validation/summary",
         "/auto-validation/events",
     ]
-    passed = payload["config"]["auto_validation_enabled"] is False and payload["config"]["target_closed_trades"] == 30 and all(route in route_text for route in required)
+    passed = (
+        payload["config"]["auto_validation_enabled"] is False
+        and payload["config"]["target_closed_trades"] == 30
+        and payload["config"]["target_validation_trades"] == 30
+        and payload["config"]["max_open_trades_total"] == 5
+        and payload["config"]["max_open_trades_per_symbol"] == 3
+        and payload["config"]["max_daily_demo_trades"] == 30
+        and all(route in route_text for route in required)
+    )
     return show("Default disabled config and auto-validation routes exist", passed, str(payload["config"]))
 
 
@@ -222,12 +230,18 @@ def verify_risk_blocks() -> bool:
     sl_service.start()
     checks.append("SL_TP_REQUIRED" in sl_service.run_once([signal(stop_loss=None, signal_hash="missing-sl")])["blockers"])
 
-    open_service, _ = make_service(positions=[{"symbol": "XAUUSD"}])
+    open_service, _ = make_service(positions=[{"symbol": "XAUUSD", "side": "BUY"} for _ in range(5)])
     open_service.start()
     checks.append("MAX_OPEN_TRADES_TOTAL_REACHED" in open_service.run_once([signal(signal_hash="open")])["blockers"])
 
+    sell_signal = signal(signal="SELL", stop_loss=2360.0, take_profit=2340.0, signal_hash="opposite-side")
+    one_open_service, guarded = make_service(sell_signal, positions=[{"symbol": "XAUUSD", "side": "BUY"}])
+    one_open_service.start()
+    one_open_result = one_open_service.run_once([sell_signal])
+    checks.append(one_open_result["status"] == "ORDER_SENT" and len(guarded.calls) == 1)
+
     daily_service, _ = make_service()
-    daily_service.start({"max_daily_trades": 0})
+    daily_service.start({"max_daily_demo_trades": 0})
     checks.append("MAX_DAILY_TRADE_LIMIT_REACHED" in daily_service.run_once([signal(signal_hash="daily")])["blockers"])
 
     return show("Live, broker, symbol, lot, SL/TP, open trade, and daily limit guards work", all(checks))
@@ -307,8 +321,11 @@ def verify_validation_performance_metrics() -> bool:
     equity = summary["equity_curve"]
     passed = (
         summary["total_trades"] == 4
+        and summary["target_validation_trades"] == 30
         and summary["current_closed_trades"] == 3
         and summary["current_open_trades"] == 1
+        and summary["open_trades"] == 1
+        and summary["remaining_trades_to_target"] == 27
         and summary["wins"] == 2
         and summary["losses"] == 1
         and summary["win_rate"] == 66.67
@@ -344,6 +361,11 @@ def verify_dashboard_and_no_order_send() -> bool:
         "Best Setup Type",
         "Worst Setup Type",
         "Equity Curve",
+        "Open Trade Limit",
+        "Per-Symbol Limit",
+        "Daily Demo Trades",
+        "Remaining to 30",
+        "Open Position Sync",
     ]
     missing = [item for item in required if item not in service + routes + dashboard + api]
     token = "mt5." + "order_send"

@@ -53,6 +53,9 @@ class AutoValidationRunner:
 
     def start_if_running(self) -> None:
         if self.service.should_auto_start_runner():
+            mark_resume = getattr(self.service, "mark_backend_startup_resume", None)
+            if callable(mark_resume):
+                mark_resume()
             self.start()
         else:
             self._publish_state()

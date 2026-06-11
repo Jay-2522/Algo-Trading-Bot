@@ -39,6 +39,7 @@ class AutoValidationService:
         self._last_hash_change_audit: dict[str, Any] | None = None
         self._last_sender_rejection: dict[str, Any] | None = None
         self._last_duplicate_check: dict[str, Any] | None = None
+        self._open_position_sync_diagnostics: dict[str, Any] = self._empty_open_position_sync_diagnostics()
         self._execution_timelines: list[dict[str, Any]] = []
         self._seen_signal_hashes: set[str] = set()
         self._sent_signal_keys: set[str] = set()
@@ -64,6 +65,7 @@ class AutoValidationService:
             "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
             "last_sender_rejection": copy.deepcopy(self._last_sender_rejection),
             "last_duplicate_check": copy.deepcopy(self._last_duplicate_check),
+            "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
             "post_sender_execution_summary": self.post_sender_execution_summary(),
             "execution_timelines": copy.deepcopy(self._execution_timelines[-100:]),
             "confidence_timeline": copy.deepcopy(self._confidence_timeline),
@@ -426,6 +428,7 @@ class AutoValidationService:
     def _reconcile_open_mt5_positions(self) -> list[dict[str, Any]]:
         session_id = str(self.session.get("session_id") or "")
         if not session_id:
+            self._open_position_sync_diagnostics = self._empty_open_position_sync_diagnostics()
             return []
         positions = self._open_positions()
         trades = self.trades()
@@ -434,16 +437,33 @@ class AutoValidationService:
             for trade in trades
             if str(trade.get("mt5_ticket") or "")
         }
+        allowed_symbols = self._allowed_symbols()
         session_positions: list[dict[str, Any]] = []
+        unmatched_positions: list[dict[str, Any]] = []
         for position in positions:
             ticket = self._position_ticket(position)
             matched_trade = trades_by_ticket.get(ticket)
             position_session = str(position.get("validation_session_id") or "")
-            if matched_trade is None and position_session != session_id:
+            symbol = str(position.get("symbol") or "").upper()
+            allowed_position = symbol in allowed_symbols
+            auto_owned = matched_trade is not None or position_session == session_id or allowed_position
+            if not auto_owned:
+                unmatched_positions.append(position)
                 continue
             session_positions.append(position)
-            if matched_trade is not None and str(matched_trade.get("status") or "").upper() != "OPEN":
-                self._record_open_position(position, matched_trade)
+            if matched_trade is not None:
+                if str(matched_trade.get("status") or "").upper() != "OPEN":
+                    self._record_open_position(position, matched_trade)
+            elif allowed_position:
+                self._record_open_position(position, self._synthetic_open_position_trade(position))
+        self._open_position_sync_diagnostics = {
+            "mt5_open_positions_detected": len(positions),
+            "auto_owned_open_positions": len(session_positions),
+            "unmatched_open_positions": len(unmatched_positions),
+            "open_position_tickets": [self._position_ticket(position) for position in session_positions if self._position_ticket(position)],
+            "unmatched_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
+            "timestamp": self._timestamp(),
+        }
         return session_positions
 
     def _record_opened_trade_from_sender(self, signal: dict[str, Any], payload: dict[str, Any], result: dict[str, Any]) -> None:
@@ -510,6 +530,25 @@ class AutoValidationService:
             self.journal_service.record_open_position(payload)
         except Exception:
             pass
+
+    def _synthetic_open_position_trade(self, position: dict[str, Any]) -> dict[str, Any]:
+        ticket = self._position_ticket(position)
+        symbol = str(position.get("symbol") or "").upper()
+        side = str(position.get("side") or position.get("type") or position.get("action") or "").upper()
+        return {
+            "trade_id": f"mt5_demo_{ticket}" if ticket else f"mt5_demo_open_{symbol.lower()}",
+            "status": "OPEN",
+            "result": "OPEN",
+            "source": "MT5_DEMO",
+            "environment": "DEMO",
+            "symbol": symbol,
+            "side": side,
+            "lot": position.get("lot") or position.get("volume") or 0.01,
+            "mt5_ticket": ticket,
+            "validation_session_id": self.session.get("session_id"),
+            "strategy_profile": self.config.get("strategy_profile"),
+            "notes": "Reconciled AUTO validation open MT5 position detected by open-position guard.",
+        }
 
     def _position_ticket(self, position: dict[str, Any]) -> str:
         return str(position.get("ticket") or position.get("mt5_ticket") or "")

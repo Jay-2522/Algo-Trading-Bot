@@ -70,6 +70,11 @@ async def get_auto_validation_summary() -> dict:
     return auto_validation_service.summary()
 
 
+@router.get("/post-sender-execution-summary")
+async def get_auto_validation_post_sender_execution_summary() -> dict:
+    return auto_validation_service.post_sender_execution_summary()
+
+
 @router.get("/events")
 async def get_auto_validation_events(limit: int = 100) -> list[dict]:
     return auto_validation_service.events[-max(1, min(limit, 500)) :]

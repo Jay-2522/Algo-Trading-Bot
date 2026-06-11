@@ -157,6 +157,14 @@ class VantageXAUUSDDemoValidationService:
         result["guarded_sender_used"] = True
         result["approval_result"] = approval
         result["duplicate_check"] = readiness["duplicate_check"]
+        result["duplicate_protection_status"] = "BLOCKED" if readiness["duplicate_blocked"] else "PASSED"
+        result["signal_revalidation"] = readiness["signal_revalidation"]
+        result["readiness_decision"] = "READY_FOR_GUARDED_DEMO_TEST"
+        result["approval_status"] = "APPROVED"
+        result["tick_status"] = tick.get("status")
+        result["tick_recovery_status"] = tick.get("tick_recovery_status")
+        result["spread"] = tick.get("spread")
+        result["entry_estimate"] = guarded_payload["entry_price"]
         self._latest_order = result
         return result
 

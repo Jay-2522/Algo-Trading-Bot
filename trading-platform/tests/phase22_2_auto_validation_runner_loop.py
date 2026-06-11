@@ -739,18 +739,31 @@ async def verify_sender_rejection_does_not_halt_and_records_diagnostics() -> boo
         result = await AutoValidationRunner(service).run_tick()
         status = service.status()
         rejection = status["last_sender_rejection"]
+        summary = service.post_sender_execution_summary()
+        timeline = summary["latest_timeline"]
         events = [event["event"] for event in service.events]
         passed = (
             result["status"] == "BLOCKED"
             and service.session["status"] == "RUNNING"
             and "GUARDED_SENDER_REJECTED" in events
+            and "POST_SENDER_EXECUTION_TRACE" in events
             and status["session"]["signals_sent_to_sender"] == 1
             and status["session"]["signals_blocked_by_sender"] == 1
             and status["session"]["orders_created"] == 0
+            and summary["SENT"] == 1
+            and summary["ORDER_BUILD_ATTEMPTED"] == 1
+            and summary["ORDER_BUILD_FAILED"] == 1
+            and summary["ORDER_SEND_ATTEMPTED"] == 0
+            and summary["ORDER_SEND_FAILED"] == 0
+            and summary["OPENED"] == 0
+            and summary["dominant_blocker"]["reason"] == "TEST_SENDER_BLOCK"
+            and timeline["signal_id"] == "xau-sender-reject"
+            and timeline["sender_decision"] == "BLOCKED"
+            and timeline["final_rejection_reason"] == "TEST_SENDER_BLOCK"
             and rejection["rejection_code"] == "TEST_SENDER_BLOCK"
             and rejection["failed_guard"] == "TEST_SENDER_BLOCK"
         )
-        return show("Sender rejection records diagnostics and does not HALT_RISK", passed, str({"result": result, "rejection": rejection, "events": events}))
+        return show("Sender rejection records diagnostics, post-SENT timeline, and does not HALT_RISK", passed, str({"result": result, "rejection": rejection, "summary": summary, "events": events}))
 
 
 def verify_production_profile_stays_strict() -> bool:
@@ -1084,6 +1097,14 @@ def verify_code_wiring_and_dashboard() -> bool:
         "signals_sent_to_sender",
         "signals_blocked_by_sender",
         "orders_created",
+        "post_sender_execution_summary",
+        "execution_timelines",
+        "POST_SENDER_EXECUTION_TRACE",
+        "ORDER_BUILD_ATTEMPTED",
+        "ORDER_BUILD_FAILED",
+        "ORDER_SEND_ATTEMPTED",
+        "ORDER_SEND_FAILED",
+        "dominant_blocker",
         "Last Sender Rejection",
         "rejection_code",
         "rejection_reason",

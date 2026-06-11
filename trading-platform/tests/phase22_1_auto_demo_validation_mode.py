@@ -79,11 +79,29 @@ class FakeGuarded:
                 "status": "BLOCKED",
                 "mt5_order_sent": False,
                 "guarded_sender_used": True,
+                "approval_workflow_status": "APPROVED_FOR_FUTURE_SINGLE_DEMO_ORDER_TEST",
+                "approval_workflow_passed": True,
+                "guarded_sender_attempted": True,
+                "order_send_attempted": False,
+                "order_opened": False,
+                "final_blocker": "TEST_REJECTION",
                 "rejection_code": "TEST_REJECTION",
                 "rejection_reason": "Sender rejected for test.",
                 "failed_guard": "TEST_REJECTION",
             }
-        return {"status": "DEMO_ORDER_SENT", "mt5_order_sent": True, "guarded_sender_used": True}
+        return {
+            "status": "DEMO_ORDER_SENT",
+            "mt5_order_sent": True,
+            "guarded_sender_used": True,
+            "ticket": "9101",
+            "retcode": "10009",
+            "approval_workflow_status": "APPROVED_FOR_FUTURE_SINGLE_DEMO_ORDER_TEST",
+            "approval_workflow_passed": True,
+            "guarded_sender_attempted": True,
+            "order_send_attempted": True,
+            "order_opened": True,
+            "final_blocker": "",
+        }
 
 
 class FakeJournal:

@@ -1167,12 +1167,15 @@ function AutoValidationPanel({
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Execution Funnel</p>
           <h3 className="mt-1 text-xl font-black text-white">AUTO Validation Flow</h3>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Scanned" value={String(readNumber(session, ["signals_scanned"], 0))} compact />
           <Metric label="Ready" value={String(readNumber(session, ["signals_ready_for_preview"], 0))} compact />
-          <Metric label="Sent" value={String(readNumber(session, ["signals_sent_to_sender"], 0))} compact />
+          <Metric label="Wrapper Submitted" value={String(readNumber(session, ["wrapper_submitted"], 0))} compact />
+          <Metric label="Approval Passed" value={String(readNumber(session, ["approval_workflow_passed"], 0))} compact />
+          <Metric label="Guarded Sender Attempted" value={String(readNumber(session, ["guarded_sender_attempted", "signals_sent_to_sender"], 0))} compact />
+          <Metric label="Order Send Attempted" value={String(readNumber(session, ["order_send_attempted"], 0))} compact />
+          <Metric label="Opened" value={String(readNumber(session, ["opened", "orders_created"], 0))} compact />
           <Metric label="Blocked" value={String(readNumber(session, ["signals_blocked_by_sender"], 0))} compact />
-          <Metric label="Opened" value={String(readNumber(session, ["orders_created"], 0))} compact />
         </div>
       </div>
 
@@ -1186,6 +1189,8 @@ function AutoValidationPanel({
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Metric label="Total Trades" value={String(totalTrades)} compact />
+          <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
+          <Metric label="Closed Trades" value={String(readNumber(session, ["current_closed_trades"], 0))} compact />
           <Metric label="Wins" value={String(wins)} valueClass="text-emerald-300" compact />
           <Metric label="Losses" value={String(losses)} valueClass="text-rose-300" compact />
           <Metric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />

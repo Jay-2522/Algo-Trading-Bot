@@ -117,6 +117,8 @@ class FakeGuarded:
         self.market_data_service = self
         self.failed_ticks: set[str] = set()
         self.reject = False
+        self.approval_blocked = False
+        self.order_send_fail = False
 
     def get_symbol_tick(self, symbol: str) -> dict[str, Any]:
         if symbol in self.failed_ticks:
@@ -125,17 +127,70 @@ class FakeGuarded:
 
     def send_test_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
+        if self.approval_blocked:
+            return {
+                "status": "BLOCKED",
+                "mt5_order_sent": False,
+                "guarded_sender_used": False,
+                "approval_workflow_status": "BLOCKED",
+                "approval_workflow_passed": False,
+                "guarded_sender_attempted": False,
+                "order_send_attempted": False,
+                "order_opened": False,
+                "final_blocker": "APPROVAL_WORKFLOW_NOT_APPROVED",
+                "rejection_code": "APPROVAL_WORKFLOW_NOT_APPROVED",
+                "rejection_reason": "Approval workflow blocked the guarded demo order.",
+                "failed_guard": "APPROVAL_WORKFLOW_NOT_APPROVED",
+                "strategy_profile": payload.get("strategy_profile"),
+            }
         if self.reject:
             return {
                 "status": "BLOCKED",
                 "mt5_order_sent": False,
                 "guarded_sender_used": True,
+                "approval_workflow_status": "APPROVED_FOR_FUTURE_SINGLE_DEMO_ORDER_TEST",
+                "approval_workflow_passed": True,
+                "guarded_sender_attempted": True,
+                "order_send_attempted": False,
+                "order_opened": False,
+                "final_blocker": "TEST_SENDER_BLOCK",
                 "rejection_code": "TEST_SENDER_BLOCK",
                 "rejection_reason": "Test sender rejection.",
                 "failed_guard": "TEST_SENDER_BLOCK",
                 "strategy_profile": payload.get("strategy_profile"),
             }
-        return {"status": "DEMO_ORDER_SENT", "mt5_order_sent": True}
+        if self.order_send_fail:
+            return {
+                "status": "DEMO_ORDER_REJECTED",
+                "mt5_order_sent": False,
+                "guarded_sender_used": True,
+                "approval_workflow_status": "APPROVED_FOR_FUTURE_SINGLE_DEMO_ORDER_TEST",
+                "approval_workflow_passed": True,
+                "guarded_sender_attempted": True,
+                "order_send_attempted": True,
+                "demo_order_attempted": True,
+                "order_opened": False,
+                "final_blocker": "MT5_RETCODE_REJECTED",
+                "rejection_code": "MT5_RETCODE_REJECTED",
+                "rejection_reason": "MT5 rejected the demo order.",
+                "failed_guard": "MT5_RETCODE_REJECTED",
+                "strategy_profile": payload.get("strategy_profile"),
+                "retcode": "10030",
+                "final_comment": "Rejected by test MT5 retcode.",
+            }
+        return {
+            "status": "DEMO_ORDER_SENT",
+            "mt5_order_sent": True,
+            "guarded_sender_used": True,
+            "ticket": "9101",
+            "retcode": "10009",
+            "approval_workflow_status": "APPROVED_FOR_FUTURE_SINGLE_DEMO_ORDER_TEST",
+            "approval_workflow_passed": True,
+            "guarded_sender_attempted": True,
+            "order_send_attempted": True,
+            "order_opened": True,
+            "final_blocker": "",
+        }
 
 
 class FakeJournal:
@@ -144,6 +199,17 @@ class FakeJournal:
 
     def list_trades(self, limit: int = 100000) -> list[dict[str, Any]]:
         return self.trades[-limit:]
+
+    def record_open_position(self, payload: dict[str, Any]) -> dict[str, Any]:
+        ticket = str(payload.get("mt5_ticket") or payload.get("ticket") or "")
+        existing = next((trade for trade in self.trades if str(trade.get("mt5_ticket") or "") == ticket and ticket), None)
+        record = {**(existing or {}), **payload, "status": "OPEN", "result": "OPEN", "mt5_ticket": ticket}
+        if existing is None:
+            record.setdefault("trade_id", f"mt5_demo_{ticket}")
+            self.trades.append(record)
+        else:
+            self.trades[self.trades.index(existing)] = record
+        return record
 
 
 class FakePositions:
@@ -583,7 +649,7 @@ async def verify_duplicate_same_active_signal_blocks() -> bool:
             first["status"] == "ORDER_SENT"
             and second["status"] == "BLOCKED"
             and "DUPLICATE_SIGNAL_BLOCKED" in second["blockers"]
-            and duplicate["duplicate_source"] == "same_active_signal_already_sent"
+            and duplicate["duplicate_source"] in {"same_active_signal_already_sent", "active_journal_record"}
             and duplicate["final_duplicate_decision"] is True
             and len(guarded.calls) == 1
         )
@@ -750,12 +816,14 @@ async def verify_sender_rejection_does_not_halt_and_records_diagnostics() -> boo
             and status["session"]["signals_sent_to_sender"] == 1
             and status["session"]["signals_blocked_by_sender"] == 1
             and status["session"]["orders_created"] == 0
+            and summary["WRAPPER_SUBMITTED"] == 1
+            and summary["APPROVAL_WORKFLOW_PASSED"] == 1
             and summary["SENT"] == 1
-            and summary["ORDER_BUILD_ATTEMPTED"] == 1
-            and summary["ORDER_BUILD_FAILED"] == 1
+            and summary["GUARDED_SENDER_ATTEMPTED"] == 1
             and summary["ORDER_SEND_ATTEMPTED"] == 0
             and summary["ORDER_SEND_FAILED"] == 0
             and summary["OPENED"] == 0
+            and summary["BLOCKED"] == 1
             and summary["dominant_blocker"]["reason"] == "TEST_SENDER_BLOCK"
             and timeline["signal_id"] == "xau-sender-reject"
             and timeline["sender_decision"] == "BLOCKED"
@@ -764,6 +832,98 @@ async def verify_sender_rejection_does_not_halt_and_records_diagnostics() -> boo
             and rejection["failed_guard"] == "TEST_SENDER_BLOCK"
         )
         return show("Sender rejection records diagnostics, post-SENT timeline, and does not HALT_RISK", passed, str({"result": result, "rejection": rejection, "summary": summary, "events": events}))
+
+
+async def verify_wrapper_submitted_approval_blocked_not_guarded_attempted() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="xau-approval-blocked")])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        guarded.approval_blocked = True
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        summary = service.post_sender_execution_summary()
+        passed = (
+            result["status"] == "BLOCKED"
+            and summary["WRAPPER_SUBMITTED"] == 1
+            and summary["APPROVAL_WORKFLOW_PASSED"] == 0
+            and summary["GUARDED_SENDER_ATTEMPTED"] == 0
+            and summary["SENT"] == 0
+            and summary["ORDER_SEND_ATTEMPTED"] == 0
+            and summary["OPENED"] == 0
+            and summary["BLOCKED"] == 1
+            and summary["dominant_blocker"]["reason"] == "APPROVAL_WORKFLOW_NOT_APPROVED"
+        )
+        return show("Wrapper submitted but approval blocked does not count as guarded sender attempted", passed, str({"result": result, "summary": summary}))
+
+
+async def verify_order_send_attempt_failure_counter() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="xau-order-send-failed")])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        guarded.order_send_fail = True
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        summary = service.post_sender_execution_summary()
+        passed = (
+            result["status"] == "BLOCKED"
+            and summary["WRAPPER_SUBMITTED"] == 1
+            and summary["APPROVAL_WORKFLOW_PASSED"] == 1
+            and summary["GUARDED_SENDER_ATTEMPTED"] == 1
+            and summary["SENT"] == 1
+            and summary["ORDER_SEND_ATTEMPTED"] == 1
+            and summary["ORDER_SEND_FAILED"] == 1
+            and summary["OPENED"] == 0
+            and summary["dominant_blocker"]["reason"] == "MT5_RETCODE_REJECTED"
+        )
+        return show("MT5 order_send attempt increments attempted and failed counters", passed, str({"result": result, "summary": summary}))
+
+
+async def verify_status_reconciles_open_mt5_positions_into_opened_counter() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        trade = {
+            "validation_session_id": "placeholder",
+            "trade_id": "mt5_demo_9001",
+            "status": "SENT",
+            "result": "OPEN",
+            "symbol": "XAUUSD",
+            "side": "BUY",
+            "lot": 0.01,
+            "mt5_ticket": "9001",
+            "strategy_profile": "DEMO_COLLECTION",
+        }
+        position = {
+            "ticket": "9001",
+            "symbol": "XAUUSD",
+            "side": "BUY",
+            "lot": 0.01,
+            "entry_price": 2400.0,
+            "stop_loss": 2390.0,
+            "take_profit": 2420.0,
+            "floating_pnl": 12.5,
+        }
+        service, _ = make_service(FakeSignals([wait_signal("XAUUSD")]), state_path=Path(tmp) / "state.json", positions=[position], trades=[trade])
+        service.start()
+        trade["validation_session_id"] = service.session["session_id"]
+        status = service.status()
+        session = status["session"]
+        journal_trade = service.journal_service.trades[0]
+        passed = (
+            session["opened"] == 1
+            and session["orders_created"] == 1
+            and session["current_open_trades"] == 1
+            and session["current_closed_trades"] == 0
+            and session["total_trades"] == 1
+            and session["wins"] == 0
+            and session["losses"] == 0
+            and session["net_pnl"] == 0
+            and journal_trade["status"] == "OPEN"
+            and journal_trade["mt5_ticket"] == "9001"
+        )
+        return show("Status reconciles AUTO-owned MT5 open positions into opened counter without closed metrics", passed, str({"session": session, "journal": journal_trade}))
 
 
 def verify_production_profile_stays_strict() -> bool:
@@ -1097,11 +1257,16 @@ def verify_code_wiring_and_dashboard() -> bool:
         "signals_sent_to_sender",
         "signals_blocked_by_sender",
         "orders_created",
+        "wrapper_submitted",
+        "approval_workflow_passed",
+        "guarded_sender_attempted",
+        "opened",
         "post_sender_execution_summary",
         "execution_timelines",
         "POST_SENDER_EXECUTION_TRACE",
-        "ORDER_BUILD_ATTEMPTED",
-        "ORDER_BUILD_FAILED",
+        "Wrapper Submitted",
+        "Approval Passed",
+        "Guarded Sender Attempted",
         "ORDER_SEND_ATTEMPTED",
         "ORDER_SEND_FAILED",
         "dominant_blocker",
@@ -1160,6 +1325,9 @@ async def async_main() -> list[bool]:
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),
         await verify_sender_rejection_does_not_halt_and_records_diagnostics(),
+        await verify_wrapper_submitted_approval_blocked_not_guarded_attempted(),
+        await verify_order_send_attempt_failure_counter(),
+        await verify_status_reconciles_open_mt5_positions_into_opened_counter(),
         await verify_mt5_disconnect_requires_three_failed_health_checks(),
         await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
         await verify_mt5_disconnect_timeout_halts_only_after_timeout(),

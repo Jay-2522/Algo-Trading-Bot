@@ -134,12 +134,14 @@ class AutoValidationService:
 
     def post_sender_execution_summary(self) -> dict[str, Any]:
         return {
+            "WRAPPER_SUBMITTED": int(self.session.get("wrapper_submitted") or 0),
+            "APPROVAL_WORKFLOW_PASSED": int(self.session.get("approval_workflow_passed") or 0),
             "SENT": int(self.session.get("signals_sent_to_sender") or 0),
-            "ORDER_BUILD_ATTEMPTED": int(self.session.get("order_build_attempted") or 0),
-            "ORDER_BUILD_FAILED": int(self.session.get("order_build_failed") or 0),
+            "GUARDED_SENDER_ATTEMPTED": int(self.session.get("guarded_sender_attempted") or self.session.get("signals_sent_to_sender") or 0),
             "ORDER_SEND_ATTEMPTED": int(self.session.get("order_send_attempted") or 0),
             "ORDER_SEND_FAILED": int(self.session.get("order_send_failed") or 0),
-            "OPENED": int(self.session.get("orders_created") or 0),
+            "OPENED": int(self.session.get("opened") or self.session.get("orders_created") or 0),
+            "BLOCKED": int(self.session.get("signals_blocked_by_sender") or 0),
             "dominant_blocker": self._dominant_post_sender_blocker(),
             "latest_timeline": copy.deepcopy(self._execution_timelines[-1]) if self._execution_timelines else None,
             "timelines": copy.deepcopy(self._execution_timelines[-100:]),
@@ -207,9 +209,10 @@ class AutoValidationService:
         if service is None:
             return self._halt("GUARDED_SENDER_UNAVAILABLE")
         payload = self._guarded_payload(signal)
-        self._increment_funnel("signals_sent_to_sender")
+        self._increment_funnel("wrapper_submitted")
         result = service.send_test_order(payload)
         execution_timeline = self._record_post_sender_timeline(signal, payload, result)
+        self._apply_execution_stage_counters(result)
         sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True
         if not sent:
             self._increment_funnel("signals_blocked_by_sender")
@@ -218,6 +221,8 @@ class AutoValidationService:
             self._log("GUARDED_SENDER_REJECTED", rejection)
             return self._decision("BLOCKED", ["GUARDED_SENDER_REJECTED"], signal, {"sender_result": result, "last_sender_rejection": rejection, "guarded_sender_used": bool(result.get("guarded_sender_used")), "execution_timeline": execution_timeline})
         self._increment_funnel("orders_created")
+        self._increment_funnel("opened")
+        self._record_opened_trade_from_sender(signal, payload, result)
         self._seen_signal_hashes.add(str(signal.get("signal_hash") or ""))
         self._sent_signal_keys.add(self._duplicate_key(signal))
         self._last_trade_time = datetime.now(timezone.utc)
@@ -418,6 +423,97 @@ class AutoValidationService:
         positions = result.get("positions", []) if isinstance(result, dict) else []
         return positions if isinstance(positions, list) else []
 
+    def _reconcile_open_mt5_positions(self) -> list[dict[str, Any]]:
+        session_id = str(self.session.get("session_id") or "")
+        if not session_id:
+            return []
+        positions = self._open_positions()
+        trades = self.trades()
+        trades_by_ticket = {
+            str(trade.get("mt5_ticket") or ""): trade
+            for trade in trades
+            if str(trade.get("mt5_ticket") or "")
+        }
+        session_positions: list[dict[str, Any]] = []
+        for position in positions:
+            ticket = self._position_ticket(position)
+            matched_trade = trades_by_ticket.get(ticket)
+            position_session = str(position.get("validation_session_id") or "")
+            if matched_trade is None and position_session != session_id:
+                continue
+            session_positions.append(position)
+            if matched_trade is not None and str(matched_trade.get("status") or "").upper() != "OPEN":
+                self._record_open_position(position, matched_trade)
+        return session_positions
+
+    def _record_opened_trade_from_sender(self, signal: dict[str, Any], payload: dict[str, Any], result: dict[str, Any]) -> None:
+        if self.journal_service is None or not hasattr(self.journal_service, "record_open_position"):
+            return
+        ticket = str(result.get("ticket") or result.get("mt5_ticket") or "")
+        if not ticket or ticket == "0":
+            return
+        journal_payload = {
+            "trade_id": f"mt5_demo_{ticket}",
+            "source": "MT5_DEMO",
+            "environment": "DEMO",
+            "symbol": payload.get("symbol") or signal.get("symbol"),
+            "side": payload.get("action") or payload.get("side") or signal.get("signal"),
+            "lot": payload.get("lot"),
+            "entry_price": result.get("entry") or result.get("entry_estimate") or payload.get("entry_price") or signal.get("entry"),
+            "stop_loss": result.get("sl") or payload.get("stop_loss") or signal.get("stop_loss"),
+            "take_profit": result.get("tp") or payload.get("take_profit") or signal.get("take_profit"),
+            "risk_reward_ratio": result.get("rr") or payload.get("risk_reward_ratio") or signal.get("risk_reward"),
+            "profit_loss": 0.0,
+            "mt5_ticket": ticket,
+            "mt5_retcode": result.get("retcode") or result.get("final_retcode"),
+            "mt5_comment": result.get("comment") or result.get("final_comment"),
+            "account_login": result.get("account_login") or payload.get("account_login"),
+            "server": result.get("server"),
+            "broker_source": result.get("broker_source") or payload.get("broker_source") or payload.get("broker_id"),
+            "validation_session_id": self.session.get("session_id"),
+            "execution_mode": payload.get("execution_mode"),
+            "signal_confidence": payload.get("signal_confidence") or signal.get("confidence"),
+            "signal_hash": payload.get("signal_hash") or signal.get("signal_hash"),
+            "setup_reason": payload.get("setup_reason") or signal.get("setup_reason"),
+            "strategy_profile": payload.get("strategy_profile") or signal.get("strategy_profile") or self.config.get("strategy_profile"),
+            "strategy_metadata": payload.get("strategy_metadata"),
+            "notes": "AUTO validation MT5 demo position opened through guarded sender.",
+        }
+        try:
+            self.journal_service.record_open_position(journal_payload)
+        except Exception:
+            pass
+
+    def _record_open_position(self, position: dict[str, Any], matched_trade: dict[str, Any]) -> None:
+        if self.journal_service is None or not hasattr(self.journal_service, "record_open_position"):
+            return
+        ticket = self._position_ticket(position)
+        payload = {
+            **matched_trade,
+            "trade_id": matched_trade.get("trade_id") or f"mt5_demo_{ticket}",
+            "source": "MT5_DEMO",
+            "environment": "DEMO",
+            "symbol": position.get("symbol") or matched_trade.get("symbol"),
+            "side": position.get("side") or position.get("type") or matched_trade.get("side"),
+            "lot": position.get("lot") or position.get("volume") or matched_trade.get("lot"),
+            "entry_price": position.get("entry_price") or position.get("price_open") or matched_trade.get("entry_price"),
+            "stop_loss": position.get("stop_loss") or position.get("sl") or matched_trade.get("stop_loss"),
+            "take_profit": position.get("take_profit") or position.get("tp") or matched_trade.get("take_profit"),
+            "profit_loss": position.get("floating_pnl") or position.get("profit") or 0.0,
+            "mt5_ticket": ticket,
+            "account_login": position.get("account_login") or matched_trade.get("account_login"),
+            "server": position.get("server") or matched_trade.get("server"),
+            "validation_session_id": self.session.get("session_id"),
+            "notes": "Reconciled AUTO validation open MT5 position.",
+        }
+        try:
+            self.journal_service.record_open_position(payload)
+        except Exception:
+            pass
+
+    def _position_ticket(self, position: dict[str, Any]) -> str:
+        return str(position.get("ticket") or position.get("mt5_ticket") or "")
+
     def _allowed_symbols(self) -> set[str]:
         symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
         return {str(symbol).upper() for symbol in symbols if str(symbol).upper()}
@@ -583,9 +679,14 @@ class AutoValidationService:
         }
 
     def _refresh_session_metrics(self) -> None:
+        mt5_open_positions = self._reconcile_open_mt5_positions()
         trades = self.trades()
         closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
         open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT"}]
+        open_ticket_keys = {str(trade.get("mt5_ticket") or "") for trade in open_trades if str(trade.get("mt5_ticket") or "")}
+        mt5_open_ticket_keys = {self._position_ticket(position) for position in mt5_open_positions if self._position_ticket(position)}
+        open_trade_count = len(open_trades) + len(mt5_open_ticket_keys - open_ticket_keys)
+        opened_count = max(int(self.session.get("opened") or 0), int(self.session.get("orders_created") or 0), open_trade_count)
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
         losses = [trade for trade in closed if trade.get("result") == "LOSS"]
         pnl_values = [self._trade_pnl(trade) for trade in closed]
@@ -596,9 +697,11 @@ class AutoValidationService:
         setup_performance = self._setup_performance(closed)
         self.session.update(
             {
-                "total_trades": len(trades),
+                "total_trades": len(closed) + open_trade_count,
                 "current_closed_trades": len(closed),
-                "current_open_trades": len(open_trades) + len(self._open_positions()),
+                "current_open_trades": open_trade_count,
+                "opened": opened_count,
+                "orders_created": opened_count,
                 "wins": len(wins),
                 "losses": len(losses),
                 "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
@@ -838,10 +941,11 @@ class AutoValidationService:
             hash_status = "HASH_UNCHANGED" if current_hash and current_hash == signal_id else "HASH_CHANGED" if current_hash else "HASH_UNKNOWN"
         sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True
         guarded_sender_used = result.get("guarded_sender_used") is True
-        order_build_attempted = guarded_sender_used or bool(result.get("request_id")) or sent
-        order_send_attempted = result.get("demo_order_attempted") is True or sent
+        order_build_attempted = result.get("guarded_sender_attempted") is True or guarded_sender_used or bool(result.get("request_id")) or sent
+        order_send_attempted = result.get("order_send_attempted") is True or result.get("demo_order_attempted") is True or sent
         final_reason = (
-            result.get("rejection_code")
+            result.get("final_blocker")
+            or result.get("rejection_code")
             or result.get("failed_guard")
             or (blockers[0] if blockers else "")
             or result.get("final_comment")
@@ -849,14 +953,6 @@ class AutoValidationService:
             or result.get("reason")
             or ("OPENED" if sent else "UNKNOWN")
         )
-        if order_build_attempted:
-            self._increment_funnel("order_build_attempted")
-        if order_build_attempted and not order_send_attempted and not sent:
-            self._increment_funnel("order_build_failed")
-        if order_send_attempted:
-            self._increment_funnel("order_send_attempted")
-        if order_send_attempted and not sent:
-            self._increment_funnel("order_send_failed")
         timeline = {
             "signal_id": signal_id,
             "symbol": payload.get("symbol") or signal.get("symbol"),
@@ -881,6 +977,21 @@ class AutoValidationService:
         self._execution_timelines = (self._execution_timelines + [timeline])[-100:]
         self._log("POST_SENDER_EXECUTION_TRACE", timeline)
         return timeline
+
+    def _apply_execution_stage_counters(self, result: dict[str, Any]) -> None:
+        sent = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True
+        approval_passed = result.get("approval_workflow_passed") is True
+        guarded_attempted = result.get("guarded_sender_attempted") is True or (result.get("guarded_sender_used") is True and result.get("approval_workflow_passed") is True)
+        order_send_attempted = result.get("order_send_attempted") is True or result.get("demo_order_attempted") is True or sent
+        if approval_passed:
+            self._increment_funnel("approval_workflow_passed")
+        if guarded_attempted:
+            self._increment_funnel("guarded_sender_attempted")
+            self._increment_funnel("signals_sent_to_sender")
+        if order_send_attempted:
+            self._increment_funnel("order_send_attempted")
+        if order_send_attempted and not sent:
+            self._increment_funnel("order_send_failed")
 
     def _dominant_post_sender_blocker(self) -> dict[str, Any]:
         counts: dict[str, int] = {}
@@ -1051,6 +1162,10 @@ class AutoValidationService:
             "signals_sent_to_sender": 0,
             "signals_blocked_by_sender": 0,
             "orders_created": 0,
+            "wrapper_submitted": 0,
+            "approval_workflow_passed": 0,
+            "guarded_sender_attempted": 0,
+            "opened": 0,
             "order_build_attempted": 0,
             "order_build_failed": 0,
             "order_send_attempted": 0,

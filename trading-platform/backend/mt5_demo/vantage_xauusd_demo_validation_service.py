@@ -83,6 +83,7 @@ class VantageXAUUSDDemoValidationService:
         readiness = self._readiness(payload, require_confirm=True)
         preview = self.preview(payload)
         if readiness["blockers"]:
+            final_blocker = readiness["blockers"][0] if readiness["blockers"] else "VANTAGE_READINESS_BLOCKED"
             diagnostics = self._rejection_diagnostics(payload, readiness["blockers"], readiness, "Vantage demo validation blocked the order.")
             result = {
                 **preview,
@@ -90,6 +91,12 @@ class VantageXAUUSDDemoValidationService:
                 "would_send": False,
                 "mt5_order_sent": False,
                 "guarded_sender_used": False,
+                "approval_workflow_status": "NOT_RUN",
+                "approval_workflow_passed": False,
+                "guarded_sender_attempted": False,
+                "order_send_attempted": False,
+                "order_opened": False,
+                "final_blocker": final_blocker,
                 "blocked_reasons": readiness["blockers"],
                 **diagnostics,
             }
@@ -135,6 +142,7 @@ class VantageXAUUSDDemoValidationService:
         approval = self.approval_workflow_service.run_workflow(approval_payload)
         if approval.get("approved_for_future_demo_order") is not True:
             blockers = sorted(set([*readiness["blockers"], *approval.get("blockers", ["APPROVAL_WORKFLOW_NOT_APPROVED"])]))
+            final_blocker = blockers[0] if blockers else "APPROVAL_WORKFLOW_NOT_APPROVED"
             diagnostics = self._rejection_diagnostics(payload, blockers, readiness, "Approval workflow blocked the guarded demo order.")
             result = {
                 **preview,
@@ -143,6 +151,12 @@ class VantageXAUUSDDemoValidationService:
                 "mt5_order_sent": False,
                 "guarded_sender_used": False,
                 "approval_result": approval,
+                "approval_workflow_status": approval.get("status") or "BLOCKED",
+                "approval_workflow_passed": False,
+                "guarded_sender_attempted": False,
+                "order_send_attempted": False,
+                "order_opened": False,
+                "final_blocker": final_blocker,
                 "blocked_reasons": blockers,
                 **diagnostics,
             }
@@ -156,6 +170,12 @@ class VantageXAUUSDDemoValidationService:
         result["broker"] = self.broker
         result["guarded_sender_used"] = True
         result["approval_result"] = approval
+        result["approval_workflow_status"] = approval.get("status") or "APPROVED"
+        result["approval_workflow_passed"] = True
+        result["guarded_sender_attempted"] = True
+        result["order_opened"] = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True
+        result["order_send_attempted"] = result.get("demo_order_attempted") is True or result["order_opened"]
+        result["final_blocker"] = "" if result["order_opened"] else result.get("rejection_code") or result.get("failed_guard") or result.get("final_comment") or result.get("comment") or result.get("status")
         result["duplicate_check"] = readiness["duplicate_check"]
         result["duplicate_protection_status"] = "BLOCKED" if readiness["duplicate_blocked"] else "PASSED"
         result["signal_revalidation"] = readiness["signal_revalidation"]

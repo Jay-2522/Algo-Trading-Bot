@@ -739,6 +739,7 @@ class AutoValidationService:
                 "total_trades": len(closed) + open_trade_count,
                 "current_closed_trades": len(closed),
                 "current_open_trades": open_trade_count,
+                "open_trades": open_trade_count,
                 "opened": opened_count,
                 "orders_created": opened_count,
                 "wins": len(wins),
@@ -905,6 +906,16 @@ class AutoValidationService:
             "last_successful_tick_symbol": "",
             "last_tick_time": None,
             "symbol_statuses": {},
+            "timestamp": None,
+        }
+
+    def _empty_open_position_sync_diagnostics(self) -> dict[str, Any]:
+        return {
+            "mt5_open_positions_detected": 0,
+            "auto_owned_open_positions": 0,
+            "unmatched_open_positions": 0,
+            "open_position_tickets": [],
+            "unmatched_open_position_tickets": [],
             "timestamp": None,
         }
 
@@ -1178,6 +1189,7 @@ class AutoValidationService:
             "target_closed_trades": 30,
             "current_closed_trades": 0,
             "current_open_trades": 0,
+            "open_trades": 0,
             "wins": 0,
             "losses": 0,
             "win_rate": 0.0,
@@ -1243,6 +1255,8 @@ class AutoValidationService:
             self._last_sender_rejection = data["last_sender_rejection"]
         if isinstance(data.get("last_duplicate_check"), dict):
             self._last_duplicate_check = data["last_duplicate_check"]
+        if isinstance(data.get("open_position_sync"), dict):
+            self._open_position_sync_diagnostics = data["open_position_sync"]
         if isinstance(data.get("execution_timelines"), list):
             self._execution_timelines = [item for item in data["execution_timelines"] if isinstance(item, dict)][-100:]
         if isinstance(data.get("sent_signal_keys"), list):
@@ -1264,6 +1278,7 @@ class AutoValidationService:
                 "last_hash_change_audit": self._last_hash_change_audit,
                 "last_sender_rejection": self._last_sender_rejection,
                 "last_duplicate_check": self._last_duplicate_check,
+                "open_position_sync": self._open_position_sync_diagnostics,
                 "execution_timelines": self._execution_timelines[-100:],
                 "confidence_timeline": self._confidence_timeline,
                 "sent_signal_keys": sorted(self._sent_signal_keys),

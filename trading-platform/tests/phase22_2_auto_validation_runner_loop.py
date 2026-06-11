@@ -733,15 +733,27 @@ async def verify_open_position_blocks_duplicate() -> bool:
         service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-open-position")]), state_path=Path(tmp) / "state.json", positions=positions)
         service.start()
         result = await AutoValidationRunner(service).run_tick()
-        duplicate = service.status()["last_duplicate_check"]
+        status = service.status()
+        duplicate = status["last_duplicate_check"]
+        session = status["session"]
+        sync = status["open_position_sync"]
         passed = (
             result["status"] == "BLOCKED"
             and "DUPLICATE_SIGNAL_BLOCKED" in result["blockers"]
             and duplicate["duplicate_source"] == "open_mt5_position"
             and duplicate["open_positions_count"] == 1
+            and session["current_open_trades"] == 1
+            and session["open_trades"] == 1
+            and session["total_trades"] == 1
+            and session["opened"] == 1
+            and session["orders_created"] == 1
+            and sync["mt5_open_positions_detected"] == 1
+            and sync["auto_owned_open_positions"] == 1
+            and sync["unmatched_open_positions"] == 0
+            and sync["open_position_tickets"] == ["123"]
             and guarded.calls == []
         )
-        return show("Genuine open position blocks duplicate AUTO signal", passed, str({"result": result, "duplicate": duplicate}))
+        return show("Genuine open position blocks duplicate AUTO signal and syncs open telemetry", passed, str({"result": result, "duplicate": duplicate, "session": session, "sync": sync}))
 
 
 async def verify_auto_validation_minor_hash_change_does_not_block() -> bool:
@@ -915,6 +927,7 @@ async def verify_status_reconciles_open_mt5_positions_into_opened_counter() -> b
             session["opened"] == 1
             and session["orders_created"] == 1
             and session["current_open_trades"] == 1
+            and session["open_trades"] == 1
             and session["current_closed_trades"] == 0
             and session["total_trades"] == 1
             and session["wins"] == 0
@@ -922,6 +935,9 @@ async def verify_status_reconciles_open_mt5_positions_into_opened_counter() -> b
             and session["net_pnl"] == 0
             and journal_trade["status"] == "OPEN"
             and journal_trade["mt5_ticket"] == "9001"
+            and status["open_position_sync"]["mt5_open_positions_detected"] == 1
+            and status["open_position_sync"]["auto_owned_open_positions"] == 1
+            and status["open_position_sync"]["open_position_tickets"] == ["9001"]
         )
         return show("Status reconciles AUTO-owned MT5 open positions into opened counter without closed metrics", passed, str({"session": session, "journal": journal_trade}))
 

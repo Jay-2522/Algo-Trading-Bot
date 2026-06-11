@@ -1078,6 +1078,7 @@ function AutoValidationPanel({
   const hashAudit = asRecord(status?.last_hash_change_audit ?? decision?.last_hash_change_audit);
   const senderRejection = asRecord(status?.last_sender_rejection ?? decision?.last_sender_rejection);
   const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
+  const openPositionSync = asRecord(status?.open_position_sync);
   const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const hashEvent = readText(hashAudit, ["event"], readText(hashAudit, ["minor_change"], "false") === "true" ? "HASH_CHANGE_MINOR" : "No hash change");
   const confidenceTimeline = Array.isArray(status?.confidence_timeline)
@@ -1250,6 +1251,16 @@ function AutoValidationPanel({
           <Metric label="Matching Journal" value={String(readNumber(duplicateCheck, ["matching_journal_records"], 0))} compact />
           <Metric label="Cooldown Active" value={readText(duplicateCheck, ["cooldown_active"], "false") === "true" ? "Yes" : "No"} compact />
           <Metric label="Duplicate Decision" value={readText(duplicateCheck, ["final_duplicate_decision"], "false") === "true" ? "Blocked" : "Clear"} valueClass={readText(duplicateCheck, ["final_duplicate_decision"], "false") === "true" ? "text-amber-200" : "text-emerald-300"} compact />
+        </div>
+      </div>
+      <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Open Position Sync</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <Metric label="MT5 Open Detected" value={String(readNumber(openPositionSync, ["mt5_open_positions_detected"], 0))} compact />
+          <Metric label="AUTO-Owned Open" value={String(readNumber(openPositionSync, ["auto_owned_open_positions"], 0))} compact />
+          <Metric label="Unmatched Open" value={String(readNumber(openPositionSync, ["unmatched_open_positions"], 0))} compact />
+          <Metric label="Open Tickets" value={Array.isArray(openPositionSync?.open_position_tickets) && openPositionSync.open_position_tickets.length ? openPositionSync.open_position_tickets.map(String).join(", ") : "None"} compact />
+          <Metric label="Sync Time" value={formatTradeTime(readText(openPositionSync, ["timestamp"], ""))} compact />
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

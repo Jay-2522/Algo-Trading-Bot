@@ -38,7 +38,9 @@ class AutoValidationService:
         self._confidence_timeline: dict[str, list[dict[str, Any]]] = {}
         self._last_hash_change_audit: dict[str, Any] | None = None
         self._last_sender_rejection: dict[str, Any] | None = None
+        self._last_duplicate_check: dict[str, Any] | None = None
         self._seen_signal_hashes: set[str] = set()
+        self._sent_signal_keys: set[str] = set()
         self._last_trade_time: datetime | None = None
         self._last_execution_decision: dict[str, Any] | None = None
         self._current_signal_watched: dict[str, Any] | None = None
@@ -60,6 +62,7 @@ class AutoValidationService:
             "mt5_health": copy.deepcopy(self.mt5_health_state),
             "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
             "last_sender_rejection": copy.deepcopy(self._last_sender_rejection),
+            "last_duplicate_check": copy.deepcopy(self._last_duplicate_check),
             "confidence_timeline": copy.deepcopy(self._confidence_timeline),
             **self.runner_state,
             "simulation_only": True,
@@ -83,6 +86,7 @@ class AutoValidationService:
             "target_closed_trades": int(self.config["target_closed_trades"]),
         }
         self._seen_signal_hashes = set()
+        self._sent_signal_keys = set()
         self._last_trade_time = None
         self._last_execution_decision = None
         self._log("SESSION_STARTED", {"session_id": self.session["session_id"]})
@@ -198,6 +202,7 @@ class AutoValidationService:
             return self._decision("BLOCKED", ["GUARDED_SENDER_REJECTED"], signal, {"sender_result": result, "last_sender_rejection": rejection, "guarded_sender_used": bool(result.get("guarded_sender_used"))})
         self._increment_funnel("orders_created")
         self._seen_signal_hashes.add(str(signal.get("signal_hash") or ""))
+        self._sent_signal_keys.add(self._duplicate_key(signal))
         self._last_trade_time = datetime.now(timezone.utc)
         decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True})
         self._log("ORDER_SENT", decision)
@@ -214,6 +219,8 @@ class AutoValidationService:
         tick = self._tick(symbol)
         current = self._current_signal(symbol)
         open_positions = self._open_positions()
+        duplicate_check = self._duplicate_check(signal, open_positions)
+        self._last_duplicate_check = duplicate_check
         hash_audit = self._hash_change_audit(signal, current)
 
         if account.get("account_type") != config["account_type_required"]:
@@ -236,7 +243,7 @@ class AutoValidationService:
             blockers.append("RR_BELOW_MINIMUM")
         if config["require_sl_tp"] and not all(self._number(signal.get(key), 0) > 0 for key in ["entry", "stop_loss", "take_profit"]):
             blockers.append("SL_TP_REQUIRED")
-        if signal_hash and signal_hash in self._seen_signal_hashes:
+        if duplicate_check["final_duplicate_decision"] is True:
             blockers.append("DUPLICATE_SIGNAL_BLOCKED")
         if len(open_positions) >= int(config["max_open_trades_total"]):
             blockers.append("MAX_OPEN_TRADES_TOTAL_REACHED")
@@ -680,7 +687,6 @@ class AutoValidationService:
             "NON_VANTAGE_BROKER_DETECTED",
             "LOT_SIZE_EXCEEDS_0_01",
             "SL_TP_REQUIRED",
-            "DUPLICATE_SIGNAL_BLOCKED",
             "MAX_DAILY_TRADE_LIMIT_REACHED",
             "MAX_DRAWDOWN_REACHED",
             "MAX_DAILY_LOSS_REACHED",
@@ -969,6 +975,10 @@ class AutoValidationService:
             self._last_hash_change_audit = data["last_hash_change_audit"]
         if isinstance(data.get("last_sender_rejection"), dict):
             self._last_sender_rejection = data["last_sender_rejection"]
+        if isinstance(data.get("last_duplicate_check"), dict):
+            self._last_duplicate_check = data["last_duplicate_check"]
+        if isinstance(data.get("sent_signal_keys"), list):
+            self._sent_signal_keys = {str(item) for item in data["sent_signal_keys"] if item}
         if isinstance(data.get("confidence_timeline"), dict):
             self._confidence_timeline = data["confidence_timeline"]
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
@@ -985,7 +995,9 @@ class AutoValidationService:
                 "current_signal_watched": self._current_signal_watched,
                 "last_hash_change_audit": self._last_hash_change_audit,
                 "last_sender_rejection": self._last_sender_rejection,
+                "last_duplicate_check": self._last_duplicate_check,
                 "confidence_timeline": self._confidence_timeline,
+                "sent_signal_keys": sorted(self._sent_signal_keys),
                 "updated_at": self._timestamp(),
             }
             self.state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -1036,6 +1048,63 @@ class AutoValidationService:
             "server": result.get("server"),
             "strategy_profile": result.get("strategy_profile") or payload.get("strategy_profile"),
             "sender_status": result.get("status"),
+            "timestamp": self._timestamp(),
+        }
+
+    def _duplicate_key(self, signal: dict[str, Any]) -> str:
+        profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
+        symbol = str(signal.get("symbol") or "").upper()
+        side = str(signal.get("signal") or "").upper()
+        session_id = str(self.session.get("session_id") or "")
+        signal_hash = str(signal.get("signal_hash") or "")
+        return "|".join([profile, symbol, side, session_id, signal_hash])
+
+    def _duplicate_check(self, signal: dict[str, Any], open_positions: list[dict[str, Any]]) -> dict[str, Any]:
+        key = self._duplicate_key(signal)
+        symbol = str(signal.get("symbol") or "").upper()
+        side = str(signal.get("signal") or "").upper()
+        profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "AUTO_VALIDATION").upper()
+        signal_hash = str(signal.get("signal_hash") or "")
+        active_positions = [
+            item for item in open_positions
+            if str(item.get("symbol") or "").upper() == symbol
+        ]
+        pending_records = []
+        matching_records = []
+        for trade in self.trades():
+            metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+            trade_symbol = str(trade.get("symbol") or "").upper()
+            trade_side = str(trade.get("side") or trade.get("action") or "").upper()
+            trade_profile = str(trade.get("strategy_profile") or metadata.get("strategy_profile") or "").upper()
+            trade_hash = str(trade.get("signal_hash") or "")
+            status = str(trade.get("status") or "").upper()
+            trade_session_id = str(trade.get("validation_session_id") or "")
+            if trade_symbol == symbol and trade_side == side and trade_profile == profile and trade_hash == signal_hash and trade_session_id == str(self.session.get("session_id") or ""):
+                matching_records.append(trade)
+                if status in {"OPEN", "SENT", "PENDING"}:
+                    pending_records.append(trade)
+        active_signal_sent = key in self._sent_signal_keys
+        duplicate = bool(active_positions or pending_records or active_signal_sent)
+        if active_positions:
+            source = "open_mt5_position"
+        elif pending_records:
+            source = "active_journal_record"
+        elif active_signal_sent:
+            source = "same_active_signal_already_sent"
+        else:
+            source = "none"
+        return {
+            "duplicate_key": key,
+            "duplicate_source": source,
+            "open_positions_count": len(active_positions),
+            "pending_orders_count": len(pending_records),
+            "matching_journal_records": len(matching_records),
+            "cooldown_active": self._cooldown_active(),
+            "final_duplicate_decision": duplicate,
+            "symbol": symbol,
+            "side": side,
+            "strategy_profile": profile,
+            "signal_hash": signal_hash,
             "timestamp": self._timestamp(),
         }
 

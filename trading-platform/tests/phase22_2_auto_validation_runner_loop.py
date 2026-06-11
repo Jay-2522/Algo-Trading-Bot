@@ -139,13 +139,22 @@ class FakeGuarded:
 
 
 class FakeJournal:
+    def __init__(self, trades: list[dict[str, Any]] | None = None) -> None:
+        self.trades = trades or []
+
     def list_trades(self, limit: int = 100000) -> list[dict[str, Any]]:
-        return []
+        return self.trades[-limit:]
 
 
 class FakePositions:
+    def __init__(self, positions: list[dict[str, Any]] | None = None) -> None:
+        self.positions = positions or []
+
     def get_open_positions(self) -> dict[str, Any]:
-        return {"positions": []}
+        return {"positions": self.positions}
+
+    def get_open_positions_by_symbol(self, symbol: str) -> dict[str, Any]:
+        return {"positions": [item for item in self.positions if str(item.get("symbol") or "").upper() == symbol.upper()]}
 
 
 class FakeAccount:
@@ -153,7 +162,7 @@ class FakeAccount:
         return {"account_type": "DEMO", "server": "VantageMarkets-Demo", "login": "123", "terminal_running": True, "status": "CONNECTED"}
 
 
-def make_service(signals: FakeSignals | None = None, state_path: Path | None = None):
+def make_service(signals: FakeSignals | None = None, state_path: Path | None = None, positions: list[dict[str, Any]] | None = None, trades: list[dict[str, Any]] | None = None):
     from backend.auto_validation.auto_validation_service import AutoValidationService
 
     guarded = FakeGuarded()
@@ -161,8 +170,8 @@ def make_service(signals: FakeSignals | None = None, state_path: Path | None = N
         AutoValidationService(
             signal_provider=signals or FakeSignals(),
             guarded_execution_service=guarded,
-            journal_service=FakeJournal(),
-            position_service=FakePositions(),
+            journal_service=FakeJournal(trades),
+            position_service=FakePositions(positions),
             mt5_demo_service=FakeAccount(),
             state_path=state_path,
         ),
@@ -338,6 +347,116 @@ async def verify_auto_validation_profile_loosened_rules_fire_demo_order() -> boo
             and signals.requested_profiles[:2] == ["AUTO_VALIDATION", "AUTO_VALIDATION"]
         )
         return show("AUTO_VALIDATION allows demo-only 68 confidence setup without BOS/liquidity hard gates", passed, str(payload))
+
+
+async def verify_duplicate_same_active_signal_blocks() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="xau-duplicate-active")])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        runner = AutoValidationRunner(service)
+        service.start({"cooldown_after_trade_minutes": 0})
+        first = await runner.run_tick()
+        second = await runner.run_tick()
+        duplicate = service.status()["last_duplicate_check"]
+        passed = (
+            first["status"] == "ORDER_SENT"
+            and second["status"] == "BLOCKED"
+            and "DUPLICATE_SIGNAL_BLOCKED" in second["blockers"]
+            and duplicate["duplicate_source"] == "same_active_signal_already_sent"
+            and duplicate["final_duplicate_decision"] is True
+            and len(guarded.calls) == 1
+        )
+        return show("Repeated same active AUTO signal is blocked as duplicate", passed, str({"second": second, "duplicate": duplicate}))
+
+
+async def verify_closed_historical_trade_does_not_block_duplicate_check() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signal = ready_signal("XAUUSD", signal_hash="xau-closed-history")
+        trades = [
+            {
+                "validation_session_id": "old-session",
+                "symbol": "XAUUSD",
+                "side": "BUY",
+                "status": "CLOSED",
+                "signal_hash": "xau-closed-history",
+                "strategy_profile": "AUTO_VALIDATION",
+            }
+        ]
+        service, guarded = make_service(FakeSignals([signal]), state_path=Path(tmp) / "state.json", trades=trades)
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        duplicate = service.status()["last_duplicate_check"]
+        passed = result["status"] == "ORDER_SENT" and len(guarded.calls) == 1 and duplicate["duplicate_source"] == "none" and duplicate["matching_journal_records"] == 0
+        return show("Closed historical trade does not block new AUTO signal", passed, str(duplicate))
+
+
+async def verify_failed_sender_attempt_does_not_create_duplicate() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-failed-retry")]), state_path=Path(tmp) / "state.json")
+        runner = AutoValidationRunner(service)
+        service.start({"cooldown_after_trade_minutes": 0})
+        guarded.reject = True
+        first = await runner.run_tick()
+        guarded.reject = False
+        second = await runner.run_tick()
+        passed = (
+            first["status"] == "BLOCKED"
+            and second["status"] == "ORDER_SENT"
+            and service.status()["session"]["orders_created"] == 1
+            and len(guarded.calls) == 2
+        )
+        return show("Blocked/failed sender attempt does not create duplicate", passed, str({"first": first, "second": second}))
+
+
+async def verify_cooldown_is_separate_from_duplicate() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        first_signal = ready_signal("XAUUSD", signal_hash="xau-cooldown-one")
+        second_signal = ready_signal("XAUUSD", signal_hash="xau-cooldown-two")
+        signals = FakeSignals([first_signal])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json")
+        runner = AutoValidationRunner(service)
+        service.start({"cooldown_after_trade_minutes": 15})
+        first = await runner.run_tick()
+        signals.signals = [second_signal]
+        second = await runner.run_tick()
+        duplicate = service.status()["last_duplicate_check"]
+        passed = (
+            first["status"] == "ORDER_SENT"
+            and second["status"] == "BLOCKED"
+            and "COOLDOWN_ACTIVE" in second["blockers"]
+            and "DUPLICATE_SIGNAL_BLOCKED" not in second["blockers"]
+            and duplicate["duplicate_source"] == "none"
+            and duplicate["cooldown_active"] is True
+            and len(guarded.calls) == 1
+        )
+        return show("Cooldown is reported separately from duplicate", passed, str({"second": second, "duplicate": duplicate}))
+
+
+async def verify_open_position_blocks_duplicate() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        positions = [{"symbol": "XAUUSD", "ticket": "123", "volume": 0.01}]
+        service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-open-position")]), state_path=Path(tmp) / "state.json", positions=positions)
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        duplicate = service.status()["last_duplicate_check"]
+        passed = (
+            result["status"] == "BLOCKED"
+            and "DUPLICATE_SIGNAL_BLOCKED" in result["blockers"]
+            and duplicate["duplicate_source"] == "open_mt5_position"
+            and duplicate["open_positions_count"] == 1
+            and guarded.calls == []
+        )
+        return show("Genuine open position blocks duplicate AUTO signal", passed, str({"result": result, "duplicate": duplicate}))
 
 
 async def verify_auto_validation_minor_hash_change_does_not_block() -> bool:
@@ -750,6 +869,14 @@ def verify_code_wiring_and_dashboard() -> bool:
         "rejection_code",
         "rejection_reason",
         "failed_guard",
+        "Last Duplicate Check",
+        "duplicate_key",
+        "duplicate_source",
+        "open_positions_count",
+        "pending_orders_count",
+        "matching_journal_records",
+        "cooldown_active",
+        "final_duplicate_decision",
         "Strategy Profile",
         "HASH_CHANGE_MINOR",
         "AUTO_VALIDATION",
@@ -778,6 +905,11 @@ async def async_main() -> list[bool]:
         await verify_allowed_symbols_only_and_scan_report(),
         await verify_recoverable_market_data_failure_does_not_halt(),
         await verify_auto_validation_profile_loosened_rules_fire_demo_order(),
+        await verify_duplicate_same_active_signal_blocks(),
+        await verify_closed_historical_trade_does_not_block_duplicate_check(),
+        await verify_failed_sender_attempt_does_not_create_duplicate(),
+        await verify_cooldown_is_separate_from_duplicate(),
+        await verify_open_position_blocks_duplicate(),
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),
         await verify_sender_rejection_does_not_halt_and_records_diagnostics(),

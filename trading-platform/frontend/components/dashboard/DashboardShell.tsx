@@ -1076,6 +1076,7 @@ function AutoValidationPanel({
   const mt5Health = asRecord(status?.mt5_health ?? decision?.mt5_health);
   const hashAudit = asRecord(status?.last_hash_change_audit ?? decision?.last_hash_change_audit);
   const senderRejection = asRecord(status?.last_sender_rejection ?? decision?.last_sender_rejection);
+  const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
   const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const hashEvent = readText(hashAudit, ["event"], readText(hashAudit, ["minor_change"], "false") === "true" ? "HASH_CHANGE_MINOR" : "No hash change");
   const confidenceTimeline = Array.isArray(status?.confidence_timeline)
@@ -1223,6 +1224,18 @@ function AutoValidationPanel({
           <Metric label="Code" value={readText(senderRejection, ["rejection_code"], "None")} compact />
           <Metric label="Reason" value={readText(senderRejection, ["rejection_reason"], "None")} compact />
           <Metric label="Failed Guard" value={readText(senderRejection, ["failed_guard"], "None")} compact />
+        </div>
+      </div>
+      <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Last Duplicate Check</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <Metric label="Duplicate Key" value={readText(duplicateCheck, ["duplicate_key"], "None")} compact />
+          <Metric label="Duplicate Source" value={readText(duplicateCheck, ["duplicate_source"], "None")} compact />
+          <Metric label="Open Positions" value={String(readNumber(duplicateCheck, ["open_positions_count"], 0))} compact />
+          <Metric label="Pending Orders" value={String(readNumber(duplicateCheck, ["pending_orders_count"], 0))} compact />
+          <Metric label="Matching Journal" value={String(readNumber(duplicateCheck, ["matching_journal_records"], 0))} compact />
+          <Metric label="Cooldown Active" value={readText(duplicateCheck, ["cooldown_active"], "false") === "true" ? "Yes" : "No"} compact />
+          <Metric label="Duplicate Decision" value={readText(duplicateCheck, ["final_duplicate_decision"], "false") === "true" ? "Blocked" : "Clear"} valueClass={readText(duplicateCheck, ["final_duplicate_decision"], "false") === "true" ? "text-amber-200" : "text-emerald-300"} compact />
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

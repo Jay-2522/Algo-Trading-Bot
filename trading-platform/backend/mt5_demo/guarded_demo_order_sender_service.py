@@ -42,6 +42,7 @@ class GuardedDemoOrderSenderService:
         self.persistent_trade_journal_service = persistent_trade_journal_service or PersistentTradeJournalService()
         self._history: list[dict[str, Any]] = []
         self._demo_send_attempted = False
+        self._sent_signal_keys: set[str] = set()
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -104,6 +105,8 @@ class GuardedDemoOrderSenderService:
 
         self._demo_send_attempted = True
         result = self._send_to_mt5(payload)
+        if result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True:
+            self._sent_signal_keys.add(self._duplicate_key(payload))
         self._history.append(result)
         return result
 
@@ -146,8 +149,9 @@ class GuardedDemoOrderSenderService:
             blockers.append("LIVE_TRADING_ENABLED")
         if payload.get("broker_execution_enabled") is True:
             blockers.append("PRODUCTION_BROKER_EXECUTION_ENABLED")
-        if self._demo_send_attempted and not self._safe_rejected_send_retry_available():
-            blockers.append("SINGLE_DEMO_TRADE_LIMIT_REACHED")
+        duplicate_check = self._duplicate_check(payload)
+        if duplicate_check["final_duplicate_decision"] is True:
+            blockers.append("DUPLICATE_ACTIVE_DEMO_ORDER")
         if account_status.get("status") != "CONNECTED" or account_status.get("environment") != "DEMO":
             blockers.append("MT5_DEMO_ACCOUNT_NOT_VALIDATED")
         if account_status.get("account_type", "DEMO") != "DEMO":
@@ -165,6 +169,52 @@ class GuardedDemoOrderSenderService:
         if readiness.get("overall_status") != "READY":
             blockers.append("READINESS_NOT_READY")
         return blockers
+
+    def _duplicate_key(self, payload: dict[str, Any]) -> str:
+        profile = str(payload.get("strategy_profile") or "").upper()
+        symbol = str(payload.get("symbol") or "").strip().upper()
+        side = str(payload.get("action") or payload.get("side") or "").strip().upper()
+        session_id = str(payload.get("validation_session_id") or "")
+        signal_hash = str(payload.get("signal_hash") or "")
+        return "|".join([profile, symbol, side, session_id, signal_hash])
+
+    def _duplicate_check(self, payload: dict[str, Any]) -> dict[str, Any]:
+        key = self._duplicate_key(payload)
+        symbol = str(payload.get("symbol") or "").strip().upper()
+        side = str(payload.get("action") or payload.get("side") or "").strip().upper()
+        profile = str(payload.get("strategy_profile") or "").upper()
+        session_id = str(payload.get("validation_session_id") or "")
+        signal_hash = str(payload.get("signal_hash") or "")
+        active_records = []
+        matching_records = []
+        try:
+            trades = self.persistent_trade_journal_service.list_trades(limit=100000)
+        except Exception:
+            trades = []
+        for trade in trades:
+            metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+            trade_profile = str(trade.get("strategy_profile") or metadata.get("strategy_profile") or "").upper()
+            if (
+                str(trade.get("symbol") or "").upper() == symbol
+                and str(trade.get("side") or trade.get("action") or "").upper() == side
+                and trade_profile == profile
+                and str(trade.get("validation_session_id") or "") == session_id
+                and str(trade.get("signal_hash") or "") == signal_hash
+            ):
+                matching_records.append(trade)
+                if str(trade.get("status") or "").upper() in {"OPEN", "SENT", "PENDING"}:
+                    active_records.append(trade)
+        active_signal_sent = key in self._sent_signal_keys
+        duplicate = bool(active_records or active_signal_sent)
+        return {
+            "duplicate_key": key,
+            "duplicate_source": "active_journal_record" if active_records else "same_active_signal_already_sent" if active_signal_sent else "none",
+            "open_positions_count": 0,
+            "pending_orders_count": len(active_records),
+            "matching_journal_records": len(matching_records),
+            "cooldown_active": False,
+            "final_duplicate_decision": duplicate,
+        }
 
     def _send_to_mt5(self, payload: dict[str, Any]) -> dict[str, Any]:
         symbol = str(payload["symbol"]).strip().upper()

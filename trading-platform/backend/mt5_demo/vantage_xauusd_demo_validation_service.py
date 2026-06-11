@@ -31,6 +31,8 @@ class VantageXAUUSDDemoValidationService:
         self._latest_preview: dict[str, Any] | None = None
         self._latest_order: dict[str, Any] | None = None
         self._test_order_attempted = False
+        self._sent_signal_keys: set[str] = set()
+        self._last_duplicate_check: dict[str, Any] | None = None
 
     def preview(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         payload = payload or {}
@@ -58,6 +60,7 @@ class VantageXAUUSDDemoValidationService:
             "readiness_decision": "READY_FOR_GUARDED_DEMO_TEST" if not readiness["blockers"] else "BLOCKED",
             "approval_status": "APPROVED" if not readiness["blockers"] else "BLOCKED",
             "duplicate_protection_status": "BLOCKED" if readiness["duplicate_blocked"] else "PASSED",
+            "duplicate_check": readiness["duplicate_check"],
             "tick_status": tick.get("status"),
             "tick_recovery_status": tick.get("tick_recovery_status"),
             "source": tick.get("source"),
@@ -115,7 +118,9 @@ class VantageXAUUSDDemoValidationService:
             "broker_id": self.broker,
             "broker_source": self.broker,
             "signal_confidence": self._float_or_none(payload.get("signal_confidence")),
+            "risk_reward_ratio": self._float_or_none(payload.get("risk_reward_ratio") or payload.get("risk_reward")),
             "signal_hash": payload.get("signal_hash"),
+            "validation_session_id": payload.get("validation_session_id"),
             "setup_reason": payload.get("setup_reason"),
             "strategy_metadata": payload.get("strategy_metadata"),
             "strategy_profile": payload.get("strategy_profile"),
@@ -146,9 +151,12 @@ class VantageXAUUSDDemoValidationService:
 
         self._test_order_attempted = True
         result = self.guarded_sender_service.send_order(guarded_payload)
+        if result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True:
+            self._sent_signal_keys.add(self._duplicate_key(payload, symbol, side))
         result["broker"] = self.broker
         result["guarded_sender_used"] = True
         result["approval_result"] = approval
+        result["duplicate_check"] = readiness["duplicate_check"]
         self._latest_order = result
         return result
 
@@ -169,6 +177,7 @@ class VantageXAUUSDDemoValidationService:
             "readiness_result": diagnostics.get("readiness_result"),
             "latest_preview": self._latest_preview,
             "latest_test_order": self._latest_order,
+            "last_duplicate_check": self._last_duplicate_check,
             "position_sync_compatible": True,
             "lifecycle_sync_compatible": True,
             "journal_compatible": True,
@@ -218,7 +227,9 @@ class VantageXAUUSDDemoValidationService:
             blockers.append("SPREAD_UNAVAILABLE")
         elif float(tick["spread"]) > self.max_spread:
             blockers.append("SPREAD_TOO_WIDE")
-        if self._test_order_attempted:
+        duplicate_check = self._duplicate_check(payload, symbol, side)
+        self._last_duplicate_check = duplicate_check
+        if duplicate_check["final_duplicate_decision"] is True:
             blockers.append("DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED")
         if payload.get("live_execution_enabled") is not False:
             blockers.append("LIVE_EXECUTION_FLAG_MUST_BE_FALSE")
@@ -233,8 +244,44 @@ class VantageXAUUSDDemoValidationService:
             "broker_detected": self._broker_detected(account),
             "blockers": sorted(set(blockers)),
             "duplicate_blocked": "DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED" in blockers,
+            "duplicate_check": duplicate_check,
             "signal_revalidation": signal_revalidation,
         }
+
+    def _duplicate_key(self, payload: dict[str, Any], symbol: str, side: str) -> str:
+        profile = str(payload.get("strategy_profile") or "").upper()
+        session_id = str(payload.get("validation_session_id") or "")
+        signal_hash = str(payload.get("signal_hash") or "")
+        return "|".join([profile, str(symbol or "").upper(), str(side or "").upper(), session_id, signal_hash])
+
+    def _duplicate_check(self, payload: dict[str, Any], symbol: str, side: str) -> dict[str, Any]:
+        key = self._duplicate_key(payload, symbol, side)
+        open_positions = self._open_positions(symbol)
+        active_signal_sent = key in self._sent_signal_keys
+        duplicate = bool(open_positions or active_signal_sent)
+        source = "open_mt5_position" if open_positions else "same_active_signal_already_sent" if active_signal_sent else "none"
+        return {
+            "duplicate_key": key,
+            "duplicate_source": source,
+            "open_positions_count": len(open_positions),
+            "pending_orders_count": 0,
+            "matching_journal_records": 0,
+            "cooldown_active": False,
+            "final_duplicate_decision": duplicate,
+            "symbol": str(symbol or "").upper(),
+            "side": str(side or "").upper(),
+            "strategy_profile": str(payload.get("strategy_profile") or "").upper(),
+            "signal_hash": str(payload.get("signal_hash") or ""),
+            "timestamp": self._timestamp(),
+        }
+
+    def _open_positions(self, symbol: str) -> list[dict[str, Any]]:
+        try:
+            result = self.position_sync_service.get_open_positions_by_symbol(symbol)
+        except Exception:
+            return []
+        positions = result.get("positions", []) if isinstance(result, dict) else []
+        return positions if isinstance(positions, list) else []
 
     def _revalidate_signal(self, payload: dict[str, Any], symbol: str, side: str) -> dict[str, Any]:
         signal_timestamp = payload.get("signal_timestamp")

@@ -50,6 +50,8 @@ type DashboardData = {
 
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
 type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
+type DashboardView = "dashboard" | "developer";
+type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
 
@@ -276,13 +278,26 @@ export function DashboardShell(_: {
   const [workingAction, setWorkingAction] = useState<string | null>(null);
   const [heldReadySignals, setHeldReadySignals] = useState<HeldSignals>({});
   const [nowMs, setNowMs] = useState(Date.now());
+  const [activeView, setActiveView] = useState<DashboardView>("dashboard");
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
   const requestInFlight = useRef(false);
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
   const autoValidationRequestInFlight = useRef(false);
 
+  const showToast = useCallback((tone: ToastState["tone"], message: string) => {
+    setToast({ id: Date.now(), tone, message });
+  }, []);
+
+  useEffect(() => {
+    if (!toast || toast.tone === "loading") return;
+    const timeout = window.setTimeout(() => setToast((current) => (current?.id === toast.id ? null : current)), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   const refresh = useCallback(async () => {
-    if (requestInFlight.current) return;
+    if (requestInFlight.current) return false;
     requestInFlight.current = true;
     setLoading(true);
     try {
@@ -309,10 +324,14 @@ export function DashboardShell(_: {
       }));
       setErrors(result.errors);
       setPanelErrors((current) => ({ ...current, dashboard: result.errors[0] ?? "" }));
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      setLastUpdated(timestamp);
+      setLastSuccessfulSync(timestamp);
+      return result.errors.length === 0;
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
       setPanelErrors((current) => ({ ...current, dashboard: error instanceof Error ? error.message : "Backend unavailable" }));
+      return false;
     } finally {
       setLoading(false);
       requestInFlight.current = false;
@@ -583,25 +602,32 @@ export function DashboardShell(_: {
   }
 
   async function handleSync(action: "positions" | "lifecycle" | "exit-management") {
+    if (workingAction !== null) return;
     setWorkingAction(action);
     setTradeError(null);
     const setState = action === "positions" ? setPositionsSyncState : action === "lifecycle" ? setLifecycleSyncState : setExitManagementState;
     setState({ loading: true, message: "", error: "" });
+    showToast("loading", action === "lifecycle" ? "Syncing lifecycle..." : action === "exit-management" ? "Running exit management..." : "Refreshing positions...");
     try {
       if (action === "positions") {
         await syncClientPositionsToJournal();
         setState({ loading: false, message: "Positions refreshed.", error: "" });
+        showToast("success", "Positions refreshed successfully");
       } else if (action === "lifecycle") {
         const result = await syncAutoValidationLifecycle();
         setState({ loading: false, message: readText(result, ["message"], "AUTO lifecycle synchronized."), error: "" });
+        showToast("success", "Lifecycle sync complete");
       } else {
         const result = await runAutoValidationExitManagement();
         setState({ loading: false, message: readText(result, ["message"], "Exit management evaluated."), error: "" });
+        showToast("success", "Exit management completed");
       }
+      setLastSuccessfulSync(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       await refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Sync failed.";
       setTradeError(message);
+      showToast("error", action === "lifecycle" ? "Failed to sync lifecycle" : action === "exit-management" ? "Exit management failed" : "Failed to refresh positions");
       setState({ loading: false, message: "", error: message });
     } finally {
       setWorkingAction(null);
@@ -640,12 +666,30 @@ export function DashboardShell(_: {
   }
 
   async function handleAutoValidationAction(action: "start" | "pause" | "resume" | "stop" | "emergency-stop") {
+    if (workingAction !== null) return;
     setWorkingAction(`auto-validation-${action}`);
     setTradeError(null);
+    showToast("loading", autoValidationLoadingMessage(action));
     try {
+      const currentAutoValidation = data.autoValidation;
+      const recoverable = readText(currentAutoValidation, ["recoverable_session"], "false") === "true";
+      const recoveredClosed = readNumber(currentAutoValidation, ["recovered_closed_trades"], 0);
+      const recoveredOpen = readNumber(currentAutoValidation, ["recovered_open_trades"], 0);
+      const recoveredSessionId = readText(currentAutoValidation, ["recovered_session_id"], "");
+      let startPayload: ApiRecord = {};
+      if (action === "start" && recoverable) {
+        const confirmed = window.confirm(
+          `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start a fresh session and reset current validation counters?`,
+        );
+        if (!confirmed) {
+          setToast(null);
+          return;
+        }
+        startPayload = { confirm_fresh_start: true };
+      }
       const result =
         action === "start"
-          ? await startAutoValidation()
+          ? await startAutoValidation(startPayload)
           : action === "pause"
             ? await pauseAutoValidation()
             : action === "resume"
@@ -654,16 +698,49 @@ export function DashboardShell(_: {
                 ? await emergencyStopAutoValidation()
                 : await stopAutoValidation();
       setData((current) => ({ ...current, autoValidation: result }));
+      setLastSuccessfulSync(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      showToast("success", autoValidationSuccessMessage(action));
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "AUTO validation action failed.");
+      showToast("error", autoValidationErrorMessage(action));
     } finally {
       setWorkingAction(null);
     }
   }
 
+  async function handleClientRefresh() {
+    if (workingAction !== null) return;
+    setWorkingAction("dashboard-refresh");
+    showToast("loading", "Refreshing dashboard...");
+    const ok = await refresh();
+    showToast(ok ? "success" : "error", ok ? "Dashboard refreshed successfully" : "Failed to refresh dashboard");
+    setWorkingAction(null);
+  }
+
   return (
-    <main className="min-h-screen bg-[#050816] text-white">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#102044_0%,#06101f_40%,#030712_100%)] text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+        <ViewSelector activeView={activeView} onChange={setActiveView} />
+        {toast ? <Toast tone={toast.tone} message={toast.message} onDismiss={() => setToast(null)} /> : null}
+        {activeView === "dashboard" ? (
+          <ClientDashboardView
+            data={data}
+            closedTrades={closedTrades}
+            errors={errors}
+            exitManagementState={exitManagementState}
+            lastSuccessfulSync={lastSuccessfulSync}
+            lifecycleSyncState={lifecycleSyncState}
+            loading={loading}
+            onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
+            onRefresh={() => void handleClientRefresh()}
+            onSync={(action) => void handleSync(action)}
+            openFloatingPnl={openFloatingPnl}
+            positionsSyncState={positionsSyncState}
+            todayPnl={todayPnl(closedTrades)}
+            workingAction={workingAction}
+          />
+        ) : (
+          <>
         <header className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-2xl shadow-black/30">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -900,6 +977,8 @@ export function DashboardShell(_: {
             </div>
           )}
         </section>
+          </>
+        )}
       </div>
 
       {confirmOpen && (
@@ -927,6 +1006,354 @@ export function DashboardShell(_: {
       )}
     </main>
   );
+}
+
+function ViewSelector({ activeView, onChange }: { activeView: DashboardView; onChange: (view: DashboardView) => void }) {
+  return (
+    <select className="sticky top-3 z-40 w-fit rounded-xl border border-white/10 bg-[#071226]/95 px-3 py-2 text-sm font-black text-white shadow-xl shadow-black/25 outline-none backdrop-blur" value={activeView} onChange={(event) => onChange(event.target.value as DashboardView)}>
+      <option value="dashboard">Dashboard</option>
+      <option value="developer">Developer Panel</option>
+    </select>
+  );
+}
+
+function Toast({ tone, message, onDismiss }: { tone: ToastState["tone"]; message: string; onDismiss: () => void }) {
+  const icon = tone === "success" ? "✓" : tone === "error" ? "⚠" : "";
+  const classes =
+    tone === "success"
+      ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-50"
+      : tone === "error"
+        ? "border-rose-300/30 bg-rose-500/15 text-rose-50"
+        : "border-blue-300/30 bg-blue-500/15 text-blue-50";
+  return (
+    <div className={`fixed left-4 right-4 top-20 z-50 mx-auto flex max-w-md items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-black shadow-2xl backdrop-blur sm:left-auto sm:right-4 sm:mx-0 ${classes}`} role="status">
+      <div className="flex min-w-0 items-center gap-3">
+        {tone === "loading" ? <Spinner /> : <span className="shrink-0 text-base">{icon}</span>}
+        <span className="min-w-0 break-words">{message}</span>
+      </div>
+      <button aria-label="Dismiss notification" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-base leading-none text-white/75 hover:bg-white/10" onClick={onDismiss} type="button">
+        ×
+      </button>
+    </div>
+  );
+}
+
+function ClientDashboardView({
+  data,
+  closedTrades,
+  errors,
+  exitManagementState,
+  lastSuccessfulSync,
+  lifecycleSyncState,
+  loading,
+  onAutoValidationAction,
+  onRefresh,
+  onSync,
+  openFloatingPnl,
+  positionsSyncState,
+  todayPnl,
+  workingAction,
+}: {
+  data: DashboardData;
+  closedTrades: ApiRecord[];
+  errors: string[];
+  exitManagementState: { loading: boolean; message: string; error: string };
+  lastSuccessfulSync: string | null;
+  lifecycleSyncState: { loading: boolean; message: string; error: string };
+  loading: boolean;
+  onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  onRefresh: () => void;
+  onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
+  openFloatingPnl: number;
+  positionsSyncState: { loading: boolean; message: string; error: string };
+  todayPnl: number;
+  workingAction: string | null;
+}) {
+  const autoStatus = asRecord(data.autoValidation);
+  const session = asRecord(autoStatus?.session);
+  const config = asRecord(autoStatus?.config);
+  const mt5Health = asRecord(autoStatus?.mt5_health);
+  const exitManagement = asRecord(autoStatus?.exit_management);
+  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
+  const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
+  const open = readNumber(session, ["current_open_trades", "current_session_open_trades"], data.openPositions.length);
+  const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
+  const progress = target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0;
+  const mode = readText(session, ["status"], "");
+  const botState = clientBotState(mode, closed, open, target);
+  const mt5Connected = readText(mt5Health, ["status"], "").toUpperCase() === "MT5_CONNECTED";
+  const recentClosed = closedTrades.slice(0, 5);
+  const equityCurve = Array.isArray(session?.equity_curve) ? (session.equity_curve.filter((point) => asRecord(point)) as ApiRecord[]) : [];
+  const controlsDisabled = workingAction !== null;
+  const backendHealthy = errors.length === 0;
+
+  return (
+    <div className="flex flex-col gap-6 pb-8">
+      <section className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-[#0f2347]/90 via-[#09172e]/95 to-[#06101f] p-5 shadow-2xl shadow-black/30 md:p-6">
+        <div className="flex flex-col gap-4">
+          <div>
+            <h1 className="whitespace-nowrap text-3xl font-black tracking-tight text-white md:text-5xl">AI Multi-Market Trading Bot</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ClientBadge text="Demo Mode" tone="healthy" />
+            <ClientBadge text="Live Trading Disabled" tone="healthy" />
+            <ClientBadge text={mt5Connected ? "MT5 Connected" : "MT5 Disconnected"} tone={mt5Connected ? "healthy" : "danger"} />
+            <ClientBadge text={`Bot ${botState.label}`} tone={botState.tone} />
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatusStripItem label="Backend Status" value={backendHealthy ? "Connected" : "Reconnecting"} tone={backendHealthy ? "healthy" : "warning"} />
+        <StatusStripItem label="MT5 Status" value={mt5Connected ? "Connected" : "Connecting"} tone={mt5Connected ? "healthy" : "warning"} />
+        <StatusStripItem label="Validation Status" value={botState.statusText} tone={botState.tone} />
+        <StatusStripItem label="Last Successful Sync" value={lastSuccessfulSync ?? "Waiting for first sync"} tone={lastSuccessfulSync ? "healthy" : "warning"} />
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <ClientMetric label="Account Number" value={friendlyText(data.account, ["login"], "Connecting to MT5")} />
+        <ClientMetric label="Balance" value={moneyOrWaiting(numeric(data.account, ["balance"]))} />
+        <ClientMetric label="Equity" value={moneyOrWaiting(numeric(data.account, ["equity"]))} />
+        <ClientMetric label="Floating P&L" value={money(openFloatingPnl)} valueClass={pnlClass(openFloatingPnl)} />
+        <ClientMetric label="Open Positions" value={String(data.openPositions.length)} />
+        <ClientMetric label="Today's P&L" value={money(todayPnl)} valueClass={pnlClass(todayPnl)} />
+      </section>
+
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20 backdrop-blur">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-200">Validation Progress</p>
+            <h2 className="mt-2 text-3xl font-black">{botState.statusText}</h2>
+            <p className="mt-2 text-base font-semibold text-slate-400">{closed} of {target} closed trades completed.</p>
+          </div>
+          <strong className="text-5xl font-black text-blue-100">{progress}%</strong>
+        </div>
+        <div className="mt-6 h-5 overflow-hidden rounded-full bg-slate-900/80">
+          <div className="h-full rounded-full bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-300 transition-all duration-700" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ClientMetric label="Target Closed Trades" value={String(target)} compact />
+          <ClientMetric label="Closed Trades" value={String(closed)} compact />
+          <ClientMetric label="Remaining Trades" value={String(remaining)} compact />
+          <ClientMetric label="Open Trades" value={String(open)} compact />
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
+        <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-200">Performance Summary</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <ClientMetric label="Wins" value={String(readNumber(session, ["wins"], 0))} valueClass="text-emerald-200" compact />
+            <ClientMetric label="Losses" value={String(readNumber(session, ["losses"], 0))} valueClass="text-rose-200" compact />
+            <ClientMetric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
+            <ClientMetric label="Net P&L" value={money(readNumber(session, ["net_pnl"], 0))} valueClass={pnlClass(readNumber(session, ["net_pnl"], 0))} compact />
+            <ClientMetric label="Profit Factor" value={readNumber(session, ["profit_factor"], 0).toFixed(2)} compact />
+            <ClientMetric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
+          </div>
+        </div>
+        <ValidationEquityCurve points={equityCurve} />
+      </section>
+
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
+        <ClientSectionTitle eyebrow="Active Positions" title="Open Demo Trades" />
+        {data.openPositions.length ? <ClientOpenPositionsTable positions={data.openPositions} managedPositions={Array.isArray(exitManagement?.managed_positions) ? (exitManagement.managed_positions.filter((item) => asRecord(item)) as ApiRecord[]) : []} /> : <EmptyState text="No Active Positions" />}
+      </section>
+
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
+        <ClientSectionTitle eyebrow="Recent Closed Trades" title="Latest 5 Outcomes" />
+        {recentClosed.length ? <ClientClosedTradesTable trades={recentClosed} /> : <EmptyState text="Validation Not Started" />}
+      </section>
+
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
+        <ClientSectionTitle eyebrow="Controls" title="Validation Actions" />
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ClientButton disabled={controlsDisabled || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-start"} onClick={() => onAutoValidationAction("start")}>Start Validation</ClientButton>
+          <ClientButton disabled={controlsDisabled || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-resume"} onClick={() => onAutoValidationAction("resume")}>Resume Validation</ClientButton>
+          <ClientButton disabled={controlsDisabled || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-pause"} onClick={() => onAutoValidationAction("pause")}>Pause</ClientButton>
+          <ClientButton disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-stop"} onClick={() => onAutoValidationAction("stop")}>Stop</ClientButton>
+          <ClientButton danger disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-emergency-stop"} onClick={() => onAutoValidationAction("emergency-stop")}>Emergency Stop</ClientButton>
+          <ClientButton disabled={controlsDisabled} loading={workingAction === "dashboard-refresh"} onClick={onRefresh}>Refresh</ClientButton>
+          <ClientButton disabled={controlsDisabled || lifecycleSyncState.loading} loading={lifecycleSyncState.loading} onClick={() => onSync("lifecycle")}>Sync Lifecycle</ClientButton>
+          <ClientButton disabled={controlsDisabled || exitManagementState.loading} loading={exitManagementState.loading} onClick={() => onSync("exit-management")}>Run Exit Management</ClientButton>
+        </div>
+        <div className="mt-4 grid gap-2 text-sm font-bold sm:grid-cols-3">
+          <ActionState label="Refresh Positions" state={positionsSyncState} />
+          <ActionState label="Lifecycle" state={lifecycleSyncState} />
+          <ActionState label="Exit Management" state={exitManagementState} />
+        </div>
+      </section>
+
+      {errors.length ? (
+        <div className="rounded-2xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">Connecting to MT5. Last successful dashboard data remains visible.</div>
+      ) : null}
+    </div>
+  );
+}
+
+function ClientBadge({ text, tone }: { text: string; tone: "healthy" | "warning" | "danger" }) {
+  const classes = tone === "healthy" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100" : tone === "warning" ? "border-amber-300/30 bg-amber-400/15 text-amber-100" : "border-rose-300/30 bg-rose-500/15 text-rose-100";
+  return <span className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.16em] ${classes}`}>{text}</span>;
+}
+
+function StatusStripItem({ label, value, tone }: { label: string; value: string; tone: "healthy" | "warning" | "danger" }) {
+  const dotClass = tone === "healthy" ? "bg-emerald-300" : tone === "danger" ? "bg-rose-300" : "bg-amber-300";
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 shadow-lg shadow-black/10">
+      <p className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <div className="mt-2 flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
+        <strong className="text-sm font-black text-white">{value}</strong>
+      </div>
+    </div>
+  );
+}
+
+function ClientMetric({ label, value, valueClass = "text-white", compact = false }: { label: string; value: string; valueClass?: string; compact?: boolean }) {
+  return (
+    <div className={`rounded-[1.25rem] border border-white/10 bg-white/[0.055] shadow-lg shadow-black/10 backdrop-blur ${compact ? "p-4" : "p-5"}`}>
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <strong className={`mt-3 block whitespace-nowrap font-mono tabular-nums tracking-tight ${compact ? "text-xl" : "text-2xl"} ${valueClass}`}>{value}</strong>
+    </div>
+  );
+}
+
+function ClientSectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <div>
+      <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-200">{eyebrow}</p>
+      <h2 className="mt-2 text-3xl font-black text-white">{title}</h2>
+    </div>
+  );
+}
+
+function ClientButton({ children, danger = false, disabled, loading, onClick }: { children: React.ReactNode; danger?: boolean; disabled?: boolean; loading?: boolean; onClick: () => void }) {
+  return (
+    <button className={`flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-black shadow-lg transition disabled:cursor-not-allowed disabled:opacity-45 ${danger ? "border border-rose-300/30 bg-rose-500/15 text-rose-50 hover:bg-rose-500/25" : "border border-blue-300/20 bg-blue-400/15 text-blue-50 hover:bg-blue-400/25"}`} disabled={disabled || loading} onClick={onClick} type="button">
+      {loading ? <Spinner /> : null}
+      <span>{loading ? "Working..." : children}</span>
+    </button>
+  );
+}
+
+function Spinner() {
+  return <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" />;
+}
+
+function ActionState({ label, state }: { label: string; state: { loading: boolean; message: string; error: string } }) {
+  const text = state.loading ? "In Progress" : state.error || state.message || "Ready";
+  return <p className={state.error ? "text-rose-200" : state.message ? "text-emerald-200" : "text-slate-400"}>{label}: {text}</p>;
+}
+
+function ClientOpenPositionsTable({ positions, managedPositions }: { positions: ApiRecord[]; managedPositions: ApiRecord[] }) {
+  return (
+    <div className="mt-5 overflow-x-auto">
+      <table className="w-full min-w-[920px] border-separate border-spacing-y-2 text-left text-sm">
+        <thead className="text-xs uppercase tracking-[0.16em] text-slate-400">
+          <tr>{["Symbol", "Direction", "Entry Price", "Current Price", "P&L", "Stop Loss", "Take Profit", "Trade Age", "Exit Status"].map((item) => <th className="px-4 py-2" key={item}>{item}</th>)}</tr>
+        </thead>
+        <tbody>
+          {positions.map((position, index) => {
+            const ticket = readText(position, ["ticket"], "");
+            const managed = managedPositions.find((item) => readText(item, ["ticket"], "") === ticket) ?? null;
+            const pnl = readNumber(position, ["floating_pnl", "profit"], 0);
+            return (
+              <tr className="bg-[#0b1528]/90" key={`${ticket || index}-${index}`}>
+                <td className="rounded-l-2xl px-4 py-4 font-black">{friendlyText(position, ["symbol"], "Waiting for Data")}</td>
+                <td className="px-4 py-4">{friendlyText(position, ["side", "type"], "Waiting")}</td>
+                <td className="px-4 py-4">{marketNumber(readNumber(position, ["entry_price", "price_open"], Number.NaN))}</td>
+                <td className="px-4 py-4">{marketNumber(readNumber(position, ["current_price", "price_current"], Number.NaN))}</td>
+                <td className={`px-4 py-4 font-black ${pnlClass(pnl)}`}>{money(pnl)}</td>
+                <td className="px-4 py-4">{marketNumber(readNumber(position, ["stop_loss", "sl"], Number.NaN))}</td>
+                <td className="px-4 py-4">{marketNumber(readNumber(position, ["take_profit", "tp"], Number.NaN))}</td>
+                <td className="px-4 py-4">{formatDuration(readNumber(managed, ["age_minutes"], readNumber(position, ["age_minutes"], Number.NaN)))}</td>
+                <td className="rounded-r-2xl px-4 py-4">{friendlyText(managed, ["exit_reason", "action"], "Monitoring")}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ClientClosedTradesTable({ trades }: { trades: ApiRecord[] }) {
+  return (
+    <div className="mt-5 overflow-x-auto">
+      <table className="w-full min-w-[760px] border-separate border-spacing-y-2 text-left text-sm">
+        <thead className="text-xs uppercase tracking-[0.16em] text-slate-400">
+          <tr>{["Symbol", "Direction", "Result", "P&L", "Exit Reason", "Closed Time"].map((item) => <th className="px-4 py-2" key={item}>{item}</th>)}</tr>
+        </thead>
+        <tbody>
+          {trades.map((trade, index) => {
+            const pnl = readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl"], 0);
+            return (
+              <tr className="bg-[#0b1528]/90" key={`${readText(trade, ["trade_id", "mt5_ticket"], String(index))}-${index}`}>
+                <td className="rounded-l-2xl px-4 py-4 font-black">{friendlyText(trade, ["symbol"], "Waiting")}</td>
+                <td className="px-4 py-4">{friendlyText(trade, ["side"], "Waiting")}</td>
+                <td className="px-4 py-4">{friendlyText(trade, ["result"], "Closed")}</td>
+                <td className={`px-4 py-4 font-black ${pnlClass(pnl)}`}>{money(pnl)}</td>
+                <td className="px-4 py-4">{friendlyText(trade, ["exit_reason"], "Closed")}</td>
+                <td className="rounded-r-2xl px-4 py-4">{formatTradeTime(readText(trade, ["closed_at", "close_time"], ""))}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function friendlyText(record: ApiRecord | null, paths: string[], fallback: string): string {
+  const value = readText(record, paths, "");
+  return value && value !== "Unavailable" ? value : fallback;
+}
+
+function moneyOrWaiting(value: number): string {
+  return Number.isFinite(value) ? money(value) : "Waiting for Data";
+}
+
+function clientBotState(mode: string, closed: number, open: number, target: number): { label: string; statusText: string; tone: "healthy" | "warning" | "danger" } {
+  if (closed >= target && target > 0) return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
+  if (mode === "RUNNING") return { label: "Running", statusText: open > 0 ? "Waiting for Open Trades to Close" : "Validation in Progress", tone: "healthy" };
+  if (["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)) return { label: "Paused", statusText: "Validation Paused", tone: "warning" };
+  if (mode === "COMPLETED") return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
+  return { label: "Stopped", statusText: "Validation Not Started", tone: "warning" };
+}
+
+function autoValidationLoadingMessage(action: "start" | "pause" | "resume" | "stop" | "emergency-stop"): string {
+  return action === "start"
+    ? "Starting validation..."
+    : action === "resume"
+      ? "Resuming validation..."
+      : action === "pause"
+        ? "Pausing validation..."
+        : action === "stop"
+          ? "Stopping validation..."
+          : "Sending emergency stop...";
+}
+
+function autoValidationSuccessMessage(action: "start" | "pause" | "resume" | "stop" | "emergency-stop"): string {
+  return action === "start"
+    ? "Validation started successfully"
+    : action === "resume"
+      ? "Validation resumed successfully"
+      : action === "pause"
+        ? "Validation paused successfully"
+        : action === "stop"
+          ? "Validation stopped successfully"
+          : "Emergency stop sent successfully";
+}
+
+function autoValidationErrorMessage(action: "start" | "pause" | "resume" | "stop" | "emergency-stop"): string {
+  return action === "start"
+    ? "Failed to start validation"
+    : action === "resume"
+      ? "Failed to resume validation"
+      : action === "pause"
+        ? "Failed to pause validation"
+        : action === "stop"
+          ? "Failed to stop validation"
+          : "Failed to send emergency stop";
 }
 
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
@@ -1113,6 +1540,10 @@ function AutoValidationPanel({
   const decision = asRecord(status?.last_execution_decision);
   const watchedAudit = asRecord(watched?.approval_audit ?? decision?.approval_audit);
   const mode = readText(session, ["status"], "OFF");
+  const recoverableSession = readText(status, ["recoverable_session"], "false") === "true";
+  const recoveredSessionId = readText(status, ["recovered_session_id"], "");
+  const recoveredClosedTrades = readNumber(status, ["recovered_closed_trades"], 0);
+  const recoveredOpenTrades = readNumber(status, ["recovered_open_trades"], 0);
   const blockers = Array.isArray(status?.blocked_reasons) ? status.blocked_reasons.map(String) : [];
   const nextEligible = readText(status, ["next_eligible_time"], "");
   const runnerActive = readText(status, ["runner_active"], "false") === "true";
@@ -1127,6 +1558,7 @@ function AutoValidationPanel({
   const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
   const openPositionSync = asRecord(status?.open_position_sync);
   const lifecycleSync = asRecord(status?.lifecycle_sync);
+  const latestCloseReport = asRecord(status?.latest_validation_close_report ?? lifecycleSync?.latest_validation_close_report);
   const exitManagement = asRecord(status?.exit_management);
   const managedExitPositions = Array.isArray(exitManagement?.managed_positions) ? (exitManagement.managed_positions.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const lastExitAction = asRecord(exitManagement?.last_action);
@@ -1173,23 +1605,34 @@ function AutoValidationPanel({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <SectionTitle eyebrow="AUTO Demo Validation" title={`30-Trade Bot Test: ${mode === "IDLE" ? "OFF" : mode}`} />
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("start")} type="button">
-            Start 30-Trade Validation
+          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction(recoverableSession ? "resume" : "start")} type="button">
+            {recoverableSession ? "Resume Validation" : "Start 30-Trade Validation"}
           </button>
+          {recoverableSession ? (
+            <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("start")} type="button">
+              Start Fresh
+            </button>
+          ) : null}
           <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("pause")} type="button">
             Pause
           </button>
-          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || mode !== "PAUSED"} onClick={() => onAction("resume")} type="button">
+          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("resume")} type="button">
             Resume
           </button>
-          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("stop")} type="button">
+          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("stop")} type="button">
             Stop
           </button>
-          <button className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("emergency-stop")} type="button">
+          <button className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("emergency-stop")} type="button">
             Emergency Stop
           </button>
         </div>
       </div>
+
+      {recoverableSession ? (
+        <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
+          Recovered validation session {recoveredSessionId || "available"}: {recoveredClosedTrades} closed, {recoveredOpenTrades} open. Runner is inactive until you resume.
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <Metric label="Target Closed Trades" value={String(targetValidationTrades)} compact />
@@ -1208,6 +1651,9 @@ function AutoValidationPanel({
         <Metric label="Watching" value={watchedSymbols.join(" + ")} compact />
         <Metric label="Strategy Profile" value={activeStrategyProfile} valueClass="text-blue-200" compact />
         <Metric label="Session Started By" value={readText(session, ["session_started_by"], "Not started")} compact />
+        <Metric label="Recovered Session ID" value={recoveredSessionId || "None"} compact />
+        <Metric label="Recovered Closed" value={String(recoveredClosedTrades)} compact />
+        <Metric label="Recovered Open" value={String(recoveredOpenTrades)} compact />
         <Metric label="Session Start Time" value={formatTradeTime(readText(session, ["session_start_time", "started_at"], ""))} compact />
         <Metric label="Current Session Opened" value={String(readNumber(session, ["current_session_opened", "opened", "orders_created"], 0))} compact />
         <Metric label="Current Session Closed" value={String(readNumber(session, ["current_session_closed", "current_closed_trades"], 0))} compact />
@@ -1286,6 +1732,31 @@ function AutoValidationPanel({
         <div className="mt-4">
           <ValidationEquityCurve points={equityCurve} />
         </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Live Validation Report</p>
+          <h3 className="mt-1 text-xl font-black text-white">Latest Closed Trade</h3>
+        </div>
+        {latestCloseReport ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <Metric label="Ticket" value={readText(latestCloseReport, ["ticket"], "Unavailable")} compact />
+            <Metric label="Symbol" value={readText(latestCloseReport, ["symbol"], "Unavailable")} compact />
+            <Metric label="BUY/SELL" value={readText(latestCloseReport, ["side"], "Unavailable")} compact />
+            <Metric label="Entry" value={marketNumber(readNumber(latestCloseReport, ["entry"], Number.NaN), readText(latestCloseReport, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+            <Metric label="Exit" value={marketNumber(readNumber(latestCloseReport, ["exit"], Number.NaN), readText(latestCloseReport, ["symbol"], "") === "XAUUSD" ? 2 : 5)} compact />
+            <Metric label="P&L" value={money(readNumber(latestCloseReport, ["pnl"], 0))} valueClass={pnlClass(readNumber(latestCloseReport, ["pnl"], 0))} compact />
+            <Metric label="Exit Reason" value={readText(latestCloseReport, ["exit_reason"], "UNKNOWN")} compact />
+            <Metric label="Setup Type" value={readText(latestCloseReport, ["setup_type"], "Unknown Setup")} compact />
+            <Metric label="Confidence" value={percent(readNumber(latestCloseReport, ["confidence"], Number.NaN))} compact />
+            <Metric label="RR" value={readNumber(latestCloseReport, ["rr"], 0) > 0 ? `${readNumber(latestCloseReport, ["rr"], 0).toFixed(2)}:1` : "Unavailable"} compact />
+            <Metric label="Session" value={readText(latestCloseReport, ["session"], "Unavailable")} compact />
+            <Metric label="Closed At" value={formatTradeTime(readText(latestCloseReport, ["closed_at"], ""))} compact />
+          </div>
+        ) : (
+          <EmptyState text="A live validation report will appear when the next current-session trade closes." />
+        )}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

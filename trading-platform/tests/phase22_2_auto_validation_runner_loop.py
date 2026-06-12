@@ -73,6 +73,25 @@ def ready_signal(symbol: str = "XAUUSD", *, signal_hash: str = "runner-ready") -
     return payload
 
 
+def journal_trade(session_id: str, index: int, *, status: str = "CLOSED", symbol: str = "XAUUSD") -> dict[str, Any]:
+    pnl = 1.0 if index % 2 == 0 else -0.5
+    return {
+        "trade_id": f"recovered-{index}",
+        "mt5_ticket": f"900{index}",
+        "symbol": symbol,
+        "side": "BUY",
+        "status": status,
+        "result": "WIN" if pnl > 0 else "LOSS",
+        "validation_session_id": session_id,
+        "strategy_profile": "DEMO_COLLECTION",
+        "opened_at": f"2026-06-12T12:{index:02d}:00+00:00",
+        "closed_at": f"2026-06-12T13:{index:02d}:00+00:00" if status == "CLOSED" else "",
+        "profit_loss": pnl if status == "CLOSED" else None,
+        "net_pnl": pnl if status == "CLOSED" else None,
+        "risk_reward_ratio": 1.2,
+    }
+
+
 class FakeSignals:
     def __init__(self, signals: list[dict[str, Any]] | None = None, *, fail: bool = False) -> None:
         self.signals = signals or [wait_signal()]
@@ -1403,21 +1422,50 @@ async def verify_phase23_open_limit_blocks_entries_but_monitoring_stays_active()
 
 async def verify_phase23_closed_mt5_trade_sync_updates_completed_count() -> bool:
     with tempfile.TemporaryDirectory() as tmp:
-        trades = [{"validation_session_id": "placeholder", "trade_id": "mt5_demo_777", "status": "OPEN", "result": "OPEN", "symbol": "XAUUSD", "mt5_ticket": "777", "strategy_profile": "DEMO_COLLECTION"}]
+        trades = [
+            {
+                "validation_session_id": "placeholder",
+                "trade_id": "mt5_demo_777",
+                "status": "OPEN",
+                "result": "OPEN",
+                "symbol": "XAUUSD",
+                "side": "BUY",
+                "entry_price": 2400.0,
+                "risk_reward_ratio": 1.2,
+                "signal_confidence": 61,
+                "strategy_metadata": {"setup_type": "FVG + OB", "market_session": "LONDON"},
+                "mt5_ticket": "777",
+                "strategy_profile": "DEMO_COLLECTION",
+            }
+        ]
         service, _ = make_service(FakeSignals([wait_signal("XAUUSD")]), state_path=Path(tmp) / "state.json", trades=trades)
         service.start()
         trades[0]["validation_session_id"] = service.session["session_id"]
         service.close_sync_service = FakeCloseSync(service.journal_service, ["777"])
         synced = service.sync_lifecycle()
         session = synced["session"]
+        report = synced["lifecycle_sync"]["latest_validation_close_report"]
+        report_event = next((event for event in service.events if event.get("event") == "VALIDATION_TRADE_CLOSED_REPORT"), None)
         passed = (
             synced["lifecycle_sync"]["closed_trades_updated"] == 1
             and session["current_closed_trades"] == 1
             and session["current_open_trades"] == 0
             and session["remaining_trades_to_target"] == 29
             and service.journal_service.trades[0]["status"] == "CLOSED"
+            and report_event is not None
+            and report["ticket"] == "777"
+            and report["symbol"] == "XAUUSD"
+            and report["side"] == "BUY"
+            and report["entry"] == 2400.0
+            and report["exit"] == 2405.0
+            and report["pnl"] == 5.0
+            and report["exit_reason"] == "TAKE_PROFIT"
+            and report["setup_type"] == "FVG + OB"
+            and report["confidence"] == 61
+            and report["rr"] == 1.2
+            and report["session"] == "LONDON"
         )
-        return show("Phase 23: closed MT5 trade sync increments completed closed-trade count", passed, str({"synced": synced, "trades": service.journal_service.trades}))
+        return show("Phase 23: closed MT5 trade sync increments count and emits live validation report", passed, str({"synced": synced, "report": report, "trades": service.journal_service.trades}))
 
 
 async def verify_phase23_thirty_closed_completes_session() -> bool:
@@ -1734,21 +1782,46 @@ async def verify_persisted_running_session_does_not_auto_start_by_default() -> b
     with tempfile.TemporaryDirectory() as tmp:
         state_path = Path(tmp) / "state.json"
         service, _ = make_service(state_path=state_path)
-        service.start()
+        started = service.start()
+        session_id = started["session"]["session_id"]
+        trades = [journal_trade(session_id, index, status="CLOSED", symbol="EURUSD" if index % 2 else "XAUUSD") for index in range(1, 9)]
+        trades.extend([journal_trade(session_id, 20, status="OPEN", symbol="EURUSD"), journal_trade(session_id, 21, status="OPEN", symbol="XAUUSD")])
 
-        restored, _ = make_service(state_path=state_path)
+        restored, _ = make_service(state_path=state_path, trades=trades)
         runner = AutoValidationRunner(restored, default_interval_seconds=0.05, watchlist_interval_seconds=0.03)
         runner.start_if_running()
         await asyncio.sleep(0.1)
+        recovered_status = restored.status()
+        recovered_session = recovered_status["session"]
+        blocked_fresh_start = restored.start()
+        resumed = restored.resume()
+        resumed_session = resumed["session"]
+        confirmed_fresh_start = restored.start({"confirm_fresh_start": True})
         passed = (
             not runner.is_active()
-            and restored.session["status"] == "STOPPED"
-            and restored.session["reason_stopped"] == "PERSISTED_AUTO_RESUME_DISABLED"
+            and recovered_session["status"] == "PAUSED_REQUIRES_USER_RESUME"
+            and recovered_session["session_id"] == session_id
+            and recovered_session["session_started_by"] == "user_click"
+            and recovered_session["current_closed_trades"] == 8
+            and recovered_session["current_session_closed"] == 8
+            and recovered_session["current_open_trades"] == 2
+            and recovered_session["remaining_closed_trades"] == 22
+            and recovered_status["recoverable_session"] is True
+            and recovered_status["recovered_session_id"] == session_id
+            and recovered_status["recovered_closed_trades"] == 8
+            and recovered_status["recovered_open_trades"] == 2
+            and blocked_fresh_start["status"] == "FRESH_START_CONFIRMATION_REQUIRED"
+            and blocked_fresh_start["session"]["session_id"] == session_id
+            and resumed_session["status"] == "RUNNING"
+            and resumed_session["session_id"] == session_id
+            and confirmed_fresh_start["session"]["status"] == "RUNNING"
+            and confirmed_fresh_start["session"]["session_id"] != session_id
+            and confirmed_fresh_start["session"]["current_closed_trades"] == 0
             and restored.config["allow_persisted_auto_resume"] is False
             and not any(event["event"] == "SIGNAL_EVALUATED" for event in restored.events)
         )
         await runner.shutdown()
-        return show("Persisted RUNNING session does not auto-start when persisted resume disabled", passed)
+        return show("Persisted RUNNING session recovers paused with counters and no auto-start", passed, str({"recovered": recovered_session, "blocked": blocked_fresh_start.get("status"), "resumed": resumed_session, "fresh": confirmed_fresh_start["session"]}))
 
 
 async def verify_runner_errors_logged() -> bool:
@@ -1803,6 +1876,11 @@ def verify_code_wiring_and_dashboard() -> bool:
         "await auto_validation_runner.shutdown()",
         "runner_active",
         "allow_persisted_auto_resume",
+        "PAUSED_REQUIRES_USER_RESUME",
+        "recoverable_session",
+        "recovered_session_id",
+        "recovered_closed_trades",
+        "confirm_fresh_start",
         "session_start_time",
         "historical_unowned_open_positions",
         "mt5_open_positions",
@@ -1863,6 +1941,11 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Target Closed Trades",
         "Remaining Closed Trades",
         "Current Session Closed",
+        "Resume Validation",
+        "Start Fresh",
+        "Recovered Session ID",
+        "Recovered Closed",
+        "Recovered Open",
         "Limit Count Source",
         "Last Duplicate Check",
         "duplicate_key",

@@ -89,6 +89,8 @@ class AutoValidationExitManagementService:
             "time_stale_exits": len([item for item in actions if item.get("exit_reason") == "TIME_STALE_EXIT"]),
             "signal_reversal_exits": len([item for item in actions if item.get("exit_reason") == "SIGNAL_REVERSAL_EXIT"]),
             "confidence_drop_exits": len([item for item in actions if item.get("exit_reason") == "CONFIDENCE_DROP_EXIT"]),
+            "soft_adverse_exits": len([item for item in actions if item.get("exit_reason") == "SOFT_ADVERSE_EXIT"]),
+            "no_progress_exits": len([item for item in actions if item.get("exit_reason") == "NO_PROGRESS_EXIT"]),
             "managed_positions": managed,
             "exit_outcomes": self._exit_outcomes(trades),
             "last_action": actions[-1] if actions else None,
@@ -121,18 +123,36 @@ class AutoValidationExitManagementService:
         profit_distance = (current - entry) if side == "BUY" else (entry - current)
         r_multiple = round(profit_distance / risk, 3) if risk > 0 else 0.0
         signal = self._current_signal(symbol)
+        signal_available = isinstance(signal, dict)
         signal_side = str(signal.get("signal") or "").upper() if signal else ""
         signal_confidence = self._number(signal.get("confidence") if signal else None, 0.0)
+        signal_execution_status = str(signal.get("execution_status") or signal.get("status_level") or "").upper() if signal else ""
+        signal_risk_status = str(signal.get("risk_status") or "").upper() if signal else ""
         entry_confidence = self._number(trade.get("signal_confidence"), signal_confidence)
         age_minutes = self._age_minutes(position, trade)
-        stale_minutes = int(config.get("exit_stale_minutes", 240))
+        stale_minutes = int(config.get("exit_stale_minutes", 45))
         confidence_floor = float(config.get("exit_confidence_floor", 40))
         confidence_drop = float(config.get("exit_confidence_drop_points", 25))
+        soft_adverse_minutes = float(config.get("exit_soft_adverse_minutes", 20))
+        no_progress_minutes = float(config.get("exit_no_progress_minutes", 30))
+        no_progress_min_r = float(config.get("exit_no_progress_min_r", 0.3))
         symbol_settings = self._symbol_exit_settings(symbol, config)
         if symbol_settings:
             stale_minutes = int(symbol_settings.get("stale_exit_minutes", stale_minutes))
             confidence_floor = float(symbol_settings.get("confidence_floor", confidence_floor))
             confidence_drop = float(symbol_settings.get("confidence_drop_points", confidence_drop))
+            soft_adverse_minutes = float(symbol_settings.get("soft_adverse_minutes", soft_adverse_minutes))
+            no_progress_minutes = float(symbol_settings.get("no_progress_minutes", no_progress_minutes))
+            no_progress_min_r = float(symbol_settings.get("no_progress_min_r", no_progress_min_r))
+        confidence_dropped = bool(signal_confidence and (signal_confidence <= confidence_floor or entry_confidence - signal_confidence >= confidence_drop))
+        signal_no_longer_valid = bool(
+            signal_available
+            and (
+                signal_side in {"WAIT", "REJECTED", "NO_SIGNAL"}
+                or (signal_execution_status and signal_execution_status not in {"READY_FOR_PREVIEW", "READY", "TRADEABLE"})
+                or (signal_risk_status and signal_risk_status != "APPROVED")
+            )
+        )
 
         base = {
             "ticket": self._ticket(position),
@@ -150,10 +170,22 @@ class AutoValidationExitManagementService:
             "age_minutes": age_minutes,
             "signal_side": signal_side,
             "signal_confidence": signal_confidence,
+            "signal_execution_status": signal_execution_status,
+            "signal_risk_status": signal_risk_status,
             "entry_confidence": entry_confidence,
             "strategy_profile": str(config.get("strategy_profile") or ""),
             "action": "HOLD",
-            "exit_reason": "",
+            "exit_reason": "HOLD_BELOW_BREAKEVEN_TRIGGER",
+            "hold_reason": "HOLD_BELOW_BREAKEVEN_TRIGGER",
+            "hold_checks": {
+                "break_even": "HOLD_BELOW_BREAKEVEN_TRIGGER",
+                "trailing": "HOLD_BELOW_TRAILING_TRIGGER",
+                "stale": "HOLD_WAITING_FOR_STALE_TIMEOUT",
+                "reversal": "HOLD_NO_REVERSAL",
+                "confidence": "HOLD_NO_CONFIDENCE_DROP",
+                "soft_adverse": "HOLD_NO_SOFT_ADVERSE_EXIT",
+                "no_progress": "HOLD_NO_PROGRESS_EXIT_NOT_DUE",
+            },
             "new_stop_loss": None,
             "close_volume": 0.0,
             "timestamp": self._timestamp(),
@@ -163,13 +195,17 @@ class AutoValidationExitManagementService:
 
         if signal_side in {"BUY", "SELL"} and signal_side != side:
             return {**base, "action": "CLOSE", "exit_reason": "SIGNAL_REVERSAL_EXIT", "close_volume": volume}
-        if signal_confidence and (signal_confidence <= confidence_floor or entry_confidence - signal_confidence >= confidence_drop):
+        if age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and (confidence_dropped or signal_no_longer_valid):
+            return {**base, "action": "CLOSE", "exit_reason": "SOFT_ADVERSE_EXIT", "close_volume": volume}
+        if confidence_dropped:
             return {**base, "action": "CLOSE", "exit_reason": "CONFIDENCE_DROP_EXIT", "close_volume": volume}
         if age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
             return {**base, "action": "CLOSE", "exit_reason": "TIME_STALE_EXIT", "close_volume": volume}
 
         if risk <= 0:
-            return base
+            return {**base, "exit_reason": "HOLD_WAITING_FOR_VALID_RISK"}
+        if age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
+            return {**base, "action": "CLOSE", "exit_reason": "NO_PROGRESS_EXIT", "close_volume": volume}
         break_even_r = float(symbol_settings.get("break_even_trigger_r", config.get("break_even_trigger_r", 1.0)) if symbol_settings else config.get("break_even_trigger_r", 1.0))
         trailing_r = float(symbol_settings.get("trailing_stop_trigger_r", config.get("trailing_stop_trigger_r", 1.5)) if symbol_settings else config.get("trailing_stop_trigger_r", 1.5))
         trailing_distance_r = float(symbol_settings.get("trailing_stop_distance_r", config.get("trailing_stop_distance_r", 0.75)) if symbol_settings else config.get("trailing_stop_distance_r", 0.75))
@@ -180,7 +216,18 @@ class AutoValidationExitManagementService:
                 return {**base, "action": "MODIFY_SL", "exit_reason": "TRAILING_STOP", "new_stop_loss": self._round_price(symbol, new_sl)}
         if r_multiple >= break_even_r and self._stop_worse_than_entry(side, stop_loss, entry):
             return {**base, "action": "MODIFY_SL", "exit_reason": "BREAK_EVEN_PROTECTION", "new_stop_loss": self._round_price(symbol, entry)}
-        return base
+        return {**base, "exit_reason": self._hold_reason(age_minutes, stale_minutes, r_multiple, break_even_r, signal_side, confidence_dropped)}
+
+    def _hold_reason(self, age_minutes: float, stale_minutes: float, r_multiple: float, break_even_r: float, signal_side: str, confidence_dropped: bool) -> str:
+        if r_multiple < break_even_r:
+            return "HOLD_BELOW_BREAKEVEN_TRIGGER"
+        if age_minutes < stale_minutes:
+            return "HOLD_WAITING_FOR_STALE_TIMEOUT"
+        if signal_side not in {"BUY", "SELL"}:
+            return "HOLD_NO_REVERSAL"
+        if not confidence_dropped:
+            return "HOLD_NO_CONFIDENCE_DROP"
+        return "HOLD_NO_EXIT_TRIGGER"
 
     def _execute(self, decision: dict[str, Any], position: dict[str, Any], trade: dict[str, Any], session: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
         if self.guarded_sender_service is None:

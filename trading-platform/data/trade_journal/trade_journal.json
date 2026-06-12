@@ -67854,27 +67854,27 @@
       "account_login": "25543844",
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
-      "close_price": null,
-      "closed_at": "",
-      "commission": null,
+      "close_price": 1.15763,
+      "closed_at": "2026-06-12T16:30:19+00:00",
+      "commission": 0.0,
       "created_at": "2026-06-12T12:32:01.140798+00:00",
       "demo_execution": true,
-      "duration_minutes": null,
+      "duration_minutes": 238.29,
       "entry_price": 1.15648,
       "environment": "DEMO",
       "execution_mode": "AUTO_VALIDATION",
-      "exit_reason": "",
+      "exit_reason": "TAKE_PROFIT",
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
       "mt5_retcode": "10009",
       "mt5_ticket": "1430765237",
-      "net_pnl": null,
-      "notes": "AUTO validation MT5 demo position opened through guarded sender.",
+      "net_pnl": 1.15,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
       "opened_at": "2026-06-12T12:32:01.616212+00:00",
-      "profit_loss": 0.0,
-      "realized_pnl": null,
-      "result": "OPEN",
+      "profit_loss": 1.15,
+      "realized_pnl": 1.15,
+      "result": "WIN",
       "risk_reward_ratio": 2.0,
       "server": "VantageMarkets-Demo",
       "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
@@ -67883,7 +67883,7 @@
       "signal_hash": "7a1259723a67731f",
       "simulation_only": true,
       "source": "MT5_DEMO",
-      "status": "OPEN",
+      "status": "CLOSED",
       "stop_loss": 1.15591,
       "strategy_metadata": {
         "approval_audit": {
@@ -68034,39 +68034,39 @@
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": null,
+      "swap": 0.0,
       "symbol": "EURUSD",
       "take_profit": 1.15763,
-      "total_pnl": null,
+      "total_pnl": 1.15,
       "trade_id": "mt5_demo_1430765237",
-      "updated_at": "2026-06-12T12:32:01.580021+00:00",
+      "updated_at": "2026-06-12T18:34:54.494475+00:00",
       "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
     },
     {
       "account_login": "25543844",
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
-      "close_price": null,
-      "closed_at": "",
-      "commission": null,
+      "close_price": 1.15762,
+      "closed_at": "2026-06-12T16:30:09+00:00",
+      "commission": 0.0,
       "created_at": "2026-06-12T12:33:18.449659+00:00",
       "demo_execution": true,
-      "duration_minutes": null,
+      "duration_minutes": 236.83,
       "entry_price": 1.15647,
       "environment": "DEMO",
       "execution_mode": "AUTO_VALIDATION",
-      "exit_reason": "",
+      "exit_reason": "TAKE_PROFIT",
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
       "mt5_retcode": "10009",
       "mt5_ticket": "1430772704",
-      "net_pnl": null,
-      "notes": "AUTO validation MT5 demo position opened through guarded sender.",
+      "net_pnl": 1.15,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
       "opened_at": "2026-06-12T12:33:18.911284+00:00",
-      "profit_loss": 0.0,
-      "realized_pnl": null,
-      "result": "OPEN",
+      "profit_loss": 1.15,
+      "realized_pnl": 1.15,
+      "result": "WIN",
       "risk_reward_ratio": 2.0,
       "server": "VantageMarkets-Demo",
       "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
@@ -68075,7 +68075,7 @@
       "signal_hash": "e59fdc9535342fee",
       "simulation_only": true,
       "source": "MT5_DEMO",
-      "status": "OPEN",
+      "status": "CLOSED",
       "stop_loss": 1.15589,
       "strategy_metadata": {
         "approval_audit": {
@@ -68226,39 +68226,39 @@
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": null,
+      "swap": 0.0,
       "symbol": "EURUSD",
       "take_profit": 1.15762,
-      "total_pnl": null,
+      "total_pnl": 1.15,
       "trade_id": "mt5_demo_1430772704",
-      "updated_at": "2026-06-12T12:33:18.887378+00:00",
+      "updated_at": "2026-06-12T18:34:54.082622+00:00",
       "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
     },
     {
       "account_login": "25543844",
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
-      "close_price": null,
-      "closed_at": "",
-      "commission": null,
+      "close_price": 4186.53,
+      "closed_at": "2026-06-12T16:41:41+00:00",
+      "commission": 0.0,
       "created_at": "2026-06-12T13:02:36.159849+00:00",
       "demo_execution": true,
-      "duration_minutes": null,
+      "duration_minutes": 219.07,
       "entry_price": 4194.57,
       "environment": "DEMO",
       "execution_mode": "AUTO_VALIDATION",
-      "exit_reason": "",
+      "exit_reason": "STOP_LOSS",
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
       "mt5_retcode": "10009",
       "mt5_ticket": "1430966369",
-      "net_pnl": null,
-      "notes": "AUTO validation MT5 demo position opened through guarded sender.",
+      "net_pnl": -8.16,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
       "opened_at": "2026-06-12T13:02:36.824459+00:00",
-      "profit_loss": 0.0,
-      "realized_pnl": null,
-      "result": "OPEN",
+      "profit_loss": -8.16,
+      "realized_pnl": -8.16,
+      "result": "LOSS",
       "risk_reward_ratio": 2.0,
       "server": "VantageMarkets-Demo",
       "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
@@ -68267,7 +68267,7 @@
       "signal_hash": "7218516676b1483d",
       "simulation_only": true,
       "source": "MT5_DEMO",
-      "status": "OPEN",
+      "status": "CLOSED",
       "stop_loss": 4186.53,
       "strategy_metadata": {
         "approval_audit": {
@@ -68418,12 +68418,12 @@
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": null,
+      "swap": 0.0,
       "symbol": "XAUUSD",
       "take_profit": 4211.1,
-      "total_pnl": null,
+      "total_pnl": -8.16,
       "trade_id": "mt5_demo_1430966369",
-      "updated_at": "2026-06-12T13:02:36.786455+00:00",
+      "updated_at": "2026-06-12T18:34:53.350557+00:00",
       "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
     },
     {
@@ -68622,27 +68622,27 @@
       "account_login": "25543844",
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
-      "close_price": null,
-      "closed_at": "",
-      "commission": null,
+      "close_price": 4186.53,
+      "closed_at": "2026-06-12T16:41:41+00:00",
+      "commission": 0.0,
       "created_at": "2026-06-12T13:07:45.959557+00:00",
       "demo_execution": true,
-      "duration_minutes": null,
+      "duration_minutes": 213.91,
       "entry_price": 4198.39,
       "environment": "DEMO",
       "execution_mode": "AUTO_VALIDATION",
-      "exit_reason": "",
+      "exit_reason": "STOP_LOSS",
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
       "mt5_retcode": "10009",
       "mt5_ticket": "1431000528",
-      "net_pnl": null,
-      "notes": "AUTO validation MT5 demo position opened through guarded sender.",
+      "net_pnl": -12.66,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
       "opened_at": "2026-06-12T13:07:46.493010+00:00",
-      "profit_loss": 0.0,
-      "realized_pnl": null,
-      "result": "OPEN",
+      "profit_loss": -12.66,
+      "realized_pnl": -12.66,
+      "result": "LOSS",
       "risk_reward_ratio": 2.0,
       "server": "VantageMarkets-Demo",
       "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
@@ -68651,7 +68651,7 @@
       "signal_hash": "f1a6d2f5ecb7d9c5",
       "simulation_only": true,
       "source": "MT5_DEMO",
-      "status": "OPEN",
+      "status": "CLOSED",
       "stop_loss": 4186.53,
       "strategy_metadata": {
         "approval_audit": {
@@ -68802,39 +68802,39 @@
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": null,
+      "swap": 0.0,
       "symbol": "XAUUSD",
       "take_profit": 4222.83,
-      "total_pnl": null,
+      "total_pnl": -12.66,
       "trade_id": "mt5_demo_1431000528",
-      "updated_at": "2026-06-12T13:07:46.436789+00:00",
+      "updated_at": "2026-06-12T18:34:52.922921+00:00",
       "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
     },
     {
       "account_login": "25543844",
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
-      "close_price": null,
-      "closed_at": "",
-      "commission": null,
+      "close_price": 4186.53,
+      "closed_at": "2026-06-12T16:41:41+00:00",
+      "commission": 0.0,
       "created_at": "2026-06-12T13:08:58.809335+00:00",
       "demo_execution": true,
-      "duration_minutes": null,
+      "duration_minutes": 212.69,
       "entry_price": 4200.79,
       "environment": "DEMO",
       "execution_mode": "AUTO_VALIDATION",
-      "exit_reason": "",
+      "exit_reason": "STOP_LOSS",
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
       "mt5_retcode": "10009",
       "mt5_ticket": "1431010309",
-      "net_pnl": null,
-      "notes": "AUTO validation MT5 demo position opened through guarded sender.",
+      "net_pnl": -14.33,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
       "opened_at": "2026-06-12T13:08:59.357288+00:00",
-      "profit_loss": 0.0,
-      "realized_pnl": null,
-      "result": "OPEN",
+      "profit_loss": -14.33,
+      "realized_pnl": -14.33,
+      "result": "LOSS",
       "risk_reward_ratio": 2.0,
       "server": "VantageMarkets-Demo",
       "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
@@ -68843,7 +68843,7 @@
       "signal_hash": "74d5f104b7b6234a",
       "simulation_only": true,
       "source": "MT5_DEMO",
-      "status": "OPEN",
+      "status": "CLOSED",
       "stop_loss": 4186.53,
       "strategy_metadata": {
         "approval_audit": {
@@ -68994,12 +68994,1002 @@
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": null,
+      "swap": 0.0,
       "symbol": "XAUUSD",
       "take_profit": 4230.24,
-      "total_pnl": null,
+      "total_pnl": -14.33,
       "trade_id": "mt5_demo_1431010309",
-      "updated_at": "2026-06-12T13:08:59.341290+00:00",
+      "updated_at": "2026-06-12T18:34:52.477219+00:00",
+      "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
+    },
+    {
+      "account_login": "25543844",
+      "broker_execution_enabled": false,
+      "broker_source": "VANTAGE_DEMO",
+      "close_price": 1.15712,
+      "closed_at": "2026-06-12T22:35:03+00:00",
+      "commission": 0.0,
+      "created_at": "2026-06-12T18:54:39.017924+00:00",
+      "demo_execution": true,
+      "duration_minutes": 220.37,
+      "entry_price": 1.1579,
+      "environment": "DEMO",
+      "execution_mode": "AUTO_VALIDATION",
+      "exit_reason": "STOP_LOSS",
+      "live_execution_enabled": false,
+      "lot": 0.01,
+      "mt5_comment": "Request executed",
+      "mt5_retcode": "10009",
+      "mt5_ticket": "1433209021",
+      "net_pnl": -0.78,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
+      "opened_at": "2026-06-12T18:54:40.729725+00:00",
+      "profit_loss": -0.78,
+      "realized_pnl": -0.78,
+      "result": "LOSS",
+      "risk_reward_ratio": 2.0,
+      "server": "VantageMarkets-Demo",
+      "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+      "side": "BUY",
+      "signal_confidence": 68.0,
+      "signal_hash": "1c647863f2d3904f",
+      "simulation_only": true,
+      "source": "MT5_DEMO",
+      "status": "CLOSED",
+      "stop_loss": 1.15712,
+      "strategy_metadata": {
+        "approval_audit": {
+          "advisory_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "approval_model": "weighted_smc_score",
+          "approval_note": "DEMO_COLLECTION normalized by AUTO runner: direction, tick/spread, SL/TP, and RR passed; SMC/session blockers are advisory.",
+          "bos_result": "FAIL",
+          "choch_result": "FAIL",
+          "confidence": 68,
+          "confidence_gap_to_55": 0,
+          "confidence_gap_to_75": 7,
+          "confidence_result": "PASS",
+          "confidence_threshold": 55,
+          "demo_collection_rules": {
+            "bos_mandatory": false,
+            "fvg_mandatory": false,
+            "liquidity_sweep_mandatory": false,
+            "min_confidence": 55,
+            "min_rr": 1.2,
+            "order_block_mandatory": false,
+            "requires_directional_bias": true,
+            "requires_sl_tp_valid_or_demo_risk_fallback": true,
+            "requires_valid_tick_spread": true,
+            "session_filter": "ADVISORY_ONLY"
+          },
+          "demo_risk_model": null,
+          "final_approval_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+          "final_decision": "BUY",
+          "fvg_result": "PASS",
+          "liquidity_sweep_result": "FAIL",
+          "min_rr": 1.2,
+          "missing_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "order_block_result": "PASS",
+          "relaxed_blockers": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "rr": 2.0,
+          "rr_result": "PASS",
+          "session_result": "PASS",
+          "sl_tp_source": "STRATEGY",
+          "spread_result": "PASS",
+          "status": "APPROVED",
+          "strategy_profile": "DEMO_COLLECTION"
+        },
+        "candle_source": {
+          "account_login": "25543844",
+          "account_type": "DEMO",
+          "broker_source": "VANTAGE_DEMO",
+          "server": "VantageMarkets-Demo",
+          "source": "VANTAGE_DEMO",
+          "symbol": "EURUSD",
+          "timeframes": {
+            "H1": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T21:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H1"
+            },
+            "H4": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T20:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H4"
+            },
+            "M15": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T21:45:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "M15"
+            }
+          }
+        },
+        "demo_risk_model": null,
+        "market_structure_state": {
+          "higher_timeframe_bias": "bullish",
+          "intermediate_timeframe_bias": "ranging",
+          "lower_timeframe_bias": "bullish",
+          "premium_discount": "premium",
+          "trend_bias": "BUY"
+        },
+        "quality_score": {
+          "confidence": 68,
+          "factors": {
+            "bos_strength": 0,
+            "fvg_quality": 10,
+            "liquidity_sweep_quality": 0,
+            "order_block_quality": 10,
+            "session_quality": 8.5,
+            "spread_quality": 10.0,
+            "trend_alignment": 20,
+            "volatility_quality": 10.0
+          },
+          "rating": "WATCHLIST"
+        },
+        "sl_tp_source": "STRATEGY",
+        "strategy_components": {
+          "bias": "BUY",
+          "bos": false,
+          "choch": false,
+          "fvg": true,
+          "liquidity_sweep": false,
+          "order_block": true,
+          "session": "New York",
+          "session_valid": true,
+          "spread_quality": 1.0,
+          "volatility_quality": 1.0
+        },
+        "strategy_profile": "DEMO_COLLECTION"
+      },
+      "strategy_profile": "DEMO_COLLECTION",
+      "swap": 0.0,
+      "symbol": "EURUSD",
+      "take_profit": 1.1594,
+      "total_pnl": -0.78,
+      "trade_id": "mt5_demo_1433209021",
+      "updated_at": "2026-06-12T19:35:31.962672+00:00",
+      "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
+    },
+    {
+      "account_login": "25543844",
+      "broker_execution_enabled": false,
+      "broker_source": "VANTAGE_DEMO",
+      "close_price": 4211.33,
+      "closed_at": "2026-06-12T22:24:03+00:00",
+      "commission": 0.0,
+      "created_at": "2026-06-12T18:55:24.840699+00:00",
+      "demo_execution": true,
+      "duration_minutes": 208.61,
+      "entry_price": 4222.49,
+      "environment": "DEMO",
+      "execution_mode": "AUTO_VALIDATION",
+      "exit_reason": "STOP_LOSS",
+      "live_execution_enabled": false,
+      "lot": 0.01,
+      "mt5_comment": "Request executed",
+      "mt5_retcode": "10009",
+      "mt5_ticket": "1433210790",
+      "net_pnl": -10.84,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
+      "opened_at": "2026-06-12T18:55:26.359657+00:00",
+      "profit_loss": -10.84,
+      "realized_pnl": -10.84,
+      "result": "LOSS",
+      "risk_reward_ratio": 2.0,
+      "server": "VantageMarkets-Demo",
+      "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+      "side": "BUY",
+      "signal_confidence": 58.0,
+      "signal_hash": "52c1a7d2065b3013",
+      "simulation_only": true,
+      "source": "MT5_DEMO",
+      "status": "CLOSED",
+      "stop_loss": 4211.33,
+      "strategy_metadata": {
+        "approval_audit": {
+          "advisory_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "FVG_MISSING",
+              "label": "FVG missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "approval_model": "weighted_smc_score",
+          "approval_note": "DEMO_COLLECTION normalized by AUTO runner: direction, tick/spread, SL/TP, and RR passed; SMC/session blockers are advisory.",
+          "bos_result": "FAIL",
+          "choch_result": "FAIL",
+          "confidence": 58,
+          "confidence_gap_to_55": 0,
+          "confidence_gap_to_75": 17,
+          "confidence_result": "PASS",
+          "confidence_threshold": 55,
+          "demo_collection_rules": {
+            "bos_mandatory": false,
+            "fvg_mandatory": false,
+            "liquidity_sweep_mandatory": false,
+            "min_confidence": 55,
+            "min_rr": 1.2,
+            "order_block_mandatory": false,
+            "requires_directional_bias": true,
+            "requires_sl_tp_valid_or_demo_risk_fallback": true,
+            "requires_valid_tick_spread": true,
+            "session_filter": "ADVISORY_ONLY"
+          },
+          "demo_risk_model": null,
+          "final_approval_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+          "final_decision": "BUY",
+          "fvg_result": "FAIL",
+          "liquidity_sweep_result": "FAIL",
+          "min_rr": 1.2,
+          "missing_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "FVG_MISSING",
+              "label": "FVG missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "order_block_result": "PASS",
+          "relaxed_blockers": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "FVG_MISSING",
+              "label": "FVG missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "rr": 2.0,
+          "rr_result": "PASS",
+          "session_result": "PASS",
+          "sl_tp_source": "STRATEGY",
+          "spread_result": "PASS",
+          "status": "APPROVED",
+          "strategy_profile": "DEMO_COLLECTION"
+        },
+        "candle_source": {
+          "account_login": "25543844",
+          "account_type": "DEMO",
+          "broker_source": "VANTAGE_DEMO",
+          "server": "VantageMarkets-Demo",
+          "source": "VANTAGE_DEMO",
+          "symbol": "XAUUSD",
+          "timeframes": {
+            "H1": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T21:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H1"
+            },
+            "H4": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T20:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H4"
+            },
+            "M15": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T21:45:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "M15"
+            }
+          }
+        },
+        "demo_risk_model": null,
+        "market_structure_state": {
+          "higher_timeframe_bias": "ranging",
+          "intermediate_timeframe_bias": "ranging",
+          "lower_timeframe_bias": "bullish",
+          "premium_discount": "premium",
+          "trend_bias": "BUY"
+        },
+        "quality_score": {
+          "confidence": 58,
+          "factors": {
+            "bos_strength": 0,
+            "fvg_quality": 0,
+            "liquidity_sweep_quality": 0,
+            "order_block_quality": 10,
+            "session_quality": 8.5,
+            "spread_quality": 10.0,
+            "trend_alignment": 20,
+            "volatility_quality": 10.0
+          },
+          "rating": "WAIT"
+        },
+        "sl_tp_source": "STRATEGY",
+        "strategy_components": {
+          "bias": "BUY",
+          "bos": false,
+          "choch": false,
+          "fvg": false,
+          "liquidity_sweep": false,
+          "order_block": true,
+          "session": "New York",
+          "session_valid": true,
+          "spread_quality": 1.0,
+          "volatility_quality": 1.0
+        },
+        "strategy_profile": "DEMO_COLLECTION"
+      },
+      "strategy_profile": "DEMO_COLLECTION",
+      "swap": 0.0,
+      "symbol": "XAUUSD",
+      "take_profit": 4244.48,
+      "total_pnl": -10.84,
+      "trade_id": "mt5_demo_1433210790",
+      "updated_at": "2026-06-12T19:24:30.744711+00:00",
+      "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
+    },
+    {
+      "account_login": "25543844",
+      "broker_execution_enabled": false,
+      "broker_source": "VANTAGE_DEMO",
+      "close_price": 1.15712,
+      "closed_at": "2026-06-12T22:35:03+00:00",
+      "commission": 0.0,
+      "created_at": "2026-06-12T19:01:55.782535+00:00",
+      "demo_execution": true,
+      "duration_minutes": 213.11,
+      "entry_price": 1.15765,
+      "environment": "DEMO",
+      "execution_mode": "AUTO_VALIDATION",
+      "exit_reason": "STOP_LOSS",
+      "live_execution_enabled": false,
+      "lot": 0.01,
+      "mt5_comment": "Request executed",
+      "mt5_retcode": "10009",
+      "mt5_ticket": "1433243655",
+      "net_pnl": -0.54,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
+      "opened_at": "2026-06-12T19:01:56.385256+00:00",
+      "profit_loss": -0.54,
+      "realized_pnl": -0.54,
+      "result": "LOSS",
+      "risk_reward_ratio": 2.0,
+      "server": "VantageMarkets-Demo",
+      "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+      "side": "BUY",
+      "signal_confidence": 68.0,
+      "signal_hash": "4f618f929a45479b",
+      "simulation_only": true,
+      "source": "MT5_DEMO",
+      "status": "CLOSED",
+      "stop_loss": 1.15712,
+      "strategy_metadata": {
+        "approval_audit": {
+          "advisory_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "approval_model": "weighted_smc_score",
+          "approval_note": "DEMO_COLLECTION normalized by AUTO runner: direction, tick/spread, SL/TP, and RR passed; SMC/session blockers are advisory.",
+          "bos_result": "FAIL",
+          "choch_result": "FAIL",
+          "confidence": 68,
+          "confidence_gap_to_55": 0,
+          "confidence_gap_to_75": 7,
+          "confidence_result": "PASS",
+          "confidence_threshold": 55,
+          "demo_collection_rules": {
+            "bos_mandatory": false,
+            "fvg_mandatory": false,
+            "liquidity_sweep_mandatory": false,
+            "min_confidence": 55,
+            "min_rr": 1.2,
+            "order_block_mandatory": false,
+            "requires_directional_bias": true,
+            "requires_sl_tp_valid_or_demo_risk_fallback": true,
+            "requires_valid_tick_spread": true,
+            "session_filter": "ADVISORY_ONLY"
+          },
+          "demo_risk_model": null,
+          "final_approval_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+          "final_decision": "BUY",
+          "fvg_result": "PASS",
+          "liquidity_sweep_result": "FAIL",
+          "min_rr": 1.2,
+          "missing_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "order_block_result": "PASS",
+          "relaxed_blockers": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "rr": 2.0,
+          "rr_result": "PASS",
+          "session_result": "PASS",
+          "sl_tp_source": "STRATEGY",
+          "spread_result": "PASS",
+          "status": "APPROVED",
+          "strategy_profile": "DEMO_COLLECTION"
+        },
+        "candle_source": {
+          "account_login": "25543844",
+          "account_type": "DEMO",
+          "broker_source": "VANTAGE_DEMO",
+          "server": "VantageMarkets-Demo",
+          "source": "VANTAGE_DEMO",
+          "symbol": "EURUSD",
+          "timeframes": {
+            "H1": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T22:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H1"
+            },
+            "H4": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T20:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H4"
+            },
+            "M15": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T22:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "M15"
+            }
+          }
+        },
+        "demo_risk_model": null,
+        "market_structure_state": {
+          "higher_timeframe_bias": "bullish",
+          "intermediate_timeframe_bias": "bullish",
+          "lower_timeframe_bias": "bullish",
+          "premium_discount": "premium",
+          "trend_bias": "BUY"
+        },
+        "quality_score": {
+          "confidence": 68,
+          "factors": {
+            "bos_strength": 0,
+            "fvg_quality": 10,
+            "liquidity_sweep_quality": 0,
+            "order_block_quality": 10,
+            "session_quality": 8.5,
+            "spread_quality": 10.0,
+            "trend_alignment": 20,
+            "volatility_quality": 10.0
+          },
+          "rating": "WATCHLIST"
+        },
+        "sl_tp_source": "STRATEGY",
+        "strategy_components": {
+          "bias": "BUY",
+          "bos": false,
+          "choch": false,
+          "fvg": true,
+          "liquidity_sweep": false,
+          "order_block": true,
+          "session": "New York",
+          "session_valid": true,
+          "spread_quality": 1.0,
+          "volatility_quality": 1.0
+        },
+        "strategy_profile": "DEMO_COLLECTION"
+      },
+      "strategy_profile": "DEMO_COLLECTION",
+      "swap": 0.0,
+      "symbol": "EURUSD",
+      "take_profit": 1.15874,
+      "total_pnl": -0.54,
+      "trade_id": "mt5_demo_1433243655",
+      "updated_at": "2026-06-12T19:35:31.723410+00:00",
+      "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
+    },
+    {
+      "account_login": "25543844",
+      "broker_execution_enabled": false,
+      "broker_source": "VANTAGE_DEMO",
+      "close_price": 1.15712,
+      "closed_at": "2026-06-12T22:35:03+00:00",
+      "commission": 0.0,
+      "created_at": "2026-06-12T19:03:23.573087+00:00",
+      "demo_execution": true,
+      "duration_minutes": 211.65,
+      "entry_price": 1.15781,
+      "environment": "DEMO",
+      "execution_mode": "AUTO_VALIDATION",
+      "exit_reason": "STOP_LOSS",
+      "live_execution_enabled": false,
+      "lot": 0.01,
+      "mt5_comment": "Request executed",
+      "mt5_retcode": "10009",
+      "mt5_ticket": "1433249296",
+      "net_pnl": -0.69,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
+      "opened_at": "2026-06-12T19:03:24.180021+00:00",
+      "profit_loss": -0.69,
+      "realized_pnl": -0.69,
+      "result": "LOSS",
+      "risk_reward_ratio": 2.0,
+      "server": "VantageMarkets-Demo",
+      "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+      "side": "BUY",
+      "signal_confidence": 68.0,
+      "signal_hash": "546b8c75cdfc2c94",
+      "simulation_only": true,
+      "source": "MT5_DEMO",
+      "status": "CLOSED",
+      "stop_loss": 1.15712,
+      "strategy_metadata": {
+        "approval_audit": {
+          "advisory_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "approval_model": "weighted_smc_score",
+          "approval_note": "DEMO_COLLECTION normalized by AUTO runner: direction, tick/spread, SL/TP, and RR passed; SMC/session blockers are advisory.",
+          "bos_result": "FAIL",
+          "choch_result": "FAIL",
+          "confidence": 68,
+          "confidence_gap_to_55": 0,
+          "confidence_gap_to_75": 7,
+          "confidence_result": "PASS",
+          "confidence_threshold": 55,
+          "demo_collection_rules": {
+            "bos_mandatory": false,
+            "fvg_mandatory": false,
+            "liquidity_sweep_mandatory": false,
+            "min_confidence": 55,
+            "min_rr": 1.2,
+            "order_block_mandatory": false,
+            "requires_directional_bias": true,
+            "requires_sl_tp_valid_or_demo_risk_fallback": true,
+            "requires_valid_tick_spread": true,
+            "session_filter": "ADVISORY_ONLY"
+          },
+          "demo_risk_model": null,
+          "final_approval_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+          "final_decision": "BUY",
+          "fvg_result": "PASS",
+          "liquidity_sweep_result": "FAIL",
+          "min_rr": 1.2,
+          "missing_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "order_block_result": "PASS",
+          "relaxed_blockers": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "rr": 2.0,
+          "rr_result": "PASS",
+          "session_result": "PASS",
+          "sl_tp_source": "STRATEGY",
+          "spread_result": "PASS",
+          "status": "APPROVED",
+          "strategy_profile": "DEMO_COLLECTION"
+        },
+        "candle_source": {
+          "account_login": "25543844",
+          "account_type": "DEMO",
+          "broker_source": "VANTAGE_DEMO",
+          "server": "VantageMarkets-Demo",
+          "source": "VANTAGE_DEMO",
+          "symbol": "EURUSD",
+          "timeframes": {
+            "H1": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T22:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H1"
+            },
+            "H4": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T20:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H4"
+            },
+            "M15": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T22:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "M15"
+            }
+          }
+        },
+        "demo_risk_model": null,
+        "market_structure_state": {
+          "higher_timeframe_bias": "bullish",
+          "intermediate_timeframe_bias": "bullish",
+          "lower_timeframe_bias": "bullish",
+          "premium_discount": "premium",
+          "trend_bias": "BUY"
+        },
+        "quality_score": {
+          "confidence": 68,
+          "factors": {
+            "bos_strength": 0,
+            "fvg_quality": 10,
+            "liquidity_sweep_quality": 0,
+            "order_block_quality": 10,
+            "session_quality": 8.5,
+            "spread_quality": 10.0,
+            "trend_alignment": 20,
+            "volatility_quality": 10.0
+          },
+          "rating": "WATCHLIST"
+        },
+        "sl_tp_source": "STRATEGY",
+        "strategy_components": {
+          "bias": "BUY",
+          "bos": false,
+          "choch": false,
+          "fvg": true,
+          "liquidity_sweep": false,
+          "order_block": true,
+          "session": "New York",
+          "session_valid": true,
+          "spread_quality": 1.0,
+          "volatility_quality": 1.0
+        },
+        "strategy_profile": "DEMO_COLLECTION"
+      },
+      "strategy_profile": "DEMO_COLLECTION",
+      "swap": 0.0,
+      "symbol": "EURUSD",
+      "take_profit": 1.15919,
+      "total_pnl": -0.69,
+      "trade_id": "mt5_demo_1433249296",
+      "updated_at": "2026-06-12T19:35:31.421941+00:00",
+      "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
+    },
+    {
+      "account_login": "25543844",
+      "broker_execution_enabled": false,
+      "broker_source": "VANTAGE_DEMO",
+      "close_price": 4207.79,
+      "closed_at": "2026-06-12T22:30:04+00:00",
+      "commission": 0.0,
+      "created_at": "2026-06-12T19:10:15.356286+00:00",
+      "demo_execution": true,
+      "duration_minutes": 199.8,
+      "entry_price": 4217.97,
+      "environment": "DEMO",
+      "execution_mode": "AUTO_VALIDATION",
+      "exit_reason": "STOP_LOSS",
+      "live_execution_enabled": false,
+      "lot": 0.01,
+      "mt5_comment": "Request executed",
+      "mt5_retcode": "10009",
+      "mt5_ticket": "1433266380",
+      "net_pnl": -10.17,
+      "notes": "AUTO validation MT5 demo position opened through guarded sender. Lifecycle closed from MT5 deal history.",
+      "opened_at": "2026-06-12T19:10:16.198706+00:00",
+      "profit_loss": -10.17,
+      "realized_pnl": -10.17,
+      "result": "LOSS",
+      "risk_reward_ratio": 2.0,
+      "server": "VantageMarkets-Demo",
+      "setup_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+      "side": "BUY",
+      "signal_confidence": 58.0,
+      "signal_hash": "afd0b0ff8e5ec5c5",
+      "simulation_only": true,
+      "source": "MT5_DEMO",
+      "status": "CLOSED",
+      "stop_loss": 4207.79,
+      "strategy_metadata": {
+        "approval_audit": {
+          "advisory_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "FVG_MISSING",
+              "label": "FVG missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "approval_model": "weighted_smc_score",
+          "approval_note": "DEMO_COLLECTION normalized by AUTO runner: direction, tick/spread, SL/TP, and RR passed; SMC/session blockers are advisory.",
+          "bos_result": "FAIL",
+          "choch_result": "FAIL",
+          "confidence": 58,
+          "confidence_gap_to_55": 0,
+          "confidence_gap_to_75": 17,
+          "confidence_result": "PASS",
+          "confidence_threshold": 55,
+          "demo_collection_rules": {
+            "bos_mandatory": false,
+            "fvg_mandatory": false,
+            "liquidity_sweep_mandatory": false,
+            "min_confidence": 55,
+            "min_rr": 1.2,
+            "order_block_mandatory": false,
+            "requires_directional_bias": true,
+            "requires_sl_tp_valid_or_demo_risk_fallback": true,
+            "requires_valid_tick_spread": true,
+            "session_filter": "ADVISORY_ONLY"
+          },
+          "demo_risk_model": null,
+          "final_approval_reason": "DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only.",
+          "final_decision": "BUY",
+          "fvg_result": "FAIL",
+          "liquidity_sweep_result": "FAIL",
+          "min_rr": 1.2,
+          "missing_requirements": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "FVG_MISSING",
+              "label": "FVG missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "order_block_result": "PASS",
+          "relaxed_blockers": [
+            {
+              "advisory": true,
+              "code": "BOS_MISSING",
+              "label": "BOS missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "LIQUIDITY_SWEEP_MISSING",
+              "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."
+            },
+            {
+              "advisory": true,
+              "code": "FVG_MISSING",
+              "label": "FVG missing; advisory only in DEMO_COLLECTION."
+            }
+          ],
+          "rr": 2.0,
+          "rr_result": "PASS",
+          "session_result": "PASS",
+          "sl_tp_source": "STRATEGY",
+          "spread_result": "PASS",
+          "status": "APPROVED",
+          "strategy_profile": "DEMO_COLLECTION"
+        },
+        "candle_source": {
+          "account_login": "25543844",
+          "account_type": "DEMO",
+          "broker_source": "VANTAGE_DEMO",
+          "server": "VantageMarkets-Demo",
+          "source": "VANTAGE_DEMO",
+          "symbol": "XAUUSD",
+          "timeframes": {
+            "H1": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T22:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H1"
+            },
+            "H4": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T20:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "H4"
+            },
+            "M15": {
+              "broker_source": "VANTAGE_DEMO",
+              "last_candle_timestamp": "2026-06-12T22:00:00+00:00",
+              "requested_count": 220,
+              "returned_count": 220,
+              "source": "VANTAGE_DEMO",
+              "status": "OK",
+              "timeframe": "M15"
+            }
+          }
+        },
+        "demo_risk_model": null,
+        "market_structure_state": {
+          "higher_timeframe_bias": "ranging",
+          "intermediate_timeframe_bias": "bullish",
+          "lower_timeframe_bias": "ranging",
+          "premium_discount": "premium",
+          "trend_bias": "BUY"
+        },
+        "quality_score": {
+          "confidence": 58,
+          "factors": {
+            "bos_strength": 0,
+            "fvg_quality": 0,
+            "liquidity_sweep_quality": 0,
+            "order_block_quality": 10,
+            "session_quality": 8.5,
+            "spread_quality": 10.0,
+            "trend_alignment": 20,
+            "volatility_quality": 10.0
+          },
+          "rating": "WAIT"
+        },
+        "sl_tp_source": "STRATEGY",
+        "strategy_components": {
+          "bias": "BUY",
+          "bos": false,
+          "choch": false,
+          "fvg": false,
+          "liquidity_sweep": false,
+          "order_block": true,
+          "session": "New York",
+          "session_valid": true,
+          "spread_quality": 1.0,
+          "volatility_quality": 1.0
+        },
+        "strategy_profile": "DEMO_COLLECTION"
+      },
+      "strategy_profile": "DEMO_COLLECTION",
+      "swap": 0.0,
+      "symbol": "XAUUSD",
+      "take_profit": 4238.32,
+      "total_pnl": -10.17,
+      "trade_id": "mt5_demo_1433266380",
+      "updated_at": "2026-06-12T19:30:30.792606+00:00",
       "validation_session_id": "auto-validation-488d171b-1158-4a13-9c81-5d84176a3ade"
     }
   ]

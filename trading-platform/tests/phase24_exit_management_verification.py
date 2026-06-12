@@ -72,14 +72,17 @@ def config(**overrides: Any) -> dict[str, Any]:
         "break_even_trigger_r": 1.0,
         "trailing_stop_trigger_r": 1.5,
         "trailing_stop_distance_r": 0.75,
-        "exit_stale_minutes": 240,
+        "exit_stale_minutes": 45,
         "exit_stale_min_r": 0.2,
+        "exit_soft_adverse_minutes": 20,
+        "exit_no_progress_minutes": 30,
+        "exit_no_progress_min_r": 0.3,
         "exit_confidence_floor": 40,
         "exit_confidence_drop_points": 25,
         "exit_max_close_retries": 3,
         "per_symbol_exit_settings": {
-            "XAUUSD": {"max_spread": 1.0, "max_tick_age_seconds": 10, "break_even_trigger_r": 1.0, "trailing_stop_trigger_r": 1.5, "trailing_stop_distance_r": 0.75, "stale_exit_minutes": 240, "confidence_floor": 40, "confidence_drop_points": 25},
-            "EURUSD": {"max_spread": 0.0003, "max_tick_age_seconds": 10, "break_even_trigger_r": 1.0, "trailing_stop_trigger_r": 1.5, "trailing_stop_distance_r": 0.75, "stale_exit_minutes": 240, "confidence_floor": 40, "confidence_drop_points": 25},
+            "XAUUSD": {"max_spread": 1.0, "max_tick_age_seconds": 10, "break_even_trigger_r": 1.0, "trailing_stop_trigger_r": 1.5, "trailing_stop_distance_r": 0.75, "stale_exit_minutes": 45, "soft_adverse_minutes": 20, "no_progress_minutes": 30, "no_progress_min_r": 0.3, "confidence_floor": 40, "confidence_drop_points": 25},
+            "EURUSD": {"max_spread": 0.0003, "max_tick_age_seconds": 10, "break_even_trigger_r": 1.0, "trailing_stop_trigger_r": 1.5, "trailing_stop_distance_r": 0.75, "stale_exit_minutes": 45, "soft_adverse_minutes": 20, "no_progress_minutes": 30, "no_progress_min_r": 0.3, "confidence_floor": 40, "confidence_drop_points": 25},
             "NIFTY50": {"max_spread": 5.0, "max_tick_age_seconds": 10},
         },
     }
@@ -150,7 +153,7 @@ def verify_break_even_and_trailing() -> bool:
 
 def verify_close_reasons() -> bool:
     old = (datetime.now(timezone.utc) - timedelta(minutes=300)).isoformat()
-    stale, stale_sender, _ = run_with(position(price_current=100.5, time=old), trade(), cfg=config(exit_stale_minutes=240))
+    stale, stale_sender, _ = run_with(position(price_current=100.5, time=old), trade(), cfg=config(exit_stale_minutes=45))
     reversal, reversal_sender, _ = run_with(position(), trade(), signals=FakeSignals("SELL", 80))
     confidence, confidence_sender, _ = run_with(position(), trade(signal_confidence=70), signals=FakeSignals("BUY", 35))
     passed = (
@@ -162,6 +165,42 @@ def verify_close_reasons() -> bool:
         and len(confidence_sender.close_calls) == 1
     )
     return show("Time-stale, signal reversal, and confidence-drop exits close through guarded demo sender", passed)
+
+
+def verify_forward_validation_exit_rules() -> bool:
+    old_negative = (datetime.now(timezone.utc) - timedelta(minutes=25)).isoformat()
+    soft, soft_sender, _ = run_with(
+        position(price_current=97.0, profit=-3.0, time=old_negative),
+        trade(signal_confidence=70),
+        signals=FakeSignals("WAIT", 35),
+    )
+    no_progress_time = (datetime.now(timezone.utc) - timedelta(minutes=35)).isoformat()
+    no_progress, no_progress_sender, _ = run_with(
+        position(price_current=101.0, profit=1.0, time=no_progress_time),
+        trade(signal_confidence=70),
+        signals=FakeSignals("BUY", 70),
+    )
+    hold, hold_sender, _ = run_with(
+        position(price_current=102.0, profit=2.0, time=(datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()),
+        trade(signal_confidence=70),
+        signals=FakeSignals("BUY", 70),
+    )
+    hold_decision = hold["managed_positions"][0]
+    passed = (
+        soft["managed_positions"][0]["exit_reason"] == "SOFT_ADVERSE_EXIT"
+        and len(soft_sender.close_calls) == 1
+        and soft["soft_adverse_exits"] == 1
+        and no_progress["managed_positions"][0]["exit_reason"] == "NO_PROGRESS_EXIT"
+        and len(no_progress_sender.close_calls) == 1
+        and no_progress["no_progress_exits"] == 1
+        and hold_decision["action"] == "HOLD"
+        and hold_decision["exit_reason"] == "HOLD_BELOW_BREAKEVEN_TRIGGER"
+        and hold_decision["hold_checks"]["stale"] == "HOLD_WAITING_FOR_STALE_TIMEOUT"
+        and hold_decision["hold_checks"]["reversal"] == "HOLD_NO_REVERSAL"
+        and hold_decision["hold_checks"]["confidence"] == "HOLD_NO_CONFIDENCE_DROP"
+        and len(hold_sender.close_calls) == 0
+    )
+    return show("Forward validation soft-adverse/no-progress exits and explicit HOLD reasons work", passed, str({"soft": soft["managed_positions"][0], "no_progress": no_progress["managed_positions"][0], "hold": hold_decision}))
 
 
 def verify_safety_and_retry_guards() -> bool:
@@ -211,6 +250,15 @@ def verify_code_wiring_and_dashboard() -> bool:
         "SL Dist",
         "TP Dist",
         "exit_outcomes",
+        "SOFT_ADVERSE_EXIT",
+        "NO_PROGRESS_EXIT",
+        "HOLD_BELOW_BREAKEVEN_TRIGGER",
+        "HOLD_WAITING_FOR_STALE_TIMEOUT",
+        "HOLD_NO_REVERSAL",
+        "HOLD_NO_CONFIDENCE_DROP",
+        "exit_soft_adverse_minutes",
+        "exit_no_progress_minutes",
+        "exit_no_progress_min_r",
         "live_execution_enabled",
     ]
     missing = [item for item in required if item not in text]
@@ -230,6 +278,7 @@ def main() -> int:
     checks = [
         verify_break_even_and_trailing(),
         verify_close_reasons(),
+        verify_forward_validation_exit_rules(),
         verify_safety_and_retry_guards(),
         verify_code_wiring_and_dashboard(),
     ]

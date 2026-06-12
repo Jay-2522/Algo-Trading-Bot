@@ -49,6 +49,8 @@ class AutoValidationService:
         self._lifecycle_sync_diagnostics: dict[str, Any] = self._empty_lifecycle_sync_diagnostics()
         self._exit_management_diagnostics: dict[str, Any] = self._empty_exit_management_diagnostics()
         self._execution_timelines: list[dict[str, Any]] = []
+        self._validation_close_reports: list[dict[str, Any]] = []
+        self._reported_close_keys: set[str] = set()
         self._seen_signal_hashes: set[str] = set()
         self._sent_signal_keys: set[str] = set()
         self._last_trade_time: datetime | None = None
@@ -60,9 +62,11 @@ class AutoValidationService:
         self._sync_lifecycle_services(manual=False)
         self._refresh_session_metrics()
         self._clear_disallowed_watched_signal()
+        recovery = self._recovery_status()
         return {
             "status": "READY",
             "mode": self.session["status"],
+            **recovery,
             "config": dict(self.config),
             "session": dict(self.session),
             "current_signal_watched": copy.deepcopy(self._current_signal_watched),
@@ -77,6 +81,8 @@ class AutoValidationService:
             "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
             "lifecycle_sync": copy.deepcopy(self._lifecycle_sync_diagnostics),
             "exit_management": copy.deepcopy(self._exit_management_diagnostics),
+            "latest_validation_close_report": copy.deepcopy(self._validation_close_reports[-1]) if self._validation_close_reports else None,
+            "validation_close_reports": copy.deepcopy(self._validation_close_reports[-30:]),
             "post_sender_execution_summary": self.post_sender_execution_summary(),
             "execution_timelines": copy.deepcopy(self._execution_timelines[-100:]),
             "confidence_timeline": copy.deepcopy(self._confidence_timeline),
@@ -90,6 +96,19 @@ class AutoValidationService:
 
     def start(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}
+        if self._has_recoverable_progress() and payload.get("confirm_fresh_start") is not True:
+            self._log(
+                "FRESH_START_CONFIRMATION_REQUIRED",
+                {
+                    "recovered_session_id": self.session.get("session_id"),
+                    "recovered_closed_trades": self.session.get("current_closed_trades", 0),
+                    "recovered_open_trades": self.session.get("current_open_trades", 0),
+                },
+            )
+            status = self.status()
+            status["status"] = "FRESH_START_CONFIRMATION_REQUIRED"
+            status["message"] = "Recoverable validation progress exists. Confirm fresh start to reset it."
+            return status
         self.config = {**self.config, **self._safe_config(payload)}
         self.config["auto_validation_enabled"] = True
         started_at = self._timestamp()
@@ -106,6 +125,8 @@ class AutoValidationService:
         self._seen_signal_hashes = set()
         self._sent_signal_keys = set()
         self._execution_timelines = []
+        self._validation_close_reports = []
+        self._reported_close_keys = set()
         self.events = []
         self._confidence_timeline = {}
         self._open_position_sync_diagnostics = self._empty_open_position_sync_diagnostics()
@@ -127,14 +148,15 @@ class AutoValidationService:
         return self.status()
 
     def resume(self) -> dict[str, Any]:
-        if self.session["status"] == "PAUSED":
+        if self.session["status"] in {"PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             self.session["status"] = "RUNNING"
+            self.config["auto_validation_enabled"] = True
             self._log("SESSION_RESUMED")
             self._save_state()
         return self.status()
 
     def stop(self, reason: str = "Stopped manually.") -> dict[str, Any]:
-        if self.session["status"] in {"RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT"}:
+        if self.session["status"] in {"RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             self.session["status"] = "STOPPED"
             self.session["stopped_at"] = self._timestamp()
             self.session["reason_stopped"] = reason
@@ -1167,6 +1189,9 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
         if session_closed:
+            reports = self._emit_validation_close_reports(session_closed)
+            self._lifecycle_sync_diagnostics["validation_close_reports"] = reports
+            self._lifecycle_sync_diagnostics["latest_validation_close_report"] = reports[-1] if reports else None
             self._log("LIFECYCLE_SYNC_CLOSED_TRADES", {"closed_trades_updated": len(session_closed), "trade_ids": self._lifecycle_sync_diagnostics["session_closed_trade_ids"]})
         elif manual:
             self._log("LIFECYCLE_SYNC_COMPLETED", {"closed_trades_updated": 0, "status": self._lifecycle_sync_diagnostics["status"]})
@@ -1326,6 +1351,35 @@ class AutoValidationService:
     def should_auto_start_runner(self) -> bool:
         return self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} and self.config.get("auto_validation_enabled") is True
 
+    def _has_recoverable_progress(self) -> bool:
+        if self.session.get("status") not in {"PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
+            return False
+        if not self._has_current_user_session():
+            return False
+        progress_keys = (
+            "current_closed_trades",
+            "current_session_closed",
+            "current_open_trades",
+            "current_session_open_trades",
+            "opened",
+            "orders_created",
+            "current_session_opened",
+            "total_trades",
+            "current_session_total_trades",
+        )
+        return any(int(self.session.get(key) or 0) > 0 for key in progress_keys)
+
+    def _recovery_status(self) -> dict[str, Any]:
+        recoverable = self._has_recoverable_progress()
+        return {
+            "recoverable_session": recoverable,
+            "recovered_session_id": self.session.get("session_id") if recoverable else "",
+            "recovered_closed_trades": int(self.session.get("current_closed_trades") or self.session.get("current_session_closed") or 0) if recoverable else 0,
+            "recovered_open_trades": int(self.session.get("current_open_trades") or self.session.get("current_session_open_trades") or 0) if recoverable else 0,
+            "recovered_remaining_closed_trades": int(self.session.get("remaining_closed_trades") or self.session.get("remaining_trades_to_target") or 0) if recoverable else int(self.session.get("remaining_closed_trades") or 0),
+            "requires_user_resume": self.session.get("status") in {"PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"},
+        }
+
     def mark_backend_startup_resume(self) -> None:
         if self.should_auto_start_runner() and self.session.get("session_started_by") == "persisted_resume":
             self.session["session_started_by"] = "backend_startup_resume"
@@ -1361,6 +1415,8 @@ class AutoValidationService:
             "closed_trades_updated": 0,
             "all_closed_trades_updated": 0,
             "session_closed_trade_ids": [],
+            "validation_close_reports": [],
+            "latest_validation_close_report": None,
             "warnings": [],
             "errors": [],
             "timestamp": None,
@@ -1795,6 +1851,16 @@ class AutoValidationService:
                 self.config["max_open_trades_per_symbol"] = 3
                 self.config["max_daily_demo_trades"] = 30
                 self.config["max_daily_trades"] = 30
+                self.config["exit_stale_minutes"] = 45
+                self.config["exit_soft_adverse_minutes"] = 20
+                self.config["exit_no_progress_minutes"] = 30
+                self.config["exit_no_progress_min_r"] = 0.3
+                for settings in (self.config.get("per_symbol_exit_settings") or {}).values():
+                    if isinstance(settings, dict):
+                        settings["stale_exit_minutes"] = 45
+                        settings["soft_adverse_minutes"] = 20
+                        settings["no_progress_minutes"] = 30
+                        settings["no_progress_min_r"] = 0.3
             elif self.config["strategy_profile"] == "AUTO_VALIDATION":
                 self.config["min_confidence"] = 65
                 self.config["min_rr"] = 1.5
@@ -1824,6 +1890,9 @@ class AutoValidationService:
             self._exit_management_diagnostics = data["exit_management"]
         if isinstance(data.get("execution_timelines"), list):
             self._execution_timelines = [item for item in data["execution_timelines"] if isinstance(item, dict)][-100:]
+        if isinstance(data.get("validation_close_reports"), list):
+            self._validation_close_reports = [item for item in data["validation_close_reports"] if isinstance(item, dict)][-30:]
+            self._reported_close_keys = {self._close_report_key(item) for item in self._validation_close_reports if self._close_report_key(item)}
         if isinstance(data.get("sent_signal_keys"), list):
             self._sent_signal_keys = {str(item) for item in data["sent_signal_keys"] if item}
         if isinstance(data.get("confidence_timeline"), dict):
@@ -1831,17 +1900,17 @@ class AutoValidationService:
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
             updated_at = str(data.get("updated_at") or self.session.get("started_at") or "")
             if not self.config.get("allow_persisted_auto_resume", False):
-                self.session["status"] = "STOPPED"
-                self.session["stopped_at"] = self._timestamp()
+                self.session["status"] = "PAUSED_REQUIRES_USER_RESUME"
+                self.session["paused_reason"] = "PERSISTED_AUTO_RESUME_DISABLED"
                 self.session["reason_stopped"] = "PERSISTED_AUTO_RESUME_DISABLED"
-                self.session["session_started_by"] = ""
                 self.config["auto_validation_enabled"] = False
+                self.runner_state = self._empty_runner_state()
             elif self._persisted_session_stale(updated_at):
-                self.session["status"] = "STOPPED"
-                self.session["stopped_at"] = self._timestamp()
-                self.session["reason_stopped"] = "STALE_PERSISTED_SESSION_RESET"
-                self.session["session_started_by"] = ""
+                self.session["status"] = "RECOVERED_STOPPED"
+                self.session["paused_reason"] = "STALE_PERSISTED_SESSION_REQUIRES_USER_RESUME"
+                self.session["reason_stopped"] = "STALE_PERSISTED_SESSION_REQUIRES_USER_RESUME"
                 self.config["auto_validation_enabled"] = False
+                self.runner_state = self._empty_runner_state()
             else:
                 self.session["session_started_by"] = "persisted_resume"
                 self.config["auto_validation_enabled"] = True
@@ -1861,6 +1930,7 @@ class AutoValidationService:
                 "open_position_sync": self._open_position_sync_diagnostics,
                 "lifecycle_sync": self._lifecycle_sync_diagnostics,
                 "exit_management": self._exit_management_diagnostics,
+                "validation_close_reports": self._validation_close_reports[-30:],
                 "execution_timelines": self._execution_timelines[-100:],
                 "confidence_timeline": self._confidence_timeline,
                 "sent_signal_keys": sorted(self._sent_signal_keys),
@@ -1890,8 +1960,11 @@ class AutoValidationService:
             "break_even_trigger_r": 1.0,
             "trailing_stop_trigger_r": 1.5,
             "trailing_stop_distance_r": 0.75,
-            "exit_stale_minutes": 240,
+            "exit_stale_minutes": 45,
             "exit_stale_min_r": 0.2,
+            "exit_soft_adverse_minutes": 20,
+            "exit_no_progress_minutes": 30,
+            "exit_no_progress_min_r": 0.3,
             "exit_confidence_floor": 40,
             "exit_confidence_drop_points": 25,
             "exit_max_close_retries": 3,
@@ -1900,7 +1973,10 @@ class AutoValidationService:
                     "break_even_trigger_r": 1.0,
                     "trailing_stop_trigger_r": 1.5,
                     "trailing_stop_distance_r": 0.75,
-                    "stale_exit_minutes": 240,
+                    "stale_exit_minutes": 45,
+                    "soft_adverse_minutes": 20,
+                    "no_progress_minutes": 30,
+                    "no_progress_min_r": 0.3,
                     "confidence_floor": 40,
                     "confidence_drop_points": 25,
                     "max_spread": 1.0,
@@ -1910,7 +1986,10 @@ class AutoValidationService:
                     "break_even_trigger_r": 1.0,
                     "trailing_stop_trigger_r": 1.5,
                     "trailing_stop_distance_r": 0.75,
-                    "stale_exit_minutes": 240,
+                    "stale_exit_minutes": 45,
+                    "soft_adverse_minutes": 20,
+                    "no_progress_minutes": 30,
+                    "no_progress_min_r": 0.3,
                     "confidence_floor": 40,
                     "confidence_drop_points": 25,
                     "max_spread": 0.0003,
@@ -1920,7 +1999,10 @@ class AutoValidationService:
                     "break_even_trigger_r": 1.0,
                     "trailing_stop_trigger_r": 1.5,
                     "trailing_stop_distance_r": 0.75,
-                    "stale_exit_minutes": 240,
+                    "stale_exit_minutes": 45,
+                    "soft_adverse_minutes": 20,
+                    "no_progress_minutes": 30,
+                    "no_progress_min_r": 0.3,
                     "confidence_floor": 40,
                     "confidence_drop_points": 25,
                     "max_spread": 5.0,
@@ -2111,6 +2193,79 @@ class AutoValidationService:
             peak = max(peak, equity)
             max_drawdown = max(max_drawdown, peak - equity)
         return round(max_drawdown, 2)
+
+    def _emit_validation_close_reports(self, closed_trades: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        reports: list[dict[str, Any]] = []
+        for trade in closed_trades:
+            report = self._validation_close_report(trade)
+            key = self._close_report_key(report)
+            if key and key in self._reported_close_keys:
+                continue
+            if key:
+                self._reported_close_keys.add(key)
+            self._validation_close_reports.append(report)
+            self._validation_close_reports = self._validation_close_reports[-30:]
+            reports.append(report)
+            self._log("VALIDATION_TRADE_CLOSED_REPORT", report)
+        return reports
+
+    def _validation_close_report(self, trade: dict[str, Any]) -> dict[str, Any]:
+        metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+        setup_type = self._setup_type(trade)
+        confidence = self._number(trade.get("signal_confidence") or metadata.get("confidence"), 0)
+        rr = self._trade_rr(trade)
+        market_session = self._market_session_label(trade, metadata)
+        ticket = str(trade.get("mt5_ticket") or trade.get("ticket") or "")
+        return {
+            "report_type": "VALIDATION_TRADE_CLOSED",
+            "ticket": ticket,
+            "trade_id": str(trade.get("trade_id") or ""),
+            "symbol": str(trade.get("symbol") or "").upper(),
+            "side": str(trade.get("side") or trade.get("action") or "").upper(),
+            "entry": self._number_or_none(trade.get("entry_price") or trade.get("entry")),
+            "exit": self._number_or_none(trade.get("close_price") or trade.get("exit_price")),
+            "pnl": round(self._trade_pnl(trade), 2),
+            "exit_reason": str(trade.get("exit_reason") or "UNKNOWN"),
+            "setup_type": setup_type,
+            "confidence": confidence,
+            "rr": rr,
+            "session": market_session,
+            "validation_session_id": str(trade.get("validation_session_id") or self.session.get("session_id") or ""),
+            "opened_at": str(trade.get("opened_at") or trade.get("created_at") or ""),
+            "closed_at": str(trade.get("closed_at") or trade.get("close_time") or trade.get("updated_at") or ""),
+            "result": str(trade.get("result") or ""),
+            "strategy_profile": str(trade.get("strategy_profile") or metadata.get("strategy_profile") or self.config.get("strategy_profile") or ""),
+            "generated_at": self._timestamp(),
+        }
+
+    def _market_session_label(self, trade: dict[str, Any], metadata: dict[str, Any]) -> str:
+        for source in (trade, metadata):
+            for key in ("session", "market_session", "trading_session", "session_label"):
+                value = str(source.get(key) or "").strip()
+                if value:
+                    return value
+        components = metadata.get("strategy_components") if isinstance(metadata.get("strategy_components"), dict) else {}
+        value = str(components.get("session") or components.get("market_session") or "").strip()
+        if value:
+            return value
+        if "session_valid" in components:
+            return "SESSION_VALID" if components.get("session_valid") else "SESSION_INVALID"
+        return str(trade.get("validation_session_id") or self.session.get("session_id") or "UNKNOWN_SESSION")
+
+    def _close_report_key(self, report: dict[str, Any]) -> str:
+        ticket = str(report.get("ticket") or "")
+        closed_at = str(report.get("closed_at") or "")
+        trade_id = str(report.get("trade_id") or "")
+        return "|".join([ticket, closed_at, trade_id]).strip("|")
+
+    def _number_or_none(self, value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number == number else None
 
     def _trade_pnl(self, trade: dict[str, Any]) -> float:
         for key in ["net_pnl", "profit_loss", "realized_pnl", "total_pnl"]:

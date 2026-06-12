@@ -213,8 +213,8 @@ export function rejectExecutionModeSignal(approvalId: string, reason = "Rejected
   return postJson<ApiRecord>("/execution-mode/reject-signal", { approval_id: approvalId, reason });
 }
 
-export function startAutoValidation() {
-  return postJson<ApiRecord>("/auto-validation/start", {});
+export function startAutoValidation(payload: ApiRecord = {}) {
+  return postJson<ApiRecord>("/auto-validation/start", payload);
 }
 
 export async function fetchAutoValidationStatus() {

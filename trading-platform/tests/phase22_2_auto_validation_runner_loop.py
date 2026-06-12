@@ -250,6 +250,7 @@ class FakeVantageMarket:
 class FakeVantageSender:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.persistent_trade_journal_service = FakeJournal([])
 
     def send_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
@@ -750,6 +751,47 @@ def verify_vantage_demo_collection_symbol_limit_blocks() -> bool:
     return show("DEMO_COLLECTION wrapper blocks only when configured open-position limit is reached", passed, str({"result": result, "duplicate": duplicate}))
 
 
+def verify_vantage_demo_collection_raw_unowned_exposure_blocks() -> bool:
+    current = ready_signal("EURUSD", signal_hash="demo-current-raw-eur-limit")
+    current.update({"symbol": "EURUSD", "signal": "BUY", "entry": 1.15, "stop_loss": 1.148, "take_profit": 1.154, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
+    positions = [{"symbol": "EURUSD", "side": "BUY", "ticket": f"raw-eur-{index}", "volume": 0.01} for index in range(3)]
+    service, sender = _vantage_service_for_revalidation(current, positions)
+    result = service.send_test_order(_demo_collection_vantage_payload("BUY", symbol="EURUSD", stop_loss=1.148, take_profit=1.154, signal_hash="demo-raw-eur-limit"))
+    duplicate = result.get("duplicate_check") or {}
+    blockers = result.get("blocked_reasons") or result.get("blockers") or []
+
+    total_positions = [
+        {"symbol": "EURUSD", "side": "BUY", "ticket": "raw-eur-1", "volume": 0.01},
+        {"symbol": "EURUSD", "side": "SELL", "ticket": "raw-eur-2", "volume": 0.01},
+        {"symbol": "XAUUSD", "side": "BUY", "ticket": "raw-xau-1", "volume": 0.01},
+        {"symbol": "XAUUSD", "side": "SELL", "ticket": "raw-xau-2", "volume": 0.01},
+        {"symbol": "XAUUSD", "side": "BUY", "ticket": "raw-xau-3", "volume": 0.01},
+        {"symbol": "GBPUSD", "side": "BUY", "ticket": "raw-gbp-ignored", "volume": 0.01},
+    ]
+    total_service, total_sender = _vantage_service_for_revalidation(current, total_positions)
+    total_result = total_service.send_test_order(_demo_collection_vantage_payload("BUY", symbol="EURUSD", stop_loss=1.148, take_profit=1.154, signal_hash="demo-raw-total-limit"))
+    total_duplicate = total_result.get("duplicate_check") or {}
+    total_blockers = total_result.get("blocked_reasons") or total_result.get("blockers") or []
+
+    passed = (
+        result["status"] == "BLOCKED"
+        and sender.calls == []
+        and "DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED" in blockers
+        and duplicate.get("duplicate_source") == "max_open_trades_per_symbol_reached"
+        and duplicate.get("symbol_limit_count") == 3
+        and duplicate.get("raw_open_positions_count") == 3
+        and duplicate.get("open_positions_count") == 0
+        and total_result["status"] == "BLOCKED"
+        and total_sender.calls == []
+        and "DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED" in total_blockers
+        and total_duplicate.get("duplicate_source") == "max_open_trades_total_reached"
+        and total_duplicate.get("total_limit_count") == 5
+        and total_duplicate.get("raw_allowed_open_positions_count") == 5
+        and total_duplicate.get("total_open_positions_count") == 0
+    )
+    return show("DEMO_COLLECTION wrapper exposure limits use raw MT5 positions without ownership markers", passed, str({"symbol_duplicate": duplicate, "total_duplicate": total_duplicate, "symbol_result": result, "total_result": total_result}))
+
+
 def verify_vantage_buy_to_sell_direction_change_rejects() -> bool:
     current = ready_signal("XAUUSD", signal_hash="demo-current-sell")
     current.update({"signal": "SELL", "stop_loss": 2410.0, "take_profit": 2380.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
@@ -1000,54 +1042,52 @@ async def verify_start_creates_fresh_user_click_session() -> bool:
         return show("Start creates fresh user_click session and only new AUTO trades increment opened", passed, str({"session": session, "sync": sync, "order": order, "after_order": after_order}))
 
 
-async def verify_demo_collection_limits_ignore_historical_positions_until_current_session_limit() -> bool:
+async def verify_demo_collection_limits_use_raw_mt5_exposure_without_ownership_markers() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
     with tempfile.TemporaryDirectory() as tmp:
-        old_positions = [
-            {"symbol": "XAUUSD", "side": "BUY", "ticket": "old-xau-1", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"},
-            {"symbol": "XAUUSD", "side": "SELL", "ticket": "old-xau-2", "volume": 0.01, "time": "2026-01-01T00:01:00+00:00"},
+        raw_eurusd_positions = [
+            {"symbol": "EURUSD", "side": "BUY", "ticket": f"raw-eur-{index}", "volume": 0.01}
+            for index in range(3)
         ]
-        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="xau-current-1")])
-        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json", positions=list(old_positions))
-        runner = AutoValidationRunner(service)
+        eur_signal = ready_signal("EURUSD", signal_hash="eur-raw-limit")
+        eur_signal.update({"symbol": "EURUSD", "signal": "BUY", "entry": 1.15, "stop_loss": 1.148, "take_profit": 1.154, "risk_reward": 2.0})
+        service, guarded = make_service(FakeSignals([eur_signal]), state_path=Path(tmp) / "state.json", positions=raw_eurusd_positions)
         service.start({"cooldown_after_trade_minutes": 0})
+        symbol_block = await AutoValidationRunner(service).run_tick()
+        symbol_duplicate = service.status()["last_duplicate_check"]
 
-        opened_results = []
-        for index in range(1, 4):
-            signals.signals = [ready_signal("XAUUSD", signal_hash=f"xau-current-{index}")]
-            result = await runner.run_tick()
-            opened_results.append(result["status"])
-            service.position_service.positions.append(
-                {
-                    "symbol": "XAUUSD",
-                    "side": "BUY",
-                    "ticket": f"current-xau-{index}",
-                    "volume": 0.01,
-                    "time": service.session["session_start_time"],
-                    "validation_session_id": service.session["session_id"],
-                    "strategy_profile": "DEMO_COLLECTION",
-                }
-            )
+    with tempfile.TemporaryDirectory() as tmp:
+        raw_allowed_positions = [
+            {"symbol": "EURUSD", "side": "BUY", "ticket": "raw-eur-1", "volume": 0.01},
+            {"symbol": "EURUSD", "side": "SELL", "ticket": "raw-eur-2", "volume": 0.01},
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "raw-xau-1", "volume": 0.01},
+            {"symbol": "XAUUSD", "side": "SELL", "ticket": "raw-xau-2", "volume": 0.01},
+            {"symbol": "GBPUSD", "side": "BUY", "ticket": "raw-gbp-ignored", "volume": 0.01},
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "raw-xau-3", "volume": 0.01},
+        ]
+        xau_signal = ready_signal("XAUUSD", signal_hash="xau-raw-total-limit")
+        service_total, guarded_total = make_service(FakeSignals([xau_signal]), state_path=Path(tmp) / "state.json", positions=raw_allowed_positions)
+        service_total.start({"cooldown_after_trade_minutes": 0})
+        total_block = await AutoValidationRunner(service_total).run_tick()
+        total_duplicate = service_total.status()["last_duplicate_check"]
 
-        signals.signals = [ready_signal("XAUUSD", signal_hash="xau-current-4")]
-        fourth = await runner.run_tick()
-        status = service.status()
-        sync = status["open_position_sync"]
-        duplicate = status["last_duplicate_check"]
-        passed = (
-            opened_results == ["ORDER_SENT", "ORDER_SENT", "ORDER_SENT"]
-            and len(guarded.calls) == 3
-            and fourth["status"] == "BLOCKED"
-            and "MAX_OPEN_TRADES_PER_SYMBOL_REACHED" in fourth["blockers"]
-            and sync["historical_unowned_open_positions"] == 2
-            and sync["current_session_positions"] == 3
-            and sync["current_session_open_positions_by_symbol"] == {"XAUUSD": 3}
-            and duplicate["open_positions_count"] == 3
-            and duplicate["same_side_open_positions_count"] == 3
-            and duplicate["limit_count_source"] == "current_session_positions_only"
-        )
-        return show("DEMO_COLLECTION open-position limits exclude historical MT5 positions and block fourth current XAUUSD", passed, str({"opened": opened_results, "fourth": fourth, "sync": sync, "duplicate": duplicate}))
+    passed = (
+        symbol_block["status"] == "BLOCKED"
+        and "MAX_OPEN_TRADES_PER_SYMBOL_REACHED" in symbol_block["blockers"]
+        and len(guarded.calls) == 0
+        and symbol_duplicate["symbol_limit_count"] == 3
+        and symbol_duplicate["raw_symbol_open_positions_count"] == 3
+        and symbol_duplicate["current_session_symbol_positions_count"] == 0
+        and symbol_duplicate["limit_count_source"] == "max_raw_mt5_current_session_active_journal"
+        and total_block["status"] == "BLOCKED"
+        and "MAX_OPEN_TRADES_TOTAL_REACHED" in total_block["blockers"]
+        and len(guarded_total.calls) == 0
+        and total_duplicate["total_limit_count"] == 5
+        and total_duplicate["raw_allowed_open_positions_count"] == 5
+        and total_duplicate["current_session_total_positions_count"] == 0
+    )
+    return show("DEMO_COLLECTION exposure limits use raw MT5 positions even when ownership markers are missing", passed, str({"symbol_block": symbol_block, "symbol_duplicate": symbol_duplicate, "total_block": total_block, "total_duplicate": total_duplicate}))
 
 
 async def verify_auto_validation_minor_hash_change_does_not_block() -> bool:
@@ -1659,7 +1699,7 @@ async def async_main() -> list[bool]:
         await verify_old_positions_before_start_do_not_count(),
         await verify_not_started_session_zeroes_stale_validation_counters(),
         await verify_start_creates_fresh_user_click_session(),
-        await verify_demo_collection_limits_ignore_historical_positions_until_current_session_limit(),
+        await verify_demo_collection_limits_use_raw_mt5_exposure_without_ownership_markers(),
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),
         await verify_sender_rejection_does_not_halt_and_records_diagnostics(),
@@ -1686,6 +1726,7 @@ def main() -> int:
         verify_vantage_demo_collection_allows_open_position_below_limit(),
         verify_vantage_demo_collection_exact_active_signal_blocks(),
         verify_vantage_demo_collection_symbol_limit_blocks(),
+        verify_vantage_demo_collection_raw_unowned_exposure_blocks(),
         verify_vantage_buy_to_sell_direction_change_rejects(),
         verify_vantage_sell_to_buy_direction_change_rejects(),
         verify_journal_stores_strategy_profile(),

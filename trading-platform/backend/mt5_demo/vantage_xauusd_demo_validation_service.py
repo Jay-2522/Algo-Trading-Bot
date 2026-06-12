@@ -299,11 +299,22 @@ class VantageXAUUSDDemoValidationService:
         else:
             open_positions = raw_symbol_positions
             all_open_positions = raw_all_open_positions
+        raw_allowed_positions = [position for position in raw_all_open_positions if str(position.get("symbol") or "").upper() in self.supported_symbols]
+        active_journal_positions = self._active_journal_open_positions(payload, profile)
+        active_journal_symbol_positions = [trade for trade in active_journal_positions if str(trade.get("symbol") or "").upper() == str(symbol or "").upper()]
+        if profile == "DEMO_COLLECTION":
+            symbol_limit_count = max(len(raw_symbol_positions), len(open_positions), len(active_journal_symbol_positions))
+            total_limit_count = max(len(raw_allowed_positions), len(all_open_positions), len(active_journal_positions))
+            limit_count_source = "max_raw_mt5_current_session_active_journal"
+        else:
+            symbol_limit_count = len(open_positions)
+            total_limit_count = len(all_open_positions)
+            limit_count_source = "all_open_positions"
         same_side_open_positions = [position for position in open_positions if self._position_side(position) == str(side or "").upper()]
         active_signal_sent = key in self._sent_signal_keys
         if profile == "DEMO_COLLECTION":
-            total_limit_reached = len(all_open_positions) >= self.demo_collection_max_open_trades_total
-            symbol_limit_reached = len(open_positions) >= self.demo_collection_max_open_trades_per_symbol
+            total_limit_reached = total_limit_count >= self.demo_collection_max_open_trades_total
+            symbol_limit_reached = symbol_limit_count >= self.demo_collection_max_open_trades_per_symbol
             duplicate = bool(active_signal_sent or total_limit_reached or symbol_limit_reached)
             if active_signal_sent:
                 source = "same_active_signal_already_sent"
@@ -325,8 +336,13 @@ class VantageXAUUSDDemoValidationService:
             "total_open_positions_count": len(all_open_positions),
             "raw_open_positions_count": len(raw_symbol_positions),
             "raw_total_open_positions_count": len(raw_all_open_positions),
+            "raw_allowed_open_positions_count": len(raw_allowed_positions),
+            "active_journal_symbol_positions_count": len(active_journal_symbol_positions),
+            "active_journal_total_positions_count": len(active_journal_positions),
+            "symbol_limit_count": symbol_limit_count,
+            "total_limit_count": total_limit_count,
             "historical_unowned_positions_count": max(len(raw_all_open_positions) - len(all_open_positions), 0),
-            "limit_count_source": "current_session_positions_only" if profile == "DEMO_COLLECTION" else "all_open_positions",
+            "limit_count_source": limit_count_source,
             "same_side_open_positions_count": len(same_side_open_positions),
             "max_open_trades_total": self.demo_collection_max_open_trades_total if profile == "DEMO_COLLECTION" else 1,
             "max_open_trades_per_symbol": self.demo_collection_max_open_trades_per_symbol if profile == "DEMO_COLLECTION" else 1,
@@ -342,6 +358,32 @@ class VantageXAUUSDDemoValidationService:
             "signal_hash": str(payload.get("signal_hash") or ""),
             "timestamp": self._timestamp(),
         }
+
+    def _active_journal_open_positions(self, payload: dict[str, Any], profile: str) -> list[dict[str, Any]]:
+        session_id = str(payload.get("validation_session_id") or "")
+        if not session_id:
+            return []
+        journal = getattr(self.guarded_sender_service, "persistent_trade_journal_service", None)
+        reader = getattr(journal, "list_trades", None)
+        if not callable(reader):
+            return []
+        try:
+            trades = reader(limit=100000)
+        except Exception:
+            return []
+        active_statuses = {"OPEN", "SENT", "PENDING"}
+        active_profile = str(profile or "").upper()
+        return [
+            trade
+            for trade in trades
+            if str(trade.get("validation_session_id") or "") == session_id
+            and str(trade.get("symbol") or "").upper() in self.supported_symbols
+            and str(trade.get("status") or "").upper() in active_statuses
+            and (
+                active_profile != "DEMO_COLLECTION"
+                or str((trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}).get("strategy_profile") or trade.get("strategy_profile") or "").upper() == "DEMO_COLLECTION"
+            )
+        ]
 
     def _demo_collection_limit_positions(self, payload: dict[str, Any], positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [position for position in positions if self._position_belongs_to_payload_session(payload, position)]

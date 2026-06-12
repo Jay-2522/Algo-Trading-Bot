@@ -254,8 +254,10 @@ class AutoValidationService:
         tick = self._tick(symbol)
         current = self._current_signal(symbol)
         active_profile = str(self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
-        open_positions = self._limit_count_positions(self._open_positions(), active_profile)
-        duplicate_check = self._duplicate_check(signal, open_positions)
+        raw_open_positions = self._open_positions()
+        open_positions = self._limit_count_positions(raw_open_positions, active_profile)
+        exposure_counts = self._demo_collection_exposure_counts(symbol, raw_open_positions, open_positions, active_profile)
+        duplicate_check = self._duplicate_check(signal, open_positions, exposure_counts)
         self._last_duplicate_check = duplicate_check
         hash_audit = self._hash_change_audit(signal, current)
 
@@ -282,9 +284,11 @@ class AutoValidationService:
         same_symbol_positions = [item for item in open_positions if str(item.get("symbol") or "").upper() == symbol]
         if duplicate_check["final_duplicate_decision"] is True:
             blockers.append("DUPLICATE_SIGNAL_BLOCKED")
-        if len(open_positions) >= int(config["max_open_trades_total"]):
+        total_open_count = int(exposure_counts.get("total_limit_count", len(open_positions)))
+        same_symbol_open_count = int(exposure_counts.get("symbol_limit_count", len(same_symbol_positions)))
+        if total_open_count >= int(config["max_open_trades_total"]):
             blockers.append("MAX_OPEN_TRADES_TOTAL_REACHED")
-        if len(same_symbol_positions) >= int(config["max_open_trades_per_symbol"]):
+        if same_symbol_open_count >= int(config["max_open_trades_per_symbol"]):
             blockers.append("MAX_OPEN_TRADES_PER_SYMBOL_REACHED")
         if self._daily_trade_count() >= int(config["max_daily_demo_trades"]):
             blockers.append("MAX_DAILY_TRADE_LIMIT_REACHED")
@@ -443,6 +447,56 @@ class AutoValidationService:
         if str(profile or "").upper() != "DEMO_COLLECTION":
             return positions
         return [position for position in positions if self._position_belongs_to_current_session(position)]
+
+    def _demo_collection_exposure_counts(
+        self,
+        symbol: str,
+        raw_positions: list[dict[str, Any]],
+        session_positions: list[dict[str, Any]],
+        profile: str,
+    ) -> dict[str, Any]:
+        allowed_symbols = self._allowed_symbols()
+        raw_allowed_positions = [position for position in raw_positions if str(position.get("symbol") or "").upper() in allowed_symbols]
+        raw_symbol_positions = [position for position in raw_allowed_positions if str(position.get("symbol") or "").upper() == symbol]
+        session_symbol_positions = [position for position in session_positions if str(position.get("symbol") or "").upper() == symbol]
+        active_journal_positions = self._active_journal_open_positions(profile)
+        journal_symbol_positions = [trade for trade in active_journal_positions if str(trade.get("symbol") or "").upper() == symbol]
+        if str(profile or "").upper() == "DEMO_COLLECTION":
+            symbol_limit_count = max(len(raw_symbol_positions), len(session_symbol_positions), len(journal_symbol_positions))
+            total_limit_count = max(len(raw_allowed_positions), len(session_positions), len(active_journal_positions))
+            limit_count_source = "max_raw_mt5_current_session_active_journal"
+        else:
+            symbol_limit_count = len(session_symbol_positions)
+            total_limit_count = len(session_positions)
+            limit_count_source = "profile_positions"
+        return {
+            "symbol_limit_count": symbol_limit_count,
+            "total_limit_count": total_limit_count,
+            "raw_symbol_open_positions_count": len(raw_symbol_positions),
+            "raw_allowed_open_positions_count": len(raw_allowed_positions),
+            "current_session_symbol_positions_count": len(session_symbol_positions),
+            "current_session_total_positions_count": len(session_positions),
+            "active_journal_symbol_positions_count": len(journal_symbol_positions),
+            "active_journal_total_positions_count": len(active_journal_positions),
+            "limit_count_source": limit_count_source,
+        }
+
+    def _active_journal_open_positions(self, profile: str) -> list[dict[str, Any]]:
+        session_id = str(self.session.get("session_id") or "")
+        allowed_symbols = self._allowed_symbols()
+        active_statuses = {"OPEN", "SENT", "PENDING"}
+        active_profile = str(profile or "").upper()
+        return [
+            trade
+            for trade in self.trades()
+            if str(trade.get("validation_session_id") or "") == session_id
+            and str(trade.get("symbol") or "").upper() in allowed_symbols
+            and str(trade.get("status") or "").upper() in active_statuses
+            and (
+                active_profile != "DEMO_COLLECTION"
+                or str((trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}).get("strategy_profile") or trade.get("strategy_profile") or "").upper() == "DEMO_COLLECTION"
+            )
+        ]
 
     def _position_belongs_to_current_session(self, position: dict[str, Any]) -> bool:
         session_id = str(self.session.get("session_id") or "")
@@ -1666,7 +1720,7 @@ class AutoValidationService:
         signal_hash = str(signal.get("signal_hash") or "")
         return "|".join([profile, symbol, side, session_id, signal_hash])
 
-    def _duplicate_check(self, signal: dict[str, Any], open_positions: list[dict[str, Any]]) -> dict[str, Any]:
+    def _duplicate_check(self, signal: dict[str, Any], open_positions: list[dict[str, Any]], exposure_counts: dict[str, Any] | None = None) -> dict[str, Any]:
         key = self._duplicate_key(signal)
         symbol = str(signal.get("symbol") or "").upper()
         side = str(signal.get("signal") or "").upper()
@@ -1703,7 +1757,8 @@ class AutoValidationService:
                     recent_same_side_records.append(trade)
         active_signal_sent = key in self._sent_signal_keys
         demo_collection = profile == "DEMO_COLLECTION"
-        same_side_position_limit_reached = len(same_side_positions) >= int(self.config.get("max_open_trades_per_symbol") or 1)
+        exposure_counts = exposure_counts or {}
+        same_side_position_limit_reached = max(len(same_side_positions), int(exposure_counts.get("symbol_limit_count", 0))) >= int(self.config.get("max_open_trades_per_symbol") or 1)
         if demo_collection:
             duplicate = bool(pending_records or active_signal_sent or recent_same_side_records or same_side_position_limit_reached)
         else:
@@ -1725,7 +1780,15 @@ class AutoValidationService:
             "duplicate_source": source,
             "open_positions_count": len(active_positions),
             "same_side_open_positions_count": len(same_side_positions),
-            "limit_count_source": "current_session_positions_only" if demo_collection else "all_open_positions",
+            "limit_count_source": exposure_counts.get("limit_count_source") or ("current_session_positions_only" if demo_collection else "all_open_positions"),
+            "symbol_limit_count": exposure_counts.get("symbol_limit_count", len(active_positions)),
+            "total_limit_count": exposure_counts.get("total_limit_count", len(open_positions)),
+            "raw_symbol_open_positions_count": exposure_counts.get("raw_symbol_open_positions_count"),
+            "raw_allowed_open_positions_count": exposure_counts.get("raw_allowed_open_positions_count"),
+            "current_session_symbol_positions_count": exposure_counts.get("current_session_symbol_positions_count", len(active_positions)),
+            "current_session_total_positions_count": exposure_counts.get("current_session_total_positions_count", len(open_positions)),
+            "active_journal_symbol_positions_count": exposure_counts.get("active_journal_symbol_positions_count", 0),
+            "active_journal_total_positions_count": exposure_counts.get("active_journal_total_positions_count", 0),
             "pending_orders_count": len(pending_records),
             "matching_journal_records": len(matching_records),
             "recent_same_side_records": len(recent_same_side_records),

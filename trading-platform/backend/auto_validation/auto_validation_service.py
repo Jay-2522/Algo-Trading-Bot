@@ -253,7 +253,8 @@ class AutoValidationService:
         account = self._account_status(signal)
         tick = self._tick(symbol)
         current = self._current_signal(symbol)
-        open_positions = self._open_positions()
+        active_profile = str(self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
+        open_positions = self._limit_count_positions(self._open_positions(), active_profile)
         duplicate_check = self._duplicate_check(signal, open_positions)
         self._last_duplicate_check = duplicate_check
         hash_audit = self._hash_change_audit(signal, current)
@@ -268,7 +269,6 @@ class AutoValidationService:
             blockers.append("LOT_SIZE_EXCEEDS_0_01")
         if signal.get("execution_status") != "READY_FOR_PREVIEW" or signal.get("risk_status") != "APPROVED":
             blockers.append("SIGNAL_NOT_READY_APPROVED")
-        active_profile = str(self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
         if active_profile in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
             if str(signal.get("strategy_profile") or "").upper() != active_profile:
                 blockers.append("STRATEGY_PROFILE_MISMATCH")
@@ -336,6 +336,8 @@ class AutoValidationService:
                 "demo_risk_model": signal.get("demo_risk_model"),
             },
             "validation_session_id": self.session["session_id"],
+            "validation_session_start_time": self.session.get("session_start_time") or self.session.get("started_at"),
+            "session_started_by": self.session.get("session_started_by"),
             "execution_mode": "AUTO_VALIDATION",
             "broker_source": source.get("broker_source") or source.get("source") or "VANTAGE_DEMO",
             "account_login": source.get("account_login"),
@@ -437,6 +439,17 @@ class AutoValidationService:
         positions = result.get("positions", []) if isinstance(result, dict) else []
         return positions if isinstance(positions, list) else []
 
+    def _limit_count_positions(self, positions: list[dict[str, Any]], profile: str) -> list[dict[str, Any]]:
+        if str(profile or "").upper() != "DEMO_COLLECTION":
+            return positions
+        return [position for position in positions if self._position_belongs_to_current_session(position)]
+
+    def _position_belongs_to_current_session(self, position: dict[str, Any]) -> bool:
+        session_id = str(self.session.get("session_id") or "")
+        if session_id and str(position.get("validation_session_id") or "") == session_id:
+            return True
+        return self._position_has_auto_validation_marker(position) and self._position_opened_after_session_start(position)
+
     def _reconcile_open_mt5_positions(self) -> list[dict[str, Any]]:
         session_id = str(self.session.get("session_id") or "")
         if not self._has_current_user_session():
@@ -450,6 +463,8 @@ class AutoValidationService:
                 "historical_positions": len(positions),
                 "validation_positions": 0,
                 "current_session_positions": 0,
+                "current_session_open_positions_by_symbol": {},
+                "limit_count_source": "current_session_positions_only",
                 "unmatched_open_position_tickets": [self._position_ticket(position) for position in positions if self._position_ticket(position)],
                 "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in positions if self._position_ticket(position)],
                 "timestamp": self._timestamp(),
@@ -471,7 +486,7 @@ class AutoValidationService:
             position_session = str(position.get("validation_session_id") or "")
             symbol = str(position.get("symbol") or "").upper()
             allowed_position = symbol in allowed_symbols
-            auto_owned = matched_trade is not None or position_session == session_id or (self._position_has_auto_validation_marker(position) and self._position_opened_after_session_start(position))
+            auto_owned = matched_trade is not None or position_session == session_id or self._position_belongs_to_current_session(position)
             if not auto_owned:
                 unmatched_positions.append(position)
                 continue
@@ -490,12 +505,22 @@ class AutoValidationService:
             "historical_positions": len(unmatched_positions),
             "validation_positions": len(session_positions),
             "current_session_positions": len(session_positions),
+            "current_session_open_positions_by_symbol": self._positions_by_symbol(session_positions),
+            "limit_count_source": "current_session_positions_only",
             "open_position_tickets": [self._position_ticket(position) for position in session_positions if self._position_ticket(position)],
             "unmatched_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
             "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
             "timestamp": self._timestamp(),
         }
         return session_positions
+
+    def _positions_by_symbol(self, positions: list[dict[str, Any]]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for position in positions:
+            symbol = str(position.get("symbol") or "").upper()
+            if symbol:
+                counts[symbol] = counts.get(symbol, 0) + 1
+        return counts
 
     def _record_opened_trade_from_sender(self, signal: dict[str, Any], payload: dict[str, Any], result: dict[str, Any]) -> None:
         if self.journal_service is None or not hasattr(self.journal_service, "record_open_position"):
@@ -1176,6 +1201,8 @@ class AutoValidationService:
             "historical_positions": 0,
             "validation_positions": 0,
             "current_session_positions": 0,
+            "current_session_open_positions_by_symbol": {},
+            "limit_count_source": "current_session_positions_only",
             "open_position_tickets": [],
             "unmatched_open_position_tickets": [],
             "historical_unowned_open_position_tickets": [],
@@ -1698,6 +1725,7 @@ class AutoValidationService:
             "duplicate_source": source,
             "open_positions_count": len(active_positions),
             "same_side_open_positions_count": len(same_side_positions),
+            "limit_count_source": "current_session_positions_only" if demo_collection else "all_open_positions",
             "pending_orders_count": len(pending_records),
             "matching_journal_records": len(matching_records),
             "recent_same_side_records": len(recent_same_side_records),

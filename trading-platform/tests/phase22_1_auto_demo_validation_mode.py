@@ -242,8 +242,17 @@ def verify_risk_blocks() -> bool:
     invalid_sl_result = invalid_sl_service.run_once([signal(stop_loss=2360.0, take_profit=2365.0, signal_hash="invalid-sl-tp")])
     checks.append("SL_TP_REQUIRED" in invalid_sl_result["blockers"])
 
-    open_service, _ = make_service(positions=[{"symbol": "XAUUSD", "side": "BUY"} for _ in range(5)])
+    open_service, _ = make_service(positions=[])
     open_service.start()
+    open_service.position_service.positions = [
+        {
+            "symbol": "XAUUSD",
+            "side": "BUY",
+            "validation_session_id": open_service.session["session_id"],
+            "time": open_service.session["session_start_time"],
+        }
+        for _ in range(5)
+    ]
     checks.append("MAX_OPEN_TRADES_TOTAL_REACHED" in open_service.run_once([signal(signal_hash="open")])["blockers"])
 
     sell_signal = signal(signal="SELL", stop_loss=2360.0, take_profit=2340.0, signal_hash="opposite-side")

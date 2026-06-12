@@ -664,6 +664,7 @@ def _demo_collection_vantage_payload(side: str = "SELL", **overrides: Any) -> di
         "live_execution_enabled": False,
         "broker_execution_enabled": False,
         "validation_session_id": "demo-validation-test",
+        "validation_session_start_time": "2026-06-12T00:00:00+00:00",
     }
     payload.update(overrides)
     return payload
@@ -699,11 +700,13 @@ def verify_vantage_demo_collection_allows_open_position_below_limit() -> bool:
     passed = (
         result["status"] == "DEMO_ORDER_SENT"
         and len(sender.calls) == 1
-        and duplicate.get("open_positions_count") == 1
+        and duplicate.get("raw_open_positions_count") == 1
+        and duplicate.get("open_positions_count") == 0
+        and duplicate.get("historical_unowned_positions_count") == 1
         and duplicate.get("final_duplicate_decision") is False
         and duplicate.get("duplicate_source") == "none"
     )
-    return show("DEMO_COLLECTION wrapper allows new trade when open-position limits are still available", passed, str({"result": result, "duplicate": duplicate}))
+    return show("DEMO_COLLECTION wrapper ignores historical/unowned open positions for limits", passed, str({"result": result, "duplicate": duplicate}))
 
 
 def verify_vantage_demo_collection_exact_active_signal_blocks() -> bool:
@@ -729,9 +732,9 @@ def verify_vantage_demo_collection_symbol_limit_blocks() -> bool:
     current = ready_signal("XAUUSD", signal_hash="demo-current-symbol-limit")
     current.update({"signal": "SELL", "stop_loss": 2410.0, "take_profit": 2380.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
     positions = [
-        {"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-1", "volume": 0.01},
-        {"symbol": "XAUUSD", "side": "SELL", "ticket": "existing-2", "volume": 0.01},
-        {"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-3", "volume": 0.01},
+        {"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-1", "volume": 0.01, "validation_session_id": "demo-validation-test"},
+        {"symbol": "XAUUSD", "side": "SELL", "ticket": "existing-2", "volume": 0.01, "validation_session_id": "demo-validation-test"},
+        {"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-3", "volume": 0.01, "validation_session_id": "demo-validation-test"},
     ]
     service, sender = _vantage_service_for_revalidation(current, positions)
     result = service.send_test_order(_demo_collection_vantage_payload("SELL", signal_hash="demo-symbol-limit"))
@@ -995,6 +998,56 @@ async def verify_start_creates_fresh_user_click_session() -> bool:
             and after_order["orders_created"] == 1
         )
         return show("Start creates fresh user_click session and only new AUTO trades increment opened", passed, str({"session": session, "sync": sync, "order": order, "after_order": after_order}))
+
+
+async def verify_demo_collection_limits_ignore_historical_positions_until_current_session_limit() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        old_positions = [
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "old-xau-1", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"},
+            {"symbol": "XAUUSD", "side": "SELL", "ticket": "old-xau-2", "volume": 0.01, "time": "2026-01-01T00:01:00+00:00"},
+        ]
+        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="xau-current-1")])
+        service, guarded = make_service(signals, state_path=Path(tmp) / "state.json", positions=list(old_positions))
+        runner = AutoValidationRunner(service)
+        service.start({"cooldown_after_trade_minutes": 0})
+
+        opened_results = []
+        for index in range(1, 4):
+            signals.signals = [ready_signal("XAUUSD", signal_hash=f"xau-current-{index}")]
+            result = await runner.run_tick()
+            opened_results.append(result["status"])
+            service.position_service.positions.append(
+                {
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                    "ticket": f"current-xau-{index}",
+                    "volume": 0.01,
+                    "time": service.session["session_start_time"],
+                    "validation_session_id": service.session["session_id"],
+                    "strategy_profile": "DEMO_COLLECTION",
+                }
+            )
+
+        signals.signals = [ready_signal("XAUUSD", signal_hash="xau-current-4")]
+        fourth = await runner.run_tick()
+        status = service.status()
+        sync = status["open_position_sync"]
+        duplicate = status["last_duplicate_check"]
+        passed = (
+            opened_results == ["ORDER_SENT", "ORDER_SENT", "ORDER_SENT"]
+            and len(guarded.calls) == 3
+            and fourth["status"] == "BLOCKED"
+            and "MAX_OPEN_TRADES_PER_SYMBOL_REACHED" in fourth["blockers"]
+            and sync["historical_unowned_open_positions"] == 2
+            and sync["current_session_positions"] == 3
+            and sync["current_session_open_positions_by_symbol"] == {"XAUUSD": 3}
+            and duplicate["open_positions_count"] == 3
+            and duplicate["same_side_open_positions_count"] == 3
+            and duplicate["limit_count_source"] == "current_session_positions_only"
+        )
+        return show("DEMO_COLLECTION open-position limits exclude historical MT5 positions and block fourth current XAUUSD", passed, str({"opened": opened_results, "fourth": fourth, "sync": sync, "duplicate": duplicate}))
 
 
 async def verify_auto_validation_minor_hash_change_does_not_block() -> bool:
@@ -1551,6 +1604,8 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Historical Positions",
         "Validation Positions",
         "Current Session Positions",
+        "Current Session By Symbol",
+        "Limit Count Source",
         "Last Duplicate Check",
         "duplicate_key",
         "duplicate_source",
@@ -1604,6 +1659,7 @@ async def async_main() -> list[bool]:
         await verify_old_positions_before_start_do_not_count(),
         await verify_not_started_session_zeroes_stale_validation_counters(),
         await verify_start_creates_fresh_user_click_session(),
+        await verify_demo_collection_limits_ignore_historical_positions_until_current_session_limit(),
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),
         await verify_sender_rejection_does_not_halt_and_records_diagnostics(),

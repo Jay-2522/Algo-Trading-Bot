@@ -288,13 +288,19 @@ class VantageXAUUSDDemoValidationService:
 
     def _duplicate_check(self, payload: dict[str, Any], symbol: str, side: str) -> dict[str, Any]:
         key = self._duplicate_key(payload, symbol, side)
-        open_positions = self._open_positions(symbol)
-        all_open_positions = self._all_open_positions()
-        if not all_open_positions:
-            all_open_positions = open_positions
+        raw_symbol_positions = self._open_positions(symbol)
+        raw_all_open_positions = self._all_open_positions()
+        if not raw_all_open_positions:
+            raw_all_open_positions = raw_symbol_positions
+        profile = str(payload.get("strategy_profile") or "").upper()
+        if profile == "DEMO_COLLECTION":
+            open_positions = self._demo_collection_limit_positions(payload, raw_symbol_positions)
+            all_open_positions = self._demo_collection_limit_positions(payload, raw_all_open_positions)
+        else:
+            open_positions = raw_symbol_positions
+            all_open_positions = raw_all_open_positions
         same_side_open_positions = [position for position in open_positions if self._position_side(position) == str(side or "").upper()]
         active_signal_sent = key in self._sent_signal_keys
-        profile = str(payload.get("strategy_profile") or "").upper()
         if profile == "DEMO_COLLECTION":
             total_limit_reached = len(all_open_positions) >= self.demo_collection_max_open_trades_total
             symbol_limit_reached = len(open_positions) >= self.demo_collection_max_open_trades_per_symbol
@@ -317,6 +323,10 @@ class VantageXAUUSDDemoValidationService:
             "duplicate_source": source,
             "open_positions_count": len(open_positions),
             "total_open_positions_count": len(all_open_positions),
+            "raw_open_positions_count": len(raw_symbol_positions),
+            "raw_total_open_positions_count": len(raw_all_open_positions),
+            "historical_unowned_positions_count": max(len(raw_all_open_positions) - len(all_open_positions), 0),
+            "limit_count_source": "current_session_positions_only" if profile == "DEMO_COLLECTION" else "all_open_positions",
             "same_side_open_positions_count": len(same_side_open_positions),
             "max_open_trades_total": self.demo_collection_max_open_trades_total if profile == "DEMO_COLLECTION" else 1,
             "max_open_trades_per_symbol": self.demo_collection_max_open_trades_per_symbol if profile == "DEMO_COLLECTION" else 1,
@@ -332,6 +342,38 @@ class VantageXAUUSDDemoValidationService:
             "signal_hash": str(payload.get("signal_hash") or ""),
             "timestamp": self._timestamp(),
         }
+
+    def _demo_collection_limit_positions(self, payload: dict[str, Any], positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [position for position in positions if self._position_belongs_to_payload_session(payload, position)]
+
+    def _position_belongs_to_payload_session(self, payload: dict[str, Any], position: dict[str, Any]) -> bool:
+        session_id = str(payload.get("validation_session_id") or "")
+        if session_id and str(position.get("validation_session_id") or "") == session_id:
+            return True
+        return self._position_has_auto_validation_marker(position) and self._position_opened_after_session_start(payload, position)
+
+    def _position_has_auto_validation_marker(self, position: dict[str, Any]) -> bool:
+        profile = str(position.get("strategy_profile") or position.get("execution_mode") or "").upper()
+        if profile in {"DEMO_COLLECTION", "AUTO_VALIDATION"}:
+            return True
+        comment = str(position.get("comment") or position.get("external_id") or position.get("magic_comment") or "").upper()
+        return "AUTO" in comment or "GUARDED" in comment or "VALIDATION" in comment
+
+    def _position_opened_after_session_start(self, payload: dict[str, Any], position: dict[str, Any]) -> bool:
+        session_start = str(payload.get("validation_session_start_time") or payload.get("session_start_time") or "")
+        opened_at = (
+            position.get("validation_session_started_at")
+            or position.get("auto_validation_opened_at")
+            or position.get("opened_at")
+            or position.get("time_update")
+            or position.get("time")
+            or position.get("time_msc")
+        )
+        if not session_start or opened_at in {None, ""}:
+            return False
+        session_dt = self._parse_time(session_start)
+        position_dt = self._parse_time(opened_at)
+        return bool(session_dt and position_dt and position_dt >= session_dt)
 
     def _open_positions(self, symbol: str) -> list[dict[str, Any]]:
         try:
@@ -472,11 +514,24 @@ class VantageXAUUSDDemoValidationService:
     def _signal_age_seconds(self, value: Any) -> float | None:
         if not value:
             return None
-        try:
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
-        except ValueError:
+        parsed = self._parse_time(value)
+        if parsed is None:
             return None
         return (datetime.now(timezone.utc) - parsed).total_seconds()
+
+    def _parse_time(self, value: Any) -> datetime | None:
+        if isinstance(value, (int, float)):
+            try:
+                return datetime.fromtimestamp(float(value), tz=timezone.utc)
+            except (OSError, OverflowError, ValueError):
+                return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     def _broker_detected(self, account: dict[str, Any]) -> str | None:
         server = str(account.get("server") or "").lower()

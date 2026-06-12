@@ -1096,6 +1096,10 @@ function AutoValidationPanel({
   const senderRejection = asRecord(status?.last_sender_rejection ?? decision?.last_sender_rejection);
   const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
   const openPositionSync = asRecord(status?.open_position_sync);
+  const currentSessionPositionsBySymbol = asRecord(openPositionSync?.current_session_open_positions_by_symbol);
+  const currentSessionPositionsText = currentSessionPositionsBySymbol
+    ? Object.entries(currentSessionPositionsBySymbol).map(([symbol, count]) => `${symbol}: ${String(count)}`).join(", ") || "None"
+    : "None";
   const executionTimeline = asRecord(decision?.execution_timeline ?? asRecord(status?.post_sender_execution_summary)?.latest_timeline);
   const senderResult = asRecord(decision?.sender_result);
   const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
@@ -1306,6 +1310,8 @@ function AutoValidationPanel({
           <Metric label="Historical Positions" value={String(readNumber(openPositionSync, ["historical_positions"], 0))} compact />
           <Metric label="Validation Positions" value={String(readNumber(openPositionSync, ["validation_positions"], 0))} compact />
           <Metric label="Current Session Positions" value={String(readNumber(openPositionSync, ["current_session_positions"], 0))} compact />
+          <Metric label="Current Session By Symbol" value={currentSessionPositionsText} compact />
+          <Metric label="Limit Count Source" value={readText(openPositionSync, ["limit_count_source"], "current_session_positions_only").replaceAll("_", " ")} compact />
           <Metric label="Open Tickets" value={Array.isArray(openPositionSync?.open_position_tickets) && openPositionSync.open_position_tickets.length ? openPositionSync.open_position_tickets.map(String).join(", ") : "None"} compact />
           <Metric label="Sync Time" value={formatTradeTime(readText(openPositionSync, ["timestamp"], ""))} compact />
         </div>

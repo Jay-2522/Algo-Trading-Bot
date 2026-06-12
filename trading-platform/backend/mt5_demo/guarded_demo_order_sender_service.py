@@ -72,6 +72,20 @@ class GuardedDemoOrderSenderService:
             return result
         return self._handle(payload, require_final_flag=True)
 
+    def modify_demo_position_stop(self, payload: dict[str, Any] | None) -> dict[str, Any]:
+        payload = payload or {}
+        blockers = self._validate_demo_exit_payload(payload, require_stop=True)
+        if blockers:
+            return self._exit_result("BLOCKED", payload, blockers, "Exit stop modification blocked by guarded sender.")
+        return self._modify_position_stop(payload)
+
+    def close_demo_position(self, payload: dict[str, Any] | None) -> dict[str, Any]:
+        payload = payload or {}
+        blockers = self._validate_demo_exit_payload(payload, require_stop=False)
+        if blockers:
+            return self._exit_result("BLOCKED", payload, blockers, "Position close blocked by guarded sender.")
+        return self._close_position(payload)
+
     def get_latest(self) -> dict[str, Any]:
         if self._history:
             return self._history[-1]
@@ -169,6 +183,153 @@ class GuardedDemoOrderSenderService:
         if readiness.get("overall_status") != "READY":
             blockers.append("READINESS_NOT_READY")
         return blockers
+
+    def _validate_demo_exit_payload(self, payload: dict[str, Any], require_stop: bool) -> list[str]:
+        blockers: list[str] = []
+        symbol = str(payload.get("symbol") or "").strip().upper()
+        ticket = self._positive_int(payload.get("position_ticket") or payload.get("ticket")) or 0
+        volume = self._float_or_none(payload.get("close_volume") or payload.get("volume") or payload.get("lot"))
+        account_status = self.mt5_demo_service.get_status()
+        if payload.get("environment") != "DEMO":
+            blockers.append("ENVIRONMENT_MUST_BE_DEMO")
+        if symbol not in self.allowed_symbols:
+            blockers.append("INVALID_SYMBOL")
+        if ticket <= 0:
+            blockers.append("POSITION_TICKET_REQUIRED")
+        if volume is None or volume <= 0 or volume > self.max_demo_lot:
+            blockers.append("EXIT_VOLUME_MUST_BE_0_01_OR_LESS")
+        if require_stop and (self._float_or_none(payload.get("stop_loss")) is None or self._float_or_none(payload.get("stop_loss")) <= 0):
+            blockers.append("STOP_LOSS_REQUIRED")
+        if payload.get("live_execution_enabled") is True:
+            blockers.append("LIVE_TRADING_ENABLED")
+        if payload.get("broker_execution_enabled") is True:
+            blockers.append("PRODUCTION_BROKER_EXECUTION_ENABLED")
+        if payload.get("execution_allowed") is True:
+            blockers.append("UNRESTRICTED_EXECUTION_FLAG_ENABLED")
+        if payload.get("strategy_profile") != "DEMO_COLLECTION":
+            blockers.append("DEMO_COLLECTION_REQUIRED")
+        if account_status.get("status") != "CONNECTED" or account_status.get("account_type", "DEMO") != "DEMO":
+            blockers.append("MT5_DEMO_ACCOUNT_NOT_VALIDATED")
+        server = str(account_status.get("server") or "").lower()
+        if "vantage" not in server:
+            blockers.append("VANTAGE_DEMO_REQUIRED")
+        return blockers
+
+    def _modify_position_stop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        initialized = False
+        try:
+            if mt5 is None:
+                return self._exit_result("EXIT_FAILED", payload, ["MT5_UNAVAILABLE"], f"MetaTrader5 package unavailable: {MT5_IMPORT_ERROR}")
+            initialized = bool(mt5.initialize())
+            if not initialized:
+                return self._exit_result("EXIT_FAILED", payload, ["MT5_INITIALIZE_FAILED"], f"MT5 initialize failed: {mt5.last_error()}")
+            account = mt5.account_info()
+            if not self._is_demo_account(account):
+                return self._exit_result("BLOCKED", payload, ["MT5_ACCOUNT_IS_NOT_DEMO"], "MT5 account is not confirmed as DEMO.", account=account)
+            request = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "position": self._positive_int(payload.get("position_ticket") or payload.get("ticket")) or 0,
+                "symbol": str(payload.get("symbol") or "").upper(),
+                "sl": float(payload.get("stop_loss")),
+                "tp": self._float_or_none(payload.get("take_profit")) or 0.0,
+                "magic": 17001,
+                "comment": f"AUTO_EXIT_{str(payload.get('exit_reason') or 'SL_UPDATE')[:18]}",
+            }
+            result = mt5.order_send(request)
+            retcode = getattr(result, "retcode", None)
+            success_codes = {getattr(mt5, "TRADE_RETCODE_DONE", None), getattr(mt5, "TRADE_RETCODE_PLACED", None)}
+            ok = retcode in {code for code in success_codes if code is not None}
+            return self._exit_result(
+                "SLTP_MODIFIED" if ok else "EXIT_FAILED",
+                payload,
+                [] if ok else ["SLTP_MODIFY_FAILED"],
+                str(getattr(result, "comment", "")),
+                account=account,
+                retcode=retcode,
+                mt5_result={"retcode": retcode, "comment": str(getattr(result, "comment", ""))},
+            )
+        except Exception as exc:  # pragma: no cover - depends on terminal state
+            return self._exit_result("EXIT_FAILED", payload, ["GUARDED_EXIT_EXCEPTION"], str(exc))
+        finally:
+            if initialized:
+                mt5.shutdown()
+
+    def _close_position(self, payload: dict[str, Any]) -> dict[str, Any]:
+        initialized = False
+        try:
+            if mt5 is None:
+                return self._exit_result("EXIT_FAILED", payload, ["MT5_UNAVAILABLE"], f"MetaTrader5 package unavailable: {MT5_IMPORT_ERROR}")
+            initialized = bool(mt5.initialize())
+            if not initialized:
+                return self._exit_result("EXIT_FAILED", payload, ["MT5_INITIALIZE_FAILED"], f"MT5 initialize failed: {mt5.last_error()}")
+            account = mt5.account_info()
+            if not self._is_demo_account(account):
+                return self._exit_result("BLOCKED", payload, ["MT5_ACCOUNT_IS_NOT_DEMO"], "MT5 account is not confirmed as DEMO.", account=account)
+            ticket = self._positive_int(payload.get("position_ticket") or payload.get("ticket")) or 0
+            positions = mt5.positions_get(ticket=ticket) or []
+            position = positions[0] if positions else None
+            if position is None:
+                return self._exit_result("EXIT_FAILED", payload, ["POSITION_NOT_FOUND"], "Position is no longer open.", account=account)
+            symbol = str(getattr(position, "symbol", payload.get("symbol") or "") or "").upper()
+            position_type = getattr(position, "type", None)
+            close_buy_position = position_type == getattr(mt5, "POSITION_TYPE_BUY", 0) or str(payload.get("side") or "").upper() == "BUY"
+            tick = mt5.symbol_info_tick(symbol)
+            if tick is None:
+                return self._exit_result("EXIT_FAILED", payload, ["TICK_UNAVAILABLE"], f"No MT5 tick available for {symbol}.", account=account)
+            price = float(getattr(tick, "bid", 0.0) if close_buy_position else getattr(tick, "ask", 0.0))
+            if price <= 0:
+                return self._exit_result("EXIT_FAILED", payload, ["EXIT_PRICE_UNAVAILABLE"], "No valid close price available.", account=account)
+            requested_volume = min(float(payload.get("close_volume") or payload.get("volume") or payload.get("lot") or 0.0), float(getattr(position, "volume", 0.0) or 0.0))
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "position": ticket,
+                "symbol": symbol,
+                "volume": requested_volume,
+                "type": mt5.ORDER_TYPE_SELL if close_buy_position else mt5.ORDER_TYPE_BUY,
+                "price": price,
+                "deviation": 20,
+                "magic": 17001,
+                "comment": f"AUTO_EXIT_{str(payload.get('exit_reason') or 'CLOSE')[:18]}",
+                "type_time": mt5.ORDER_TIME_GTC,
+            }
+            attempts: list[dict[str, Any]] = []
+            final_result = None
+            final_retcode = None
+            final_comment = ""
+            sent = False
+            for filling_mode in self._build_filling_mode_candidates(mt5.symbol_info(symbol)):
+                request["type_filling"] = filling_mode
+                final_result = mt5.order_send(dict(request))
+                final_retcode = getattr(final_result, "retcode", None)
+                final_comment = str(getattr(final_result, "comment", ""))
+                attempts.append({"mode": filling_mode, "retcode": final_retcode, "comment": final_comment})
+                success_codes = {getattr(mt5, "TRADE_RETCODE_DONE", None), getattr(mt5, "TRADE_RETCODE_PLACED", None)}
+                sent = final_retcode in {code for code in success_codes if code is not None}
+                if sent or final_retcode != 10030:
+                    break
+            status = "POSITION_CLOSED" if sent and requested_volume >= float(getattr(position, "volume", 0.0) or 0.0) else "POSITION_PARTIALLY_CLOSED" if sent else "EXIT_FAILED"
+            return self._exit_result(
+                status,
+                payload,
+                [] if sent else ["POSITION_CLOSE_FAILED"],
+                final_comment,
+                account=account,
+                retcode=final_retcode,
+                mt5_result={
+                    "retcode": final_retcode,
+                    "comment": final_comment,
+                    "order": getattr(final_result, "order", 0) if final_result is not None else 0,
+                    "deal": getattr(final_result, "deal", 0) if final_result is not None else 0,
+                    "filling_mode_attempts": attempts,
+                    "requested_volume": requested_volume,
+                    "position_volume": float(getattr(position, "volume", 0.0) or 0.0),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - depends on terminal state
+            return self._exit_result("EXIT_FAILED", payload, ["GUARDED_EXIT_EXCEPTION"], str(exc))
+        finally:
+            if initialized:
+                mt5.shutdown()
 
     def _duplicate_key(self, payload: dict[str, Any]) -> str:
         profile = str(payload.get("strategy_profile") or "").upper()
@@ -522,6 +683,46 @@ class GuardedDemoOrderSenderService:
             "timestamp": self._timestamp(),
         }
 
+    def _exit_result(
+        self,
+        status: str,
+        payload: dict[str, Any],
+        blockers: list[str],
+        reason: str,
+        account: Any = None,
+        retcode: Any = None,
+        mt5_result: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "request_id": f"guarded-demo-exit-{uuid4()}",
+            "status": status,
+            "environment": "DEMO",
+            "symbol": str(payload.get("symbol") or "").strip().upper(),
+            "ticket": str(payload.get("position_ticket") or payload.get("ticket") or ""),
+            "position_ticket": str(payload.get("position_ticket") or payload.get("ticket") or ""),
+            "side": str(payload.get("side") or payload.get("action") or "").strip().upper(),
+            "volume": self._float_or_none(payload.get("volume") or payload.get("lot")),
+            "close_volume": self._float_or_none(payload.get("close_volume")),
+            "stop_loss": self._float_or_none(payload.get("stop_loss")),
+            "take_profit": self._float_or_none(payload.get("take_profit")),
+            "exit_reason": str(payload.get("exit_reason") or ""),
+            "blockers": blockers,
+            "failed_guard": blockers[0] if blockers else "",
+            "reason": reason,
+            "retcode": str(retcode) if retcode is not None else "",
+            "mt5_result": mt5_result or {},
+            "account_login": str(getattr(account, "login", "")) if account else "",
+            "server": str(getattr(account, "server", "")) if account else "",
+            "demo_exit_attempted": status != "BLOCKED",
+            "mt5_order_sent": status in {"SLTP_MODIFIED", "POSITION_CLOSED", "POSITION_PARTIALLY_CLOSED"},
+            "live_order_attempted": False,
+            "execution_allowed": False,
+            "simulation_only": False if status != "BLOCKED" else True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "timestamp": self._timestamp(),
+        }
+
     def _result(
         self,
         status: str,
@@ -567,6 +768,14 @@ class GuardedDemoOrderSenderService:
             "tp": self._float_or_none(payload.get("take_profit")),
             "comment": "GUARDED_DEMO_PREPARE_ONLY",
         }
+
+    def _is_demo_account(self, account: Any) -> bool:
+        if account is None:
+            return False
+        server = str(getattr(account, "server", "") or "")
+        demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", None) if mt5 is not None else None
+        account_trade_mode = getattr(account, "trade_mode", None)
+        return "demo" in server.lower() or (demo_mode is not None and account_trade_mode == demo_mode)
 
     def _rejection_diagnostics(self, payload: dict[str, Any], blockers: list[str], reason: str, account: Any = None, retcode: Any = None) -> dict[str, Any]:
         account_status = {}

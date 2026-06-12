@@ -15,6 +15,7 @@ import {
   pauseAutoValidation,
   rejectExecutionModeSignal,
   resumeAutoValidation,
+  runAutoValidationExitManagement,
   sendGuardedClientDemoTrade,
   setExecutionMode,
   startAutoValidation,
@@ -270,6 +271,7 @@ export function DashboardShell(_: {
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [positionsSyncState, setPositionsSyncState] = useState<{ loading: boolean; message: string; error: string }>({ loading: false, message: "", error: "" });
   const [lifecycleSyncState, setLifecycleSyncState] = useState<{ loading: boolean; message: string; error: string }>({ loading: false, message: "", error: "" });
+  const [exitManagementState, setExitManagementState] = useState<{ loading: boolean; message: string; error: string }>({ loading: false, message: "", error: "" });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [workingAction, setWorkingAction] = useState<string | null>(null);
   const [heldReadySignals, setHeldReadySignals] = useState<HeldSignals>({});
@@ -580,18 +582,21 @@ export function DashboardShell(_: {
     }
   }
 
-  async function handleSync(action: "positions" | "lifecycle") {
+  async function handleSync(action: "positions" | "lifecycle" | "exit-management") {
     setWorkingAction(action);
     setTradeError(null);
-    const setState = action === "positions" ? setPositionsSyncState : setLifecycleSyncState;
+    const setState = action === "positions" ? setPositionsSyncState : action === "lifecycle" ? setLifecycleSyncState : setExitManagementState;
     setState({ loading: true, message: "", error: "" });
     try {
       if (action === "positions") {
         await syncClientPositionsToJournal();
         setState({ loading: false, message: "Positions refreshed.", error: "" });
-      } else {
+      } else if (action === "lifecycle") {
         const result = await syncAutoValidationLifecycle();
         setState({ loading: false, message: readText(result, ["message"], "AUTO lifecycle synchronized."), error: "" });
+      } else {
+        const result = await runAutoValidationExitManagement();
+        setState({ loading: false, message: readText(result, ["message"], "Exit management evaluated."), error: "" });
       }
       await refresh();
     } catch (error) {
@@ -676,15 +681,21 @@ export function DashboardShell(_: {
               <button className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-500/20" onClick={() => void handleSync("lifecycle")} type="button">
                 {lifecycleSyncState.loading ? "Syncing Lifecycle..." : "Sync Lifecycle"}
               </button>
+              <button className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-500/20" onClick={() => void handleSync("exit-management")} type="button">
+                {exitManagementState.loading ? "Checking Exits..." : "Run Exit Management"}
+              </button>
             </div>
           </div>
-          {positionsSyncState.error || lifecycleSyncState.error || positionsSyncState.message || lifecycleSyncState.message ? (
-            <div className="mt-4 grid gap-2 text-sm font-bold sm:grid-cols-2">
+          {positionsSyncState.error || lifecycleSyncState.error || exitManagementState.error || positionsSyncState.message || lifecycleSyncState.message || exitManagementState.message ? (
+            <div className="mt-4 grid gap-2 text-sm font-bold sm:grid-cols-3">
               <p className={positionsSyncState.error ? "text-rose-200" : "text-emerald-300"}>
                 Refresh Positions: {positionsSyncState.error || positionsSyncState.message || "Idle"}
               </p>
               <p className={lifecycleSyncState.error ? "text-rose-200" : "text-emerald-300"}>
                 Sync Lifecycle: {lifecycleSyncState.error || lifecycleSyncState.message || "Idle"}
+              </p>
+              <p className={exitManagementState.error ? "text-rose-200" : "text-emerald-300"}>
+                Exit Management: {exitManagementState.error || exitManagementState.message || "Idle"}
               </p>
             </div>
           ) : null}
@@ -1116,6 +1127,10 @@ function AutoValidationPanel({
   const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
   const openPositionSync = asRecord(status?.open_position_sync);
   const lifecycleSync = asRecord(status?.lifecycle_sync);
+  const exitManagement = asRecord(status?.exit_management);
+  const managedExitPositions = Array.isArray(exitManagement?.managed_positions) ? (exitManagement.managed_positions.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const lastExitAction = asRecord(exitManagement?.last_action);
+  const lastFailedExitAction = asRecord(exitManagement?.last_failed_action);
   const currentSessionPositionsBySymbol = asRecord(openPositionSync?.current_session_open_positions_by_symbol);
   const currentSessionPositionsText = currentSessionPositionsBySymbol
     ? Object.entries(currentSessionPositionsBySymbol).map(([symbol, count]) => `${symbol}: ${String(count)}`).join(", ") || "None"
@@ -1352,6 +1367,48 @@ function AutoValidationPanel({
         <p className={`mt-3 text-sm font-bold ${readText(lifecycleSync, ["status"], "") === "ERROR" ? "text-rose-200" : "text-slate-400"}`}>
           {readText(lifecycleSync, ["message"], "Lifecycle sync has not run.")}
         </p>
+      </div>
+      <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Exit Management</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Status" value={readText(exitManagement, ["status"], "NOT_RUN")} compact />
+          <Metric label="Positions Checked" value={String(readNumber(exitManagement, ["positions_checked"], 0))} compact />
+          <Metric label="Actions Taken" value={String(readNumber(exitManagement, ["actions_taken"], 0))} compact />
+          <Metric label="Failed Actions" value={String(readNumber(exitManagement, ["failed_actions"], 0))} compact />
+          <Metric label="Break Even Moves" value={String(readNumber(exitManagement, ["break_even_moves"], 0))} compact />
+          <Metric label="Trailing Updates" value={String(readNumber(exitManagement, ["trailing_stop_moves"], 0))} compact />
+          <Metric label="Reversal Exits" value={String(readNumber(exitManagement, ["signal_reversal_exits"], 0))} compact />
+          <Metric label="Confidence Exits" value={String(readNumber(exitManagement, ["confidence_drop_exits"], 0))} compact />
+          <Metric label="Last Exit Action" value={readText(lastExitAction, ["exit_reason"], readText(lastFailedExitAction, ["exit_reason"], "None"))} compact />
+          <Metric label="Last Exit Result" value={readText(asRecord(lastExitAction?.execution_result) ?? asRecord(lastFailedExitAction?.execution_result), ["status"], "None")} compact />
+        </div>
+        <div className="mt-4 overflow-auto">
+          <table className="w-full min-w-[900px] text-left text-xs font-bold text-slate-300">
+            <thead className="text-slate-500">
+              <tr>{["Ticket", "Symbol", "Side", "Open trade age", "Unrealized P&L", "SL Dist", "TP Dist", "Exit State", "Last Action"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+            </thead>
+            <tbody>
+              {managedExitPositions.length ? managedExitPositions.map((item, index) => {
+                const execution = asRecord(item.execution_result);
+                return (
+                  <tr className="border-t border-slate-800" key={`${readText(item, ["ticket"], "ticket")}-${index}`}>
+                    <td className="px-3 py-2">{readText(item, ["ticket"], "None")}</td>
+                    <td className="px-3 py-2">{readText(item, ["symbol"], "None")}</td>
+                    <td className="px-3 py-2">{readText(item, ["side"], "None")}</td>
+                    <td className="px-3 py-2">{readNumber(item, ["age_minutes"], 0).toFixed(1)}m</td>
+                    <td className={`px-3 py-2 ${pnlClass(readNumber(item, ["unrealized_pnl"], 0))}`}>{money(readNumber(item, ["unrealized_pnl"], 0))}</td>
+                    <td className="px-3 py-2">{readText(item, ["distance_to_sl"], "n/a")}</td>
+                    <td className="px-3 py-2">{readText(item, ["distance_to_tp"], "n/a")}</td>
+                    <td className="px-3 py-2">{readText(item, ["exit_reason"], readText(item, ["action"], "HOLD"))}</td>
+                    <td className="px-3 py-2">{readText(execution, ["status"], readText(item, ["action"], "HOLD"))}</td>
+                  </tr>
+                );
+              }) : (
+                <tr><td className="px-3 py-4 text-slate-500" colSpan={9}>No current-session open positions have been evaluated for exits yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">

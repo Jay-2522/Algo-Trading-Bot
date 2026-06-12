@@ -175,6 +175,10 @@ export function syncAutoValidationLifecycle() {
   return postJson<ApiRecord>("/auto-validation/sync-lifecycle");
 }
 
+export function runAutoValidationExitManagement() {
+  return postJson<ApiRecord>("/auto-validation/run-exit-management");
+}
+
 export function syncClientCloseHistory() {
   return postJson<ApiRecord>("/mt5-demo/close-sync/run");
 }

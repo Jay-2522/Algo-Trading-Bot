@@ -93,10 +93,10 @@ demo_approval_workflow_service = DemoApprovalWorkflowService(
     test_plan_service=demo_trade_test_plan_service,
     final_approval_service=demo_final_approval_service,
 )
-mt5_demo_position_sync_service = MT5DemoPositionSyncService()
+mt5_demo_position_sync_service = MT5DemoPositionSyncService(persistent_trade_journal_service)
 mt5_trade_lifecycle_service = MT5TradeLifecycleService(persistent_trade_journal_service)
 mt5_trade_close_sync_service = MT5TradeCloseSyncService(persistent_trade_journal_service)
-mt5_position_monitoring_service = MT5PositionMonitoringService(mt5_demo_position_sync_service)
+mt5_position_monitoring_service = MT5PositionMonitoringService(mt5_demo_position_sync_service, persistent_trade_journal_service)
 guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     mt5_demo_service=service,
     approval_workflow_service=demo_approval_workflow_service,

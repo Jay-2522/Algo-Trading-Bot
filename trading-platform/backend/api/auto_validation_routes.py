@@ -4,6 +4,8 @@ from fastapi import APIRouter, Body
 
 from backend.api.client_signal_engine_routes import client_signal_engine
 from backend.api.mt5_demo_routes import (
+    guarded_demo_order_sender_service,
+    market_data_service,
     mt5_position_monitoring_service,
     mt5_trade_close_sync_service,
     mt5_trade_lifecycle_service,
@@ -12,10 +14,17 @@ from backend.api.mt5_demo_routes import (
 )
 from backend.api.trade_journal_persistence_routes import persistent_trade_journal_service
 from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+from backend.auto_validation.exit_management_service import AutoValidationExitManagementService
 from backend.auto_validation.auto_validation_service import AutoValidationService
 
 
 router = APIRouter(prefix="/auto-validation", tags=["AUTO Demo Validation"])
+exit_management_service = AutoValidationExitManagementService(
+    signal_provider=client_signal_engine,
+    market_data_service=market_data_service,
+    guarded_sender_service=guarded_demo_order_sender_service,
+    journal_service=persistent_trade_journal_service,
+)
 auto_validation_service = AutoValidationService(
     signal_provider=client_signal_engine,
     guarded_execution_service=vantage_xauusd_demo_validation_service,
@@ -24,6 +33,7 @@ auto_validation_service = AutoValidationService(
     mt5_demo_service=mt5_demo_service,
     lifecycle_service=mt5_trade_lifecycle_service,
     close_sync_service=mt5_trade_close_sync_service,
+    exit_management_service=exit_management_service,
 )
 auto_validation_runner = AutoValidationRunner(auto_validation_service)
 
@@ -81,6 +91,11 @@ async def get_auto_validation_summary() -> dict:
 @router.post("/sync-lifecycle")
 async def sync_auto_validation_lifecycle() -> dict:
     return auto_validation_service.sync_lifecycle()
+
+
+@router.post("/run-exit-management")
+async def run_auto_validation_exit_management() -> dict:
+    return auto_validation_service.run_exit_management()
 
 
 @router.get("/post-sender-execution-summary")

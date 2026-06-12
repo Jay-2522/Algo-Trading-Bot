@@ -106,6 +106,19 @@ class PersistentTradeJournalService:
             return None
         return self.record_trade_closed({**existing, **close_payload, "trade_id": existing["trade_id"], "mt5_ticket": existing.get("mt5_ticket")})
 
+    def record_exit_management_update(self, ticket: str | int, payload: dict[str, Any]) -> dict[str, Any] | None:
+        existing = self.get_trade_by_ticket(ticket)
+        if existing is None:
+            return None
+        merged = {
+            **existing,
+            "exit_management": payload.get("exit_management") or existing.get("exit_management") or {},
+            "exit_reason": self._text(payload.get("exit_reason")) or existing.get("exit_reason", ""),
+            "notes": self._text(payload.get("notes")) or existing.get("notes", ""),
+            "updated_at": utc_now_iso(),
+        }
+        return self._upsert_trade(merged)
+
     def get_open_trades(self) -> list[dict[str, Any]]:
         return [trade for trade in self.list_trades(limit=100000) if trade.get("status") == "OPEN"]
 

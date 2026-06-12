@@ -23,6 +23,7 @@ class AutoValidationService:
         mt5_demo_service: Any | None = None,
         lifecycle_service: Any | None = None,
         close_sync_service: Any | None = None,
+        exit_management_service: Any | None = None,
         state_path: Path | None = None,
     ) -> None:
         self.signal_provider = signal_provider
@@ -32,6 +33,7 @@ class AutoValidationService:
         self.mt5_demo_service = mt5_demo_service
         self.lifecycle_service = lifecycle_service
         self.close_sync_service = close_sync_service
+        self.exit_management_service = exit_management_service
         self.state_path = state_path or DEFAULT_STATE_PATH
         self.config = self._default_config()
         self.session = self._empty_session()
@@ -45,6 +47,7 @@ class AutoValidationService:
         self._last_duplicate_check: dict[str, Any] | None = None
         self._open_position_sync_diagnostics: dict[str, Any] = self._empty_open_position_sync_diagnostics()
         self._lifecycle_sync_diagnostics: dict[str, Any] = self._empty_lifecycle_sync_diagnostics()
+        self._exit_management_diagnostics: dict[str, Any] = self._empty_exit_management_diagnostics()
         self._execution_timelines: list[dict[str, Any]] = []
         self._seen_signal_hashes: set[str] = set()
         self._sent_signal_keys: set[str] = set()
@@ -73,6 +76,7 @@ class AutoValidationService:
             "last_duplicate_check": copy.deepcopy(self._last_duplicate_check),
             "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
             "lifecycle_sync": copy.deepcopy(self._lifecycle_sync_diagnostics),
+            "exit_management": copy.deepcopy(self._exit_management_diagnostics),
             "post_sender_execution_summary": self.post_sender_execution_summary(),
             "execution_timelines": copy.deepcopy(self._execution_timelines[-100:]),
             "confidence_timeline": copy.deepcopy(self._confidence_timeline),
@@ -170,6 +174,22 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
 
+    def run_exit_management(self) -> dict[str, Any]:
+        result = self._run_exit_management(manual=True)
+        self._refresh_session_metrics()
+        self._save_state()
+        return {
+            "status": result.get("status", "READY"),
+            "message": result.get("message", "Exit management evaluated."),
+            "exit_management": copy.deepcopy(result),
+            "session": dict(self.session),
+            "simulation_only": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
+            "timestamp": self._timestamp(),
+        }
+
     def post_sender_execution_summary(self) -> dict[str, Any]:
         return {
             "WRAPPER_SUBMITTED": int(self.session.get("wrapper_submitted") or 0),
@@ -208,6 +228,7 @@ class AutoValidationService:
         halt = self._risk_halt_reason()
         if halt:
             return self._halt(halt)
+        self._run_exit_management(manual=False)
         signals = [self._normalize_demo_collection_signal(signal) for signal in self._allowed_signals(signals if signals is not None else self._load_signals())]
         self._record_execution_funnel_scan(signals)
         self._record_confidence_timeline(signals)
@@ -1151,6 +1172,49 @@ class AutoValidationService:
             self._log("LIFECYCLE_SYNC_COMPLETED", {"closed_trades_updated": 0, "status": self._lifecycle_sync_diagnostics["status"]})
         return self._lifecycle_sync_diagnostics
 
+    def _run_exit_management(self, manual: bool = False) -> dict[str, Any]:
+        if self.exit_management_service is None:
+            self._exit_management_diagnostics = {
+                **self._empty_exit_management_diagnostics(),
+                "status": "NOT_CONFIGURED",
+                "message": "Exit management service is not configured.",
+                "manual": manual,
+                "timestamp": self._timestamp(),
+            }
+            return self._exit_management_diagnostics
+        positions = self._reconcile_open_mt5_positions()
+        trades = self.trades()
+        try:
+            result = self.exit_management_service.run(session=dict(self.session), config=dict(self.config), positions=positions, trades=trades)
+        except Exception as exc:
+            result = {
+                **self._empty_exit_management_diagnostics(),
+                "status": "ERROR",
+                "message": f"Exit management failed safely: {exc}",
+                "manual": manual,
+                "timestamp": self._timestamp(),
+            }
+        result["manual"] = manual
+        self._exit_management_diagnostics = result
+        managed_positions = result.get("managed_positions", []) if isinstance(result.get("managed_positions"), list) else []
+        for item in managed_positions:
+            if not isinstance(item, dict) or item.get("action") == "HOLD":
+                continue
+            event = "EXIT_SL_MOVED" if item.get("action") == "MODIFY_SL" else "EXIT_CLOSE_ATTEMPTED"
+            execution = item.get("execution_result") if isinstance(item.get("execution_result"), dict) else {}
+            if execution.get("status") in {"POSITION_CLOSED", "POSITION_PARTIALLY_CLOSED"}:
+                event = "EXIT_CLOSE_SUCCEEDED"
+            elif execution.get("status") == "EXIT_FAILED":
+                event = "EXIT_CLOSE_FAILED"
+            elif item.get("exit_reason") == "TRAILING_STOP":
+                event = "EXIT_TRAILING_UPDATED"
+            self._log(event, {"ticket": item.get("ticket"), "symbol": item.get("symbol"), "exit_reason": item.get("exit_reason"), "execution_result": execution})
+        if int(result.get("actions_taken") or 0) > 0:
+            self._log("EXIT_MANAGEMENT_ACTION", {"actions_taken": result.get("actions_taken"), "last_action": result.get("last_action")})
+        elif manual:
+            self._log("EXIT_MANAGEMENT_EVALUATED", {"positions_checked": result.get("positions_checked"), "status": result.get("status")})
+        return self._exit_management_diagnostics
+
     def _risk_halt_reason(self) -> str | None:
         if self.session["current_closed_trades"] >= int(self.config.get("target_validation_trades") or self.config["target_closed_trades"]):
             return "TARGET_COMPLETED"
@@ -1301,6 +1365,32 @@ class AutoValidationService:
             "errors": [],
             "timestamp": None,
             "simulation_only": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
+        }
+
+    def _empty_exit_management_diagnostics(self) -> dict[str, Any]:
+        return {
+            "status": "NOT_RUN",
+            "message": "Exit management has not run yet.",
+            "enabled": False,
+            "manual": False,
+            "positions_checked": 0,
+            "actions_taken": 0,
+            "blocked_actions": 0,
+            "failed_actions": 0,
+            "break_even_moves": 0,
+            "trailing_stop_moves": 0,
+            "time_stale_exits": 0,
+            "signal_reversal_exits": 0,
+            "confidence_drop_exits": 0,
+            "managed_positions": [],
+            "last_action": None,
+            "last_failed_action": None,
+            "timestamp": None,
+            "simulation_only": True,
+            "demo_execution": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
             "execution_allowed": False,
@@ -1730,6 +1820,8 @@ class AutoValidationService:
             self._open_position_sync_diagnostics = data["open_position_sync"]
         if isinstance(data.get("lifecycle_sync"), dict):
             self._lifecycle_sync_diagnostics = data["lifecycle_sync"]
+        if isinstance(data.get("exit_management"), dict):
+            self._exit_management_diagnostics = data["exit_management"]
         if isinstance(data.get("execution_timelines"), list):
             self._execution_timelines = [item for item in data["execution_timelines"] if isinstance(item, dict)][-100:]
         if isinstance(data.get("sent_signal_keys"), list):
@@ -1768,6 +1860,7 @@ class AutoValidationService:
                 "last_duplicate_check": self._last_duplicate_check,
                 "open_position_sync": self._open_position_sync_diagnostics,
                 "lifecycle_sync": self._lifecycle_sync_diagnostics,
+                "exit_management": self._exit_management_diagnostics,
                 "execution_timelines": self._execution_timelines[-100:],
                 "confidence_timeline": self._confidence_timeline,
                 "sent_signal_keys": sorted(self._sent_signal_keys),
@@ -1793,6 +1886,47 @@ class AutoValidationService:
             "duplicate_recent_seconds": 60,
             "max_daily_loss_amount": 100.0,
             "max_total_drawdown_amount": 150.0,
+            "exit_management_enabled": True,
+            "break_even_trigger_r": 1.0,
+            "trailing_stop_trigger_r": 1.5,
+            "trailing_stop_distance_r": 0.75,
+            "exit_stale_minutes": 240,
+            "exit_stale_min_r": 0.2,
+            "exit_confidence_floor": 40,
+            "exit_confidence_drop_points": 25,
+            "exit_max_close_retries": 3,
+            "per_symbol_exit_settings": {
+                "XAUUSD": {
+                    "break_even_trigger_r": 1.0,
+                    "trailing_stop_trigger_r": 1.5,
+                    "trailing_stop_distance_r": 0.75,
+                    "stale_exit_minutes": 240,
+                    "confidence_floor": 40,
+                    "confidence_drop_points": 25,
+                    "max_spread": 1.0,
+                    "max_tick_age_seconds": 10,
+                },
+                "EURUSD": {
+                    "break_even_trigger_r": 1.0,
+                    "trailing_stop_trigger_r": 1.5,
+                    "trailing_stop_distance_r": 0.75,
+                    "stale_exit_minutes": 240,
+                    "confidence_floor": 40,
+                    "confidence_drop_points": 25,
+                    "max_spread": 0.0003,
+                    "max_tick_age_seconds": 10,
+                },
+                "NIFTY50": {
+                    "break_even_trigger_r": 1.0,
+                    "trailing_stop_trigger_r": 1.5,
+                    "trailing_stop_distance_r": 0.75,
+                    "stale_exit_minutes": 240,
+                    "confidence_floor": 40,
+                    "confidence_drop_points": 25,
+                    "max_spread": 5.0,
+                    "max_tick_age_seconds": 10,
+                },
+            },
             "min_confidence": 55,
             "strategy_profile": "DEMO_COLLECTION",
             "min_rr": 1.2,

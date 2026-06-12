@@ -439,13 +439,17 @@ class AutoValidationService:
 
     def _reconcile_open_mt5_positions(self) -> list[dict[str, Any]]:
         session_id = str(self.session.get("session_id") or "")
-        if not session_id:
+        if not self._has_current_user_session():
             positions = self._open_positions()
             self._open_position_sync_diagnostics = {
                 **self._empty_open_position_sync_diagnostics(),
                 "mt5_open_positions_detected": len(positions),
+                "mt5_open_positions": len(positions),
                 "unmatched_open_positions": len(positions),
                 "historical_unowned_open_positions": len(positions),
+                "historical_positions": len(positions),
+                "validation_positions": 0,
+                "current_session_positions": 0,
                 "unmatched_open_position_tickets": [self._position_ticket(position) for position in positions if self._position_ticket(position)],
                 "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in positions if self._position_ticket(position)],
                 "timestamp": self._timestamp(),
@@ -479,9 +483,13 @@ class AutoValidationService:
                 self._record_open_position(position, self._synthetic_open_position_trade(position))
         self._open_position_sync_diagnostics = {
             "mt5_open_positions_detected": len(positions),
+            "mt5_open_positions": len(positions),
             "auto_owned_open_positions": len(session_positions),
             "unmatched_open_positions": len(unmatched_positions),
             "historical_unowned_open_positions": len(unmatched_positions),
+            "historical_positions": len(unmatched_positions),
+            "validation_positions": len(session_positions),
+            "current_session_positions": len(session_positions),
             "open_position_tickets": [self._position_ticket(position) for position in session_positions if self._position_ticket(position)],
             "unmatched_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
             "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
@@ -615,6 +623,13 @@ class AutoValidationService:
             return True
         comment = str(position.get("comment") or position.get("external_id") or position.get("magic_comment") or "").upper()
         return "AUTO" in comment or "GUARDED" in comment or "VALIDATION" in comment
+
+    def _has_current_user_session(self) -> bool:
+        return bool(
+            self.session.get("session_id")
+            and self.session.get("session_start_time")
+            and str(self.session.get("session_started_by") or "") == "user_click"
+        )
 
     def _allowed_symbols(self) -> set[str]:
         symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
@@ -782,6 +797,46 @@ class AutoValidationService:
 
     def _refresh_session_metrics(self) -> None:
         mt5_open_positions = self._reconcile_open_mt5_positions()
+        target_trades = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
+        if not self._has_current_user_session():
+            self.session.update(
+                {
+                    "total_trades": 0,
+                    "target_validation_trades": target_trades,
+                    "current_closed_trades": 0,
+                    "current_open_trades": 0,
+                    "open_trades": 0,
+                    "daily_demo_trade_count": 0,
+                    "remaining_trades_to_target": target_trades,
+                    "signals_scanned": 0,
+                    "signals_wait": 0,
+                    "signals_watchlist": 0,
+                    "signals_ready_for_preview": 0,
+                    "signals_sent_to_sender": 0,
+                    "signals_blocked_by_sender": 0,
+                    "orders_created": 0,
+                    "wrapper_submitted": 0,
+                    "approval_workflow_passed": 0,
+                    "guarded_sender_attempted": 0,
+                    "opened": 0,
+                    "order_build_attempted": 0,
+                    "order_build_failed": 0,
+                    "order_send_attempted": 0,
+                    "order_send_failed": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "win_rate": 0.0,
+                    "net_pnl": 0.0,
+                    "avg_rr": 0.0,
+                    "average_rr": 0.0,
+                    "profit_factor": 0.0,
+                    "max_drawdown": 0.0,
+                    "best_setup_type": "Unavailable",
+                    "worst_setup_type": "Unavailable",
+                    "equity_curve": [],
+                }
+            )
+            return
         trades = self.trades()
         closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
         open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT"}]
@@ -790,7 +845,6 @@ class AutoValidationService:
         open_trade_count = len(open_trades) + len(mt5_open_ticket_keys - open_ticket_keys)
         opened_count = max(int(self.session.get("opened") or 0), int(self.session.get("orders_created") or 0), open_trade_count)
         daily_demo_trade_count = self._daily_trade_count()
-        target_trades = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
         losses = [trade for trade in closed if trade.get("result") == "LOSS"]
         pnl_values = [self._trade_pnl(trade) for trade in closed]
@@ -1017,9 +1071,13 @@ class AutoValidationService:
     def _empty_open_position_sync_diagnostics(self) -> dict[str, Any]:
         return {
             "mt5_open_positions_detected": 0,
+            "mt5_open_positions": 0,
             "auto_owned_open_positions": 0,
             "unmatched_open_positions": 0,
             "historical_unowned_open_positions": 0,
+            "historical_positions": 0,
+            "validation_positions": 0,
+            "current_session_positions": 0,
             "open_position_tickets": [],
             "unmatched_open_position_tickets": [],
             "historical_unowned_open_position_tickets": [],

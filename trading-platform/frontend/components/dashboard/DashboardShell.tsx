@@ -1302,6 +1302,10 @@ function AutoValidationPanel({
           <Metric label="AUTO-Owned Open" value={String(readNumber(openPositionSync, ["auto_owned_open_positions"], 0))} compact />
           <Metric label="Unmatched Open" value={String(readNumber(openPositionSync, ["unmatched_open_positions"], 0))} compact />
           <Metric label="Historical/Unowned" value={String(readNumber(openPositionSync, ["historical_unowned_open_positions"], 0))} compact />
+          <Metric label="MT5 Open Positions" value={String(readNumber(openPositionSync, ["mt5_open_positions"], 0))} compact />
+          <Metric label="Historical Positions" value={String(readNumber(openPositionSync, ["historical_positions"], 0))} compact />
+          <Metric label="Validation Positions" value={String(readNumber(openPositionSync, ["validation_positions"], 0))} compact />
+          <Metric label="Current Session Positions" value={String(readNumber(openPositionSync, ["current_session_positions"], 0))} compact />
           <Metric label="Open Tickets" value={Array.isArray(openPositionSync?.open_position_tickets) && openPositionSync.open_position_tickets.length ? openPositionSync.open_position_tickets.map(String).join(", ") : "None"} compact />
           <Metric label="Sync Time" value={formatTradeTime(readText(openPositionSync, ["timestamp"], ""))} compact />
         </div>

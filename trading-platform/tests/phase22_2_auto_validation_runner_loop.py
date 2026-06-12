@@ -847,6 +847,55 @@ async def verify_old_positions_before_start_do_not_count() -> bool:
         return show("Before Start, old MT5 positions are historical/unowned and do not count", passed, str({"session": session, "sync": sync}))
 
 
+async def verify_not_started_session_zeroes_stale_validation_counters() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        positions = [
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "old-1", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"},
+            {"symbol": "EURUSD", "side": "SELL", "ticket": "old-2", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"},
+        ]
+        service, _ = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-stale-counters")]), state_path=Path(tmp) / "state.json", positions=positions)
+        service.session.update(
+            {
+                "status": "STOPPED",
+                "session_id": "stale-session",
+                "session_started_by": "",
+                "session_start_time": None,
+                "opened": 2,
+                "orders_created": 2,
+                "current_open_trades": 2,
+                "total_trades": 2,
+                "signals_scanned": 12,
+                "wrapper_submitted": 7,
+                "approval_workflow_passed": 5,
+                "guarded_sender_attempted": 4,
+                "order_send_attempted": 3,
+                "signals_blocked_by_sender": 6,
+            }
+        )
+        status = service.status()
+        session = status["session"]
+        sync = status["open_position_sync"]
+        passed = (
+            session["status"] == "STOPPED"
+            and session["session_started_by"] == ""
+            and session["opened"] == 0
+            and session["orders_created"] == 0
+            and session["current_open_trades"] == 0
+            and session["total_trades"] == 0
+            and session["signals_scanned"] == 0
+            and session["wrapper_submitted"] == 0
+            and session["approval_workflow_passed"] == 0
+            and session["guarded_sender_attempted"] == 0
+            and session["order_send_attempted"] == 0
+            and session["signals_blocked_by_sender"] == 0
+            and sync["mt5_open_positions"] == 2
+            and sync["historical_positions"] == 2
+            and sync["validation_positions"] == 0
+            and sync["current_session_positions"] == 0
+        )
+        return show("STOPPED + Not Started zeroes stale validation counters while keeping MT5 diagnostics", passed, str({"session": session, "sync": sync}))
+
+
 async def verify_start_creates_fresh_user_click_session() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
@@ -1383,6 +1432,10 @@ def verify_code_wiring_and_dashboard() -> bool:
         "allow_persisted_auto_resume",
         "session_start_time",
         "historical_unowned_open_positions",
+        "mt5_open_positions",
+        "historical_positions",
+        "validation_positions",
+        "current_session_positions",
         "runner_last_tick_at",
         "runner_next_tick_at",
         "run_once_in_progress",
@@ -1425,6 +1478,10 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Last Blocker",
         "Last MT5 Retcode",
         "Order Send Status",
+        "MT5 Open Positions",
+        "Historical Positions",
+        "Validation Positions",
+        "Current Session Positions",
         "Last Duplicate Check",
         "duplicate_key",
         "duplicate_source",
@@ -1474,6 +1531,7 @@ async def async_main() -> list[bool]:
         await verify_cooldown_is_separate_from_duplicate(),
         await verify_open_position_blocks_duplicate(),
         await verify_old_positions_before_start_do_not_count(),
+        await verify_not_started_session_zeroes_stale_validation_counters(),
         await verify_start_creates_fresh_user_click_session(),
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),

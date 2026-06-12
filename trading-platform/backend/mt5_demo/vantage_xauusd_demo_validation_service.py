@@ -10,6 +10,8 @@ class VantageXAUUSDDemoValidationService:
     broker = "VANTAGE_DEMO"
     max_lot = 0.01
     max_spread = 1.0
+    demo_collection_max_open_trades_total = 5
+    demo_collection_max_open_trades_per_symbol = 3
 
     def __init__(
         self,
@@ -285,20 +287,46 @@ class VantageXAUUSDDemoValidationService:
     def _duplicate_check(self, payload: dict[str, Any], symbol: str, side: str) -> dict[str, Any]:
         key = self._duplicate_key(payload, symbol, side)
         open_positions = self._open_positions(symbol)
+        all_open_positions = self._all_open_positions()
+        if not all_open_positions:
+            all_open_positions = open_positions
+        same_side_open_positions = [position for position in open_positions if self._position_side(position) == str(side or "").upper()]
         active_signal_sent = key in self._sent_signal_keys
-        duplicate = bool(open_positions or active_signal_sent)
-        source = "open_mt5_position" if open_positions else "same_active_signal_already_sent" if active_signal_sent else "none"
+        profile = str(payload.get("strategy_profile") or "").upper()
+        if profile == "DEMO_COLLECTION":
+            total_limit_reached = len(all_open_positions) >= self.demo_collection_max_open_trades_total
+            symbol_limit_reached = len(open_positions) >= self.demo_collection_max_open_trades_per_symbol
+            duplicate = bool(active_signal_sent or total_limit_reached or symbol_limit_reached)
+            if active_signal_sent:
+                source = "same_active_signal_already_sent"
+            elif total_limit_reached:
+                source = "max_open_trades_total_reached"
+            elif symbol_limit_reached:
+                source = "max_open_trades_per_symbol_reached"
+            else:
+                source = "none"
+        else:
+            total_limit_reached = bool(open_positions)
+            symbol_limit_reached = bool(open_positions)
+            duplicate = bool(open_positions or active_signal_sent)
+            source = "open_mt5_position" if open_positions else "same_active_signal_already_sent" if active_signal_sent else "none"
         return {
             "duplicate_key": key,
             "duplicate_source": source,
             "open_positions_count": len(open_positions),
+            "total_open_positions_count": len(all_open_positions),
+            "same_side_open_positions_count": len(same_side_open_positions),
+            "max_open_trades_total": self.demo_collection_max_open_trades_total if profile == "DEMO_COLLECTION" else 1,
+            "max_open_trades_per_symbol": self.demo_collection_max_open_trades_per_symbol if profile == "DEMO_COLLECTION" else 1,
             "pending_orders_count": 0,
             "matching_journal_records": 0,
             "cooldown_active": False,
+            "total_limit_reached": total_limit_reached,
+            "symbol_limit_reached": symbol_limit_reached,
             "final_duplicate_decision": duplicate,
             "symbol": str(symbol or "").upper(),
             "side": str(side or "").upper(),
-            "strategy_profile": str(payload.get("strategy_profile") or "").upper(),
+            "strategy_profile": profile,
             "signal_hash": str(payload.get("signal_hash") or ""),
             "timestamp": self._timestamp(),
         }
@@ -310,6 +338,18 @@ class VantageXAUUSDDemoValidationService:
             return []
         positions = result.get("positions", []) if isinstance(result, dict) else []
         return positions if isinstance(positions, list) else []
+
+    def _all_open_positions(self) -> list[dict[str, Any]]:
+        try:
+            reader = getattr(self.position_sync_service, "get_open_positions", None)
+            result = reader() if callable(reader) else None
+        except Exception:
+            return []
+        positions = result.get("positions", []) if isinstance(result, dict) else []
+        return positions if isinstance(positions, list) else []
+
+    def _position_side(self, position: dict[str, Any]) -> str:
+        return str(position.get("side") or position.get("type") or position.get("action") or "").upper()
 
     def _revalidate_signal(self, payload: dict[str, Any], symbol: str, side: str) -> dict[str, Any]:
         signal_timestamp = payload.get("signal_timestamp")

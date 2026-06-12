@@ -175,6 +175,7 @@ def verify_default_routes_and_config() -> bool:
         and payload["config"]["max_open_trades_total"] == 5
         and payload["config"]["max_open_trades_per_symbol"] == 3
         and payload["config"]["max_daily_demo_trades"] == 30
+        and payload["config"]["allow_persisted_auto_resume"] is False
         and all(route in route_text for route in required)
     )
     return show("Default disabled config and auto-validation routes exist", passed, str(payload["config"]))
@@ -366,6 +367,9 @@ def verify_dashboard_and_no_order_send() -> bool:
         "Daily Demo Trades",
         "Remaining to 30",
         "Open Position Sync",
+        "Session Started By",
+        "Session Start Time",
+        "Historical/Unowned",
     ]
     missing = [item for item in required if item not in service + routes + dashboard + api]
     token = "mt5." + "order_send"

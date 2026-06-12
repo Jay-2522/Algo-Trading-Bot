@@ -81,10 +81,12 @@ class AutoValidationService:
         payload = payload or {}
         self.config = {**self.config, **self._safe_config(payload)}
         self.config["auto_validation_enabled"] = True
+        started_at = self._timestamp()
         self.session = {
             **self._empty_session(),
             "session_id": f"auto-validation-{uuid4()}",
-            "started_at": self._timestamp(),
+            "started_at": started_at,
+            "session_start_time": started_at,
             "status": "RUNNING",
             "target_closed_trades": int(self.config["target_closed_trades"]),
             "target_validation_trades": int(self.config["target_validation_trades"]),
@@ -93,8 +95,15 @@ class AutoValidationService:
         self._seen_signal_hashes = set()
         self._sent_signal_keys = set()
         self._execution_timelines = []
+        self.events = []
+        self._confidence_timeline = {}
+        self._open_position_sync_diagnostics = self._empty_open_position_sync_diagnostics()
         self._last_trade_time = None
         self._last_execution_decision = None
+        self._current_signal_watched = None
+        self._last_duplicate_check = None
+        self._last_hash_change_audit = None
+        self._last_sender_rejection = None
         self._log("SESSION_STARTED", {"session_id": self.session["session_id"]})
         self._save_state()
         return self.status()
@@ -431,7 +440,16 @@ class AutoValidationService:
     def _reconcile_open_mt5_positions(self) -> list[dict[str, Any]]:
         session_id = str(self.session.get("session_id") or "")
         if not session_id:
-            self._open_position_sync_diagnostics = self._empty_open_position_sync_diagnostics()
+            positions = self._open_positions()
+            self._open_position_sync_diagnostics = {
+                **self._empty_open_position_sync_diagnostics(),
+                "mt5_open_positions_detected": len(positions),
+                "unmatched_open_positions": len(positions),
+                "historical_unowned_open_positions": len(positions),
+                "unmatched_open_position_tickets": [self._position_ticket(position) for position in positions if self._position_ticket(position)],
+                "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in positions if self._position_ticket(position)],
+                "timestamp": self._timestamp(),
+            }
             return []
         positions = self._open_positions()
         trades = self.trades()
@@ -449,7 +467,7 @@ class AutoValidationService:
             position_session = str(position.get("validation_session_id") or "")
             symbol = str(position.get("symbol") or "").upper()
             allowed_position = symbol in allowed_symbols
-            auto_owned = matched_trade is not None or position_session == session_id or allowed_position
+            auto_owned = matched_trade is not None or position_session == session_id or (self._position_has_auto_validation_marker(position) and self._position_opened_after_session_start(position))
             if not auto_owned:
                 unmatched_positions.append(position)
                 continue
@@ -457,14 +475,16 @@ class AutoValidationService:
             if matched_trade is not None:
                 if str(matched_trade.get("status") or "").upper() != "OPEN":
                     self._record_open_position(position, matched_trade)
-            elif allowed_position:
+            elif allowed_position and self._position_opened_after_session_start(position):
                 self._record_open_position(position, self._synthetic_open_position_trade(position))
         self._open_position_sync_diagnostics = {
             "mt5_open_positions_detected": len(positions),
             "auto_owned_open_positions": len(session_positions),
             "unmatched_open_positions": len(unmatched_positions),
+            "historical_unowned_open_positions": len(unmatched_positions),
             "open_position_tickets": [self._position_ticket(position) for position in session_positions if self._position_ticket(position)],
             "unmatched_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
+            "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
             "timestamp": self._timestamp(),
         }
         return session_positions
@@ -569,6 +589,32 @@ class AutoValidationService:
         if raw == 1:
             return "SELL"
         return ""
+
+    def _position_opened_after_session_start(self, position: dict[str, Any]) -> bool:
+        session_start = str(self.session.get("session_start_time") or self.session.get("started_at") or "")
+        opened_at = (
+            position.get("validation_session_started_at")
+            or position.get("auto_validation_opened_at")
+            or position.get("opened_at")
+            or position.get("time_update")
+            or position.get("time")
+            or position.get("time_msc")
+        )
+        if not session_start or opened_at in {None, ""}:
+            return False
+        session_dt = self._parse_time(session_start)
+        position_dt = self._parse_time(opened_at)
+        return bool(session_dt and position_dt and position_dt >= session_dt)
+
+    def _position_has_auto_validation_marker(self, position: dict[str, Any]) -> bool:
+        session_id = str(self.session.get("session_id") or "")
+        if str(position.get("validation_session_id") or "") == session_id:
+            return True
+        profile = str(position.get("strategy_profile") or position.get("execution_mode") or "").upper()
+        if profile in {"DEMO_COLLECTION", "AUTO_VALIDATION"}:
+            return True
+        comment = str(position.get("comment") or position.get("external_id") or position.get("magic_comment") or "").upper()
+        return "AUTO" in comment or "GUARDED" in comment or "VALIDATION" in comment
 
     def _allowed_symbols(self) -> set[str]:
         symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
@@ -954,13 +1000,29 @@ class AutoValidationService:
             return float("inf")
         return max(0.0, ((now or datetime.now(timezone.utc)) - parsed).total_seconds())
 
+    def _parse_time(self, value: Any) -> datetime | None:
+        if value in {None, ""}:
+            return None
+        if isinstance(value, (int, float)):
+            number = float(value)
+            if number > 10_000_000_000:
+                number = number / 1000
+            return datetime.fromtimestamp(number, tz=timezone.utc)
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
     def _empty_open_position_sync_diagnostics(self) -> dict[str, Any]:
         return {
             "mt5_open_positions_detected": 0,
             "auto_owned_open_positions": 0,
             "unmatched_open_positions": 0,
+            "historical_unowned_open_positions": 0,
             "open_position_tickets": [],
             "unmatched_open_position_tickets": [],
+            "historical_unowned_open_position_tickets": [],
             "timestamp": None,
         }
 
@@ -1234,6 +1296,7 @@ class AutoValidationService:
             "target_closed_trades": 30,
             "target_validation_trades": 30,
             "session_started_by": "",
+            "session_start_time": None,
             "current_closed_trades": 0,
             "current_open_trades": 0,
             "open_trades": 0,
@@ -1322,7 +1385,13 @@ class AutoValidationService:
             self._confidence_timeline = data["confidence_timeline"]
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
             updated_at = str(data.get("updated_at") or self.session.get("started_at") or "")
-            if self._persisted_session_stale(updated_at):
+            if not self.config.get("allow_persisted_auto_resume", False):
+                self.session["status"] = "STOPPED"
+                self.session["stopped_at"] = self._timestamp()
+                self.session["reason_stopped"] = "PERSISTED_AUTO_RESUME_DISABLED"
+                self.session["session_started_by"] = ""
+                self.config["auto_validation_enabled"] = False
+            elif self._persisted_session_stale(updated_at):
                 self.session["status"] = "STOPPED"
                 self.session["stopped_at"] = self._timestamp()
                 self.session["reason_stopped"] = "STALE_PERSISTED_SESSION_RESET"
@@ -1377,6 +1446,7 @@ class AutoValidationService:
             "cooldown_after_trade_minutes": 15,
             "stop_after_target_reached": True,
             "mt5_disconnect_timeout_seconds": 600,
+            "allow_persisted_auto_resume": False,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
         }
@@ -1498,6 +1568,7 @@ class AutoValidationService:
             "max_open_trades_per_symbol",
             "duplicate_recent_seconds",
             "mt5_disconnect_timeout_seconds",
+            "allow_persisted_auto_resume",
         ]:
             if key in payload:
                 safe[key] = payload[key]

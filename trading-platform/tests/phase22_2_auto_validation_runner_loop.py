@@ -254,8 +254,14 @@ class FakeVantageSender:
 
 
 class FakeVantagePositions:
+    def __init__(self, positions: list[dict[str, Any]] | None = None) -> None:
+        self.positions = positions or []
+
+    def get_open_positions(self) -> dict[str, Any]:
+        return {"positions": self.positions}
+
     def get_open_positions_by_symbol(self, symbol: str) -> dict[str, Any]:
-        return {"positions": []}
+        return {"positions": [item for item in self.positions if str(item.get("symbol") or "").upper() == symbol.upper()]}
 
 
 class RevalidationSignalEngine:
@@ -556,7 +562,7 @@ def verify_real_engine_demo_collection_fallback_sl_tp() -> bool:
     return show("DEMO_COLLECTION generates fallback SL/TP from real tick plus ATR/fixed risk model", passed, str(plan))
 
 
-def _vantage_service_for_revalidation(current_signal: dict[str, Any]):
+def _vantage_service_for_revalidation(current_signal: dict[str, Any], positions: list[dict[str, Any]] | None = None):
     from backend.mt5_demo.vantage_xauusd_demo_validation_service import VantageXAUUSDDemoValidationService
 
     sender = FakeVantageSender()
@@ -565,7 +571,7 @@ def _vantage_service_for_revalidation(current_signal: dict[str, Any]):
         market_data_service=FakeVantageMarket(),
         approval_workflow_service=FakeApprovalWorkflow(),
         guarded_sender_service=sender,
-        position_sync_service=FakeVantagePositions(),
+        position_sync_service=FakeVantagePositions(positions),
         lifecycle_service=object(),
         signal_engine_service=RevalidationSignalEngine(current_signal),
     )
@@ -612,6 +618,64 @@ def verify_vantage_same_direction_minor_change_proceeds() -> bool:
     blockers = result.get("blocked_reasons") or result.get("blockers") or []
     passed = result["status"] == "DEMO_ORDER_SENT" and len(sender.calls) == 1 and "SIGNAL_DIRECTION_CHANGED" not in blockers
     return show("Vantage revalidation permits same-direction entry/TP hash drift", passed, str({"result": result, "sender_calls": sender.calls}))
+
+
+def verify_vantage_demo_collection_allows_open_position_below_limit() -> bool:
+    current = ready_signal("XAUUSD", signal_hash="demo-current-below-limit")
+    current.update({"signal": "SELL", "stop_loss": 2410.0, "take_profit": 2380.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
+    positions = [{"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-1", "volume": 0.01}]
+    service, sender = _vantage_service_for_revalidation(current, positions)
+    result = service.send_test_order(_demo_collection_vantage_payload("SELL", signal_hash="demo-below-limit"))
+    duplicate = result.get("duplicate_check") or {}
+    passed = (
+        result["status"] == "DEMO_ORDER_SENT"
+        and len(sender.calls) == 1
+        and duplicate.get("open_positions_count") == 1
+        and duplicate.get("final_duplicate_decision") is False
+        and duplicate.get("duplicate_source") == "none"
+    )
+    return show("DEMO_COLLECTION wrapper allows new trade when open-position limits are still available", passed, str({"result": result, "duplicate": duplicate}))
+
+
+def verify_vantage_demo_collection_exact_active_signal_blocks() -> bool:
+    current = ready_signal("XAUUSD", signal_hash="demo-current-exact-duplicate")
+    current.update({"signal": "SELL", "stop_loss": 2410.0, "take_profit": 2380.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
+    service, sender = _vantage_service_for_revalidation(current)
+    payload = _demo_collection_vantage_payload("SELL", signal_hash="demo-exact-duplicate")
+    first = service.send_test_order(payload)
+    second = service.send_test_order(payload)
+    duplicate = second.get("duplicate_check") or {}
+    blockers = second.get("blocked_reasons") or second.get("blockers") or []
+    passed = (
+        first["status"] == "DEMO_ORDER_SENT"
+        and second["status"] == "BLOCKED"
+        and duplicate.get("duplicate_source") == "same_active_signal_already_sent"
+        and "DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED" in blockers
+        and len(sender.calls) == 1
+    )
+    return show("DEMO_COLLECTION wrapper still blocks exact active signal duplicates", passed, str({"second": second, "duplicate": duplicate}))
+
+
+def verify_vantage_demo_collection_symbol_limit_blocks() -> bool:
+    current = ready_signal("XAUUSD", signal_hash="demo-current-symbol-limit")
+    current.update({"signal": "SELL", "stop_loss": 2410.0, "take_profit": 2380.0, "risk_reward": 2.0, "confidence": 69, "strategy_profile": "DEMO_COLLECTION"})
+    positions = [
+        {"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-1", "volume": 0.01},
+        {"symbol": "XAUUSD", "side": "SELL", "ticket": "existing-2", "volume": 0.01},
+        {"symbol": "XAUUSD", "side": "BUY", "ticket": "existing-3", "volume": 0.01},
+    ]
+    service, sender = _vantage_service_for_revalidation(current, positions)
+    result = service.send_test_order(_demo_collection_vantage_payload("SELL", signal_hash="demo-symbol-limit"))
+    duplicate = result.get("duplicate_check") or {}
+    blockers = result.get("blocked_reasons") or result.get("blockers") or []
+    passed = (
+        result["status"] == "BLOCKED"
+        and sender.calls == []
+        and duplicate.get("duplicate_source") == "max_open_trades_per_symbol_reached"
+        and duplicate.get("symbol_limit_reached") is True
+        and "DUPLICATE_VANTAGE_XAUUSD_TEST_ORDER_BLOCKED" in blockers
+    )
+    return show("DEMO_COLLECTION wrapper blocks only when configured open-position limit is reached", passed, str({"result": result, "duplicate": duplicate}))
 
 
 def verify_vantage_buy_to_sell_direction_change_rejects() -> bool:
@@ -729,13 +793,14 @@ async def verify_open_position_blocks_duplicate() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
     with tempfile.TemporaryDirectory() as tmp:
-        positions = [
-            {"symbol": "XAUUSD", "side": "BUY", "ticket": "123", "volume": 0.01},
-            {"symbol": "XAUUSD", "side": "BUY", "ticket": "124", "volume": 0.01},
-            {"symbol": "XAUUSD", "side": "BUY", "ticket": "125", "volume": 0.01},
-        ]
+        positions: list[dict[str, Any]] = []
         service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-open-position")]), state_path=Path(tmp) / "state.json", positions=positions)
         service.start()
+        service.position_service.positions = [
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "123", "volume": 0.01, "time": service.session["session_start_time"], "validation_session_id": service.session["session_id"]},
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "124", "volume": 0.01, "time": service.session["session_start_time"], "validation_session_id": service.session["session_id"]},
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": "125", "volume": 0.01, "time": service.session["session_start_time"], "validation_session_id": service.session["session_id"]},
+        ]
         result = await AutoValidationRunner(service).run_tick()
         status = service.status()
         duplicate = status["last_duplicate_check"]
@@ -759,6 +824,59 @@ async def verify_open_position_blocks_duplicate() -> bool:
             and guarded.calls == []
         )
         return show("Genuine open position blocks duplicate AUTO signal and syncs open telemetry", passed, str({"result": result, "duplicate": duplicate, "session": session, "sync": sync}))
+
+
+async def verify_old_positions_before_start_do_not_count() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        positions = [{"symbol": "XAUUSD", "side": "BUY", "ticket": "old-1", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"}]
+        service, _ = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-old-position")]), state_path=Path(tmp) / "state.json", positions=positions)
+        status = service.status()
+        session = status["session"]
+        sync = status["open_position_sync"]
+        passed = (
+            session["status"] == "IDLE"
+            and status["runner_active"] is False
+            and session["opened"] == 0
+            and session["orders_created"] == 0
+            and session["current_open_trades"] == 0
+            and session["total_trades"] == 0
+            and sync["mt5_open_positions_detected"] == 1
+            and sync["auto_owned_open_positions"] == 0
+            and sync["historical_unowned_open_positions"] == 1
+        )
+        return show("Before Start, old MT5 positions are historical/unowned and do not count", passed, str({"session": session, "sync": sync}))
+
+
+async def verify_start_creates_fresh_user_click_session() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        old_positions = [{"symbol": "XAUUSD", "side": "BUY", "ticket": "old-2", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"}]
+        service, _ = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-fresh-start")]), state_path=Path(tmp) / "state.json", positions=old_positions)
+        service.session.update({"orders_created": 9, "opened": 9, "signals_scanned": 99})
+        service._sent_signal_keys.add("stale-key")
+        started = service.start()
+        session = started["session"]
+        sync = started["open_position_sync"]
+        latches_cleared = service._sent_signal_keys == set()
+        order = await AutoValidationRunner(service).run_tick()
+        after_order = service.status()["session"]
+        passed = (
+            session["status"] == "RUNNING"
+            and session["session_started_by"] == "user_click"
+            and bool(session["session_id"])
+            and bool(session["session_start_time"])
+            and session["opened"] == 0
+            and session["orders_created"] == 0
+            and session["signals_scanned"] == 0
+            and latches_cleared
+            and sync["auto_owned_open_positions"] == 0
+            and sync["historical_unowned_open_positions"] == 1
+            and order["status"] == "ORDER_SENT"
+            and after_order["opened"] == 1
+            and after_order["orders_created"] == 1
+        )
+        return show("Start creates fresh user_click session and only new AUTO trades increment opened", passed, str({"session": session, "sync": sync, "order": order, "after_order": after_order}))
 
 
 async def verify_auto_validation_minor_hash_change_does_not_block() -> bool:
@@ -1188,7 +1306,7 @@ async def verify_no_overlapping_run_once_calls() -> bool:
     return show("Overlapping run_once calls are skipped", passed, str({"calls": service.calls, "second": second}))
 
 
-async def verify_persisted_running_session_starts_on_backend_startup() -> bool:
+async def verify_persisted_running_session_does_not_auto_start_by_default() -> bool:
     from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -1200,9 +1318,15 @@ async def verify_persisted_running_session_starts_on_backend_startup() -> bool:
         runner = AutoValidationRunner(restored, default_interval_seconds=0.05, watchlist_interval_seconds=0.03)
         runner.start_if_running()
         await asyncio.sleep(0.1)
-        passed = runner.is_active() and restored.session["status"] == "RUNNING" and any(event["event"] == "SIGNAL_EVALUATED" for event in restored.events)
+        passed = (
+            not runner.is_active()
+            and restored.session["status"] == "STOPPED"
+            and restored.session["reason_stopped"] == "PERSISTED_AUTO_RESUME_DISABLED"
+            and restored.config["allow_persisted_auto_resume"] is False
+            and not any(event["event"] == "SIGNAL_EVALUATED" for event in restored.events)
+        )
         await runner.shutdown()
-        return show("Persisted RUNNING session starts runner on backend startup", passed)
+        return show("Persisted RUNNING session does not auto-start when persisted resume disabled", passed)
 
 
 async def verify_runner_errors_logged() -> bool:
@@ -1256,6 +1380,9 @@ def verify_code_wiring_and_dashboard() -> bool:
         "auto_validation_runner.start_if_running()",
         "await auto_validation_runner.shutdown()",
         "runner_active",
+        "allow_persisted_auto_resume",
+        "session_start_time",
+        "historical_unowned_open_positions",
         "runner_last_tick_at",
         "runner_next_tick_at",
         "run_once_in_progress",
@@ -1295,6 +1422,9 @@ def verify_code_wiring_and_dashboard() -> bool:
         "rejection_code",
         "rejection_reason",
         "failed_guard",
+        "Last Blocker",
+        "Last MT5 Retcode",
+        "Order Send Status",
         "Last Duplicate Check",
         "duplicate_key",
         "duplicate_source",
@@ -1343,6 +1473,8 @@ async def async_main() -> list[bool]:
         await verify_failed_sender_attempt_does_not_create_duplicate(),
         await verify_cooldown_is_separate_from_duplicate(),
         await verify_open_position_blocks_duplicate(),
+        await verify_old_positions_before_start_do_not_count(),
+        await verify_start_creates_fresh_user_click_session(),
         await verify_auto_validation_minor_hash_change_does_not_block(),
         await verify_auto_validation_material_hash_change_blocks(),
         await verify_sender_rejection_does_not_halt_and_records_diagnostics(),
@@ -1353,7 +1485,7 @@ async def async_main() -> list[bool]:
         await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
         await verify_mt5_disconnect_timeout_halts_only_after_timeout(),
         await verify_no_overlapping_run_once_calls(),
-        await verify_persisted_running_session_starts_on_backend_startup(),
+        await verify_persisted_running_session_does_not_auto_start_by_default(),
         await verify_runner_errors_logged(),
     ]
 
@@ -1366,6 +1498,9 @@ def main() -> int:
         verify_production_profile_stays_strict(),
         verify_real_engine_demo_collection_fallback_sl_tp(),
         verify_vantage_same_direction_minor_change_proceeds(),
+        verify_vantage_demo_collection_allows_open_position_below_limit(),
+        verify_vantage_demo_collection_exact_active_signal_blocks(),
+        verify_vantage_demo_collection_symbol_limit_blocks(),
         verify_vantage_buy_to_sell_direction_change_rejects(),
         verify_vantage_sell_to_buy_direction_change_rejects(),
         verify_journal_stores_strategy_profile(),

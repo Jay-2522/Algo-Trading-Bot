@@ -1096,6 +1096,8 @@ function AutoValidationPanel({
   const senderRejection = asRecord(status?.last_sender_rejection ?? decision?.last_sender_rejection);
   const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
   const openPositionSync = asRecord(status?.open_position_sync);
+  const executionTimeline = asRecord(decision?.execution_timeline ?? asRecord(status?.post_sender_execution_summary)?.latest_timeline);
+  const senderResult = asRecord(decision?.sender_result);
   const hashChangedFields = Array.isArray(hashAudit?.changed_fields) ? (hashAudit.changed_fields.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const hashEvent = readText(hashAudit, ["event"], readText(hashAudit, ["minor_change"], "false") === "true" ? "HASH_CHANGE_MINOR" : "No hash change");
   const confidenceTimeline = Array.isArray(status?.confidence_timeline)
@@ -1167,6 +1169,9 @@ function AutoValidationPanel({
         <Metric label="Watching" value={watchedSymbols.join(" + ")} compact />
         <Metric label="Strategy Profile" value={activeStrategyProfile} valueClass="text-blue-200" compact />
         <Metric label="Session Started By" value={readText(session, ["session_started_by"], "Not started")} compact />
+        <Metric label="Session Start Time" value={formatTradeTime(readText(session, ["session_start_time", "started_at"], ""))} compact />
+        <Metric label="Current Session Opened" value={String(readNumber(session, ["opened", "orders_created"], 0))} compact />
+        <Metric label="Historical/Unowned MT5" value={String(readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0))} valueClass={readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0) > 0 ? "text-amber-200" : "text-slate-100"} compact />
         <Metric label="SL/TP Source" value={slTpSource} valueClass={slTpSource === "DEMO_RISK_FALLBACK" ? "text-amber-200" : "text-emerald-300"} compact />
         <Metric label="Advisory Blockers" value={relaxedBlockers.length ? relaxedBlockers.join(", ") : "None"} compact />
         <Metric label="Cooldown" value={`${readNumber(config, ["cooldown_after_trade_minutes"], 15)}m`} compact />
@@ -1189,6 +1194,11 @@ function AutoValidationPanel({
       {pollError ? (
         <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
           AUTO status stale: {pollError}
+        </div>
+      ) : null}
+      {readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0) > 0 ? (
+        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm font-bold text-amber-100">
+          Historical MT5 positions detected before this AUTO session. They are not counted toward current validation results.
         </div>
       ) : null}
 
@@ -1268,6 +1278,9 @@ function AutoValidationPanel({
           <Metric label="Code" value={readText(senderRejection, ["rejection_code"], "None")} compact />
           <Metric label="Reason" value={readText(senderRejection, ["rejection_reason"], "None")} compact />
           <Metric label="Failed Guard" value={readText(senderRejection, ["failed_guard"], "None")} compact />
+          <Metric label="Last Blocker" value={readText(executionTimeline, ["final_rejection_reason"], readText(senderResult, ["final_blocker"], "None"))} compact />
+          <Metric label="Last MT5 Retcode" value={readText(executionTimeline, ["retcode"], readText(senderResult, ["retcode", "final_retcode"], "None"))} compact />
+          <Metric label="Order Send Status" value={readText(executionTimeline, ["order_send_status"], readText(senderResult, ["order_send_status"], "None"))} compact />
         </div>
       </div>
       <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
@@ -1288,6 +1301,7 @@ function AutoValidationPanel({
           <Metric label="MT5 Open Detected" value={String(readNumber(openPositionSync, ["mt5_open_positions_detected"], 0))} compact />
           <Metric label="AUTO-Owned Open" value={String(readNumber(openPositionSync, ["auto_owned_open_positions"], 0))} compact />
           <Metric label="Unmatched Open" value={String(readNumber(openPositionSync, ["unmatched_open_positions"], 0))} compact />
+          <Metric label="Historical/Unowned" value={String(readNumber(openPositionSync, ["historical_unowned_open_positions"], 0))} compact />
           <Metric label="Open Tickets" value={Array.isArray(openPositionSync?.open_position_tickets) && openPositionSync.open_position_tickets.length ? openPositionSync.open_position_tickets.map(String).join(", ") : "None"} compact />
           <Metric label="Sync Time" value={formatTradeTime(readText(openPositionSync, ["timestamp"], ""))} compact />
         </div>

@@ -227,9 +227,20 @@ def verify_risk_blocks() -> bool:
     lot_service.start({"lot_size": 0.02})
     checks.append(lot_service.config["lot_size"] == 0.01)
 
-    sl_service, _ = make_service(signal(stop_loss=None, signal_hash="missing-sl"))
+    sl_service, sl_guarded = make_service(signal(stop_loss=None, signal_hash="missing-sl"))
     sl_service.start()
-    checks.append("SL_TP_REQUIRED" in sl_service.run_once([signal(stop_loss=None, signal_hash="missing-sl")])["blockers"])
+    missing_sl_result = sl_service.run_once([signal(stop_loss=None, signal_hash="missing-sl")])
+    sl_payload = sl_guarded.calls[-1] if sl_guarded.calls else {}
+    checks.append(
+        missing_sl_result["status"] == "ORDER_SENT"
+        and sl_payload.get("strategy_metadata", {}).get("sl_tp_source") == "DEMO_RISK_FALLBACK"
+        and sl_payload.get("stop_loss", 0) < sl_payload.get("entry_price", 0) < sl_payload.get("take_profit", 0)
+    )
+
+    invalid_sl_service, _ = make_service(signal(stop_loss=2360.0, take_profit=2365.0, signal_hash="invalid-sl-tp"))
+    invalid_sl_service.start()
+    invalid_sl_result = invalid_sl_service.run_once([signal(stop_loss=2360.0, take_profit=2365.0, signal_hash="invalid-sl-tp")])
+    checks.append("SL_TP_REQUIRED" in invalid_sl_result["blockers"])
 
     open_service, _ = make_service(positions=[{"symbol": "XAUUSD", "side": "BUY"} for _ in range(5)])
     open_service.start()

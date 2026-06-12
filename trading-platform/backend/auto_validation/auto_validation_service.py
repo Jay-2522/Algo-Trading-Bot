@@ -182,7 +182,7 @@ class AutoValidationService:
         halt = self._risk_halt_reason()
         if halt:
             return self._halt(halt)
-        signals = self._allowed_signals(signals if signals is not None else self._load_signals())
+        signals = [self._normalize_demo_collection_signal(signal) for signal in self._allowed_signals(signals if signals is not None else self._load_signals())]
         self._record_execution_funnel_scan(signals)
         self._record_confidence_timeline(signals)
         checked = [self._checked_symbol_result(signal) for signal in signals]
@@ -746,12 +746,110 @@ class AutoValidationService:
         spread = self._number(tick.get("spread"), None)
         spread_ok = spread is not None and spread <= max_spread
         live_tick_ok = tick.get("status") in {"OK", "TICK_AVAILABLE_DIRECT"} and spread_ok
+        tick_ok_or_grace = live_tick_ok or self._tick_stale_within_grace(symbol, tick)
         if profile == "DEMO_COLLECTION":
-            if not live_tick_ok:
+            if not tick_ok_or_grace:
                 blockers.append("VALID_TICK_SPREAD_REQUIRED")
         elif not live_tick_ok and not self._tick_stale_within_grace(symbol, tick):
             blockers.append("SPREAD_NOT_ACCEPTABLE_OR_STALE_WITHIN_GRACE")
         return blockers
+
+    def _normalize_demo_collection_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
+        if str(self.config.get("strategy_profile") or "").upper() != "DEMO_COLLECTION":
+            return signal
+        direction = str(signal.get("signal") or signal.get("side") or signal.get("action") or "").upper()
+        if direction not in {"BUY", "SELL"}:
+            return signal
+        normalized = dict(signal)
+        symbol = str(normalized.get("symbol") or "").upper()
+        tick = self._tick(symbol)
+        if not self._demo_collection_tick_ok(symbol, tick):
+            return normalized
+        entry = self._number(normalized.get("entry"), None)
+        if entry is None or entry <= 0:
+            entry = self._entry_from_tick(direction, tick)
+        if entry is not None and entry > 0:
+            normalized["entry"] = entry
+        if self._demo_collection_trade_plan_can_use_fallback(normalized):
+            normalized.update(self._demo_collection_fallback_trade_plan(symbol, direction, entry))
+        rr = self._number(normalized.get("risk_reward"), 0)
+        confidence = self._number(normalized.get("confidence"), 0)
+        if (
+            self._signal_sl_tp_valid(normalized)
+            and rr >= float(self.config.get("min_rr", 1.2))
+            and confidence >= float(self.config.get("min_confidence", 55))
+        ):
+            normalized["execution_status"] = "READY_FOR_PREVIEW"
+            normalized["risk_status"] = "APPROVED"
+            normalized["status_level"] = "READY_FOR_PREVIEW"
+            audit = normalized.get("approval_audit") if isinstance(normalized.get("approval_audit"), dict) else {}
+            advisory = self._demo_collection_advisory_from_signal(normalized)
+            normalized["approval_audit"] = {
+                **audit,
+                "strategy_profile": "DEMO_COLLECTION",
+                "sl_tp_source": normalized.get("sl_tp_source") or audit.get("sl_tp_source") or "STRATEGY",
+                "relaxed_blockers": advisory,
+                "advisory_requirements": advisory,
+                "approval_note": "DEMO_COLLECTION normalized by AUTO runner: direction, tick/spread, SL/TP, and RR passed; SMC/session blockers are advisory.",
+            }
+            normalized["missing_requirements"] = [item for item in normalized.get("missing_requirements", []) if not self._demo_collection_advisory_code(item)]
+        return normalized
+
+    def _demo_collection_tick_ok(self, symbol: str, tick: dict[str, Any]) -> bool:
+        spread = self._number(tick.get("spread"), None)
+        max_spread = 1.0 if symbol == "XAUUSD" else 0.0003
+        live_ok = tick.get("status") in {"OK", "TICK_AVAILABLE_DIRECT"} and spread is not None and spread <= max_spread
+        return live_ok or self._tick_stale_within_grace(symbol, tick)
+
+    def _entry_from_tick(self, direction: str, tick: dict[str, Any]) -> float | None:
+        return self._number(tick.get("ask" if direction == "BUY" else "bid"), None)
+
+    def _demo_collection_trade_plan_can_use_fallback(self, signal: dict[str, Any]) -> bool:
+        values = {key: self._number(signal.get(key), None) for key in ["entry", "stop_loss", "take_profit"]}
+        if any(value is None or value <= 0 for value in values.values()):
+            return True
+        if self._signal_sl_tp_valid(signal) and self._number(signal.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.2)):
+            return True
+        return False
+
+    def _demo_collection_fallback_trade_plan(self, symbol: str, direction: str, entry: float | None) -> dict[str, Any]:
+        if entry is None or entry <= 0:
+            return {}
+        min_rr = float(self.config.get("min_rr", 1.2))
+        risk = max(entry * (0.001 if symbol == "XAUUSD" else 0.0008), 0.01 if symbol == "XAUUSD" else 0.0001)
+        digits = 2 if symbol == "XAUUSD" else 5
+        if direction == "BUY":
+            stop_loss = entry - risk
+            take_profit = entry + risk * min_rr
+        else:
+            stop_loss = entry + risk
+            take_profit = entry - risk * min_rr
+        return {
+            "entry": round(entry, digits),
+            "stop_loss": round(stop_loss, digits),
+            "take_profit": round(take_profit, digits),
+            "risk_reward": round(min_rr, 2),
+            "sl_tp_source": "DEMO_RISK_FALLBACK",
+            "demo_risk_model": {
+                "model": "AUTO_RUNNER_FIXED_RISK",
+                "risk_distance": round(risk, digits),
+                "min_rr": min_rr,
+            },
+        }
+
+    def _demo_collection_advisory_from_signal(self, signal: dict[str, Any]) -> list[dict[str, Any]]:
+        advisory_codes = {"SESSION_INVALID", "BOS_MISSING", "FVG_MISSING", "ORDER_BLOCK_MISSING", "LIQUIDITY_SWEEP_MISSING", "TREND_ALIGNMENT_MISSING"}
+        items = signal.get("missing_requirements") if isinstance(signal.get("missing_requirements"), list) else []
+        advisory = []
+        for item in items:
+            code = str((item.get("code") if isinstance(item, dict) else item) or "")
+            if code in advisory_codes:
+                advisory.append({**item, "advisory": True} if isinstance(item, dict) else {"code": code, "advisory": True})
+        return advisory
+
+    def _demo_collection_advisory_code(self, item: Any) -> bool:
+        code = str((item.get("code") if isinstance(item, dict) else item) or "")
+        return code in {"SESSION_INVALID", "BOS_MISSING", "FVG_MISSING", "ORDER_BLOCK_MISSING", "LIQUIDITY_SWEEP_MISSING", "TREND_ALIGNMENT_MISSING"}
 
     def _signal_sl_tp_valid(self, signal: dict[str, Any]) -> bool:
         direction = str(signal.get("signal") or "").upper()
@@ -1292,7 +1390,8 @@ class AutoValidationService:
         if str(current.get("status_level") or "").upper() in {"WAIT", "REJECTED"}:
             material.append("SETUP_BECAME_WAIT_OR_REJECTED")
         components = current.get("strategy_components") if isinstance(current.get("strategy_components"), dict) else {}
-        if components.get("session_valid") is False:
+        profile = str(original.get("strategy_profile") or current.get("strategy_profile") or self.config.get("strategy_profile") or "").upper()
+        if components.get("session_valid") is False and profile != "DEMO_COLLECTION":
             material.append("SESSION_INVALID")
         if self._number(current.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.5)):
             material.append("RR_BELOW_THRESHOLD")

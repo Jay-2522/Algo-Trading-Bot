@@ -116,11 +116,14 @@ class FakeGuarded:
         self.calls: list[dict[str, Any]] = []
         self.market_data_service = self
         self.failed_ticks: set[str] = set()
+        self.ticks: dict[str, dict[str, Any]] = {}
         self.reject = False
         self.approval_blocked = False
         self.order_send_fail = False
 
     def get_symbol_tick(self, symbol: str) -> dict[str, Any]:
+        if symbol in self.ticks:
+            return self.ticks[symbol]
         if symbol in self.failed_ticks:
             return {"status": "SYMBOL_TICK_UNAVAILABLE", "spread": None}
         return {"status": "OK", "bid": 1.1, "ask": 1.2, "spread": 0.2}
@@ -507,6 +510,72 @@ async def verify_demo_collection_relaxed_directional_setup_opens() -> bool:
             and signals.requested_profiles[:2] == ["DEMO_COLLECTION", "DEMO_COLLECTION"]
         )
         return show("DEMO_COLLECTION relaxed directional setup can reach OPENED = 1", passed, str({"payload": payload, "session": status["session"]}))
+
+
+async def verify_demo_collection_builds_fallback_from_clean_start() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        imperfect = ready_signal("XAUUSD", signal_hash="xau-demo-build-fallback")
+        imperfect.update(
+            {
+                "signal": "BUY",
+                "status_level": "WATCHLIST",
+                "confidence": 58,
+                "execution_status": "WAITING",
+                "risk_status": "REJECTED",
+                "entry": None,
+                "stop_loss": None,
+                "take_profit": None,
+                "risk_reward": None,
+                "missing_requirements": [
+                    {"code": "SESSION_INVALID"},
+                    {"code": "FVG_MISSING"},
+                    {"code": "ORDER_BLOCK_MISSING"},
+                    {"code": "RR_MISSING"},
+                ],
+                "strategy_components": {
+                    "liquidity_sweep": False,
+                    "bos": False,
+                    "choch": False,
+                    "fvg": False,
+                    "order_block": False,
+                    "session_valid": False,
+                },
+                "strategy_profile": "DEMO_COLLECTION",
+            }
+        )
+        service, guarded = make_service(FakeSignals([imperfect]), state_path=Path(tmp) / "state.json")
+        guarded.ticks["XAUUSD"] = {"status": "OK", "bid": 2400.0, "ask": 2400.25, "spread": 0.25}
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        payload = guarded.calls[-1] if guarded.calls else {}
+        status = service.status()
+        passed = (
+            result["status"] == "ORDER_SENT"
+            and payload.get("strategy_profile") == "DEMO_COLLECTION"
+            and payload.get("risk_reward_ratio") == 1.2
+            and payload.get("entry_price") == 2400.25
+            and payload.get("stop_loss") < payload.get("entry_price") < payload.get("take_profit")
+            and payload.get("strategy_metadata", {}).get("sl_tp_source") == "DEMO_RISK_FALLBACK"
+            and status["session"]["opened"] == 1
+            and "SIGNAL_HASH_CHANGED" not in result.get("blockers", [])
+        )
+        return show("DEMO_COLLECTION clean Start builds fallback SL/TP and reaches guarded sender", passed, str({"result": result, "payload": payload, "session": status["session"]}))
+
+
+async def verify_demo_collection_stale_tick_within_grace_opens() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signal = ready_signal("XAUUSD", signal_hash="xau-demo-stale-grace")
+        signal.update({"confidence": 58, "risk_reward": 1.2, "strategy_profile": "DEMO_COLLECTION"})
+        service, _ = make_service(FakeSignals([signal]), state_path=Path(tmp) / "state.json")
+        service.guarded_execution_service.ticks["XAUUSD"] = {"status": "STALE_TICK", "bid": 2400.0, "ask": 2400.25, "spread": 0.25, "stale_age_seconds": 4}
+        service.start()
+        result = await AutoValidationRunner(service).run_tick()
+        passed = result["status"] == "ORDER_SENT" and "VALID_TICK_SPREAD_REQUIRED" not in result.get("blockers", [])
+        return show("DEMO_COLLECTION stale-within-grace tick does not block valid demo order", passed, str(result))
 
 
 async def verify_auto_validation_profile_remains_strict() -> bool:
@@ -1524,6 +1593,8 @@ async def async_main() -> list[bool]:
         await verify_recoverable_market_data_failure_does_not_halt(),
         await verify_auto_validation_profile_loosened_rules_fire_demo_order(),
         await verify_demo_collection_relaxed_directional_setup_opens(),
+        await verify_demo_collection_builds_fallback_from_clean_start(),
+        await verify_demo_collection_stale_tick_within_grace_opens(),
         await verify_auto_validation_profile_remains_strict(),
         await verify_duplicate_same_active_signal_blocks(),
         await verify_closed_historical_trade_does_not_block_duplicate_check(),

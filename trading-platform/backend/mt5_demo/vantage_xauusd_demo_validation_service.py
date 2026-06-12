@@ -251,7 +251,9 @@ class VantageXAUUSDDemoValidationService:
             blockers.append("INVALID_BUY_SL_TP_PLACEMENT")
         elif side == "SELL" and stop_loss is not None and take_profit is not None and not (take_profit < entry < stop_loss):
             blockers.append("INVALID_SELL_SL_TP_PLACEMENT")
-        if tick.get("status") != "OK":
+        strategy_profile = str(payload.get("strategy_profile") or "").upper()
+        tick_ready = tick.get("status") == "OK" or (strategy_profile == "DEMO_COLLECTION" and self._tick_stale_within_grace(tick))
+        if not tick_ready:
             blockers.append(f"{symbol}_TICK_NOT_READY")
         if tick.get("spread") is None:
             blockers.append("SPREAD_UNAVAILABLE")
@@ -339,6 +341,12 @@ class VantageXAUUSDDemoValidationService:
         positions = result.get("positions", []) if isinstance(result, dict) else []
         return positions if isinstance(positions, list) else []
 
+    def _tick_stale_within_grace(self, tick: dict[str, Any]) -> bool:
+        status = str(tick.get("status") or "").upper()
+        stale_age = self._float_or_none(tick.get("stale_age_seconds"))
+        spread = self._float_or_none(tick.get("spread"))
+        return status == "STALE_TICK" and stale_age is not None and stale_age <= 10 and spread is not None and spread <= self.max_spread
+
     def _all_open_positions(self) -> list[dict[str, Any]]:
         try:
             reader = getattr(self.position_sync_service, "get_open_positions", None)
@@ -379,14 +387,18 @@ class VantageXAUUSDDemoValidationService:
                 current_signal = self.signal_engine_service.generate_signal(symbol)
         if current_signal is not None:
             current_direction = str(current_signal.get("signal") or "").upper()
-            if current_signal.get("execution_status") != "READY_FOR_PREVIEW":
-                blockers.append("SIGNAL_NO_LONGER_READY_FOR_PREVIEW")
-            if current_signal.get("risk_status") != "APPROVED":
-                blockers.append("SIGNAL_NO_LONGER_APPROVED")
             if current_direction in {"BUY", "SELL"} and side in {"BUY", "SELL"} and current_direction != side:
                 blockers.append("SIGNAL_DIRECTION_CHANGED")
             elif current_direction not in {"BUY", "SELL"}:
                 blockers.append("SIGNAL_NO_LONGER_HAS_DIRECTION")
+            if strategy_profile == "DEMO_COLLECTION":
+                if not self._demo_collection_payload_still_executable(payload, side):
+                    blockers.append("DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE")
+            else:
+                if current_signal.get("execution_status") != "READY_FOR_PREVIEW":
+                    blockers.append("SIGNAL_NO_LONGER_READY_FOR_PREVIEW")
+                if current_signal.get("risk_status") != "APPROVED":
+                    blockers.append("SIGNAL_NO_LONGER_APPROVED")
             if signal_hash and current_signal.get("signal_hash") != signal_hash and strategy_profile not in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
                 blockers.append("SIGNAL_HASH_CHANGED")
             if strategy_profile == "AUTO_VALIDATION":
@@ -417,6 +429,22 @@ class VantageXAUUSDDemoValidationService:
             if current_signal is not None
             else None,
         }
+
+    def _demo_collection_payload_still_executable(self, payload: dict[str, Any], side: str) -> bool:
+        entry = self._float_or_none(payload.get("entry_price") or payload.get("entry"))
+        if entry is None:
+            symbol = str(payload.get("symbol") or self.symbol).strip().upper()
+            tick = self.market_data_service.get_symbol_tick(symbol if symbol in self.supported_symbols else self.symbol)
+            entry = self._entry_estimate(side, tick)
+        stop_loss = self._float_or_none(payload.get("stop_loss") or payload.get("sl"))
+        take_profit = self._float_or_none(payload.get("take_profit") or payload.get("tp"))
+        rr = self._float_or_none(payload.get("risk_reward_ratio") or payload.get("risk_reward") or payload.get("rr"))
+        confidence = self._float_or_none(payload.get("signal_confidence") or payload.get("confidence"))
+        if side == "BUY" and not (entry and stop_loss and take_profit and stop_loss < entry < take_profit):
+            return False
+        if side == "SELL" and not (entry and stop_loss and take_profit and take_profit < entry < stop_loss):
+            return False
+        return bool(rr is not None and rr >= 1.2 and confidence is not None and confidence >= 55)
 
     def _rejection_diagnostics(self, payload: dict[str, Any], blockers: list[str], readiness: dict[str, Any], reason: str) -> dict[str, Any]:
         account = readiness.get("account") if isinstance(readiness.get("account"), dict) else {}

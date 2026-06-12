@@ -21,6 +21,8 @@ class AutoValidationService:
         journal_service: Any | None = None,
         position_service: Any | None = None,
         mt5_demo_service: Any | None = None,
+        lifecycle_service: Any | None = None,
+        close_sync_service: Any | None = None,
         state_path: Path | None = None,
     ) -> None:
         self.signal_provider = signal_provider
@@ -28,6 +30,8 @@ class AutoValidationService:
         self.journal_service = journal_service
         self.position_service = position_service
         self.mt5_demo_service = mt5_demo_service
+        self.lifecycle_service = lifecycle_service
+        self.close_sync_service = close_sync_service
         self.state_path = state_path or DEFAULT_STATE_PATH
         self.config = self._default_config()
         self.session = self._empty_session()
@@ -40,6 +44,7 @@ class AutoValidationService:
         self._last_sender_rejection: dict[str, Any] | None = None
         self._last_duplicate_check: dict[str, Any] | None = None
         self._open_position_sync_diagnostics: dict[str, Any] = self._empty_open_position_sync_diagnostics()
+        self._lifecycle_sync_diagnostics: dict[str, Any] = self._empty_lifecycle_sync_diagnostics()
         self._execution_timelines: list[dict[str, Any]] = []
         self._seen_signal_hashes: set[str] = set()
         self._sent_signal_keys: set[str] = set()
@@ -49,6 +54,7 @@ class AutoValidationService:
         self._load_state()
 
     def status(self) -> dict[str, Any]:
+        self._sync_lifecycle_services(manual=False)
         self._refresh_session_metrics()
         self._clear_disallowed_watched_signal()
         return {
@@ -66,6 +72,7 @@ class AutoValidationService:
             "last_sender_rejection": copy.deepcopy(self._last_sender_rejection),
             "last_duplicate_check": copy.deepcopy(self._last_duplicate_check),
             "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
+            "lifecycle_sync": copy.deepcopy(self._lifecycle_sync_diagnostics),
             "post_sender_execution_summary": self.post_sender_execution_summary(),
             "execution_timelines": copy.deepcopy(self._execution_timelines[-100:]),
             "confidence_timeline": copy.deepcopy(self._confidence_timeline),
@@ -142,8 +149,26 @@ class AutoValidationService:
         return [trade for trade in self.journal_service.list_trades(limit=100000) if trade.get("validation_session_id") == session_id]
 
     def summary(self) -> dict[str, Any]:
+        self._sync_lifecycle_services(manual=False)
         self._refresh_session_metrics()
         return dict(self.session)
+
+    def sync_lifecycle(self) -> dict[str, Any]:
+        result = self._sync_lifecycle_services(manual=True)
+        self._refresh_session_metrics()
+        self._save_state()
+        return {
+            "status": "SYNCED",
+            "message": "AUTO validation lifecycle synchronized.",
+            "lifecycle_sync": copy.deepcopy(result),
+            "session": dict(self.session),
+            "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
+            "simulation_only": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
+            "timestamp": self._timestamp(),
+        }
 
     def post_sender_execution_summary(self) -> dict[str, Any]:
         return {
@@ -164,6 +189,7 @@ class AutoValidationService:
     def run_once(self, signals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         if self.session["status"] not in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} or self.config["auto_validation_enabled"] is not True:
             return self._decision("IDLE", ["AUTO_VALIDATION_NOT_RUNNING"])
+        self._sync_lifecycle_services(manual=False)
         self._refresh_session_metrics()
         mt5_health = self._mt5_health_check()
         if self.session["status"] == "WAITING_FOR_MT5_RECONNECT":
@@ -979,12 +1005,17 @@ class AutoValidationService:
             self.session.update(
                 {
                     "total_trades": 0,
+                    "current_session_total_trades": 0,
                     "target_validation_trades": target_trades,
                     "current_closed_trades": 0,
+                    "current_session_closed": 0,
                     "current_open_trades": 0,
+                    "current_session_open_trades": 0,
                     "open_trades": 0,
+                    "current_session_opened": 0,
                     "daily_demo_trade_count": 0,
                     "remaining_trades_to_target": target_trades,
+                    "remaining_closed_trades": target_trades,
                     "signals_scanned": 0,
                     "signals_wait": 0,
                     "signals_watchlist": 0,
@@ -1033,13 +1064,18 @@ class AutoValidationService:
         self.session.update(
             {
                 "total_trades": len(closed) + open_trade_count,
+                "current_session_total_trades": len(closed) + open_trade_count,
                 "target_validation_trades": target_trades,
                 "current_closed_trades": len(closed),
+                "current_session_closed": len(closed),
                 "current_open_trades": open_trade_count,
+                "current_session_open_trades": open_trade_count,
                 "open_trades": open_trade_count,
                 "daily_demo_trade_count": daily_demo_trade_count,
                 "remaining_trades_to_target": max(0, target_trades - len(closed)),
+                "remaining_closed_trades": max(0, target_trades - len(closed)),
                 "opened": opened_count,
+                "current_session_opened": opened_count,
                 "orders_created": opened_count,
                 "wins": len(wins),
                 "losses": len(losses),
@@ -1061,6 +1097,59 @@ class AutoValidationService:
             self.config["auto_validation_enabled"] = False
             self._log("TARGET_COMPLETED")
             self._save_state()
+
+    def _sync_lifecycle_services(self, manual: bool = False) -> dict[str, Any]:
+        result = self._empty_lifecycle_sync_diagnostics()
+        result["manual"] = manual
+        if not self._has_current_user_session():
+            self._lifecycle_sync_diagnostics = {
+                **result,
+                "status": "SKIPPED",
+                "message": "No current user-started AUTO validation session.",
+                "timestamp": self._timestamp(),
+            }
+            return self._lifecycle_sync_diagnostics
+
+        lifecycle_result: dict[str, Any] = {}
+        close_result: dict[str, Any] = {}
+        errors: list[str] = []
+        try:
+            if self.lifecycle_service is not None and hasattr(self.lifecycle_service, "sync"):
+                lifecycle_result = self.lifecycle_service.sync()
+        except Exception as exc:
+            errors.append(f"lifecycle_sync_failed: {exc}")
+        try:
+            if self.close_sync_service is not None and hasattr(self.close_sync_service, "run"):
+                close_result = self.close_sync_service.run()
+        except Exception as exc:
+            errors.append(f"close_sync_failed: {exc}")
+
+        updated = []
+        if isinstance(lifecycle_result.get("updated_trades"), list):
+            updated.extend(item for item in lifecycle_result["updated_trades"] if isinstance(item, dict))
+        if isinstance(close_result.get("closed_trades"), list):
+            updated.extend(item for item in close_result["closed_trades"] if isinstance(item, dict))
+        session_id = str(self.session.get("session_id") or "")
+        session_closed = [trade for trade in updated if str(trade.get("validation_session_id") or "") == session_id]
+        self._lifecycle_sync_diagnostics = {
+            **result,
+            "status": "ERROR" if errors else "SYNCED",
+            "message": "; ".join(errors) if errors else "Lifecycle sync completed.",
+            "lifecycle_status": lifecycle_result.get("status", "NOT_CONFIGURED" if not lifecycle_result else ""),
+            "close_sync_status": close_result.get("status", "NOT_CONFIGURED" if not close_result else ""),
+            "open_trades_checked": int(lifecycle_result.get("open_trades_checked") or close_result.get("open_trades_checked") or 0),
+            "closed_trades_updated": len(session_closed),
+            "all_closed_trades_updated": int(lifecycle_result.get("closed_trades_updated") or 0) + int(close_result.get("closed_trades_updated") or 0),
+            "session_closed_trade_ids": [str(trade.get("trade_id") or "") for trade in session_closed if trade.get("trade_id")],
+            "warnings": close_result.get("warnings") if isinstance(close_result.get("warnings"), list) else [],
+            "errors": errors,
+            "timestamp": self._timestamp(),
+        }
+        if session_closed:
+            self._log("LIFECYCLE_SYNC_CLOSED_TRADES", {"closed_trades_updated": len(session_closed), "trade_ids": self._lifecycle_sync_diagnostics["session_closed_trade_ids"]})
+        elif manual:
+            self._log("LIFECYCLE_SYNC_COMPLETED", {"closed_trades_updated": 0, "status": self._lifecycle_sync_diagnostics["status"]})
+        return self._lifecycle_sync_diagnostics
 
     def _risk_halt_reason(self) -> str | None:
         if self.session["current_closed_trades"] >= int(self.config.get("target_validation_trades") or self.config["target_closed_trades"]):
@@ -1154,7 +1243,6 @@ class AutoValidationService:
             "NON_VANTAGE_BROKER_DETECTED",
             "LOT_SIZE_EXCEEDS_0_01",
             "SL_TP_REQUIRED",
-            "MAX_DAILY_TRADE_LIMIT_REACHED",
             "MAX_DRAWDOWN_REACHED",
             "MAX_DAILY_LOSS_REACHED",
             "MT5_DISCONNECT_TIMEOUT",
@@ -1196,6 +1284,26 @@ class AutoValidationService:
             "run_once_in_progress": False,
             "last_run_once_duration_ms": None,
             "last_runner_error": "",
+        }
+
+    def _empty_lifecycle_sync_diagnostics(self) -> dict[str, Any]:
+        return {
+            "status": "NOT_SYNCED",
+            "message": "AUTO validation lifecycle sync has not run.",
+            "manual": False,
+            "lifecycle_status": "NOT_CONFIGURED",
+            "close_sync_status": "NOT_CONFIGURED",
+            "open_trades_checked": 0,
+            "closed_trades_updated": 0,
+            "all_closed_trades_updated": 0,
+            "session_closed_trade_ids": [],
+            "warnings": [],
+            "errors": [],
+            "timestamp": None,
+            "simulation_only": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
         }
 
     def _empty_mt5_health_state(self) -> dict[str, Any]:
@@ -1535,11 +1643,16 @@ class AutoValidationService:
             "target_validation_trades": 30,
             "session_started_by": "",
             "session_start_time": None,
+            "current_session_total_trades": 0,
             "current_closed_trades": 0,
+            "current_session_closed": 0,
             "current_open_trades": 0,
+            "current_session_open_trades": 0,
             "open_trades": 0,
+            "current_session_opened": 0,
             "daily_demo_trade_count": 0,
             "remaining_trades_to_target": 30,
+            "remaining_closed_trades": 30,
             "wins": 0,
             "losses": 0,
             "win_rate": 0.0,
@@ -1615,6 +1728,8 @@ class AutoValidationService:
             self._last_duplicate_check = data["last_duplicate_check"]
         if isinstance(data.get("open_position_sync"), dict):
             self._open_position_sync_diagnostics = data["open_position_sync"]
+        if isinstance(data.get("lifecycle_sync"), dict):
+            self._lifecycle_sync_diagnostics = data["lifecycle_sync"]
         if isinstance(data.get("execution_timelines"), list):
             self._execution_timelines = [item for item in data["execution_timelines"] if isinstance(item, dict)][-100:]
         if isinstance(data.get("sent_signal_keys"), list):
@@ -1652,6 +1767,7 @@ class AutoValidationService:
                 "last_sender_rejection": self._last_sender_rejection,
                 "last_duplicate_check": self._last_duplicate_check,
                 "open_position_sync": self._open_position_sync_diagnostics,
+                "lifecycle_sync": self._lifecycle_sync_diagnostics,
                 "execution_timelines": self._execution_timelines[-100:],
                 "confidence_timeline": self._confidence_timeline,
                 "sent_signal_keys": sorted(self._sent_signal_keys),

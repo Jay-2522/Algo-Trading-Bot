@@ -25,6 +25,7 @@ from backend.mt5_demo.mt5_risk_qualification_service import MT5RiskQualification
 from backend.mt5_demo.mt5_execution_gate_validation_service import MT5ExecutionGateValidationService
 from backend.mt5_demo.vantage_xauusd_demo_validation_service import VantageXAUUSDDemoValidationService
 from backend.strategy.real_signal_engine_service import RealSignalEngineService
+from backend.api.trade_journal_persistence_routes import persistent_trade_journal_service
 
 
 router = APIRouter(prefix="/mt5-demo", tags=["MT5 Demo"])
@@ -93,8 +94,8 @@ demo_approval_workflow_service = DemoApprovalWorkflowService(
     final_approval_service=demo_final_approval_service,
 )
 mt5_demo_position_sync_service = MT5DemoPositionSyncService()
-mt5_trade_lifecycle_service = MT5TradeLifecycleService()
-mt5_trade_close_sync_service = MT5TradeCloseSyncService()
+mt5_trade_lifecycle_service = MT5TradeLifecycleService(persistent_trade_journal_service)
+mt5_trade_close_sync_service = MT5TradeCloseSyncService(persistent_trade_journal_service)
 mt5_position_monitoring_service = MT5PositionMonitoringService(mt5_demo_position_sync_service)
 guarded_demo_order_sender_service = GuardedDemoOrderSenderService(
     mt5_demo_service=service,

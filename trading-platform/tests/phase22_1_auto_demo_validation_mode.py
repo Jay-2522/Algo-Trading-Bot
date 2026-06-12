@@ -166,6 +166,7 @@ def verify_default_routes_and_config() -> bool:
         "/auto-validation/stop",
         "/auto-validation/trades",
         "/auto-validation/summary",
+        "/auto-validation/sync-lifecycle",
         "/auto-validation/events",
     ]
     passed = (
@@ -385,7 +386,10 @@ def verify_dashboard_and_no_order_send() -> bool:
         "Open Trade Limit",
         "Per-Symbol Limit",
         "Daily Demo Trades",
-        "Remaining to 30",
+        "Target Closed Trades",
+        "Remaining Closed Trades",
+        "Current Session Closed",
+        "Lifecycle Sync",
         "Open Position Sync",
         "Session Started By",
         "Session Start Time",

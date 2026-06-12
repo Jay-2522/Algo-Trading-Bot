@@ -214,6 +214,69 @@ class FakeJournal:
             self.trades[self.trades.index(existing)] = record
         return record
 
+    def mark_trade_closed_by_ticket(self, ticket: str | int, close_payload: dict[str, Any]) -> dict[str, Any] | None:
+        ticket_text = str(ticket)
+        existing = next((trade for trade in self.trades if str(trade.get("mt5_ticket") or "") == ticket_text), None)
+        if existing is None:
+            return None
+        record = {
+            **existing,
+            **close_payload,
+            "status": "CLOSED",
+            "result": close_payload.get("result", "WIN"),
+            "mt5_ticket": ticket_text,
+        }
+        self.trades[self.trades.index(existing)] = record
+        return record
+
+
+class FakeLifecycleSync:
+    def __init__(self, updates: list[dict[str, Any]] | None = None) -> None:
+        self.updates = updates or []
+        self.calls = 0
+
+    def sync(self) -> dict[str, Any]:
+        self.calls += 1
+        return {
+            "status": "SYNCED",
+            "open_trades_checked": 0,
+            "closed_trades_updated": len(self.updates),
+            "updated_trades": self.updates,
+        }
+
+
+class FakeCloseSync:
+    def __init__(self, journal: FakeJournal, closed_tickets: list[str] | None = None) -> None:
+        self.journal = journal
+        self.closed_tickets = closed_tickets or []
+        self.calls = 0
+
+    def run(self) -> dict[str, Any]:
+        self.calls += 1
+        closed = []
+        for ticket in self.closed_tickets:
+            updated = self.journal.mark_trade_closed_by_ticket(
+                ticket,
+                {
+                    "closed_at": datetime.now(timezone.utc).isoformat(),
+                    "close_price": 2405.0,
+                    "net_pnl": 5.0,
+                    "profit_loss": 5.0,
+                    "total_pnl": 5.0,
+                    "result": "WIN",
+                    "exit_reason": "TAKE_PROFIT",
+                },
+            )
+            if updated is not None:
+                closed.append(updated)
+        return {
+            "status": "SYNCED",
+            "open_trades_checked": len(self.closed_tickets),
+            "closed_trades_updated": len(closed),
+            "closed_trades": closed,
+            "warnings": [],
+        }
+
 
 class FakePositions:
     def __init__(self, positions: list[dict[str, Any]] | None = None) -> None:
@@ -278,17 +341,27 @@ class RevalidationSignalEngine:
         return {**self.signal, "symbol": symbol, "strategy_profile": strategy_profile}
 
 
-def make_service(signals: FakeSignals | None = None, state_path: Path | None = None, positions: list[dict[str, Any]] | None = None, trades: list[dict[str, Any]] | None = None):
+def make_service(
+    signals: FakeSignals | None = None,
+    state_path: Path | None = None,
+    positions: list[dict[str, Any]] | None = None,
+    trades: list[dict[str, Any]] | None = None,
+    lifecycle_service: Any | None = None,
+    close_sync_service: Any | None = None,
+):
     from backend.auto_validation.auto_validation_service import AutoValidationService
 
     guarded = FakeGuarded()
+    journal = FakeJournal(trades)
     return (
         AutoValidationService(
             signal_provider=signals or FakeSignals(),
             guarded_execution_service=guarded,
-            journal_service=FakeJournal(trades),
+            journal_service=journal,
             position_service=FakePositions(positions),
             mt5_demo_service=FakeAccount(),
+            lifecycle_service=lifecycle_service,
+            close_sync_service=close_sync_service,
             state_path=state_path,
         ),
         guarded,
@@ -1276,6 +1349,144 @@ async def verify_status_reconciles_open_mt5_positions_into_opened_counter() -> b
         return show("Status reconciles AUTO-owned MT5 open positions into opened counter without closed metrics", passed, str({"session": session, "journal": journal_trade}))
 
 
+async def verify_phase23_thirty_opened_two_closed_does_not_complete() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        trades = []
+        for index in range(28):
+            trades.append({"validation_session_id": "placeholder", "trade_id": f"open-{index}", "status": "OPEN", "result": "OPEN", "symbol": "XAUUSD", "mt5_ticket": f"open-{index}", "strategy_profile": "DEMO_COLLECTION"})
+        for index in range(2):
+            trades.append({"validation_session_id": "placeholder", "trade_id": f"closed-{index}", "status": "CLOSED", "result": "WIN", "symbol": "XAUUSD", "mt5_ticket": f"closed-{index}", "net_pnl": 1.0, "strategy_profile": "DEMO_COLLECTION"})
+        service, _ = make_service(FakeSignals([wait_signal("XAUUSD")]), state_path=Path(tmp) / "state.json", trades=trades)
+        service.start()
+        for trade in trades:
+            trade["validation_session_id"] = service.session["session_id"]
+        service.session["opened"] = 30
+        service.session["orders_created"] = 30
+        status = service.status()
+        session = status["session"]
+        passed = (
+            session["status"] == "RUNNING"
+            and session["current_closed_trades"] == 2
+            and session["current_open_trades"] == 28
+            and session["opened"] == 30
+            and session["remaining_trades_to_target"] == 28
+            and session["remaining_closed_trades"] == 28
+            and session["reason_stopped"] == ""
+        )
+        return show("Phase 23: 30 opened/active records with only 2 closed does not complete validation", passed, str(session))
+
+
+async def verify_phase23_open_limit_blocks_entries_but_monitoring_stays_active() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        positions = [
+            {"symbol": "XAUUSD", "side": "BUY", "ticket": f"raw-{index}", "volume": 0.01}
+            for index in range(5)
+        ]
+        service, guarded = make_service(FakeSignals([ready_signal("XAUUSD", signal_hash="xau-phase23-open-limit")]), state_path=Path(tmp) / "state.json", positions=positions)
+        lifecycle = FakeLifecycleSync([])
+        service.lifecycle_service = lifecycle
+        service.start({"cooldown_after_trade_minutes": 0})
+        result = await AutoValidationRunner(service).run_tick()
+        status = service.status()
+        passed = (
+            result["status"] == "BLOCKED"
+            and "MAX_OPEN_TRADES_TOTAL_REACHED" in result["blockers"]
+            and status["session"]["status"] == "RUNNING"
+            and status["config"]["auto_validation_enabled"] is True
+            and lifecycle.calls >= 1
+            and guarded.calls == []
+        )
+        return show("Phase 23: max 5 open positions blocks new entries but lifecycle monitoring remains active", passed, str({"result": result, "session": status["session"], "lifecycle_calls": lifecycle.calls}))
+
+
+async def verify_phase23_closed_mt5_trade_sync_updates_completed_count() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        trades = [{"validation_session_id": "placeholder", "trade_id": "mt5_demo_777", "status": "OPEN", "result": "OPEN", "symbol": "XAUUSD", "mt5_ticket": "777", "strategy_profile": "DEMO_COLLECTION"}]
+        service, _ = make_service(FakeSignals([wait_signal("XAUUSD")]), state_path=Path(tmp) / "state.json", trades=trades)
+        service.start()
+        trades[0]["validation_session_id"] = service.session["session_id"]
+        service.close_sync_service = FakeCloseSync(service.journal_service, ["777"])
+        synced = service.sync_lifecycle()
+        session = synced["session"]
+        passed = (
+            synced["lifecycle_sync"]["closed_trades_updated"] == 1
+            and session["current_closed_trades"] == 1
+            and session["current_open_trades"] == 0
+            and session["remaining_trades_to_target"] == 29
+            and service.journal_service.trades[0]["status"] == "CLOSED"
+        )
+        return show("Phase 23: closed MT5 trade sync increments completed closed-trade count", passed, str({"synced": synced, "trades": service.journal_service.trades}))
+
+
+async def verify_phase23_thirty_closed_completes_session() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        trades = [
+            {"validation_session_id": "placeholder", "trade_id": f"closed-{index}", "status": "CLOSED", "result": "WIN", "symbol": "XAUUSD", "mt5_ticket": f"closed-{index}", "net_pnl": 1.0, "strategy_profile": "DEMO_COLLECTION"}
+            for index in range(30)
+        ]
+        service, _ = make_service(FakeSignals([wait_signal("XAUUSD")]), state_path=Path(tmp) / "state.json", trades=trades)
+        service.start()
+        for trade in trades:
+            trade["validation_session_id"] = service.session["session_id"]
+        status = service.status()
+        session = status["session"]
+        passed = (
+            session["status"] == "COMPLETED"
+            and session["current_closed_trades"] == 30
+            and session["remaining_trades_to_target"] == 0
+            and session["reason_stopped"] == "TARGET_COMPLETED"
+            and status["config"]["auto_validation_enabled"] is False
+        )
+        return show("Phase 23: 30 closed trades completes the AUTO validation session", passed, str(session))
+
+
+async def verify_phase23_duplicate_blocked_scan_does_not_count_opened_or_closed() -> bool:
+    from backend.auto_validation.auto_validation_runner import AutoValidationRunner
+
+    with tempfile.TemporaryDirectory() as tmp:
+        signals = FakeSignals([ready_signal("XAUUSD", signal_hash="phase23-duplicate")])
+        service, _ = make_service(signals, state_path=Path(tmp) / "state.json")
+        runner = AutoValidationRunner(service)
+        service.start({"cooldown_after_trade_minutes": 0})
+        first = await runner.run_tick()
+        second = await runner.run_tick()
+        session = service.status()["session"]
+        passed = (
+            first["status"] == "ORDER_SENT"
+            and second["status"] == "BLOCKED"
+            and "DUPLICATE_SIGNAL_BLOCKED" in second["blockers"]
+            and session["opened"] == 1
+            and session["current_closed_trades"] == 0
+            and session["total_trades"] == 1
+        )
+        return show("Phase 23: duplicate-blocked scans do not count as opened or closed trades", passed, str({"first": first, "second": second, "session": session}))
+
+
+async def verify_phase23_historical_trades_do_not_contaminate_current_results() -> bool:
+    with tempfile.TemporaryDirectory() as tmp:
+        trades = [
+            {"validation_session_id": "old-session", "trade_id": "old-closed", "status": "CLOSED", "result": "WIN", "symbol": "XAUUSD", "mt5_ticket": "old-1", "net_pnl": 10.0},
+            {"validation_session_id": "old-session", "trade_id": "old-open", "status": "OPEN", "result": "OPEN", "symbol": "EURUSD", "mt5_ticket": "old-2"},
+        ]
+        positions = [{"symbol": "EURUSD", "side": "BUY", "ticket": "old-2", "volume": 0.01, "time": "2026-01-01T00:00:00+00:00"}]
+        service, _ = make_service(FakeSignals([wait_signal("XAUUSD")]), state_path=Path(tmp) / "state.json", trades=trades, positions=positions)
+        stopped = service.status()
+        service.start()
+        started = service.status()
+        passed = (
+            stopped["session"]["current_closed_trades"] == 0
+            and stopped["session"]["opened"] == 0
+            and stopped["open_position_sync"]["historical_positions"] == 1
+            and started["session"]["current_closed_trades"] == 0
+            and started["session"]["opened"] == 0
+            and started["session"]["total_trades"] == 0
+            and started["open_position_sync"]["historical_unowned_open_positions"] == 1
+        )
+        return show("Phase 23: historical MT5/journal trades do not contaminate current validation results", passed, str({"stopped": stopped["session"], "started": started["session"], "sync": started["open_position_sync"]}))
+
+
 def verify_production_profile_stays_strict() -> bool:
     from backend.strategy.client_signal_engine import ClientSignalEngine
 
@@ -1625,6 +1836,9 @@ def verify_code_wiring_and_dashboard() -> bool:
         "guarded_sender_attempted",
         "opened",
         "post_sender_execution_summary",
+        "sync_lifecycle",
+        "/sync-lifecycle",
+        "lifecycle_sync",
         "execution_timelines",
         "POST_SENDER_EXECUTION_TRACE",
         "Wrapper Submitted",
@@ -1645,6 +1859,10 @@ def verify_code_wiring_and_dashboard() -> bool:
         "Validation Positions",
         "Current Session Positions",
         "Current Session By Symbol",
+        "Lifecycle Sync",
+        "Target Closed Trades",
+        "Remaining Closed Trades",
+        "Current Session Closed",
         "Limit Count Source",
         "Last Duplicate Check",
         "duplicate_key",
@@ -1706,6 +1924,12 @@ async def async_main() -> list[bool]:
         await verify_wrapper_submitted_approval_blocked_not_guarded_attempted(),
         await verify_order_send_attempt_failure_counter(),
         await verify_status_reconciles_open_mt5_positions_into_opened_counter(),
+        await verify_phase23_thirty_opened_two_closed_does_not_complete(),
+        await verify_phase23_open_limit_blocks_entries_but_monitoring_stays_active(),
+        await verify_phase23_closed_mt5_trade_sync_updates_completed_count(),
+        await verify_phase23_thirty_closed_completes_session(),
+        await verify_phase23_duplicate_blocked_scan_does_not_count_opened_or_closed(),
+        await verify_phase23_historical_trades_do_not_contaminate_current_results(),
         await verify_mt5_disconnect_requires_three_failed_health_checks(),
         await verify_mt5_reconnect_auto_resumes_and_uses_10s_interval(),
         await verify_mt5_disconnect_timeout_halts_only_after_timeout(),

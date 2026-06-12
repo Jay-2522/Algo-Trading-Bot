@@ -3,7 +3,13 @@ from typing import Any
 from fastapi import APIRouter, Body
 
 from backend.api.client_signal_engine_routes import client_signal_engine
-from backend.api.mt5_demo_routes import mt5_position_monitoring_service, service as mt5_demo_service, vantage_xauusd_demo_validation_service
+from backend.api.mt5_demo_routes import (
+    mt5_position_monitoring_service,
+    mt5_trade_close_sync_service,
+    mt5_trade_lifecycle_service,
+    service as mt5_demo_service,
+    vantage_xauusd_demo_validation_service,
+)
 from backend.api.trade_journal_persistence_routes import persistent_trade_journal_service
 from backend.auto_validation.auto_validation_runner import AutoValidationRunner
 from backend.auto_validation.auto_validation_service import AutoValidationService
@@ -16,6 +22,8 @@ auto_validation_service = AutoValidationService(
     journal_service=persistent_trade_journal_service,
     position_service=mt5_position_monitoring_service,
     mt5_demo_service=mt5_demo_service,
+    lifecycle_service=mt5_trade_lifecycle_service,
+    close_sync_service=mt5_trade_close_sync_service,
 )
 auto_validation_runner = AutoValidationRunner(auto_validation_service)
 
@@ -68,6 +76,11 @@ async def get_auto_validation_trades() -> list[dict]:
 @router.get("/summary")
 async def get_auto_validation_summary() -> dict:
     return auto_validation_service.summary()
+
+
+@router.post("/sync-lifecycle")
+async def sync_auto_validation_lifecycle() -> dict:
+    return auto_validation_service.sync_lifecycle()
 
 
 @router.get("/post-sender-execution-summary")

@@ -19,6 +19,7 @@ import {
   setExecutionMode,
   startAutoValidation,
   stopAutoValidation,
+  syncAutoValidationLifecycle,
   syncClientLifecycle,
   syncClientPositionsToJournal,
   type ApiRecord,
@@ -267,6 +268,8 @@ export function DashboardShell(_: {
   const [previewSignal, setPreviewSignal] = useState<ApiRecord | null>(null);
   const [sendResult, setSendResult] = useState<ApiRecord | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
+  const [positionsSyncState, setPositionsSyncState] = useState<{ loading: boolean; message: string; error: string }>({ loading: false, message: "", error: "" });
+  const [lifecycleSyncState, setLifecycleSyncState] = useState<{ loading: boolean; message: string; error: string }>({ loading: false, message: "", error: "" });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [workingAction, setWorkingAction] = useState<string | null>(null);
   const [heldReadySignals, setHeldReadySignals] = useState<HeldSignals>({});
@@ -580,15 +583,21 @@ export function DashboardShell(_: {
   async function handleSync(action: "positions" | "lifecycle") {
     setWorkingAction(action);
     setTradeError(null);
+    const setState = action === "positions" ? setPositionsSyncState : setLifecycleSyncState;
+    setState({ loading: true, message: "", error: "" });
     try {
       if (action === "positions") {
         await syncClientPositionsToJournal();
+        setState({ loading: false, message: "Positions refreshed.", error: "" });
       } else {
-        await syncClientLifecycle();
+        const result = await syncAutoValidationLifecycle();
+        setState({ loading: false, message: readText(result, ["message"], "AUTO lifecycle synchronized."), error: "" });
       }
       await refresh();
     } catch (error) {
-      setTradeError(error instanceof Error ? error.message : "Sync failed.");
+      const message = error instanceof Error ? error.message : "Sync failed.";
+      setTradeError(message);
+      setState({ loading: false, message: "", error: message });
     } finally {
       setWorkingAction(null);
     }
@@ -662,13 +671,23 @@ export function DashboardShell(_: {
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
               <button className="rounded-xl border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm font-bold text-blue-100 hover:bg-blue-500/20" onClick={() => void handleSync("positions")} type="button">
-                Refresh Positions
+                {positionsSyncState.loading ? "Refreshing Positions..." : "Refresh Positions"}
               </button>
               <button className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-500/20" onClick={() => void handleSync("lifecycle")} type="button">
-                Sync Lifecycle
+                {lifecycleSyncState.loading ? "Syncing Lifecycle..." : "Sync Lifecycle"}
               </button>
             </div>
           </div>
+          {positionsSyncState.error || lifecycleSyncState.error || positionsSyncState.message || lifecycleSyncState.message ? (
+            <div className="mt-4 grid gap-2 text-sm font-bold sm:grid-cols-2">
+              <p className={positionsSyncState.error ? "text-rose-200" : "text-emerald-300"}>
+                Refresh Positions: {positionsSyncState.error || positionsSyncState.message || "Idle"}
+              </p>
+              <p className={lifecycleSyncState.error ? "text-rose-200" : "text-emerald-300"}>
+                Sync Lifecycle: {lifecycleSyncState.error || lifecycleSyncState.message || "Idle"}
+              </p>
+            </div>
+          ) : null}
           <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_1fr_0.8fr_1fr]">
             <section>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Status</p>
@@ -1096,6 +1115,7 @@ function AutoValidationPanel({
   const senderRejection = asRecord(status?.last_sender_rejection ?? decision?.last_sender_rejection);
   const duplicateCheck = asRecord(status?.last_duplicate_check ?? decision?.last_duplicate_check);
   const openPositionSync = asRecord(status?.open_position_sync);
+  const lifecycleSync = asRecord(status?.lifecycle_sync);
   const currentSessionPositionsBySymbol = asRecord(openPositionSync?.current_session_open_positions_by_symbol);
   const currentSessionPositionsText = currentSessionPositionsBySymbol
     ? Object.entries(currentSessionPositionsBySymbol).map(([symbol, count]) => `${symbol}: ${String(count)}`).join(", ") || "None"
@@ -1157,9 +1177,9 @@ function AutoValidationPanel({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <Metric label="Target Trades" value={String(targetValidationTrades)} compact />
-        <Metric label="Remaining to 30" value={String(remainingTrades)} compact />
-        <Metric label="Completed" value={String(readNumber(session, ["current_closed_trades"], 0))} compact />
+        <Metric label="Target Closed Trades" value={String(targetValidationTrades)} compact />
+        <Metric label="Remaining Closed Trades" value={String(remainingTrades)} compact />
+        <Metric label="Closed Trades" value={String(readNumber(session, ["current_closed_trades", "current_session_closed"], 0))} compact />
         <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
         <Metric label="Open Trade Limit" value={String(readNumber(config, ["max_open_trades_total"], 0))} compact />
         <Metric label="Per-Symbol Limit" value={String(readNumber(config, ["max_open_trades_per_symbol"], 0))} compact />
@@ -1174,7 +1194,8 @@ function AutoValidationPanel({
         <Metric label="Strategy Profile" value={activeStrategyProfile} valueClass="text-blue-200" compact />
         <Metric label="Session Started By" value={readText(session, ["session_started_by"], "Not started")} compact />
         <Metric label="Session Start Time" value={formatTradeTime(readText(session, ["session_start_time", "started_at"], ""))} compact />
-        <Metric label="Current Session Opened" value={String(readNumber(session, ["opened", "orders_created"], 0))} compact />
+        <Metric label="Current Session Opened" value={String(readNumber(session, ["current_session_opened", "opened", "orders_created"], 0))} compact />
+        <Metric label="Current Session Closed" value={String(readNumber(session, ["current_session_closed", "current_closed_trades"], 0))} compact />
         <Metric label="Historical/Unowned MT5" value={String(readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0))} valueClass={readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0) > 0 ? "text-amber-200" : "text-slate-100"} compact />
         <Metric label="SL/TP Source" value={slTpSource} valueClass={slTpSource === "DEMO_RISK_FALLBACK" ? "text-amber-200" : "text-emerald-300"} compact />
         <Metric label="Advisory Blockers" value={relaxedBlockers.length ? relaxedBlockers.join(", ") : "None"} compact />
@@ -1233,6 +1254,8 @@ function AutoValidationPanel({
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Metric label="Total Trades" value={String(totalTrades)} compact />
+          <Metric label="Target Closed Trades" value={String(targetValidationTrades)} compact />
+          <Metric label="Remaining Closed Trades" value={String(remainingTrades)} compact />
           <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
           <Metric label="Closed Trades" value={String(readNumber(session, ["current_closed_trades"], 0))} compact />
           <Metric label="Wins" value={String(wins)} valueClass="text-emerald-300" compact />
@@ -1315,6 +1338,20 @@ function AutoValidationPanel({
           <Metric label="Open Tickets" value={Array.isArray(openPositionSync?.open_position_tickets) && openPositionSync.open_position_tickets.length ? openPositionSync.open_position_tickets.map(String).join(", ") : "None"} compact />
           <Metric label="Sync Time" value={formatTradeTime(readText(openPositionSync, ["timestamp"], ""))} compact />
         </div>
+      </div>
+      <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Lifecycle Sync</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <Metric label="Lifecycle Status" value={readText(lifecycleSync, ["status"], "NOT_SYNCED")} compact />
+          <Metric label="Close Sync Status" value={readText(lifecycleSync, ["close_sync_status"], "NOT_CONFIGURED")} compact />
+          <Metric label="Open Trades Checked" value={String(readNumber(lifecycleSync, ["open_trades_checked"], 0))} compact />
+          <Metric label="Current Session Closed Updated" value={String(readNumber(lifecycleSync, ["closed_trades_updated"], 0))} compact />
+          <Metric label="All Closed Updated" value={String(readNumber(lifecycleSync, ["all_closed_trades_updated"], 0))} compact />
+          <Metric label="Lifecycle Sync Time" value={formatTradeTime(readText(lifecycleSync, ["timestamp"], ""))} compact />
+        </div>
+        <p className={`mt-3 text-sm font-bold ${readText(lifecycleSync, ["status"], "") === "ERROR" ? "text-rose-200" : "text-slate-400"}`}>
+          {readText(lifecycleSync, ["message"], "Lifecycle sync has not run.")}
+        </p>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-800 bg-[#0F172A] p-4">

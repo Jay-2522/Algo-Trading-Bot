@@ -54,6 +54,19 @@ type DashboardView = "dashboard" | "developer";
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
+const DASHBOARD_CACHE_KEY = "client-dashboard-last-successful-snapshot-v2";
+const ROUND_2_NOTE = "Round 2: EURUSD-only validation. No manual intervention. Client dashboard shows Round 2 only.";
+const ROUND_2_START_PAYLOAD: ApiRecord = {
+  confirm_fresh_start: true,
+  session_started_by: "user_click",
+  strategy_profile: "DEMO_COLLECTION",
+  allowed_symbols: ["EURUSD"],
+  target_validation_trades: 30,
+  target_closed_trades: 30,
+  round_label: "ROUND_2",
+  session_note: ROUND_2_NOTE,
+  client_dashboard_scope: "CURRENT_SESSION_ONLY",
+};
 
 const emptyData: DashboardData = {
   account: null,
@@ -74,6 +87,47 @@ const emptyData: DashboardData = {
   executionMode: null,
   autoValidation: null,
 };
+
+function readCachedDashboardData(): DashboardData {
+  if (typeof window === "undefined") return emptyData;
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (!raw) return emptyData;
+    const parsed = JSON.parse(raw) as Partial<DashboardData>;
+    return {
+      ...emptyData,
+      ...parsed,
+      marketScope: Array.isArray(parsed.marketScope) ? parsed.marketScope : [],
+      clientSignals: Array.isArray(parsed.clientSignals) ? parsed.clientSignals : [],
+      brokerAccounts: Array.isArray(parsed.brokerAccounts) ? parsed.brokerAccounts : [],
+      brokerCopyPlans: Array.isArray(parsed.brokerCopyPlans) ? parsed.brokerCopyPlans : [],
+      openPositions: Array.isArray(parsed.openPositions) ? parsed.openPositions : [],
+      recentTrades: Array.isArray(parsed.recentTrades) ? parsed.recentTrades : [],
+    };
+  } catch {
+    return emptyData;
+  }
+}
+
+function writeCachedDashboardData(data: DashboardData): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+function hasDashboardSnapshot(data: DashboardData): boolean {
+  return Boolean(
+    data.account ||
+      data.autoValidation ||
+      data.journalSummary ||
+      data.openPositions.length ||
+      data.recentTrades.length ||
+      data.clientSignals.length,
+  );
+}
 
 function asRecord(value: unknown): ApiRecord | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as ApiRecord) : null;
@@ -191,6 +245,20 @@ function floatingPnl(positions: ApiRecord[]): number {
   return positions.reduce((sum, position) => sum + readNumber(position, ["floating_pnl", "profit"], 0), 0);
 }
 
+function currentValidationSessionId(autoValidation: ApiRecord | null): string {
+  const session = asRecord(autoValidation?.session);
+  return readText(session, ["session_id", "id", "validation_session_id"], "");
+}
+
+function recordBelongsToSession(record: ApiRecord, sessionId: string): boolean {
+  if (!sessionId) return false;
+  return readText(record, ["validation_session_id", "session_id", "auto_validation_session_id"], "") === sessionId;
+}
+
+function sessionScopedRecords(records: ApiRecord[], sessionId: string): ApiRecord[] {
+  return sessionId ? records.filter((record) => recordBelongsToSession(record, sessionId)) : [];
+}
+
 function rrFrom(entry: number, action: "BUY" | "SELL", stopLoss: number, takeProfit: number): number | null {
   if (entry <= 0 || stopLoss <= 0 || takeProfit <= 0) return null;
   const risk = action === "BUY" ? entry - stopLoss : stopLoss - entry;
@@ -261,7 +329,7 @@ export function DashboardShell(_: {
   tradeJournalSection?: React.ReactNode;
   reportsSection?: React.ReactNode;
 }) {
-  const [data, setData] = useState<DashboardData>(emptyData);
+  const [data, setData] = useState<DashboardData>(() => readCachedDashboardData());
   const [errors, setErrors] = useState<string[]>([]);
   const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -308,7 +376,7 @@ export function DashboardShell(_: {
       setBackendConnected(true);
       setData((current) => {
         const brokerAccounts = "brokerAccounts" in payload ? asRecord(payload.brokerAccounts) : null;
-        return {
+        const next = {
           account: "account" in payload ? recordOrPrevious(payload.account, current.account) : current.account,
           eurusdTick: "eurusdTick" in payload ? recordOrPrevious(payload.eurusdTick, current.eurusdTick) : current.eurusdTick,
           xauusdTick: "xauusdTick" in payload ? recordOrPrevious(payload.xauusdTick, current.xauusdTick) : current.xauusdTick,
@@ -327,6 +395,8 @@ export function DashboardShell(_: {
           executionMode: "executionMode" in payload ? recordOrPrevious(payload.executionMode, current.executionMode) : current.executionMode,
           autoValidation: "autoValidation" in payload ? recordOrPrevious(payload.autoValidation, current.autoValidation) : current.autoValidation,
         };
+        writeCachedDashboardData(next);
+        return next;
       });
       setErrors(result.errors);
       setPanelErrors((current) => ({ ...current, dashboard: result.errors[0] ?? "" }));
@@ -351,11 +421,15 @@ export function DashboardShell(_: {
     try {
       const prices = await fetchClientMarketPrices();
       if (prices.ok) {
-        setData((current) => ({
-          ...current,
-          eurusdTick: asRecord(prices.eurusdTick),
-          xauusdTick: asRecord(prices.xauusdTick),
-        }));
+        setData((current) => {
+          const next = {
+            ...current,
+            eurusdTick: asRecord(prices.eurusdTick),
+            xauusdTick: asRecord(prices.xauusdTick),
+          };
+          writeCachedDashboardData(next);
+          return next;
+        });
       }
       setErrors(prices.errors);
       setPanelErrors((current) => ({ ...current, prices: prices.errors[0] ?? "" }));
@@ -373,10 +447,14 @@ export function DashboardShell(_: {
     try {
       const signals = await fetchClientSignals();
       if (signals.ok) {
-        setData((current) => ({
-          ...current,
-          clientSignals: recordsFrom(signals.signals, "signals"),
-        }));
+        setData((current) => {
+          const next = {
+            ...current,
+            clientSignals: recordsOrPrevious(signals.signals, "signals", current.clientSignals, true),
+          };
+          writeCachedDashboardData(next);
+          return next;
+        });
       }
       setErrors(signals.errors);
       setPanelErrors((current) => ({ ...current, signals: signals.errors[0] ?? "" }));
@@ -394,7 +472,11 @@ export function DashboardShell(_: {
     try {
       const result = await fetchAutoValidationStatus();
       if (result.ok) {
-        setData((current) => ({ ...current, autoValidation: asRecord(result.status) }));
+        setData((current) => {
+          const next = { ...current, autoValidation: recordOrPrevious(result.status, current.autoValidation) };
+          writeCachedDashboardData(next);
+          return next;
+        });
       }
       if (result.errors.length > 0) {
         setErrors(result.errors);
@@ -410,6 +492,11 @@ export function DashboardShell(_: {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => void refresh(), 10000);
+    return () => window.clearInterval(interval);
   }, [refresh]);
 
   useEffect(() => {
@@ -477,6 +564,9 @@ export function DashboardShell(_: {
     });
   }, [data.clientSignals, heldReadySignals, nowMs]);
   const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
+  const activeSessionId = currentValidationSessionId(data.autoValidation);
+  const clientClosedTrades = useMemo(() => sessionScopedRecords(closedTrades, activeSessionId), [closedTrades, activeSessionId]);
+  const clientOpenPositions = useMemo(() => sessionScopedRecords(data.openPositions, activeSessionId), [data.openPositions, activeSessionId]);
   const marketOpen = isMarketOpen(data.eurusdTick);
   const openTradeExists = data.openPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
   const approvalReady = preview?.approved_for_future_demo_order === true || readText(preview, ["readiness_decision"], "") === "READY_FOR_GUARDED_DEMO_TEST";
@@ -622,15 +712,40 @@ export function DashboardShell(_: {
         showToast("success", "Positions refreshed successfully");
       } else if (action === "lifecycle") {
         const result = await syncAutoValidationLifecycle();
+        setData((current) => {
+          const next = {
+            ...current,
+            autoValidation: {
+              ...(current.autoValidation ?? {}),
+              session: asRecord(result.session) ?? asRecord(current.autoValidation?.session),
+              lifecycle_sync: asRecord(result.lifecycle_sync),
+              open_position_sync: asRecord(result.open_position_sync),
+            },
+          };
+          writeCachedDashboardData(next);
+          return next;
+        });
         setState({ loading: false, message: readText(result, ["message"], "AUTO lifecycle synchronized."), error: "" });
         showToast("success", "Lifecycle sync complete");
       } else {
         const result = await runAutoValidationExitManagement();
+        setData((current) => {
+          const next = {
+            ...current,
+            autoValidation: {
+              ...(current.autoValidation ?? {}),
+              session: asRecord(result.session) ?? asRecord(current.autoValidation?.session),
+              exit_management: asRecord(result.exit_management),
+            },
+          };
+          writeCachedDashboardData(next);
+          return next;
+        });
         setState({ loading: false, message: readText(result, ["message"], "Exit management evaluated."), error: "" });
         showToast("success", "Exit management completed");
       }
       setLastSuccessfulSync(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-      await refresh();
+      void refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Sync failed.";
       setTradeError(message);
@@ -683,16 +798,15 @@ export function DashboardShell(_: {
       const recoveredClosed = readNumber(currentAutoValidation, ["recovered_closed_trades"], 0);
       const recoveredOpen = readNumber(currentAutoValidation, ["recovered_open_trades"], 0);
       const recoveredSessionId = readText(currentAutoValidation, ["recovered_session_id"], "");
-      let startPayload: ApiRecord = {};
+      let startPayload: ApiRecord = action === "start" ? { ...ROUND_2_START_PAYLOAD } : {};
       if (action === "start" && recoverable) {
         const confirmed = window.confirm(
-          `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start a fresh session and reset current validation counters?`,
+          `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start Round 2 as a fresh EURUSD-only session and reset current client validation counters?`,
         );
         if (!confirmed) {
           setToast(null);
           return;
         }
-        startPayload = { confirm_fresh_start: true };
       }
       const result =
         action === "start"
@@ -704,7 +818,11 @@ export function DashboardShell(_: {
               : action === "emergency-stop"
                 ? await emergencyStopAutoValidation()
                 : await stopAutoValidation();
-      setData((current) => ({ ...current, autoValidation: result }));
+      setData((current) => {
+        const next = { ...current, autoValidation: result };
+        writeCachedDashboardData(next);
+        return next;
+      });
       setLastSuccessfulSync(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       showToast("success", autoValidationSuccessMessage(action));
     } catch (error) {
@@ -727,16 +845,21 @@ export function DashboardShell(_: {
     }
   }
 
+  const dashboardHasSnapshot = hasDashboardSnapshot(data);
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#102044_0%,#06101f_40%,#030712_100%)] text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <ViewSelector activeView={activeView} onChange={setActiveView} />
         {toast ? <Toast tone={toast.tone} message={toast.message} onDismiss={() => setToast(null)} /> : null}
         {activeView === "dashboard" ? (
+          !dashboardHasSnapshot && loading ? (
+            <ClientDashboardLoadingView />
+          ) : (
           <ClientDashboardView
             data={data}
             backendConnected={backendConnected}
-            closedTrades={closedTrades}
+            closedTrades={clientClosedTrades}
             exitManagementState={exitManagementState}
             lastSuccessfulSync={lastSuccessfulSync}
             lifecycleSyncState={lifecycleSyncState}
@@ -744,10 +867,12 @@ export function DashboardShell(_: {
             onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
             onRefresh={() => void handleClientRefresh()}
             onSync={(action) => void handleSync(action)}
-            openFloatingPnl={openFloatingPnl}
-            todayPnl={todayPnl(closedTrades)}
+            openFloatingPnl={floatingPnl(clientOpenPositions)}
+            scopedOpenPositions={clientOpenPositions}
+            todayPnl={todayPnl(clientClosedTrades)}
             workingAction={workingAction}
           />
+          )
         ) : (
           <>
         <header className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-2xl shadow-black/30">
@@ -1028,6 +1153,29 @@ function ViewSelector({ activeView, onChange }: { activeView: DashboardView; onC
   );
 }
 
+function ClientDashboardLoadingView() {
+  return (
+    <div className="flex flex-col gap-6 pb-8">
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
+        <h1 className="whitespace-nowrap text-3xl font-black tracking-tight text-white md:text-5xl">AI Multi-Market Trading Bot</h1>
+        <div className="mt-5 rounded-2xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm font-black text-blue-100">Loading latest dashboard data...</div>
+      </section>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {["Backend Status", "MT5 Status", "Validation Status", "Last Successful Sync"].map((label) => (
+          <div className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.045] p-4" key={label}>
+            <p className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
+            <div className="mt-4 h-4 rounded-full bg-slate-700/70" />
+          </div>
+        ))}
+      </section>
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
+        <div className="h-5 w-48 animate-pulse rounded-full bg-slate-700/70" />
+        <div className="mt-5 h-28 animate-pulse rounded-2xl bg-slate-800/70" />
+      </section>
+    </div>
+  );
+}
+
 function Toast({ tone, message, onDismiss }: { tone: ToastState["tone"]; message: string; onDismiss: () => void }) {
   const icon = tone === "success" ? "✓" : tone === "error" ? "⚠" : "";
   const classes =
@@ -1061,6 +1209,7 @@ function ClientDashboardView({
   onRefresh,
   onSync,
   openFloatingPnl,
+  scopedOpenPositions,
   todayPnl,
   workingAction,
 }: {
@@ -1075,6 +1224,7 @@ function ClientDashboardView({
   onRefresh: () => void;
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
+  scopedOpenPositions: ApiRecord[];
   todayPnl: number;
   workingAction: string | null;
 }) {
@@ -1085,17 +1235,20 @@ function ClientDashboardView({
   const exitManagement = asRecord(autoStatus?.exit_management);
   const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
   const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
-  const open = readNumber(session, ["current_open_trades", "current_session_open_trades"], data.openPositions.length);
+  const open = readNumber(session, ["current_open_trades", "current_session_open_trades"], scopedOpenPositions.length);
   const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
   const progress = target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0;
   const mode = readText(session, ["status"], "");
+  const sessionNote = readText(session, ["session_note"], "");
+  const allowedSymbols = Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD";
   const sessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
   const hasValidationSession = Boolean(sessionId || mode || closed > 0 || open > 0);
   const botState = clientBotState(mode, closed, open, target, hasValidationSession);
   const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
   const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
   const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus);
-  const recentClosed = closedTrades.slice(0, 5);
+  const closeReports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const recentClosed = mergeClosedTrades(closedTrades, closeReports).slice(0, 5);
   const equityCurve = Array.isArray(session?.equity_curve) ? (session.equity_curve.filter((point) => asRecord(point)) as ApiRecord[]) : [];
   const controlsDisabled = workingAction !== null;
 
@@ -1127,7 +1280,7 @@ function ClientDashboardView({
         <ClientMetric label="Balance" value={moneyOrWaiting(numeric(data.account, ["balance"]))} />
         <ClientMetric label="Equity" value={moneyOrWaiting(numeric(data.account, ["equity"]))} />
         <ClientMetric label="Floating P&L" value={money(openFloatingPnl)} valueClass={pnlClass(openFloatingPnl)} />
-        <ClientMetric label="Open Positions" value={String(data.openPositions.length)} />
+        <ClientMetric label="Open Positions" value={String(open)} />
         <ClientMetric label="Today's P&L" value={money(todayPnl)} valueClass={pnlClass(todayPnl)} />
       </section>
 
@@ -1137,6 +1290,7 @@ function ClientDashboardView({
             <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-200">Validation Progress</p>
             <h2 className="mt-2 text-3xl font-black">{botState.statusText}</h2>
             <p className="mt-2 text-base font-semibold text-slate-400">{closed} of {target} closed trades completed.</p>
+            <p className="mt-3 max-w-3xl text-sm font-bold text-blue-100">{sessionNote || ROUND_2_NOTE}</p>
           </div>
           <strong className="text-5xl font-black text-blue-100">{progress}%</strong>
         </div>
@@ -1148,6 +1302,7 @@ function ClientDashboardView({
           <ClientMetric label="Closed Trades" value={String(closed)} compact />
           <ClientMetric label="Remaining Trades" value={String(remaining)} compact />
           <ClientMetric label="Open Trades" value={String(open)} compact />
+          <ClientMetric label="Validation Symbols" value={allowedSymbols} compact />
         </div>
       </section>
 
@@ -1168,7 +1323,7 @@ function ClientDashboardView({
 
       <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
         <ClientSectionTitle eyebrow="Active Positions" title="Open Demo Trades" />
-        {data.openPositions.length ? <ClientOpenPositionsTable positions={data.openPositions} managedPositions={Array.isArray(exitManagement?.managed_positions) ? (exitManagement.managed_positions.filter((item) => asRecord(item)) as ApiRecord[]) : []} /> : <EmptyState text="No Active Positions" />}
+        {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={Array.isArray(exitManagement?.managed_positions) ? (exitManagement.managed_positions.filter((item) => asRecord(item)) as ApiRecord[]) : []} /> : <EmptyState text="No Active Positions" />}
       </section>
 
       <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
@@ -1292,9 +1447,9 @@ function ClientClosedTradesTable({ trades }: { trades: ApiRecord[] }) {
         </thead>
         <tbody>
           {trades.map((trade, index) => {
-            const pnl = readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl"], 0);
+            const pnl = readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl", "pnl"], 0);
             return (
-              <tr className="bg-[#0b1528]/90" key={`${readText(trade, ["trade_id", "mt5_ticket"], String(index))}-${index}`}>
+              <tr className="bg-[#0b1528]/90" key={`${readText(trade, ["trade_id", "mt5_ticket", "ticket"], String(index))}-${index}`}>
                 <td className="rounded-l-2xl px-4 py-4 font-black">{friendlyText(trade, ["symbol"], "Waiting")}</td>
                 <td className="px-4 py-4">{friendlyText(trade, ["side"], "Waiting")}</td>
                 <td className="px-4 py-4">{friendlyText(trade, ["result"], "Closed")}</td>
@@ -1328,6 +1483,22 @@ function recordsOrPrevious(value: unknown, key: string, previous: ApiRecord[], f
 function arrayRecordsOrPrevious(value: unknown, previous: ApiRecord[], fullSuccess: boolean): ApiRecord[] {
   const next = Array.isArray(value) ? (value.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   return next.length || fullSuccess || previous.length === 0 ? next : previous;
+}
+
+function mergeClosedTrades(journalTrades: ApiRecord[], closeReports: ApiRecord[]): ApiRecord[] {
+  const merged: ApiRecord[] = [];
+  const seen = new Set<string>();
+  for (const trade of [...closeReports, ...journalTrades]) {
+    const key = readText(trade, ["mt5_ticket", "ticket", "trade_id"], "") || JSON.stringify(trade);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(trade);
+  }
+  return merged.sort((a, b) => {
+    const aTime = new Date(readText(a, ["closed_at", "close_time", "generated_at"], "")).getTime();
+    const bTime = new Date(readText(b, ["closed_at", "close_time", "generated_at"], "")).getTime();
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
 }
 
 function moneyOrWaiting(value: number): string {

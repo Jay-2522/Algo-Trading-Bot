@@ -121,6 +121,9 @@ class AutoValidationService:
             "target_closed_trades": int(self.config["target_closed_trades"]),
             "target_validation_trades": int(self.config["target_validation_trades"]),
             "session_started_by": str(payload.get("session_started_by") or "user_click"),
+            "round_label": str(payload.get("round_label") or ""),
+            "session_note": str(payload.get("session_note") or ""),
+            "client_dashboard_scope": str(payload.get("client_dashboard_scope") or "CURRENT_SESSION_ONLY"),
         }
         self._seen_signal_hashes = set()
         self._sent_signal_keys = set()
@@ -1789,6 +1792,9 @@ class AutoValidationService:
             "target_validation_trades": 30,
             "session_started_by": "",
             "session_start_time": None,
+            "round_label": "",
+            "session_note": "",
+            "client_dashboard_scope": "CURRENT_SESSION_ONLY",
             "current_session_total_trades": 0,
             "current_closed_trades": 0,
             "current_session_closed": 0,

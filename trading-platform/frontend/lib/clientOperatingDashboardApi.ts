@@ -56,17 +56,26 @@ async function fetchJson<T>(endpoint: string, fallback: T, timeoutMs = 5000): Pr
   }
 }
 
-async function postJson<T>(endpoint: string, payload: ApiRecord = {}): Promise<T> {
-  const response = await fetch(buildApiUrl(endpoint), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error(`${endpoint} returned ${response.status}`);
+async function postJson<T>(endpoint: string, payload: ApiRecord = {}, timeoutMs = 10000): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(buildApiUrl(endpoint), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`${endpoint} returned ${response.status}`);
+    }
+    return response.json() as Promise<T>;
+  } catch (error) {
+    throw new Error(fetchFailureMessage(endpoint, error));
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json() as Promise<T>;
 }
 
 export async function fetchClientOperatingDashboard() {

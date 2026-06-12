@@ -281,6 +281,7 @@ export function DashboardShell(_: {
   const [activeView, setActiveView] = useState<DashboardView>("dashboard");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
+  const [backendConnected, setBackendConnected] = useState(true);
   const requestInFlight = useRef(false);
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
@@ -297,38 +298,44 @@ export function DashboardShell(_: {
   }, [toast]);
 
   const refresh = useCallback(async () => {
-    if (requestInFlight.current) return false;
+    if (requestInFlight.current) return true;
     requestInFlight.current = true;
     setLoading(true);
     try {
       const result = await fetchClientOperatingDashboard();
       const payload = result.data;
-      setData((current) => ({
-        account: "account" in payload ? asRecord(payload.account) : current.account,
-        eurusdTick: "eurusdTick" in payload ? asRecord(payload.eurusdTick) : current.eurusdTick,
-        xauusdTick: "xauusdTick" in payload ? asRecord(payload.xauusdTick) : current.xauusdTick,
-        marketScope: "marketScope" in payload && Array.isArray(payload.marketScope) ? (payload.marketScope.filter((item) => asRecord(item)) as ApiRecord[]) : current.marketScope,
-        clientSignals: "clientSignals" in payload ? recordsFrom(payload.clientSignals, "signals") : current.clientSignals,
-        brokerAccounts: "brokerAccounts" in payload ? recordsFrom(payload.brokerAccounts, "accounts") : current.brokerAccounts,
-        brokerCopyPlans: "brokerCopyReadiness" in payload ? recordsFrom(payload.brokerCopyReadiness, "plans") : current.brokerCopyPlans,
-        currentTerminalAccount: "brokerAccounts" in payload ? asRecord(asRecord(payload.brokerAccounts)?.current_terminal_account) : current.currentTerminalAccount,
-        vantageXauusdStatus: "vantageXauusdStatus" in payload ? asRecord(payload.vantageXauusdStatus) : current.vantageXauusdStatus,
-        vantageXauusdPreview: "vantageXauusdPreview" in payload ? asRecord(payload.vantageXauusdPreview) : current.vantageXauusdPreview,
-        openPositions: "openPositions" in payload ? recordsFrom(payload.openPositions, "positions") : current.openPositions,
-        recentTrades: "recentTrades" in payload && Array.isArray(payload.recentTrades) ? (payload.recentTrades.filter((item) => asRecord(item)) as ApiRecord[]) : current.recentTrades,
-        journalSummary: "journalSummary" in payload ? asRecord(payload.journalSummary) : current.journalSummary,
-        outcomeSummary: "outcomeSummary" in payload ? asRecord(payload.outcomeSummary) : current.outcomeSummary,
-        guardedStatus: "guardedStatus" in payload ? asRecord(payload.guardedStatus) : current.guardedStatus,
-        executionMode: "executionMode" in payload ? asRecord(payload.executionMode) : current.executionMode,
-        autoValidation: "autoValidation" in payload ? asRecord(payload.autoValidation) : current.autoValidation,
-      }));
+      const fullSuccess = result.errors.length === 0;
+      setBackendConnected(true);
+      setData((current) => {
+        const brokerAccounts = "brokerAccounts" in payload ? asRecord(payload.brokerAccounts) : null;
+        return {
+          account: "account" in payload ? recordOrPrevious(payload.account, current.account) : current.account,
+          eurusdTick: "eurusdTick" in payload ? recordOrPrevious(payload.eurusdTick, current.eurusdTick) : current.eurusdTick,
+          xauusdTick: "xauusdTick" in payload ? recordOrPrevious(payload.xauusdTick, current.xauusdTick) : current.xauusdTick,
+          marketScope: "marketScope" in payload ? arrayRecordsOrPrevious(payload.marketScope, current.marketScope, fullSuccess) : current.marketScope,
+          clientSignals: "clientSignals" in payload ? recordsOrPrevious(payload.clientSignals, "signals", current.clientSignals, fullSuccess) : current.clientSignals,
+          brokerAccounts: "brokerAccounts" in payload ? recordsOrPrevious(payload.brokerAccounts, "accounts", current.brokerAccounts, fullSuccess) : current.brokerAccounts,
+          brokerCopyPlans: "brokerCopyReadiness" in payload ? recordsOrPrevious(payload.brokerCopyReadiness, "plans", current.brokerCopyPlans, fullSuccess) : current.brokerCopyPlans,
+          currentTerminalAccount: brokerAccounts ? recordOrPrevious(brokerAccounts.current_terminal_account, current.currentTerminalAccount) : current.currentTerminalAccount,
+          vantageXauusdStatus: "vantageXauusdStatus" in payload ? recordOrPrevious(payload.vantageXauusdStatus, current.vantageXauusdStatus) : current.vantageXauusdStatus,
+          vantageXauusdPreview: "vantageXauusdPreview" in payload ? recordOrPrevious(payload.vantageXauusdPreview, current.vantageXauusdPreview) : current.vantageXauusdPreview,
+          openPositions: "openPositions" in payload ? recordsOrPrevious(payload.openPositions, "positions", current.openPositions, fullSuccess) : current.openPositions,
+          recentTrades: "recentTrades" in payload ? arrayRecordsOrPrevious(payload.recentTrades, current.recentTrades, fullSuccess) : current.recentTrades,
+          journalSummary: "journalSummary" in payload ? recordOrPrevious(payload.journalSummary, current.journalSummary) : current.journalSummary,
+          outcomeSummary: "outcomeSummary" in payload ? recordOrPrevious(payload.outcomeSummary, current.outcomeSummary) : current.outcomeSummary,
+          guardedStatus: "guardedStatus" in payload ? recordOrPrevious(payload.guardedStatus, current.guardedStatus) : current.guardedStatus,
+          executionMode: "executionMode" in payload ? recordOrPrevious(payload.executionMode, current.executionMode) : current.executionMode,
+          autoValidation: "autoValidation" in payload ? recordOrPrevious(payload.autoValidation, current.autoValidation) : current.autoValidation,
+        };
+      });
       setErrors(result.errors);
       setPanelErrors((current) => ({ ...current, dashboard: result.errors[0] ?? "" }));
       const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       setLastUpdated(timestamp);
       setLastSuccessfulSync(timestamp);
-      return result.errors.length === 0;
+      return true;
     } catch (error) {
+      setBackendConnected(false);
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
       setPanelErrors((current) => ({ ...current, dashboard: error instanceof Error ? error.message : "Backend unavailable" }));
       return false;
@@ -712,9 +719,12 @@ export function DashboardShell(_: {
     if (workingAction !== null) return;
     setWorkingAction("dashboard-refresh");
     showToast("loading", "Refreshing dashboard...");
-    const ok = await refresh();
-    showToast(ok ? "success" : "error", ok ? "Dashboard refreshed successfully" : "Failed to refresh dashboard");
-    setWorkingAction(null);
+    try {
+      const ok = await refresh();
+      showToast(ok ? "success" : "error", ok ? "Dashboard refreshed successfully" : "Failed to refresh dashboard");
+    } finally {
+      setWorkingAction(null);
+    }
   }
 
   return (
@@ -725,8 +735,8 @@ export function DashboardShell(_: {
         {activeView === "dashboard" ? (
           <ClientDashboardView
             data={data}
+            backendConnected={backendConnected}
             closedTrades={closedTrades}
-            errors={errors}
             exitManagementState={exitManagementState}
             lastSuccessfulSync={lastSuccessfulSync}
             lifecycleSyncState={lifecycleSyncState}
@@ -735,7 +745,6 @@ export function DashboardShell(_: {
             onRefresh={() => void handleClientRefresh()}
             onSync={(action) => void handleSync(action)}
             openFloatingPnl={openFloatingPnl}
-            positionsSyncState={positionsSyncState}
             todayPnl={todayPnl(closedTrades)}
             workingAction={workingAction}
           />
@@ -1010,10 +1019,12 @@ export function DashboardShell(_: {
 
 function ViewSelector({ activeView, onChange }: { activeView: DashboardView; onChange: (view: DashboardView) => void }) {
   return (
-    <select className="sticky top-3 z-40 w-fit rounded-xl border border-white/10 bg-[#071226]/95 px-3 py-2 text-sm font-black text-white shadow-xl shadow-black/25 outline-none backdrop-blur" value={activeView} onChange={(event) => onChange(event.target.value as DashboardView)}>
-      <option value="dashboard">Dashboard</option>
-      <option value="developer">Developer Panel</option>
-    </select>
+    <div className="sticky top-0 z-40 flex justify-start bg-[#06101f]/90 py-2 backdrop-blur">
+      <select className="w-fit rounded-xl border border-white/10 bg-[#071226]/95 px-3 py-2 text-sm font-black text-white shadow-xl shadow-black/25 outline-none" value={activeView} onChange={(event) => onChange(event.target.value as DashboardView)}>
+        <option value="dashboard">Dashboard</option>
+        <option value="developer">Developer Panel</option>
+      </select>
+    </div>
   );
 }
 
@@ -1039,9 +1050,9 @@ function Toast({ tone, message, onDismiss }: { tone: ToastState["tone"]; message
 }
 
 function ClientDashboardView({
+  backendConnected,
   data,
   closedTrades,
-  errors,
   exitManagementState,
   lastSuccessfulSync,
   lifecycleSyncState,
@@ -1050,13 +1061,12 @@ function ClientDashboardView({
   onRefresh,
   onSync,
   openFloatingPnl,
-  positionsSyncState,
   todayPnl,
   workingAction,
 }: {
+  backendConnected: boolean;
   data: DashboardData;
   closedTrades: ApiRecord[];
-  errors: string[];
   exitManagementState: { loading: boolean; message: string; error: string };
   lastSuccessfulSync: string | null;
   lifecycleSyncState: { loading: boolean; message: string; error: string };
@@ -1065,7 +1075,6 @@ function ClientDashboardView({
   onRefresh: () => void;
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
-  positionsSyncState: { loading: boolean; message: string; error: string };
   todayPnl: number;
   workingAction: string | null;
 }) {
@@ -1080,12 +1089,15 @@ function ClientDashboardView({
   const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
   const progress = target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0;
   const mode = readText(session, ["status"], "");
-  const botState = clientBotState(mode, closed, open, target);
-  const mt5Connected = readText(mt5Health, ["status"], "").toUpperCase() === "MT5_CONNECTED";
+  const sessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
+  const hasValidationSession = Boolean(sessionId || mode || closed > 0 || open > 0);
+  const botState = clientBotState(mode, closed, open, target, hasValidationSession);
+  const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
+  const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
+  const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus);
   const recentClosed = closedTrades.slice(0, 5);
   const equityCurve = Array.isArray(session?.equity_curve) ? (session.equity_curve.filter((point) => asRecord(point)) as ApiRecord[]) : [];
   const controlsDisabled = workingAction !== null;
-  const backendHealthy = errors.length === 0;
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -1097,15 +1109,15 @@ function ClientDashboardView({
           <div className="flex flex-wrap gap-2">
             <ClientBadge text="Demo Mode" tone="healthy" />
             <ClientBadge text="Live Trading Disabled" tone="healthy" />
-            <ClientBadge text={mt5Connected ? "MT5 Connected" : "MT5 Disconnected"} tone={mt5Connected ? "healthy" : "danger"} />
+            <ClientBadge text={mt5Connected ? "MT5 Connected" : mt5ActuallyDisconnected ? "MT5 Disconnected" : "MT5 Checking"} tone={mt5Connected ? "healthy" : mt5ActuallyDisconnected ? "danger" : "warning"} />
             <ClientBadge text={`Bot ${botState.label}`} tone={botState.tone} />
           </div>
         </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatusStripItem label="Backend Status" value={backendHealthy ? "Connected" : "Reconnecting"} tone={backendHealthy ? "healthy" : "warning"} />
-        <StatusStripItem label="MT5 Status" value={mt5Connected ? "Connected" : "Connecting"} tone={mt5Connected ? "healthy" : "warning"} />
+        <StatusStripItem label="Backend Status" value={backendConnected ? "Connected" : "Reconnecting"} tone={backendConnected ? "healthy" : "warning"} />
+        <StatusStripItem label="MT5 Status" value={mt5Connected ? "Connected" : mt5ActuallyDisconnected ? "Disconnected" : "Checking"} tone={mt5Connected ? "healthy" : mt5ActuallyDisconnected ? "danger" : "warning"} />
         <StatusStripItem label="Validation Status" value={botState.statusText} tone={botState.tone} />
         <StatusStripItem label="Last Successful Sync" value={lastSuccessfulSync ?? "Waiting for first sync"} tone={lastSuccessfulSync ? "healthy" : "warning"} />
       </section>
@@ -1161,7 +1173,7 @@ function ClientDashboardView({
 
       <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
         <ClientSectionTitle eyebrow="Recent Closed Trades" title="Latest 5 Outcomes" />
-        {recentClosed.length ? <ClientClosedTradesTable trades={recentClosed} /> : <EmptyState text="Validation Not Started" />}
+        {recentClosed.length ? <ClientClosedTradesTable trades={recentClosed} /> : <EmptyState text={hasValidationSession ? "No Closed Trades Yet" : "Validation Not Started"} />}
       </section>
 
       <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-6 shadow-xl shadow-black/20">
@@ -1176,15 +1188,10 @@ function ClientDashboardView({
           <ClientButton disabled={controlsDisabled || lifecycleSyncState.loading} loading={lifecycleSyncState.loading} onClick={() => onSync("lifecycle")}>Sync Lifecycle</ClientButton>
           <ClientButton disabled={controlsDisabled || exitManagementState.loading} loading={exitManagementState.loading} onClick={() => onSync("exit-management")}>Run Exit Management</ClientButton>
         </div>
-        <div className="mt-4 grid gap-2 text-sm font-bold sm:grid-cols-3">
-          <ActionState label="Refresh Positions" state={positionsSyncState} />
-          <ActionState label="Lifecycle" state={lifecycleSyncState} />
-          <ActionState label="Exit Management" state={exitManagementState} />
-        </div>
       </section>
 
-      {errors.length ? (
-        <div className="rounded-2xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">Connecting to MT5. Last successful dashboard data remains visible.</div>
+      {mt5ActuallyDisconnected ? (
+        <div className="rounded-2xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">MT5 is disconnected. Last successful dashboard data remains visible.</div>
       ) : null}
     </div>
   );
@@ -1308,15 +1315,31 @@ function friendlyText(record: ApiRecord | null, paths: string[], fallback: strin
   return value && value !== "Unavailable" ? value : fallback;
 }
 
+function recordOrPrevious(value: unknown, previous: ApiRecord | null): ApiRecord | null {
+  const next = asRecord(value);
+  return next && Object.keys(next).length > 0 ? next : previous;
+}
+
+function recordsOrPrevious(value: unknown, key: string, previous: ApiRecord[], fullSuccess: boolean): ApiRecord[] {
+  const next = recordsFrom(value, key);
+  return next.length || fullSuccess || previous.length === 0 ? next : previous;
+}
+
+function arrayRecordsOrPrevious(value: unknown, previous: ApiRecord[], fullSuccess: boolean): ApiRecord[] {
+  const next = Array.isArray(value) ? (value.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  return next.length || fullSuccess || previous.length === 0 ? next : previous;
+}
+
 function moneyOrWaiting(value: number): string {
   return Number.isFinite(value) ? money(value) : "Waiting for Data";
 }
 
-function clientBotState(mode: string, closed: number, open: number, target: number): { label: string; statusText: string; tone: "healthy" | "warning" | "danger" } {
+function clientBotState(mode: string, closed: number, open: number, target: number, hasValidationSession: boolean): { label: string; statusText: string; tone: "healthy" | "warning" | "danger" } {
   if (closed >= target && target > 0) return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
   if (mode === "RUNNING") return { label: "Running", statusText: open > 0 ? "Waiting for Open Trades to Close" : "Validation in Progress", tone: "healthy" };
   if (["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)) return { label: "Paused", statusText: "Validation Paused", tone: "warning" };
   if (mode === "COMPLETED") return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
+  if (hasValidationSession) return { label: "Stopped", statusText: "Validation Progress Available", tone: "warning" };
   return { label: "Stopped", statusText: "Validation Not Started", tone: "warning" };
 }
 

@@ -11,14 +11,16 @@ export const dynamic = "force-dynamic";
 
 export default function DashboardPage() {
   return (
-    <DashboardShell
-      accountAnalyticsSection={<AccountAnalyticsSection />}
-      analyticsSection={<ClientAnalyticsSection />}
-      executiveDashboardSection={<ExecutiveDashboardSection />}
-      platformFoundationSection={<PlatformFoundationPanel />}
-      reportsSection={<ClientReportsSection />}
-      strategyIntelligenceSection={<StrategyIntelligenceSection />}
-      tradeJournalSection={<TradeJournalSection />}
-    />
+    <div className="page-enter">
+      <DashboardShell
+        accountAnalyticsSection={<AccountAnalyticsSection />}
+        analyticsSection={<ClientAnalyticsSection />}
+        executiveDashboardSection={<ExecutiveDashboardSection />}
+        platformFoundationSection={<PlatformFoundationPanel />}
+        reportsSection={<ClientReportsSection />}
+        strategyIntelligenceSection={<StrategyIntelligenceSection />}
+        tradeJournalSection={<TradeJournalSection />}
+      />
+    </div>
   );
 }

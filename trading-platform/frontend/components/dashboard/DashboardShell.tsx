@@ -68,7 +68,36 @@ const ROUND_2_START_PAYLOAD: ApiRecord = {
   session_note: ROUND_2_NOTE,
   client_dashboard_scope: "CURRENT_SESSION_ONLY",
 };
-const ROUND_1_RESULTS_KEY = "algopilot_round1_results";
+const EURUSD_TEST_RESULTS_KEY = "algopilot_eurusd_test_results";
+const FOREX_SESSIONS = {
+  tokyo: {
+    name: "Tokyo",
+    flag: "JP",
+    color: "#EC4899",
+    openUTC: { h: 0, m: 0 },
+    closeUTC: { h: 9, m: 0 },
+    openIST: "5:30 AM",
+    closeIST: "2:30 PM",
+  },
+  london: {
+    name: "London",
+    flag: "GB",
+    color: "#22D3EE",
+    openUTC: { h: 8, m: 0 },
+    closeUTC: { h: 17, m: 0 },
+    openIST: "1:30 PM",
+    closeIST: "10:30 PM",
+  },
+  newyork: {
+    name: "New York",
+    flag: "US",
+    color: "#A855F7",
+    openUTC: { h: 13, m: 0 },
+    closeUTC: { h: 22, m: 0 },
+    openIST: "6:30 PM",
+    closeIST: "3:30 AM+1",
+  },
+} as const;
 
 const emptyData: DashboardData = {
   account: null,
@@ -169,6 +198,11 @@ function marketNumber(value: number | null | undefined, digits = 5): string {
   return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+function marketPriceText(value: number | null | undefined, digits = 5): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "-";
+  return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 function signed(value: number | null | undefined, digits = 5): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "0";
   const prefix = value > 0 ? "+" : "";
@@ -194,17 +228,45 @@ function pointsToPath(points: LivePricePoint[], width: number, height: number, p
     .join(" ");
 }
 
-function forexSession(name: string, openUtc: number, closeUtc: number, now: Date): { countdown: string; name: string; open: boolean } {
-  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
-  const wraps = closeUtc <= openUtc;
-  const open = wraps ? hour >= openUtc || hour < closeUtc : hour >= openUtc && hour < closeUtc;
-  const targetHour = open ? closeUtc : hour < openUtc ? openUtc : openUtc + 24;
-  const rawHours = targetHour - hour;
-  const hours = wraps && open && hour < closeUtc ? closeUtc - hour : rawHours;
-  const totalMinutes = Math.max(0, Math.round(hours * 60));
-  const hh = Math.floor(totalMinutes / 60);
-  const mm = totalMinutes % 60;
-  return { countdown: `${open ? "Closes" : "Opens"} in ${hh}h ${mm}m`, name, open };
+function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now = new Date()): {
+  color: string;
+  countdown: string;
+  flag: string;
+  isOpen: boolean;
+  istTimes: string;
+  name: string;
+  statusText: string;
+} {
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const openMin = session.openUTC.h * 60 + session.openUTC.m;
+  const closeMin = session.closeUTC.h * 60 + session.closeUTC.m;
+  const isOpen = nowMin >= openMin && nowMin < closeMin;
+  if (isOpen) {
+    const minsLeft = closeMin - nowMin;
+    const h = Math.floor(minsLeft / 60);
+    const m = minsLeft % 60;
+    return {
+      color: session.color,
+      countdown: h > 0 ? `Closes in ${h}h ${m}m` : `Closes in ${m}m`,
+      flag: session.flag,
+      isOpen: true,
+      istTimes: `${session.openIST} - ${session.closeIST} IST`,
+      name: session.name,
+      statusText: "Open",
+    };
+  }
+  const minsToOpen = nowMin < openMin ? openMin - nowMin : 1440 - nowMin + openMin;
+  const h = Math.floor(minsToOpen / 60);
+  const m = minsToOpen % 60;
+  return {
+    color: session.color,
+    countdown: h > 0 ? `Opens in ${h}h ${m}m` : `Opens in ${m}m`,
+    flag: session.flag,
+    isOpen: false,
+    istTimes: `${session.openIST} - ${session.closeIST} IST`,
+    name: session.name,
+    statusText: "Closed",
+  };
 }
 
 function isMarketOpen(tick: ApiRecord | null): boolean {
@@ -1066,13 +1128,12 @@ function ClientPortalOverview({
   const validationSymbol = Array.isArray(config?.allowed_symbols) ? String(config.allowed_symbols[0] ?? "EURUSD") : "EURUSD";
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
   const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
-  const primaryPrice = Number.isFinite(primaryLive.currentPrice) ? primaryLive.currentPrice : readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN);
 
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
-        <PortalStatCard label="EURUSD" value={marketNumber(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} direction={eurusdLive.direction} history={eurusdLive.history} />
-        <PortalStatCard label="XAUUSD" value={marketNumber(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} direction={xauusdLive.direction} history={xauusdLive.history} />
+        <PortalStatCard label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
+        <PortalStatCard label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
         <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" history={eurusdLive.history} />
         <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" history={xauusdLive.history} />
       </section>
@@ -1088,8 +1149,12 @@ function ClientPortalOverview({
               {["1D", "1W", "1M", "1Y"].map((item) => <button className={`portal-pill ${item === "1W" ? "active" : ""}`} key={item} type="button">{item}</button>)}
             </div>
           </div>
-          <p className={`portal-price price-flash-${primaryLive.direction}`}>{marketNumber(primaryPrice, validationSymbol === "XAUUSD" ? 2 : 5)}</p>
-          <PortalAreaChart direction={primaryLive.direction} points={primaryLive.history} />
+          <p className={`portal-price ${primaryLive.marketOpen ? `price-flash-${primaryLive.direction}` : ""}`}>
+            {marketPriceText(primaryLive.currentPrice, validationSymbol === "XAUUSD" ? 2 : 5)}
+            {!primaryLive.marketOpen ? <> <span className="market-closed-badge">Market Closed</span></> : null}
+          </p>
+          {!primaryLive.endpointConnected ? <p className="price-unavailable-note">{primaryLive.statusMessage}</p> : null}
+          <PortalAreaChart direction={primaryLive.direction} marketOpen={primaryLive.marketOpen} points={primaryLive.history} />
           {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={[]} /> : <EmptyState text="No Active Positions" />}
         </div>
 
@@ -1106,32 +1171,33 @@ function ClientPortalOverview({
 
       <section className="portal-bottom-grid">
         <ValidationSummaryCard closed={closed} remaining={remaining} target={target} symbol={validationSymbol} />
-        <MarketsSummaryCard data={data} eurusdLive={eurusdLive} symbol={validationSymbol} xauusdLive={xauusdLive} />
+        <MarketsSummaryCard eurusdLive={eurusdLive} symbol={validationSymbol} xauusdLive={xauusdLive} />
         <MarketHoursCard />
       </section>
     </div>
   );
 }
 
-function PortalStatCard({ direction = "flat", history = [], label, value, delta }: { direction?: LivePriceState["direction"]; history?: LivePricePoint[]; label: string; value: string; delta: string }) {
+function PortalStatCard({ history, label, live, value, delta }: { history?: LivePricePoint[]; label: string; live?: LivePriceState; value: string; delta: string }) {
+  const direction = live?.marketOpen ? live.direction : "flat";
+  const points = live ? live.history : (history ?? []);
+  const badge = live ? (live.endpointConnected ? (live.marketOpen ? "MT5 Live" : "Closed") : "No Feed") : "Live";
   return (
     <div className="portal-stat-card">
       <div className="portal-stat-header">
         <p className="premium-metric-label">{label}</p>
-        <span className="premium-badge">Live</span>
+        <span className="premium-badge">{badge}</span>
       </div>
       <p className={`portal-stat-value price-flash-${direction}`}>{value}</p>
       <p className={`portal-stat-delta ${direction}`}>{delta}</p>
-      <PortalSparkline points={history} />
+      <PortalSparkline points={points} />
     </div>
   );
 }
 
 function PortalSparkline({ points }: { points: LivePricePoint[] }) {
   const line = pointsToPath(points, 220, 54, 6);
-  const fallbackLine = "M0 50 L24 42 L48 45 L72 30 L96 35 L120 22 L144 26 L168 14 L192 20 L220 8";
-  const d = line || fallbackLine;
-  const area = `${d} L220 62 L0 62 Z`;
+  const area = line ? `${line} L220 62 L0 62 Z` : "";
   return (
     <svg className="portal-sparkline" preserveAspectRatio="none" viewBox="0 0 220 62" aria-hidden="true">
       <defs>
@@ -1144,17 +1210,15 @@ function PortalSparkline({ points }: { points: LivePricePoint[] }) {
           <stop offset="100%" stopColor="var(--chart-gradient-end)" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#sparkFill)" />
-      <path d={d} fill="none" stroke="url(#sparkStroke)" strokeLinecap="round" strokeWidth="2" />
+      {area ? <path d={area} fill="url(#sparkFill)" /> : null}
+      {line ? <path d={line} fill="none" stroke="url(#sparkStroke)" strokeLinecap="round" strokeWidth="2" /> : null}
     </svg>
   );
 }
 
-function PortalAreaChart({ direction, points }: { direction: LivePriceState["direction"]; points: LivePricePoint[] }) {
+function PortalAreaChart({ direction, marketOpen, points }: { direction: LivePriceState["direction"]; marketOpen: boolean; points: LivePricePoint[] }) {
   const line = pointsToPath(points, 720, 260, 24);
-  const fallbackLine = "M0 230 C70 210 95 238 146 190 S248 118 318 148 S430 242 492 158 S612 64 720 104";
-  const d = line || fallbackLine;
-  const area = `${d} L720 300 L0 300 Z`;
+  const area = line ? `${line} L720 300 L0 300 Z` : "";
   const last = pointsToCoordinates(points, 720, 260, 24).at(-1);
   return (
     <svg className="portal-chart-svg" preserveAspectRatio="none" viewBox="0 0 720 300" role="img" aria-label="Dual tone validation chart">
@@ -1169,9 +1233,9 @@ function PortalAreaChart({ direction, points }: { direction: LivePriceState["dir
         </linearGradient>
       </defs>
       {[60, 120, 180, 240].map((y) => <line key={y} x1="0" x2="720" y1={y} y2={y} stroke="var(--border-subtle)" strokeDasharray="6 8" />)}
-      <path d={area} fill="url(#portalChartFill)" />
-      <path d={d} fill="none" stroke="url(#portalChartStroke)" strokeLinecap="round" strokeWidth="3" />
-      {last ? (
+      {area ? <path d={area} fill="url(#portalChartFill)" /> : null}
+      {line ? <path d={line} fill="none" stroke="url(#portalChartStroke)" strokeLinecap="round" strokeWidth="3" /> : null}
+      {last && marketOpen ? (
         <g className={`live-chart-dot ${direction}`} transform={`translate(${last.x} ${last.y})`}>
           <circle className="pulse-ring" r="12" />
           <circle r="5" />
@@ -1250,17 +1314,16 @@ function ValidationSummaryCard({ closed, remaining, symbol, target }: { closed: 
   );
 }
 
-function MarketsSummaryCard({ data, eurusdLive, symbol, xauusdLive }: { data: DashboardData; eurusdLive: LivePriceState; symbol: string; xauusdLive: LivePriceState }) {
-  const eurPrice = Number.isFinite(eurusdLive.currentPrice) ? eurusdLive.currentPrice : readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN);
-  const xauPrice = Number.isFinite(xauusdLive.currentPrice) ? xauusdLive.currentPrice : readNumber(data.xauusdTick, ["bid", "price", "last"], Number.NaN);
+function MarketsSummaryCard({ eurusdLive, symbol, xauusdLive }: { eurusdLive: LivePriceState; symbol: string; xauusdLive: LivePriceState }) {
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Markets</p>
       <h3 className="portal-card-title">Tracked symbols</h3>
       <div className="portal-detail-list">
-        <div className="portal-detail-row"><span>{symbol}</span><span className={eurusdLive.direction}>{marketNumber(eurPrice)} {signed(eurusdLive.delta)}</span></div>
-        <div className="portal-detail-row"><span>XAUUSD</span><span className={xauusdLive.direction}>{marketNumber(xauPrice, 2)} {signed(xauusdLive.delta, 2)}</span></div>
+        <div className="portal-detail-row"><span>{symbol}</span><span className={eurusdLive.marketOpen ? eurusdLive.direction : "flat"}>{marketPriceText(eurusdLive.currentPrice)} {signed(eurusdLive.delta)}</span></div>
+        <div className="portal-detail-row"><span>XAUUSD</span><span className={xauusdLive.marketOpen ? xauusdLive.direction : "flat"}>{marketPriceText(xauusdLive.currentPrice, 2)} {signed(xauusdLive.delta, 2)}</span></div>
       </div>
+      {!eurusdLive.endpointConnected || !xauusdLive.endpointConnected ? <p className="price-unavailable-note">Price data unavailable - backend endpoint /api/mt5/price not connected</p> : null}
     </section>
   );
 }
@@ -1271,35 +1334,51 @@ function MarketHoursCard() {
     const interval = window.setInterval(() => setNow(new Date()), 60000);
     return () => window.clearInterval(interval);
   }, []);
-  const sessions = [
-    forexSession("New York", 12, 21, now),
-    forexSession("London", 7, 16, now),
-    forexSession("Tokyo", 0, 9, now),
+  const sessionStatus = {
+    tokyo: getSessionStatus(FOREX_SESSIONS.tokyo, now),
+    london: getSessionStatus(FOREX_SESSIONS.london, now),
+    newyork: getSessionStatus(FOREX_SESSIONS.newyork, now),
+  };
+  const sessions = [sessionStatus.london, sessionStatus.newyork, sessionStatus.tokyo];
+  const londonOpen = sessionStatus.london.isOpen;
+  const newYorkOpen = sessionStatus.newyork.isOpen;
+  const markers = [
+    { key: "newyork", name: "New York", x: 104, y: 67, color: FOREX_SESSIONS.newyork.color, open: sessionStatus.newyork.isOpen },
+    { key: "london", name: "London", x: 202, y: 55, color: FOREX_SESSIONS.london.color, open: sessionStatus.london.isOpen },
+    { key: "tokyo", name: "Tokyo", x: 334, y: 78, color: FOREX_SESSIONS.tokyo.color, open: sessionStatus.tokyo.isOpen },
+    { key: "mumbai", name: "Mumbai", x: 279, y: 87, color: "#34D399", open: false },
   ];
-  const londonOpen = sessions[1].open;
-  const newYorkOpen = sessions[0].open;
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Market hours</p>
       <h3 className="portal-card-title">Forex sessions</h3>
       <svg className="portal-session-map" preserveAspectRatio="none" viewBox="0 0 420 170" role="img" aria-label="Forex session world map">
-        <path className="session-region" d="M38 70 C62 38 112 35 139 62 C122 91 74 106 38 70Z" />
-        <path className="session-region open" d="M190 50 C222 28 273 45 286 82 C249 106 204 98 190 50Z" />
-        <path className="session-region" d="M312 58 C354 38 392 66 386 104 C348 117 310 101 312 58Z" />
-        {sessions.map((session) => (
-          <g className={`city-dot ${session.open ? "open" : ""}`} key={session.name} transform={`translate(${session.name === "New York" ? 94 : session.name === "London" ? 216 : 346} ${session.name === "Tokyo" ? 82 : 70})`}>
-            {session.open ? <circle className="pulse-ring" r="13" /> : null}
+        <g className="world-map-land">
+          <path d="M23 63 L37 45 L61 38 L85 48 L103 43 L130 55 L143 74 L132 91 L103 95 L87 115 L61 108 L48 88 L30 81 Z" />
+          <path d="M105 112 L126 121 L134 142 L124 162 L108 151 L97 130 Z" />
+          <path d="M168 51 L184 38 L207 39 L214 53 L204 64 L181 66 Z" />
+          <path d="M198 73 L223 64 L247 70 L255 91 L241 112 L216 116 L202 99 Z" />
+          <path d="M246 50 L279 35 L322 40 L363 55 L389 76 L374 98 L334 94 L312 78 L291 96 L267 88 L260 68 Z" />
+          <path d="M300 111 L326 117 L347 135 L333 151 L304 142 Z" />
+          <path d="M350 116 L378 119 L399 134 L384 150 L354 142 Z" />
+        </g>
+        {markers.map((marker) => (
+          <g className={`city-dot ${marker.open ? "open" : ""}`} key={marker.key} style={{ color: marker.color }} transform={`translate(${marker.x} ${marker.y})`}>
+            {marker.open ? <circle className="pulse-ring" r="8" /> : null}
             <circle r="5" />
+            <text x="8" y="4">{marker.name}</text>
           </g>
         ))}
       </svg>
-      {londonOpen && newYorkOpen ? <p className="session-overlap">London / New York overlap active</p> : null}
+      <p className="timezone-note">Your timezone: IST (UTC+5:30)</p>
+      {londonOpen && newYorkOpen ? <div className="overlap-banner">London + New York overlap - High liquidity - 6:30 PM - 10:30 PM IST</div> : null}
       <div className="session-list">
         {sessions.map((session) => (
           <div className="session-row" key={session.name}>
-            <span>{session.name}</span>
-            <strong>{session.open ? "Open" : "Closed"}</strong>
-            <em>{session.countdown}</em>
+            <span>{session.flag} {session.name}</span>
+            <strong className={session.isOpen ? "open" : ""}><span className="session-status-dot" /> {session.statusText}</strong>
+            <em className={session.isOpen ? "open" : ""}>{session.countdown}</em>
+            <small>{session.istTimes}</small>
           </div>
         ))}
       </div>
@@ -1405,11 +1484,85 @@ function TestEnvironmentView(props: {
   );
 }
 
+function emptyEurusdTestResults(): ApiRecord {
+  return {
+    symbol: "EURUSD",
+    round: 2,
+    startedAt: null,
+    completedAt: null,
+    target: 30,
+    summary: {
+      closed: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+      netPnL: 0,
+      profitFactor: 0,
+      maxDrawdown: 0,
+    },
+    trades: [],
+  };
+}
+
+function normalizeStoredTrade(trade: ApiRecord): ApiRecord | null {
+  const id = readText(trade, ["ticket", "ticket_number", "id", "position_id", "order_id"], "");
+  const symbol = readText(trade, ["symbol"], "EURUSD").toUpperCase();
+  if (symbol && symbol !== "EURUSD") return null;
+  const pnl = readNumber(trade, ["profit", "pnl", "net_pnl", "profit_loss", "realized_pnl"], 0);
+  return {
+    id: id || `${readText(trade, ["closed_at", "closeTime", "close_time"], "")}-${readNumber(trade, ["entry", "entryPrice", "openPrice"], 0)}`,
+    openTime: readText(trade, ["openTime", "open_time", "opened_at", "entry_time"], ""),
+    closeTime: readText(trade, ["closeTime", "close_time", "closed_at", "exit_time"], ""),
+    type: readText(trade, ["type", "side", "direction"], "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+    lots: readNumber(trade, ["lots", "lot", "volume"], 0.01),
+    entryPrice: readNumber(trade, ["entryPrice", "openPrice", "entry", "entry_price"], 0),
+    exitPrice: readNumber(trade, ["exitPrice", "closePrice", "exit", "close_price"], 0),
+    sl: readNumber(trade, ["sl", "stop_loss"], 0),
+    tp: readNumber(trade, ["tp", "take_profit"], 0),
+    pnl,
+    result: pnl >= 0 ? "WIN" : "LOSS",
+  };
+}
+
+function buildEurusdTestResults(existing: ApiRecord | null, incomingTrades: ApiRecord[], session: ApiRecord | null, target: number): ApiRecord {
+  const base = { ...emptyEurusdTestResults(), ...(existing ?? {}) };
+  const currentTrades = Array.isArray(base.trades) ? (base.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const byId = new Map<string, ApiRecord>();
+  currentTrades.forEach((trade) => byId.set(readText(trade, ["id"], ""), trade));
+  incomingTrades.forEach((trade) => {
+    const normalized = normalizeStoredTrade(trade);
+    if (!normalized) return;
+    byId.set(readText(normalized, ["id"], ""), normalized);
+  });
+  const trades = Array.from(byId.values()).filter((trade) => readText(trade, ["id"], ""));
+  const wins = trades.filter((trade) => readText(trade, ["result"], "") === "WIN").length;
+  const losses = trades.filter((trade) => readText(trade, ["result"], "") === "LOSS").length;
+  const netPnL = trades.reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0);
+  const grossWin = trades.filter((trade) => readNumber(trade, ["pnl"], 0) > 0).reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0);
+  const grossLoss = Math.abs(trades.filter((trade) => readNumber(trade, ["pnl"], 0) < 0).reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0));
+  return {
+    ...base,
+    target,
+    summary: {
+      closed: trades.length,
+      wins,
+      losses,
+      winRate: trades.length ? Number(((wins / trades.length) * 100).toFixed(2)) : 0,
+      netPnL: Number(netPnL.toFixed(2)),
+      profitFactor: grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : 0,
+      maxDrawdown: readNumber(session, ["max_drawdown"], readNumber(asRecord(base.summary), ["maxDrawdown"], 0)),
+    },
+    startedAt: readText(base, ["startedAt"], "") || readText(session, ["session_start_time", "started_at"], "") || (trades.length ? new Date().toISOString() : null),
+    completedAt: trades.length >= target ? readText(base, ["completedAt"], "") || new Date().toISOString() : readText(base, ["completedAt"], "") || null,
+    trades,
+  };
+}
+
 function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecord[] }) {
   const [expanded, setExpanded] = useState(false);
   const [stored, setStored] = useState<ApiRecord | null>(() => {
     if (typeof window === "undefined") return null;
-    const raw = window.localStorage.getItem(ROUND_1_RESULTS_KEY);
+    const raw = window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw) as ApiRecord;
@@ -1421,39 +1574,83 @@ function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecor
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
   const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
-  const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], trades.length);
-  const roundLabel = readText(session, ["round_label"], readText(config, ["round_label"], ""));
+  const storedSummary = asRecord(stored?.summary);
+  const storedTrades = Array.isArray(stored?.trades) ? (stored.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const hasTrades = storedTrades.length > 0;
   useEffect(() => {
-    if (roundLabel !== "ROUND_1" || closed < target || target <= 0) return;
-    const snapshot: ApiRecord = {
-      captured_at: new Date().toISOString(),
-      closed_trades: closed,
-      target_closed_trades: target,
-      net_pnl: readNumber(session, ["net_pnl"], 0),
-      win_rate: readNumber(session, ["win_rate"], 0),
-      trades,
-    };
-    window.localStorage.setItem(ROUND_1_RESULTS_KEY, JSON.stringify(snapshot));
-    const timeout = window.setTimeout(() => setStored(snapshot), 0);
+    if (!trades.length) return;
+    const raw = window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY);
+    let existing: ApiRecord | null = null;
+    if (raw) {
+      try {
+        existing = JSON.parse(raw) as ApiRecord;
+      } catch {
+        existing = null;
+      }
+    }
+    const next = buildEurusdTestResults(existing, trades, session, target);
+    window.localStorage.setItem(EURUSD_TEST_RESULTS_KEY, JSON.stringify(next));
+    const timeout = window.setTimeout(() => setStored(next), 0);
     return () => window.clearTimeout(timeout);
-  }, [closed, roundLabel, session, target, trades]);
+  }, [session, target, trades]);
   return (
     <section className="round1-card">
       <div className="premium-test-header">
         <div>
-          <p className="premium-section-eyebrow">Round 1 Stored Results</p>
-          <h2 className="premium-section-title">{stored ? `${readNumber(stored, ["closed_trades"], 0)} closed trades captured` : "No Round 1 snapshot stored yet"}</h2>
+          <p className="premium-section-eyebrow">EURUSD Test Results</p>
+          <h2 className="premium-section-title">{hasTrades ? `${readNumber(storedSummary, ["closed"], 0)} closed trades captured` : "EURUSD test results will appear here once validation trades close."}</h2>
+          {!hasTrades ? <p className="test-results-empty">Results are stored permanently and persist after page refresh.</p> : null}
         </div>
-        <button className="portal-panel-tab" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? "Hide Trades" : "View Trades"}</button>
+        <button className="portal-panel-tab" disabled={!hasTrades} onClick={() => setExpanded((value) => !value)} type="button">{hasTrades ? (expanded ? "Hide Trades" : "View Trades") : "No trades yet"}</button>
       </div>
       <div className="premium-stat-grid">
-        <ClientMetric label="Target" value={String(readNumber(stored, ["target_closed_trades"], 0))} compact />
-        <ClientMetric label="Closed" value={String(readNumber(stored, ["closed_trades"], 0))} compact />
-        <ClientMetric label="Win Rate" value={`${readNumber(stored, ["win_rate"], 0).toFixed(2)}%`} compact />
-        <ClientMetric label="Net P&L" value={money(readNumber(stored, ["net_pnl"], 0))} compact />
+        <ClientMetric label="Target" value={hasTrades ? String(readNumber(stored, ["target"], target)) : "-"} compact />
+        <ClientMetric label="Closed" value={hasTrades ? String(readNumber(storedSummary, ["closed"], 0)) : "-"} compact />
+        <ClientMetric label="Win Rate" value={hasTrades ? `${readNumber(storedSummary, ["winRate"], 0).toFixed(2)}%` : "-"} compact />
+        <ClientMetric label="Net P&L" value={hasTrades ? money(readNumber(storedSummary, ["netPnL"], 0)) : "-"} compact />
       </div>
-      {expanded && Array.isArray(stored?.trades) && stored.trades.length ? <ClientClosedTradesTable trades={stored.trades.filter((item) => asRecord(item)) as ApiRecord[]} /> : null}
+      {expanded ? <EurusdTradeHistory trades={storedTrades} onClose={() => setExpanded(false)} /> : null}
     </section>
+  );
+}
+
+function EurusdTradeHistory({ trades, onClose }: { trades: ApiRecord[]; onClose: () => void }) {
+  return (
+    <div className="test-trade-history">
+      <div className="test-trade-history-header">
+        <h3>Trade History - EURUSD</h3>
+        <button onClick={onClose} type="button">Close x</button>
+      </div>
+      {trades.length ? (
+        <div className="test-trade-table-wrap">
+          <table className="test-trade-table">
+            <thead>
+              <tr>{["#", "Type", "Open", "Close", "Lots", "Entry", "Exit", "P&L"].map((item) => <th key={item}>{item}</th>)}</tr>
+            </thead>
+            <tbody>
+              {trades.map((trade, index) => {
+                const type = readText(trade, ["type"], "BUY");
+                const pnl = readNumber(trade, ["pnl"], 0);
+                return (
+                  <tr key={readText(trade, ["id"], String(index))}>
+                    <td>{index + 1}</td>
+                    <td><span className={`trade-type-pill ${type === "SELL" ? "sell" : "buy"}`}>{type}</span></td>
+                    <td>{formatTradeTime(readText(trade, ["openTime"], ""))}</td>
+                    <td>{formatTradeTime(readText(trade, ["closeTime"], ""))}</td>
+                    <td>{readNumber(trade, ["lots"], 0).toFixed(2)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["entryPrice"], 0))}</td>
+                    <td>{marketPriceText(readNumber(trade, ["exitPrice"], 0))}</td>
+                    <td className={pnlClass(pnl)}>{money(pnl)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="test-results-empty">No trades recorded yet</p>
+      )}
+    </div>
   );
 }
 

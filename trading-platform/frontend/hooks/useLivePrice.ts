@@ -13,81 +13,96 @@ export type LivePriceState = {
   deltaPercent: number;
   history: LivePricePoint[];
   direction: "up" | "down" | "flat";
+  marketOpen: boolean;
+  endpointConnected: boolean;
+  statusMessage: string;
 };
 
-const STARTING_PRICES: Record<string, number> = {
-  EURUSD: 1.15654,
-  XAUUSD: 2340.25,
+type Mt5PriceResponse = {
+  bid?: number | string | null;
+  ask?: number | string | null;
+  marketOpen?: boolean;
+  market_open?: boolean;
+  symbol?: string;
+  time?: string;
 };
 
-const YAHOO_SYMBOLS: Record<string, string> = {
-  EURUSD: "EURUSD=X",
-  XAUUSD: "XAUUSD=X",
-};
+function isForexMarketOpen(): boolean {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  if (day === 6) return false;
+  if (day === 0 && nowMin < 22 * 60) return false;
+  if (day === 5 && nowMin >= 22 * 60) return false;
+  return true;
+}
 
 function appendPoint(history: LivePricePoint[], price: number): LivePricePoint[] {
   return [...history, { time: Date.now(), value: price }].slice(-200);
 }
 
-function simulatedPrice(symbol: string, previous: number | null): number {
-  const base = STARTING_PRICES[symbol] ?? 1;
-  const last = previous ?? base;
-  const delta = symbol === "XAUUSD" ? (Math.random() - 0.5) * 1.8 : (Math.random() - 0.5) * 0.001;
-  const min = base * 0.98;
-  const max = base * 1.02;
-  return Math.min(max, Math.max(min, Number((last + delta).toFixed(symbol === "XAUUSD" ? 2 : 5))));
+function numeric(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 export function useLivePrice(symbol: "EURUSD" | "XAUUSD"): LivePriceState {
   const [history, setHistory] = useState<LivePricePoint[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const lastPrice = useRef<number | null>(null);
+  const [marketOpen, setMarketOpen] = useState(() => isForexMarketOpen());
+  const [endpointConnected, setEndpointConnected] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("Price data unavailable - backend endpoint /api/mt5/price not connected");
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    const pushPrice = (price: number) => {
-      if (!Number.isFinite(price) || cancelled) return;
-      lastPrice.current = price;
-      setCurrentPrice(price);
-      setHistory((current) => appendPoint(current, price));
-    };
-
-    const pollYahoo = async () => {
+    const poll = async () => {
+      const fallbackMarketOpen = isForexMarketOpen();
       try {
-        const yahooSymbol = YAHOO_SYMBOLS[symbol];
-        const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1m&range=1d`);
-        const payload = await response.json();
-        const quote = payload?.chart?.result?.[0];
-        const closes = quote?.indicators?.quote?.[0]?.close;
-        const latest = Array.isArray(closes) ? closes.filter((value) => typeof value === "number").at(-1) : null;
-        if (typeof latest === "number") {
-          pushPrice(Number(latest.toFixed(symbol === "XAUUSD" ? 2 : 5)));
-          return;
+        const response = await fetch(`/api/mt5/price?symbol=${symbol}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`MT5 price endpoint returned ${response.status}`);
+        const payload = (await response.json()) as Mt5PriceResponse;
+        const bid = numeric(payload.bid);
+        const nextMarketOpen = typeof payload.marketOpen === "boolean" ? payload.marketOpen : typeof payload.market_open === "boolean" ? payload.market_open : fallbackMarketOpen;
+        if (cancelled) return;
+        setEndpointConnected(true);
+        setMarketOpen(nextMarketOpen);
+        setStatusMessage(nextMarketOpen ? "MT5 price feed connected" : "Market Closed");
+        if (bid !== null) {
+          setCurrentPrice(bid);
+          if (nextMarketOpen) {
+            setHistory((current) => appendPoint(current, bid));
+          }
         }
-        pushPrice(simulatedPrice(symbol, lastPrice.current));
       } catch {
-        pushPrice(simulatedPrice(symbol, lastPrice.current));
+        if (cancelled) return;
+        setEndpointConnected(false);
+        setMarketOpen(fallbackMarketOpen);
+        setStatusMessage("Price data unavailable - backend endpoint /api/mt5/price not connected");
+      } finally {
+        if (!cancelled) {
+          timerRef.current = window.setTimeout(poll, fallbackMarketOpen ? 5000 : 60000);
+        }
       }
     };
 
-    const seed = STARTING_PRICES[symbol];
-    pushPrice(seed);
-    const simInterval = window.setInterval(() => pushPrice(simulatedPrice(symbol, lastPrice.current)), 2000);
-    const pollInterval = window.setInterval(() => void pollYahoo(), 10000);
-    void pollYahoo();
+    void poll();
 
     return () => {
       cancelled = true;
-      window.clearInterval(simInterval);
-      window.clearInterval(pollInterval);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
   }, [symbol]);
 
   const previous = history.length > 1 ? history[history.length - 2].value : currentPrice;
-  const delta = currentPrice !== null && previous !== null ? currentPrice - previous : 0;
-  const deltaPercent = previous && currentPrice !== null ? (delta / previous) * 100 : 0;
+  const delta = currentPrice !== null && previous !== null && marketOpen ? currentPrice - previous : 0;
+  const deltaPercent = previous && currentPrice !== null && marketOpen ? (delta / previous) * 100 : 0;
   const direction = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
 
-  return { currentPrice, delta, deltaPercent, history, direction };
+  return { currentPrice, delta, deltaPercent, endpointConnected, history, marketOpen, direction, statusMessage };
 }

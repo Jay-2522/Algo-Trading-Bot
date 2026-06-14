@@ -16,60 +16,10 @@
   padding: 18px 0 40px;
 }
 
-.premium-view-switcher {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 64px;
-  padding: 10px 0;
-  background: rgba(14, 19, 38, 0.86);
-  backdrop-filter: blur(20px);
-}
-
-.premium-view-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  padding: 6px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
-}
-
-.premium-view-tab {
-  min-height: 36px;
-  padding: 8px 18px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: var(--font-display), sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.premium-view-tab:hover,
-.premium-view-tab:focus-visible {
-  color: var(--text-primary);
-}
-
-.premium-view-tab:focus-visible,
 .premium-dashboard-root button:focus-visible,
 .premium-dashboard-root a:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.16);
-}
-
-.premium-view-tab.active {
-  background: var(--accent-primary);
-  color: #ffffff;
 }
 
 .premium-dashboard-grid {
@@ -491,10 +441,6 @@
   gap: 8px;
 }
 
-.client-sidebar-spacer {
-  flex: 1;
-}
-
 .client-sidebar-divider {
   height: 1px;
   margin: 16px 0;
@@ -682,6 +628,18 @@
   font-size: 12px;
 }
 
+.portal-stat-delta.up,
+.portal-detail-row .up,
+.price-flash-up {
+  color: var(--positive);
+}
+
+.portal-stat-delta.down,
+.portal-detail-row .down,
+.price-flash-down {
+  color: var(--negative);
+}
+
 .portal-sparkline {
   margin-top: 14px;
   height: 62px;
@@ -738,6 +696,24 @@
   margin-top: 12px;
   height: 300px;
   width: 100%;
+}
+
+.live-chart-dot circle:last-child,
+.city-dot circle:last-child {
+  fill: var(--accent-primary);
+}
+
+.live-chart-dot.down circle:last-child {
+  fill: var(--negative);
+}
+
+.pulse-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  opacity: 0.45;
+  transform-origin: center;
+  animation: portalPulse 1.8s ease-out infinite;
 }
 
 .portal-tabs {
@@ -880,6 +856,70 @@
   padding: 5px 9px;
 }
 
+.portal-session-map {
+  height: 170px;
+  margin-top: 16px;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(9, 14, 30, 0.95), rgba(19, 23, 43, 0.95));
+}
+
+.session-region {
+  fill: rgba(148, 163, 184, 0.18);
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.session-region.open {
+  fill: rgba(34, 211, 238, 0.22);
+}
+
+.city-dot {
+  color: var(--text-muted);
+}
+
+.city-dot.open {
+  color: var(--accent-secondary);
+}
+
+.session-overlap {
+  margin-top: 10px;
+  color: var(--accent-secondary);
+  font-family: var(--font-display), sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.session-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.session-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+}
+
+.session-row span,
+.session-row em {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.session-row strong {
+  color: var(--text-primary);
+  font-family: var(--font-data), monospace;
+  font-size: 13px;
+}
+
+.session-row em {
+  grid-column: 1 / -1;
+  font-style: normal;
+}
+
 .portal-test-shell {
   display: grid;
   gap: 20px;
@@ -891,6 +931,57 @@
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
   padding: 24px;
+}
+
+.trader-profile-shell,
+.trader-profile-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.trader-profile-hero,
+.trader-profile-card,
+.round1-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  padding: 24px;
+}
+
+.trader-profile-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.trader-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.trader-profile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.trader-profile-card h2 {
+  color: var(--text-primary);
+  font-family: var(--font-display), sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+@keyframes portalPulse {
+  from {
+    opacity: 0.5;
+    transform: scale(0.6);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
 }
 
 @keyframes portalFade {
@@ -947,6 +1038,15 @@
   }
 
   .portal-calculator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trader-profile-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .trader-profile-grid {
     grid-template-columns: 1fr;
   }
 }

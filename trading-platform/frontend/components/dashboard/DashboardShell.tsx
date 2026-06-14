@@ -27,6 +27,7 @@ import {
   type ClientOrderPayload,
 } from "@/lib/clientOperatingDashboardApi";
 import { readNumber, readText } from "@/lib/dashboard-formatters";
+import { useLivePrice, type LivePricePoint, type LivePriceState } from "@/hooks/useLivePrice";
 
 type DashboardData = {
   account: ApiRecord | null;
@@ -50,8 +51,7 @@ type DashboardData = {
 
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
 type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
-type DashboardView = "dashboard" | "developer";
-type PortalView = "portal" | "testEnvironment";
+type PortalView = "portal" | "traderProfile" | "testEnvironment";
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
@@ -68,6 +68,7 @@ const ROUND_2_START_PAYLOAD: ApiRecord = {
   session_note: ROUND_2_NOTE,
   client_dashboard_scope: "CURRENT_SESSION_ONLY",
 };
+const ROUND_1_RESULTS_KEY = "algopilot_round1_results";
 
 const emptyData: DashboardData = {
   account: null,
@@ -166,6 +167,44 @@ function numeric(record: ApiRecord | null | undefined, keys: string[], fallback 
 function marketNumber(value: number | null | undefined, digits = 5): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "Unavailable";
   return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function signed(value: number | null | undefined, digits = 5): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "0";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+}
+
+function pointsToCoordinates(points: LivePricePoint[], width: number, height: number, padding: number): { x: number; y: number }[] {
+  const recent = points.slice(-80).filter((point) => Number.isFinite(point.value));
+  if (recent.length < 2) return [];
+  const values = recent.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return recent.map((point, index) => ({
+    x: recent.length === 1 ? 0 : (index / (recent.length - 1)) * width,
+    y: padding + ((max - point.value) / range) * (height - padding * 2),
+  }));
+}
+
+function pointsToPath(points: LivePricePoint[], width: number, height: number, padding: number): string {
+  return pointsToCoordinates(points, width, height, padding)
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
+}
+
+function forexSession(name: string, openUtc: number, closeUtc: number, now: Date): { countdown: string; name: string; open: boolean } {
+  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const wraps = closeUtc <= openUtc;
+  const open = wraps ? hour >= openUtc || hour < closeUtc : hour >= openUtc && hour < closeUtc;
+  const targetHour = open ? closeUtc : hour < openUtc ? openUtc : openUtc + 24;
+  const rawHours = targetHour - hour;
+  const hours = wraps && open && hour < closeUtc ? closeUtc - hour : rawHours;
+  const totalMinutes = Math.max(0, Math.round(hours * 60));
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return { countdown: `${open ? "Closes" : "Opens"} in ${hh}h ${mm}m`, name, open };
 }
 
 function isMarketOpen(tick: ApiRecord | null): boolean {
@@ -347,7 +386,6 @@ export function DashboardShell(_: {
   const [workingAction, setWorkingAction] = useState<string | null>(null);
   const [heldReadySignals, setHeldReadySignals] = useState<HeldSignals>({});
   const [nowMs, setNowMs] = useState(0);
-  const [activeView, setActiveView] = useState<DashboardView>("dashboard");
   const [activePortalView, setActivePortalView] = useState<PortalView>("portal");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
@@ -614,6 +652,8 @@ export function DashboardShell(_: {
   const openFloatingPnl = floatingPnl(data.openPositions);
   const lastTrade = closedTrades[0] ?? null;
   const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
+  const eurusdLive = useLivePrice("EURUSD");
+  const xauusdLive = useLivePrice("XAUUSD");
 
   const orderPayload = (signal: ApiRecord | null = selectedSignal): ClientOrderPayload => ({
     symbol: readText(signal, ["symbol"], selectedSymbol) === "XAUUSD" ? "XAUUSD" : "EURUSD",
@@ -874,6 +914,8 @@ export function DashboardShell(_: {
             <ClientPortalOverview
               backendConnected={backendConnected}
               data={data}
+              eurusdLive={eurusdLive}
+              xauusdLive={xauusdLive}
               lastSuccessfulSync={lastSuccessfulSync}
               loading={loading}
               onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
@@ -882,276 +924,27 @@ export function DashboardShell(_: {
               todayPnl={todayPnl(clientClosedTrades)}
               workingAction={workingAction}
             />
+          ) : activePortalView === "traderProfile" ? (
+            <TraderProfileView
+              data={data}
+              onRefresh={() => void handleClientRefresh()}
+            />
           ) : (
-            <section className="portal-test-shell">
-              <div className="portal-test-heading">
-                <p className="premium-section-eyebrow">Test Environment</p>
-                <h2 className="premium-section-title">AI Multi-Market Trading Bot</h2>
-              </div>
-              <ViewSelector activeView={activeView} onChange={setActiveView} />
-              {activeView === "dashboard" ? (
-          !dashboardHasSnapshot && loading ? (
-            <ClientDashboardLoadingView />
-          ) : (
-          <ClientDashboardView
-            data={data}
-            backendConnected={backendConnected}
-            closedTrades={clientClosedTrades}
-            exitManagementState={exitManagementState}
-            lastSuccessfulSync={lastSuccessfulSync}
-            lifecycleSyncState={lifecycleSyncState}
-            loading={loading}
-            onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
-            onRefresh={() => void handleClientRefresh()}
-            onSync={(action) => void handleSync(action)}
-            openFloatingPnl={floatingPnl(clientOpenPositions)}
-            scopedOpenPositions={clientOpenPositions}
-            todayPnl={todayPnl(clientClosedTrades)}
-            workingAction={workingAction}
-          />
-          )
-              ) : (
-          <>
-        <header className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-2xl shadow-black/30">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-blue-300">Client-Scoped AI Trading</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">AI Trading Dashboard</h1>
-              <p className="mt-2 text-sm text-slate-400">EURUSD, XAUUSD, and NIFTY50 signal monitoring with guarded execution.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" onClick={() => void refresh()} type="button">
-                {loading ? "Refreshing..." : "Refresh"}
-              </button>
-              <button className="rounded-xl border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm font-bold text-blue-100 hover:bg-blue-500/20" onClick={() => void handleSync("positions")} type="button">
-                {positionsSyncState.loading ? "Refreshing Positions..." : "Refresh Positions"}
-              </button>
-              <button className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-500/20" onClick={() => void handleSync("lifecycle")} type="button">
-                {lifecycleSyncState.loading ? "Syncing Lifecycle..." : "Sync Lifecycle"}
-              </button>
-              <button className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-500/20" onClick={() => void handleSync("exit-management")} type="button">
-                {exitManagementState.loading ? "Checking Exits..." : "Run Exit Management"}
-              </button>
-            </div>
-          </div>
-          {positionsSyncState.error || lifecycleSyncState.error || exitManagementState.error || positionsSyncState.message || lifecycleSyncState.message || exitManagementState.message ? (
-            <div className="mt-4 grid gap-2 text-sm font-bold sm:grid-cols-3">
-              <p className={positionsSyncState.error ? "text-rose-200" : "text-emerald-300"}>
-                Refresh Positions: {positionsSyncState.error || positionsSyncState.message || "Idle"}
-              </p>
-              <p className={lifecycleSyncState.error ? "text-rose-200" : "text-emerald-300"}>
-                Sync Lifecycle: {lifecycleSyncState.error || lifecycleSyncState.message || "Idle"}
-              </p>
-              <p className={exitManagementState.error ? "text-rose-200" : "text-emerald-300"}>
-                Exit Management: {exitManagementState.error || exitManagementState.message || "Idle"}
-              </p>
-            </div>
-          ) : null}
-          <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_1fr_0.8fr_1fr]">
-            <section>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Status</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Metric label="Account" value={readText(data.account, ["login"], "Unavailable")} />
-                <Metric label="Server" value={readText(data.account, ["server"], "Unavailable")} />
-                <Metric label="Balance" value={money(numeric(data.account, ["balance"]))} valueClass="whitespace-nowrap text-white" />
-                <Metric label="Equity" value={money(numeric(data.account, ["equity"]))} valueClass="whitespace-nowrap text-white" />
-              </div>
-            </section>
-            <section>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Account Health</p>
-              <div className="mt-3 grid gap-3">
-                <Metric label="Margin Level" value={percent(numeric(data.account, ["margin_level"]))} compact />
-                <Metric label="Free Margin" value={money(numeric(data.account, ["free_margin"]))} valueClass="whitespace-nowrap text-white" compact />
-                <Metric label="Used Margin" value={money(numeric(data.account, ["used_margin"]))} valueClass="whitespace-nowrap text-white" compact />
-              </div>
-            </section>
-            <section>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Floating P&L</p>
-              <div className="mt-3 grid gap-3">
-                <Metric label="Open Positions" value={String(data.openPositions.length)} compact />
-                <Metric label="Floating P&L" value={money(openFloatingPnl)} valueClass={pnlClass(openFloatingPnl)} />
-                <Metric label="Today's P&L" value={money(todayPnl(closedTrades))} valueClass={pnlClass(todayPnl(closedTrades))} compact />
-              </div>
-            </section>
-            <section>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Last Trade</p>
-              <div className="mt-3 grid gap-3">
-                {lastTrade ? (
-                  <>
-                    <Metric label="Setup" value={`${readText(lastTrade, ["symbol"], "Trade")} ${readText(lastTrade, ["side"], "")}`} compact />
-                    <Metric label="Result" value={readText(lastTrade, ["result"], "Unavailable")} compact />
-                    <Metric label="P&L" value={money(readNumber(lastTrade, ["net_pnl", "profit_loss", "realized_pnl"], 0))} valueClass={pnlClass(readNumber(lastTrade, ["net_pnl", "profit_loss", "realized_pnl"], 0))} compact />
-                  </>
-                ) : (
-                  <Metric label="Status" value="No completed trades yet" compact />
-                )}
-              </div>
-            </section>
-          </div>
-          <p className="mt-3 text-xs text-slate-500">{lastUpdated ? `Prices refresh every 1s. AI signals refresh every 5s. Last full update ${lastUpdated}.` : "Preparing dashboard data."}</p>
-        </header>
-
-        <ExecutionModePanel
-          mode={data.executionMode}
-          nowMs={nowMs}
-          workingAction={workingAction}
-          onApprove={(approvalId) => void handleApprovalDecision("approve", approvalId)}
-          onReject={(approvalId) => void handleApprovalDecision("reject", approvalId)}
-          onSetMode={(mode) => void handleExecutionModeChange(mode)}
-        />
-
-        <AutoValidationPanel
-          status={data.autoValidation}
-          nowMs={nowMs}
-          pollError={panelErrors.autoValidation ?? ""}
-          workingAction={workingAction}
-          onAction={(action) => void handleAutoValidationAction(action)}
-        />
-
-        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-          <SectionTitle eyebrow="Market Overview" title="Scoped Instruments" />
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            <MarketCard title="EURUSD" tick={data.eurusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "EURUSD") ?? null} />
-            <MarketCard title="XAUUSD" tick={data.xauusdTick} scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} signal={displayedSignals.find((item) => readText(item, ["symbol"], "") === "XAUUSD") ?? null} />
-            <NiftyMarketCard scope={data.marketScope.find((item) => readText(item, ["symbol"], "") === "NIFTY50") ?? null} />
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-          <SectionTitle eyebrow="AI Signal Center" title="Current Client Signals" />
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            {(["EURUSD", "XAUUSD", "NIFTY50"] as const).map((symbol) => (
-              <SignalCard
-                key={symbol}
-                canPreview={canPreviewSignal(displayedSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null)}
-                onPreview={(signal) => void handlePreview(signal)}
-                selected={selectedSymbol === symbol}
-                signal={displayedSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null}
-                symbol={symbol}
-                validForSeconds={signalHoldRemaining(displayedSignals.find((item) => readText(item, ["symbol"], "") === symbol) ?? null, nowMs)}
-                onSelect={() => setSelectedSymbol(symbol)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-          <SectionTitle eyebrow="Broker Accounts" title="StarTrader, FxPro, and Vantage" />
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            {(["STARTRADER", "FXPRO", "VANTAGE"] as const).map((brokerId) => (
-              <BrokerAccountCard
-                account={data.brokerAccounts.find((account) => readText(account, ["broker_id"], "") === brokerId) ?? null}
-                brokerId={brokerId}
-                copyPlan={data.brokerCopyPlans.find((plan) => readText(plan, ["broker_id"], "") === brokerId) ?? null}
-                key={brokerId}
-              />
-            ))}
-          </div>
-          <CurrentTerminalCard account={data.currentTerminalAccount} />
-        </section>
-
-        <VantageXauusdValidationPanel status={data.vantageXauusdStatus} preview={data.vantageXauusdPreview} />
-
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Signal Execution Panel</p>
-                <h2 className="mt-1 text-2xl font-black">Review the selected AI signal and approve demo execution.</h2>
-              </div>
-              <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusTone(readText(selectedSignal, ["execution_status"], "WAITING"))}`}>{readText(selectedSignal, ["execution_status"], "WAITING")}</span>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Metric label="Selected Symbol" value={selectedSymbol} />
-              <Metric label="AI Direction" value={signalAction} />
-              <Metric label="Entry" value={marketNumber(signalEntry, selectedSymbol === "XAUUSD" ? 2 : 5)} />
-              <Metric label="Stop Loss" value={marketNumber(stopLoss, selectedSymbol === "XAUUSD" ? 2 : 5)} />
-              <Metric label="Take Profit" value={marketNumber(takeProfit, selectedSymbol === "XAUUSD" ? 2 : 5)} />
-              <Metric label="Lot" value="0.01" />
-              <Metric label="Risk / Reward" value={Number.isFinite(rr) ? `${rr.toFixed(2)}:1` : "Unavailable"} />
-              <Metric label="Risk Status" value={readText(selectedSignal, ["risk_status"], "NO_SIGNAL").replaceAll("_", " ")} />
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <button className="rounded-xl bg-blue-500 px-4 py-3 text-sm font-black text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canPreview} onClick={() => void handlePreview()} type="button">
-                {workingAction === "preview" ? "Previewing..." : "Preview Signal Trade"}
-              </button>
-              <button className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={!canSend} onClick={() => setConfirmOpen(true)} type="button">
-                Confirm & Send Demo Order
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-slate-800 bg-[#0F172A] p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Trade Status</p>
-              <div className="mt-3 grid gap-2 text-sm text-slate-300">
-                {tradeStatus.map((status) => (
-                  <div className="flex items-center justify-between gap-3" key={status.text}>
-                    <span className="font-bold text-slate-200">{status.text}</span>
-                    <span className={status.ok ? "font-bold text-emerald-300" : "font-bold text-rose-300"}>{status.ok ? "Ready" : "Blocked"}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {preview && <PreviewPanel preview={preview} signal={previewSignal ?? selectedSignal} canSend={canSend} validForSeconds={signalHoldRemaining(previewSignal ?? selectedSignal, nowMs)} onConfirm={() => setConfirmOpen(true)} />}
-
-            {(tradeError || sendResult) && (
-              <div className={`mt-4 rounded-xl border p-4 text-sm ${tradeError ? "border-rose-400/25 bg-rose-500/10 text-rose-100" : "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"}`}>
-                {tradeError || `Demo order status: ${readText(sendResult, ["status"], "Submitted")}`}
-              </div>
-            )}
-            {signalAction === "WAIT" ? <EmptyState text="Waiting for a valid strategy setup." /> : null}
-          </section>
-
-          <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-            <SectionTitle eyebrow="Open Trades" title="Active Demo Positions" />
-            {data.openPositions.length ? <OpenPositionsTable positions={data.openPositions} /> : <EmptyState text="Waiting for the next AI-approved trade." />}
-          </section>
-        </section>
-
-        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <SectionTitle eyebrow="Closed Demo Trades" title="Completed Trade Journal" />
-            <Link className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800" href="/dashboard/history">
-              View Full Trade History
-            </Link>
-          </div>
-          {closedTrades.length ? <ClosedTradesTable trades={closedTrades} /> : <EmptyState text="Completed trades will appear here." />}
-        </section>
-
-        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
-          <SectionTitle eyebrow="Performance Summary" title="Demo Analytics" />
-          {closedCount ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric label="Total Trades" value={String(totalTrades)} />
-              <Metric label="Closed Trades" value={String(closedCount)} />
-              <Metric label="Win Rate" value={`${winRate.toFixed(2)}%`} />
-              <Metric label="Net P&L" value={money(netPnl)} valueClass={pnlClass(netPnl)} />
-              <Metric label="Average RR" value={avgRr ? avgRr.toFixed(2) : "Unavailable"} />
-              {closedCount >= 5 ? <Metric label="Best / Worst" value={`${money(readNumber(bestTrade, ["realized_pnl", "net_pnl"], Number.NaN))} / ${money(readNumber(worstTrade, ["realized_pnl", "net_pnl"], Number.NaN))}`} /> : null}
-            </div>
-          ) : (
-            <EmptyState text="Need more closed trades." />
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <SafetyPill text="DEMO MODE" />
-            <SafetyPill text="LIVE TRADING DISABLED" />
-            <SafetyPill text="GUARDED EXECUTION ENABLED" />
-          </div>
-          {errors.length > 0 && (
-            <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-              <strong className="block text-amber-50">Backend unavailable</strong>
-              Some dashboard data is unavailable. Last successful values remain visible where available.
-            </div>
-          )}
-        </section>
-          </>
-              )}
-            </section>
+            <TestEnvironmentView
+              backendConnected={backendConnected}
+              closedTrades={clientClosedTrades}
+              data={data}
+              exitManagementState={exitManagementState}
+              lastSuccessfulSync={lastSuccessfulSync}
+              lifecycleSyncState={lifecycleSyncState}
+              onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
+              onRefresh={() => void handleClientRefresh()}
+              onSync={(action) => void handleSync(action)}
+              openFloatingPnl={openFloatingPnl}
+              scopedOpenPositions={clientOpenPositions}
+              todayPnl={todayPnl(clientClosedTrades)}
+              workingAction={workingAction}
+            />
           )}
         </section>
       </div>
@@ -1183,29 +976,14 @@ export function DashboardShell(_: {
   );
 }
 
-function ViewSelector({ activeView, onChange }: { activeView: DashboardView; onChange: (view: DashboardView) => void }) {
-  return (
-    <div className="premium-view-switcher">
-      <div className="premium-view-tabs" role="tablist" aria-label="Dashboard view">
-        <button className={`premium-view-tab ${activeView === "dashboard" ? "active" : ""}`} onClick={() => onChange("dashboard")} role="tab" aria-selected={activeView === "dashboard"} type="button">
-          Dashboard
-        </button>
-        <button className={`premium-view-tab ${activeView === "developer" ? "active" : ""}`} onClick={() => onChange("developer")} role="tab" aria-selected={activeView === "developer"} type="button">
-          Admin Panel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ClientPortalSidebar({ activeView, botTone, onChange }: { activeView: PortalView; botTone: "healthy" | "warning" | "danger"; onChange: (view: PortalView) => void }) {
   const items = [
-    ["Dashboard", "◆", "portal"],
-    ["Trader Profile", "◇", "portal"],
+    ["Dashboard", "D", "portal"],
+    ["Trader Profile", "P", "traderProfile"],
     ["Support", "?", "portal"],
-    ["Settings", "⌄", "portal"],
+    ["Settings", "S", "portal"],
     ["Funds", "$", "portal"],
-    ["News", "•", "portal"],
+    ["News", "N", "portal"],
   ] as const;
   return (
     <aside className="client-sidebar">
@@ -1215,30 +993,30 @@ function ClientPortalSidebar({ activeView, botTone, onChange }: { activeView: Po
       </div>
       <nav className="client-sidebar-nav" aria-label="Client portal">
         {items.map(([label, icon, view]) => (
-          <button className={`client-sidebar-item ${activeView === view && label === "Dashboard" ? "active" : ""}`} key={label} onClick={() => onChange(view)} type="button">
+          <button className={`client-sidebar-item ${activeView === view && (view !== "portal" || label === "Dashboard") ? "active" : ""}`} key={label} onClick={() => onChange(view)} type="button">
             <span className="client-sidebar-icon">{icon}</span>
             <span>{label}</span>
           </button>
         ))}
+        <div className="client-sidebar-divider" />
+        <button className={`client-sidebar-item test ${activeView === "testEnvironment" ? "active" : ""}`} onClick={() => onChange("testEnvironment")} type="button">
+          <span className="client-sidebar-icon">T</span>
+          <span>Test Environment</span>
+          <span className={`client-sidebar-dot ${botTone}`} />
+        </button>
       </nav>
-      <div className="client-sidebar-spacer" />
-      <div className="client-sidebar-divider" />
-      <button className={`client-sidebar-item test ${activeView === "testEnvironment" ? "active" : ""}`} onClick={() => onChange("testEnvironment")} type="button">
-        <span className="client-sidebar-icon">⚗</span>
-        <span>Test Environment</span>
-        <span className={`client-sidebar-dot ${botTone}`} />
-      </button>
     </aside>
   );
 }
 
 function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView; onRefresh: () => void }) {
+  const page = activeView === "portal" ? "Overview" : activeView === "traderProfile" ? "Trader Profile" : "Test Environment";
   return (
     <header className="client-topbar">
-      <p className="client-breadcrumb">Dashboard &gt; {activeView === "portal" ? "Overview" : "Test Environment"}</p>
+      <p className="client-breadcrumb">Dashboard &gt; {page}</p>
       <div className="client-topbar-actions">
-        <button aria-label="Search" className="client-icon-button" type="button">⌕</button>
-        <button aria-label="Notifications" className="client-icon-button" type="button">◦</button>
+        <button aria-label="Search" className="client-icon-button" type="button">/</button>
+        <button aria-label="Notifications" className="client-icon-button" type="button">!</button>
         <div className="client-user-chip">
           <span className="client-avatar">S</span>
           <span>Swati</span>
@@ -1248,10 +1026,10 @@ function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView;
     </header>
   );
 }
-
 function ClientPortalOverview({
   backendConnected,
   data,
+  eurusdLive,
   lastSuccessfulSync,
   loading,
   onAutoValidationAction,
@@ -1259,9 +1037,11 @@ function ClientPortalOverview({
   scopedOpenPositions,
   todayPnl,
   workingAction,
+  xauusdLive,
 }: {
   backendConnected: boolean;
   data: DashboardData;
+  eurusdLive: LivePriceState;
   lastSuccessfulSync: string | null;
   loading: boolean;
   onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
@@ -1269,6 +1049,7 @@ function ClientPortalOverview({
   scopedOpenPositions: ApiRecord[];
   todayPnl: number;
   workingAction: string | null;
+  xauusdLive: LivePriceState;
 }) {
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
@@ -1284,14 +1065,16 @@ function ClientPortalOverview({
   const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
   const validationSymbol = Array.isArray(config?.allowed_symbols) ? String(config.allowed_symbols[0] ?? "EURUSD") : "EURUSD";
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
+  const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
+  const primaryPrice = Number.isFinite(primaryLive.currentPrice) ? primaryLive.currentPrice : readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN);
 
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
-        <PortalStatCard label="Account Balance" value={moneyOrWaiting(numeric(data.account, ["balance"]))} delta="Shared account data" />
-        <PortalStatCard label="Equity" value={moneyOrWaiting(numeric(data.account, ["equity"]))} delta="MT5 account snapshot" />
-        <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" />
-        <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" />
+        <PortalStatCard label="EURUSD" value={marketNumber(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} direction={eurusdLive.direction} history={eurusdLive.history} />
+        <PortalStatCard label="XAUUSD" value={marketNumber(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} direction={xauusdLive.direction} history={xauusdLive.history} />
+        <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" history={eurusdLive.history} />
+        <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" history={xauusdLive.history} />
       </section>
 
       <section className="portal-main-grid">
@@ -1305,8 +1088,8 @@ function ClientPortalOverview({
               {["1D", "1W", "1M", "1Y"].map((item) => <button className={`portal-pill ${item === "1W" ? "active" : ""}`} key={item} type="button">{item}</button>)}
             </div>
           </div>
-          <p className="portal-price">{marketNumber(readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN))}</p>
-          <PortalAreaChart />
+          <p className={`portal-price price-flash-${primaryLive.direction}`}>{marketNumber(primaryPrice, validationSymbol === "XAUUSD" ? 2 : 5)}</p>
+          <PortalAreaChart direction={primaryLive.direction} points={primaryLive.history} />
           {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={[]} /> : <EmptyState text="No Active Positions" />}
         </div>
 
@@ -1323,28 +1106,32 @@ function ClientPortalOverview({
 
       <section className="portal-bottom-grid">
         <ValidationSummaryCard closed={closed} remaining={remaining} target={target} symbol={validationSymbol} />
-        <MarketsSummaryCard data={data} symbol={validationSymbol} />
+        <MarketsSummaryCard data={data} eurusdLive={eurusdLive} symbol={validationSymbol} xauusdLive={xauusdLive} />
         <MarketHoursCard />
       </section>
     </div>
   );
 }
 
-function PortalStatCard({ label, value, delta }: { label: string; value: string; delta: string }) {
+function PortalStatCard({ direction = "flat", history = [], label, value, delta }: { direction?: LivePriceState["direction"]; history?: LivePricePoint[]; label: string; value: string; delta: string }) {
   return (
     <div className="portal-stat-card">
       <div className="portal-stat-header">
         <p className="premium-metric-label">{label}</p>
         <span className="premium-badge">Live</span>
       </div>
-      <p className="portal-stat-value">{value}</p>
-      <p className="portal-stat-delta">{delta}</p>
-      <PortalSparkline />
+      <p className={`portal-stat-value price-flash-${direction}`}>{value}</p>
+      <p className={`portal-stat-delta ${direction}`}>{delta}</p>
+      <PortalSparkline points={history} />
     </div>
   );
 }
 
-function PortalSparkline() {
+function PortalSparkline({ points }: { points: LivePricePoint[] }) {
+  const line = pointsToPath(points, 220, 54, 6);
+  const fallbackLine = "M0 50 L24 42 L48 45 L72 30 L96 35 L120 22 L144 26 L168 14 L192 20 L220 8";
+  const d = line || fallbackLine;
+  const area = `${d} L220 62 L0 62 Z`;
   return (
     <svg className="portal-sparkline" preserveAspectRatio="none" viewBox="0 0 220 62" aria-hidden="true">
       <defs>
@@ -1357,13 +1144,18 @@ function PortalSparkline() {
           <stop offset="100%" stopColor="var(--chart-gradient-end)" />
         </linearGradient>
       </defs>
-      <path d="M0 50 L24 42 L48 45 L72 30 L96 35 L120 22 L144 26 L168 14 L192 20 L220 8 L220 62 L0 62 Z" fill="url(#sparkFill)" />
-      <path d="M0 50 L24 42 L48 45 L72 30 L96 35 L120 22 L144 26 L168 14 L192 20 L220 8" fill="none" stroke="url(#sparkStroke)" strokeLinecap="round" strokeWidth="2" />
+      <path d={area} fill="url(#sparkFill)" />
+      <path d={d} fill="none" stroke="url(#sparkStroke)" strokeLinecap="round" strokeWidth="2" />
     </svg>
   );
 }
 
-function PortalAreaChart() {
+function PortalAreaChart({ direction, points }: { direction: LivePriceState["direction"]; points: LivePricePoint[] }) {
+  const line = pointsToPath(points, 720, 260, 24);
+  const fallbackLine = "M0 230 C70 210 95 238 146 190 S248 118 318 148 S430 242 492 158 S612 64 720 104";
+  const d = line || fallbackLine;
+  const area = `${d} L720 300 L0 300 Z`;
+  const last = pointsToCoordinates(points, 720, 260, 24).at(-1);
   return (
     <svg className="portal-chart-svg" preserveAspectRatio="none" viewBox="0 0 720 300" role="img" aria-label="Dual tone validation chart">
       <defs>
@@ -1377,8 +1169,14 @@ function PortalAreaChart() {
         </linearGradient>
       </defs>
       {[60, 120, 180, 240].map((y) => <line key={y} x1="0" x2="720" y1={y} y2={y} stroke="var(--border-subtle)" strokeDasharray="6 8" />)}
-      <path d="M0 230 C70 210 95 238 146 190 S248 118 318 148 S430 242 492 158 S612 64 720 104 L720 300 L0 300 Z" fill="url(#portalChartFill)" />
-      <path d="M0 230 C70 210 95 238 146 190 S248 118 318 148 S430 242 492 158 S612 64 720 104" fill="none" stroke="url(#portalChartStroke)" strokeLinecap="round" strokeWidth="3" />
+      <path d={area} fill="url(#portalChartFill)" />
+      <path d={d} fill="none" stroke="url(#portalChartStroke)" strokeLinecap="round" strokeWidth="3" />
+      {last ? (
+        <g className={`live-chart-dot ${direction}`} transform={`translate(${last.x} ${last.y})`}>
+          <circle className="pulse-ring" r="12" />
+          <circle r="5" />
+        </g>
+      ) : null}
     </svg>
   );
 }
@@ -1452,40 +1250,209 @@ function ValidationSummaryCard({ closed, remaining, symbol, target }: { closed: 
   );
 }
 
-function MarketsSummaryCard({ data, symbol }: { data: DashboardData; symbol: string }) {
-  const price = marketNumber(readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN));
+function MarketsSummaryCard({ data, eurusdLive, symbol, xauusdLive }: { data: DashboardData; eurusdLive: LivePriceState; symbol: string; xauusdLive: LivePriceState }) {
+  const eurPrice = Number.isFinite(eurusdLive.currentPrice) ? eurusdLive.currentPrice : readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN);
+  const xauPrice = Number.isFinite(xauusdLive.currentPrice) ? xauusdLive.currentPrice : readNumber(data.xauusdTick, ["bid", "price", "last"], Number.NaN);
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Markets</p>
       <h3 className="portal-card-title">Tracked symbols</h3>
       <div className="portal-detail-list">
-        <div className="portal-detail-row"><span>{symbol}</span><span>{price}</span></div>
-        <div className="portal-detail-row"><span>XAUUSD</span><span>{marketNumber(readNumber(data.xauusdTick, ["bid", "price", "last"], Number.NaN), 2)}</span></div>
+        <div className="portal-detail-row"><span>{symbol}</span><span className={eurusdLive.direction}>{marketNumber(eurPrice)} {signed(eurusdLive.delta)}</span></div>
+        <div className="portal-detail-row"><span>XAUUSD</span><span className={xauusdLive.direction}>{marketNumber(xauPrice, 2)} {signed(xauusdLive.delta, 2)}</span></div>
       </div>
     </section>
   );
 }
 
 function MarketHoursCard() {
-  const now = new Date();
-  const utcHour = now.getUTCHours();
-  const londonOpen = utcHour >= 7 && utcHour < 16;
-  const newYorkOpen = utcHour >= 12 && utcHour < 21;
-  const tokyoOpen = utcHour >= 0 && utcHour < 9;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
+  const sessions = [
+    forexSession("New York", 12, 21, now),
+    forexSession("London", 7, 16, now),
+    forexSession("Tokyo", 0, 9, now),
+  ];
+  const londonOpen = sessions[1].open;
+  const newYorkOpen = sessions[0].open;
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Market hours</p>
       <h3 className="portal-card-title">Forex sessions</h3>
-      <div className="portal-mini-map">
-        <span className="portal-map-tag" style={{ left: "18%", top: "35%" }}>New York</span>
-        <span className="portal-map-tag" style={{ left: "43%", top: "30%" }}>London</span>
-        <span className="portal-map-tag" style={{ right: "12%", top: "50%" }}>Tokyo</span>
+      <svg className="portal-session-map" preserveAspectRatio="none" viewBox="0 0 420 170" role="img" aria-label="Forex session world map">
+        <path className="session-region" d="M38 70 C62 38 112 35 139 62 C122 91 74 106 38 70Z" />
+        <path className="session-region open" d="M190 50 C222 28 273 45 286 82 C249 106 204 98 190 50Z" />
+        <path className="session-region" d="M312 58 C354 38 392 66 386 104 C348 117 310 101 312 58Z" />
+        {sessions.map((session) => (
+          <g className={`city-dot ${session.open ? "open" : ""}`} key={session.name} transform={`translate(${session.name === "New York" ? 94 : session.name === "London" ? 216 : 346} ${session.name === "Tokyo" ? 82 : 70})`}>
+            {session.open ? <circle className="pulse-ring" r="13" /> : null}
+            <circle r="5" />
+          </g>
+        ))}
+      </svg>
+      {londonOpen && newYorkOpen ? <p className="session-overlap">London / New York overlap active</p> : null}
+      <div className="session-list">
+        {sessions.map((session) => (
+          <div className="session-row" key={session.name}>
+            <span>{session.name}</span>
+            <strong>{session.open ? "Open" : "Closed"}</strong>
+            <em>{session.countdown}</em>
+          </div>
+        ))}
       </div>
+    </section>
+  );
+}
+
+function TraderProfileView({ data, onRefresh }: { data: DashboardData; onRefresh: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [showSensitive, setShowSensitive] = useState(false);
+  const broker = asRecord(data.brokerAccounts[0]) ?? {};
+  const config = asRecord(data.autoValidation?.config);
+  const mode = asRecord(data.executionMode);
+  const mask = (value: string) => showSensitive ? value : value ? "*".repeat(Math.min(12, Math.max(6, value.length))) : "Not configured";
+  useEffect(() => {
+    if (!showSensitive) return;
+    const timeout = window.setTimeout(() => setShowSensitive(false), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [showSensitive]);
+  const handleEditSave = () => {
+    if (!editing) {
+      setEditing(true);
+      return;
+    }
+    onRefresh();
+    setEditing(false);
+  };
+  return (
+    <div className="trader-profile-shell">
+      <section className="trader-profile-hero">
+        <div>
+          <p className="premium-section-eyebrow">Trader Profile</p>
+          <h1 className="portal-card-title">Account and strategy controls</h1>
+        </div>
+        <div className="trader-profile-actions">
+          <button className="portal-panel-tab" onClick={() => setShowSensitive((value) => !value)} type="button">{showSensitive ? "Hide" : "Show"} Sensitive</button>
+          <button className="portal-primary-button !m-0 !w-auto !px-5" onClick={handleEditSave} type="button">{editing ? "Save" : "Edit"}</button>
+        </div>
+      </section>
+      <section className="trader-profile-grid">
+        <ProfileSection title="Broker Connection" rows={[
+          ["Broker", friendlyText(broker, ["broker", "broker_name", "name"], "Vantage Demo")],
+          ["Server", friendlyText(broker, ["server", "broker_server"], "Demo server")],
+          ["Account", friendlyText(data.account, ["login"], friendlyText(broker, ["account_login", "login"], "Connecting"))],
+          ["Password", mask(readText(broker, ["password", "account_password"], ""))],
+        ]} />
+        <ProfileSection title="Account Settings" rows={[
+          ["Account Type", friendlyText(data.account, ["account_type"], "Demo")],
+          ["Balance", moneyOrWaiting(numeric(data.account, ["balance"]))],
+          ["Equity", moneyOrWaiting(numeric(data.account, ["equity"]))],
+          ["Max Positions", String(readNumber(config, ["max_open_trades_total"], 0))],
+        ]} />
+        <ProfileSection title="Strategy Configuration" rows={[
+          ["Strategy", readText(config, ["strategy_profile"], "DEMO_COLLECTION")],
+          ["Symbols", Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD"],
+          ["Lot Size", String(readNumber(config, ["lot_size"], 0.01))],
+          ["Execution Mode", readText(mode, ["mode", "execution_mode"], "AUTO")],
+        ]} />
+        <ProfileSection title="Notifications and Sync" rows={[
+          ["Webhook", mask(readText(data.guardedStatus, ["webhook_url"], ""))],
+          ["API Key", mask(readText(data.guardedStatus, ["api_key"], ""))],
+          ["Sync Interval", `${readNumber(config, ["sync_interval_seconds"], 3)}s`],
+          ["Status", readText(data.guardedStatus, ["status"], "Monitoring")],
+        ]} />
+      </section>
+    </div>
+  );
+}
+
+function ProfileSection({ rows, title }: { rows: [string, string][]; title: string }) {
+  return (
+    <section className="trader-profile-card">
+      <h2>{title}</h2>
       <div className="portal-detail-list">
-        <div className="portal-detail-row"><span>New York</span><span>{newYorkOpen ? "Open" : "Closed"}</span></div>
-        <div className="portal-detail-row"><span>London</span><span>{londonOpen ? "Open" : "Closed"}</span></div>
-        <div className="portal-detail-row"><span>Tokyo</span><span>{tokyoOpen ? "Open" : "Closed"}</span></div>
+        {rows.map(([label, value]) => (
+          <div className="portal-detail-row" key={label}><span>{label}</span><span>{value}</span></div>
+        ))}
       </div>
+    </section>
+  );
+}
+
+function TestEnvironmentView(props: {
+  backendConnected: boolean;
+  closedTrades: ApiRecord[];
+  data: DashboardData;
+  exitManagementState: { loading: boolean; message: string; error: string };
+  lastSuccessfulSync: string | null;
+  lifecycleSyncState: { loading: boolean; message: string; error: string };
+  onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  onRefresh: () => void;
+  onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
+  openFloatingPnl: number;
+  scopedOpenPositions: ApiRecord[];
+  todayPnl: number;
+  workingAction: string | null;
+}) {
+  return (
+    <div className="portal-test-shell">
+      <Round1Results data={props.data} trades={props.closedTrades} />
+      <ClientDashboardView {...props} loading={false} />
+    </div>
+  );
+}
+
+function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [stored, setStored] = useState<ApiRecord | null>(() => {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(ROUND_1_RESULTS_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as ApiRecord;
+    } catch {
+      return null;
+    }
+  });
+  const autoStatus = asRecord(data.autoValidation);
+  const session = asRecord(autoStatus?.session);
+  const config = asRecord(autoStatus?.config);
+  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
+  const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], trades.length);
+  const roundLabel = readText(session, ["round_label"], readText(config, ["round_label"], ""));
+  useEffect(() => {
+    if (roundLabel !== "ROUND_1" || closed < target || target <= 0) return;
+    const snapshot: ApiRecord = {
+      captured_at: new Date().toISOString(),
+      closed_trades: closed,
+      target_closed_trades: target,
+      net_pnl: readNumber(session, ["net_pnl"], 0),
+      win_rate: readNumber(session, ["win_rate"], 0),
+      trades,
+    };
+    window.localStorage.setItem(ROUND_1_RESULTS_KEY, JSON.stringify(snapshot));
+    const timeout = window.setTimeout(() => setStored(snapshot), 0);
+    return () => window.clearTimeout(timeout);
+  }, [closed, roundLabel, session, target, trades]);
+  return (
+    <section className="round1-card">
+      <div className="premium-test-header">
+        <div>
+          <p className="premium-section-eyebrow">Round 1 Stored Results</p>
+          <h2 className="premium-section-title">{stored ? `${readNumber(stored, ["closed_trades"], 0)} closed trades captured` : "No Round 1 snapshot stored yet"}</h2>
+        </div>
+        <button className="portal-panel-tab" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? "Hide Trades" : "View Trades"}</button>
+      </div>
+      <div className="premium-stat-grid">
+        <ClientMetric label="Target" value={String(readNumber(stored, ["target_closed_trades"], 0))} compact />
+        <ClientMetric label="Closed" value={String(readNumber(stored, ["closed_trades"], 0))} compact />
+        <ClientMetric label="Win Rate" value={`${readNumber(stored, ["win_rate"], 0).toFixed(2)}%`} compact />
+        <ClientMetric label="Net P&L" value={money(readNumber(stored, ["net_pnl"], 0))} compact />
+      </div>
+      {expanded && Array.isArray(stored?.trades) && stored.trades.length ? <ClientClosedTradesTable trades={stored.trades.filter((item) => asRecord(item)) as ApiRecord[]} /> : null}
     </section>
   );
 }

@@ -3,6 +3,7 @@
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import {
   fetchClientOperatingDashboard,
@@ -56,6 +57,7 @@ type ToastState = { id: number; tone: "loading" | "success" | "error"; message: 
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
 const DASHBOARD_CACHE_KEY = "client-dashboard-last-successful-snapshot-v2";
+const BALANCE_HISTORY_KEY = "algopilot_balance_history";
 const ROUND_2_NOTE = "Round 2: EURUSD-only validation. No manual intervention. Client dashboard shows Round 2 only.";
 const ROUND_2_START_PAYLOAD: ApiRecord = {
   confirm_fresh_start: true,
@@ -76,8 +78,6 @@ const FOREX_SESSIONS = {
     color: "#EC4899",
     openUTC: { h: 0, m: 0 },
     closeUTC: { h: 9, m: 0 },
-    openIST: "5:30 AM",
-    closeIST: "2:30 PM",
   },
   london: {
     name: "London",
@@ -85,8 +85,6 @@ const FOREX_SESSIONS = {
     color: "#22D3EE",
     openUTC: { h: 8, m: 0 },
     closeUTC: { h: 17, m: 0 },
-    openIST: "1:30 PM",
-    closeIST: "10:30 PM",
   },
   newyork: {
     name: "New York",
@@ -94,8 +92,6 @@ const FOREX_SESSIONS = {
     color: "#A855F7",
     openUTC: { h: 13, m: 0 },
     closeUTC: { h: 22, m: 0 },
-    openIST: "6:30 PM",
-    closeIST: "3:30 AM+1",
   },
 } as const;
 
@@ -234,12 +230,27 @@ function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SE
   flag: string;
   isOpen: boolean;
   istTimes: string;
+  localTimes: string;
   name: string;
+  stateLabel: string;
   statusText: string;
 } {
   const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
   const openMin = session.openUTC.h * 60 + session.openUTC.m;
   const closeMin = session.closeUTC.h * 60 + session.closeUTC.m;
+  if (!isForexGloballyOpen(now)) {
+    return {
+      color: session.color,
+      countdown: formatMins(getMinutesUntilSundayOpen(now)),
+      flag: session.flag,
+      isOpen: false,
+      istTimes: sessionTimesInLocalTZ(session),
+      localTimes: sessionTimesInLocalTZ(session),
+      name: session.name,
+      stateLabel: "Market closed",
+      statusText: "Closed",
+    };
+  }
   const isOpen = nowMin >= openMin && nowMin < closeMin;
   if (isOpen) {
     const minsLeft = closeMin - nowMin;
@@ -250,8 +261,10 @@ function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SE
       countdown: h > 0 ? `Closes in ${h}h ${m}m` : `Closes in ${m}m`,
       flag: session.flag,
       isOpen: true,
-      istTimes: `${session.openIST} - ${session.closeIST} IST`,
+      istTimes: sessionTimesInLocalTZ(session),
+      localTimes: sessionTimesInLocalTZ(session),
       name: session.name,
+      stateLabel: "Closes in",
       statusText: "Open",
     };
   }
@@ -263,10 +276,44 @@ function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SE
     countdown: h > 0 ? `Opens in ${h}h ${m}m` : `Opens in ${m}m`,
     flag: session.flag,
     isOpen: false,
-    istTimes: `${session.openIST} - ${session.closeIST} IST`,
+    istTimes: sessionTimesInLocalTZ(session),
+    localTimes: sessionTimesInLocalTZ(session),
     name: session.name,
+    stateLabel: "Opens in",
     statusText: "Closed",
   };
+}
+
+function isForexGloballyOpen(now = new Date()): boolean {
+  const day = now.getUTCDay();
+  const totalMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  if (day === 6) return false;
+  if (day === 0 && totalMinutes < 22 * 60) return false;
+  if (day === 5 && totalMinutes >= 22 * 60) return false;
+  return true;
+}
+
+function getMinutesUntilSundayOpen(now: Date): number {
+  const target = new Date(now);
+  target.setUTCHours(22, 0, 0, 0);
+  const daysUntilSunday = (7 - now.getUTCDay()) % 7 || 7;
+  target.setUTCDate(target.getUTCDate() + daysUntilSunday);
+  return Math.max(0, Math.floor((target.getTime() - now.getTime()) / 60000));
+}
+
+function formatMins(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function sessionTimesInLocalTZ(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS]): string {
+  const openDate = new Date();
+  openDate.setUTCHours(session.openUTC.h, session.openUTC.m, 0, 0);
+  const closeDate = new Date();
+  closeDate.setUTCHours(session.closeUTC.h, session.closeUTC.m, 0, 0);
+  const fmt = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `${fmt(openDate)} - ${fmt(closeDate)} local`;
 }
 
 function isMarketOpen(tick: ApiRecord | null): boolean {
@@ -975,6 +1022,7 @@ export function DashboardShell(_: {
           {activePortalView === "portal" ? (
             <ClientPortalOverview
               backendConnected={backendConnected}
+              closedTrades={clientClosedTrades}
               data={data}
               eurusdLive={eurusdLive}
               xauusdLive={xauusdLive}
@@ -1077,8 +1125,6 @@ function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView;
     <header className="client-topbar">
       <p className="client-breadcrumb">Dashboard &gt; {page}</p>
       <div className="client-topbar-actions">
-        <button aria-label="Search" className="client-icon-button" type="button">/</button>
-        <button aria-label="Notifications" className="client-icon-button" type="button">!</button>
         <div className="client-user-chip">
           <span className="client-avatar">S</span>
           <span>Swati</span>
@@ -1090,6 +1136,7 @@ function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView;
 }
 function ClientPortalOverview({
   backendConnected,
+  closedTrades,
   data,
   eurusdLive,
   lastSuccessfulSync,
@@ -1102,6 +1149,7 @@ function ClientPortalOverview({
   xauusdLive,
 }: {
   backendConnected: boolean;
+  closedTrades: ApiRecord[];
   data: DashboardData;
   eurusdLive: LivePriceState;
   lastSuccessfulSync: string | null;
@@ -1128,69 +1176,67 @@ function ClientPortalOverview({
   const validationSymbol = Array.isArray(config?.allowed_symbols) ? String(config.allowed_symbols[0] ?? "EURUSD") : "EURUSD";
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
   const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
+  const accountBalance = numeric(data.account, ["balance"]);
 
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
         <PortalStatCard label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
         <PortalStatCard label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
+        <PortalStatCard badge="Disconnected" badgeStyle="neutral" delta={null} label="NIFTY 50" note="Connect to enable" value="-" />
         <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" history={eurusdLive.history} />
         <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" history={xauusdLive.history} />
       </section>
 
       <section className="portal-main-grid">
         <div className="portal-chart-card">
-          <div className="portal-card-header">
-            <div>
-              <p className="premium-section-eyebrow">Main chart</p>
-              <h2 className="portal-card-title">{validationSymbol}</h2>
-            </div>
-            <div className="portal-pill-row">
-              {["1D", "1W", "1M", "1Y"].map((item) => <button className={`portal-pill ${item === "1W" ? "active" : ""}`} key={item} type="button">{item}</button>)}
-            </div>
-          </div>
-          <p className={`portal-price ${primaryLive.marketOpen ? `price-flash-${primaryLive.direction}` : ""}`}>
-            {marketPriceText(primaryLive.currentPrice, validationSymbol === "XAUUSD" ? 2 : 5)}
-            {!primaryLive.marketOpen ? <> <span className="market-closed-badge">Market Closed</span></> : null}
-          </p>
-          {!primaryLive.endpointConnected ? <p className="price-unavailable-note">{primaryLive.statusMessage}</p> : null}
-          <PortalAreaChart direction={primaryLive.direction} marketOpen={primaryLive.marketOpen} points={primaryLive.history} />
+          <AccountBalanceChart balance={accountBalance} marketOpen={primaryLive.marketOpen} />
           {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={[]} /> : <EmptyState text="No Active Positions" />}
         </div>
 
-        <BotStatusPanel
-          backendConnected={backendConnected}
-          botStatus={botState.statusText}
-          loading={loading}
-          mt5Connected={mt5Connected}
-          lastSuccessfulSync={lastSuccessfulSync}
-          onStart={() => onAutoValidationAction("start")}
-          startDisabled={quickStartDisabled}
-        />
+        <PositionCalculatorPanel accountBalance={accountBalance} />
       </section>
 
       <section className="portal-bottom-grid">
-        <ValidationSummaryCard closed={closed} remaining={remaining} target={target} symbol={validationSymbol} />
-        <MarketsSummaryCard eurusdLive={eurusdLive} symbol={validationSymbol} xauusdLive={xauusdLive} />
+        <TradeHistoryPanel closedTrades={closedTrades} />
         <MarketHoursCard />
       </section>
     </div>
   );
 }
 
-function PortalStatCard({ history, label, live, value, delta }: { history?: LivePricePoint[]; label: string; live?: LivePriceState; value: string; delta: string }) {
+function PortalStatCard({
+  badge,
+  badgeStyle = "default",
+  delta,
+  history,
+  label,
+  live,
+  note,
+  value,
+}: {
+  badge?: string;
+  badgeStyle?: "default" | "neutral";
+  delta: string | null;
+  history?: LivePricePoint[];
+  label: string;
+  live?: LivePriceState;
+  note?: string;
+  value: string;
+}) {
   const direction = live?.marketOpen ? live.direction : "flat";
   const points = live ? live.history : (history ?? []);
-  const badge = live ? (live.endpointConnected ? (live.marketOpen ? "MT5 Live" : "Closed") : "No Feed") : "Live";
+  const badgeText = badge ?? (live ? (live.endpointConnected ? (live.marketOpen ? "MT5 Live" : "Closed") : "No Feed") : "Live");
   return (
     <div className="portal-stat-card">
       <div className="portal-stat-header">
         <p className="premium-metric-label">{label}</p>
-        <span className="premium-badge">{badge}</span>
+        <span className={`premium-badge ${badgeStyle === "neutral" ? "neutral" : ""}`}>{badgeText}</span>
       </div>
       <p className={`portal-stat-value price-flash-${direction}`}>{value}</p>
-      <p className={`portal-stat-delta ${direction}`}>{delta}</p>
-      <PortalSparkline points={points} />
+      {delta ? <p className={`portal-stat-delta ${direction}`}>{delta}</p> : null}
+      {note ? <p className="portal-stat-note">{note}</p> : null}
+      {points.length ? <PortalSparkline points={points} /> : <div className="portal-sparkline empty" />}
     </div>
   );
 }
@@ -1216,59 +1262,88 @@ function PortalSparkline({ points }: { points: LivePricePoint[] }) {
   );
 }
 
-function PortalAreaChart({ direction, marketOpen, points }: { direction: LivePriceState["direction"]; marketOpen: boolean; points: LivePricePoint[] }) {
-  const line = pointsToPath(points, 720, 260, 24);
-  const area = line ? `${line} L720 300 L0 300 Z` : "";
-  const last = pointsToCoordinates(points, 720, 260, 24).at(-1);
-  return (
-    <svg className="portal-chart-svg" preserveAspectRatio="none" viewBox="0 0 720 300" role="img" aria-label="Dual tone validation chart">
-      <defs>
-        <linearGradient id="portalChartStroke" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%" stopColor="var(--accent-secondary)" />
-          <stop offset="100%" stopColor="var(--accent-primary)" />
-        </linearGradient>
-        <linearGradient id="portalChartFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="var(--chart-gradient-start)" />
-          <stop offset="100%" stopColor="var(--chart-gradient-end)" />
-        </linearGradient>
-      </defs>
-      {[60, 120, 180, 240].map((y) => <line key={y} x1="0" x2="720" y1={y} y2={y} stroke="var(--border-subtle)" strokeDasharray="6 8" />)}
-      {area ? <path d={area} fill="url(#portalChartFill)" /> : null}
-      {line ? <path d={line} fill="none" stroke="url(#portalChartStroke)" strokeLinecap="round" strokeWidth="3" /> : null}
-      {last && marketOpen ? (
-        <g className={`live-chart-dot ${direction}`} transform={`translate(${last.x} ${last.y})`}>
-          <circle className="pulse-ring" r="12" />
-          <circle r="5" />
-        </g>
-      ) : null}
-    </svg>
-  );
+function readStoredPoints(key: string): LivePricePoint[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "[]") as unknown;
+    return Array.isArray(parsed) ? (parsed.filter((point) => asRecord(point) && Number.isFinite(readNumber(point as ApiRecord, ["value"], Number.NaN))) as LivePricePoint[]) : [];
+  } catch {
+    return [];
+  }
 }
 
-function BotStatusPanel({ backendConnected, botStatus, loading, mt5Connected, lastSuccessfulSync, onStart, startDisabled }: { backendConnected: boolean; botStatus: string; loading: boolean; mt5Connected: boolean; lastSuccessfulSync: string | null; onStart: () => void; startDisabled: boolean }) {
-  const [tab, setTab] = useState<"status" | "calculator">("status");
+function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketOpen: boolean }) {
+  const [period, setPeriod] = useState<"1D" | "1W" | "1M" | "1Y">("1W");
+  const [history, setHistory] = useState<LivePricePoint[]>(() => readStoredPoints(BALANCE_HISTORY_KEY));
+  const [chartNow, setChartNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = window.setInterval(() => setChartNow(Date.now()), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
+  useEffect(() => {
+    if (!Number.isFinite(balance) || balance <= 0) return;
+    const existing = readStoredPoints(BALANCE_HISTORY_KEY);
+    const last = existing.at(-1);
+    const next = { time: Date.now(), value: Number(balance.toFixed(2)) };
+    const updated = !last || last.value !== next.value ? [...existing, next].slice(-500) : existing;
+    window.localStorage.setItem(BALANCE_HISTORY_KEY, JSON.stringify(updated));
+    const timeout = window.setTimeout(() => {
+      setHistory(updated);
+      setChartNow(Date.now());
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [balance]);
+  const periodMs = period === "1D" ? 86400000 : period === "1W" ? 7 * 86400000 : period === "1M" ? 30 * 86400000 : 365 * 86400000;
+  const cutoff = chartNow - periodMs;
+  const filtered = history.filter((point) => point.time >= cutoff);
+  const first = filtered[0]?.value ?? balance;
+  const last = filtered.at(-1)?.value ?? balance;
+  const delta = Number.isFinite(first) && Number.isFinite(last) ? last - first : 0;
+  const deltaPercent = first ? (delta / first) * 100 : 0;
   return (
-    <aside className="portal-side-panel">
-      <div className="portal-tabs">
-        <button className={`portal-panel-tab ${tab === "status" ? "active" : ""}`} onClick={() => setTab("status")} type="button">Bot Status</button>
-        <button className={`portal-panel-tab ${tab === "calculator" ? "active" : ""}`} onClick={() => setTab("calculator")} type="button">Position Calculator</button>
+    <>
+      <div className="portal-card-header">
+        <div>
+          <p className="premium-section-eyebrow">Account Balance</p>
+          <p className="portal-price">
+            {moneyOrWaiting(balance)}
+            {!marketOpen ? <> <span className="market-closed-badge">Market Closed</span></> : null}
+          </p>
+          <p className={`balance-delta ${delta >= 0 ? "up" : "down"}`}>{money(delta)} ({signed(deltaPercent, 2)}%)</p>
+        </div>
+        <div className="portal-pill-row">
+          {(["1D", "1W", "1M", "1Y"] as const).map((item) => <button className={`portal-pill ${item === period ? "active" : ""}`} key={item} onClick={() => setPeriod(item)} type="button">{item}</button>)}
+        </div>
       </div>
-      {tab === "status" ? (
-        <>
-          <p className="premium-section-eyebrow">Current state</p>
-          <p className="portal-readout">{botStatus}</p>
-          <div className="portal-detail-list">
-            <StatusDetail label="Backend Status" value={backendConnected ? "Connected" : "Reconnecting"} tone={backendConnected ? "healthy" : "danger"} />
-            <StatusDetail label="MT5 Status" value={mt5Connected ? "Connected" : "Checking"} tone={mt5Connected ? "healthy" : "warning"} />
-            <StatusDetail label="Validation Status" value={botStatus} tone="warning" />
-            <StatusDetail label="Last Sync" value={lastSuccessfulSync ?? "Waiting"} tone={lastSuccessfulSync ? "healthy" : "warning"} />
-          </div>
-          <button className="portal-primary-button" disabled={startDisabled} onClick={onStart} type="button">{loading ? "Refreshing..." : "Start Validation"}</button>
-        </>
-      ) : (
-        <PositionCalculatorPlaceholder />
-      )}
-    </aside>
+      <div className="balance-chart-area">
+        {filtered.length ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={filtered}>
+              <defs>
+                <linearGradient id="balanceGradient" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor="#A855F7" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#22D3EE" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="balanceLine" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stopColor="#22D3EE" />
+                  <stop offset="100%" stopColor="#A855F7" />
+                </linearGradient>
+              </defs>
+              <XAxis axisLine={false} dataKey="time" tick={{ fill: "#4B5278", fontSize: 11, fontFamily: "Space Mono" }} tickFormatter={(value) => new Date(Number(value)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tickLine={false} />
+              <YAxis axisLine={false} domain={["auto", "auto"]} tick={{ fill: "#4B5278", fontSize: 11, fontFamily: "Space Mono" }} tickFormatter={(value) => `$${Number(value).toLocaleString()}`} tickLine={false} />
+              <Tooltip
+                contentStyle={{ background: "#1F2640", border: "1px solid #2A3151", borderRadius: "8px", fontFamily: "Space Mono", fontSize: "12px" }}
+                formatter={(value) => [`$${Number(value).toFixed(2)}`, "Balance"]}
+                labelFormatter={(value) => new Date(Number(value)).toLocaleString()}
+              />
+              <Area activeDot={{ r: 4, fill: "#A855F7", strokeWidth: 0 }} dataKey="value" dot={false} fill="url(#balanceGradient)" isAnimationActive={false} stroke="url(#balanceLine)" strokeWidth={2} type="monotone" />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="balance-chart-empty">Balance chart will populate as account activity is recorded.</div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -1281,50 +1356,89 @@ function StatusDetail({ label, value, tone }: { label: string; value: string; to
   );
 }
 
-function PositionCalculatorPlaceholder() {
-  const fields = ["Funds", "Deposit slip", "Opening price", "Stop loss price", "Account balance", "Risky %"];
+function PositionCalculatorPanel({ accountBalance }: { accountBalance: number }) {
+  const [calcInputs, setCalcInputs] = useState({
+    symbol: "EURUSD",
+    depositCurrency: "USD",
+    openingPrice: "",
+    stopLossPrice: "",
+    accountBalance: "",
+    riskyPercent: "1",
+  });
+  const [calcResults, setCalcResults] = useState<{ amountRisk: string; units: string } | null>(null);
+  useEffect(() => {
+    if (!Number.isFinite(accountBalance) || accountBalance <= 0 || calcInputs.accountBalance) return;
+    const timeout = window.setTimeout(() => {
+      setCalcInputs((current) => ({ ...current, accountBalance: accountBalance.toFixed(2) }));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [accountBalance, calcInputs.accountBalance]);
+  const updateInput = (key: keyof typeof calcInputs, value: string) => {
+    setCalcInputs((current) => ({ ...current, [key]: value }));
+  };
+  const calculate = () => {
+    const open = Number.parseFloat(calcInputs.openingPrice);
+    const sl = Number.parseFloat(calcInputs.stopLossPrice);
+    const bal = Number.parseFloat(calcInputs.accountBalance);
+    const risk = Number.parseFloat(calcInputs.riskyPercent) / 100;
+    if (!open || !sl || !bal || !risk) return;
+    const priceDiff = Math.abs(open - sl);
+    if (!priceDiff) return;
+    const riskAmount = bal * risk;
+    const pipValue = calcInputs.symbol === "XAUUSD" ? 1 : 10;
+    const units = riskAmount / (priceDiff * pipValue);
+    setCalcResults({
+      amountRisk: riskAmount.toFixed(2),
+      units: Math.round(units).toLocaleString(),
+    });
+  };
   return (
-    <>
-      <span className="portal-coming-soon">Coming soon</span>
-      <div className="portal-calculator-grid mt-4">
-        {fields.map((field) => (
-          <div className="portal-field" key={field}>
-            <label>{field}</label>
-            <input disabled placeholder="Coming soon" />
-          </div>
-        ))}
+    <aside className="portal-side-panel">
+      <h2 className="calc-title">Position Size Calculator</h2>
+      <div className="calc-grid">
+        <label className="calc-control">
+          <span className="calc-label">Funds</span>
+          <select className="calc-field" onChange={(event) => updateInput("symbol", event.target.value)} value={calcInputs.symbol}>
+            <option value="EURUSD">EURUSD</option>
+            <option value="XAUUSD">XAUUSD</option>
+            <option disabled value="NIFTY50">NIFTY50 - Coming soon</option>
+          </select>
+        </label>
+        <label className="calc-control">
+          <span className="calc-label">Deposit slip</span>
+          <select className="calc-field" onChange={(event) => updateInput("depositCurrency", event.target.value)} value={calcInputs.depositCurrency}>
+            <option value="USD">Dollar USA</option>
+          </select>
+        </label>
+        <label className="calc-control">
+          <span className="calc-label">Opening price</span>
+          <input className="calc-field" inputMode="decimal" onChange={(event) => updateInput("openingPrice", event.target.value)} value={calcInputs.openingPrice} />
+        </label>
+        <label className="calc-control">
+          <span className="calc-label">Stop loss price</span>
+          <input className="calc-field" inputMode="decimal" onChange={(event) => updateInput("stopLossPrice", event.target.value)} value={calcInputs.stopLossPrice} />
+        </label>
+        <label className="calc-control">
+          <span className="calc-label">Account balance</span>
+          <input className="calc-field" inputMode="decimal" onChange={(event) => updateInput("accountBalance", event.target.value)} value={calcInputs.accountBalance} />
+        </label>
+        <label className="calc-control">
+          <span className="calc-label">Risky %</span>
+          <input className="calc-field" inputMode="decimal" onChange={(event) => updateInput("riskyPercent", event.target.value)} value={calcInputs.riskyPercent} />
+        </label>
       </div>
-      <button className="portal-primary-button" disabled type="button">Calculate</button>
-    </>
-  );
-}
-
-function ValidationSummaryCard({ closed, remaining, symbol, target }: { closed: number; remaining: number; symbol: string; target: number }) {
-  return (
-    <section className="portal-bottom-card">
-      <p className="premium-section-eyebrow">Validation summary</p>
-      <h3 className="portal-card-title">Round 2</h3>
-      <div className="portal-detail-list">
-        <div className="portal-detail-row"><span>Symbol</span><span>{symbol}</span></div>
-        <div className="portal-detail-row"><span>Target</span><span>{target}</span></div>
-        <div className="portal-detail-row"><span>Closed</span><span>{closed}</span></div>
-        <div className="portal-detail-row"><span>Remaining</span><span>{remaining}</span></div>
+      <button className="btn-calculate" onClick={calculate} type="button">Calculate</button>
+      <div className="calc-results">
+        <div>
+          <p className="calc-result-label">Units (ideal size)</p>
+          <p className="calc-result-value">{calcResults?.units ?? "-"}</p>
+        </div>
+        <div>
+          <p className="calc-result-label">Amount at risk</p>
+          <p className="calc-result-value">{calcResults ? `$${calcResults.amountRisk}` : "-"}</p>
+        </div>
       </div>
-    </section>
-  );
-}
-
-function MarketsSummaryCard({ eurusdLive, symbol, xauusdLive }: { eurusdLive: LivePriceState; symbol: string; xauusdLive: LivePriceState }) {
-  return (
-    <section className="portal-bottom-card">
-      <p className="premium-section-eyebrow">Markets</p>
-      <h3 className="portal-card-title">Tracked symbols</h3>
-      <div className="portal-detail-list">
-        <div className="portal-detail-row"><span>{symbol}</span><span className={eurusdLive.marketOpen ? eurusdLive.direction : "flat"}>{marketPriceText(eurusdLive.currentPrice)} {signed(eurusdLive.delta)}</span></div>
-        <div className="portal-detail-row"><span>XAUUSD</span><span className={xauusdLive.marketOpen ? xauusdLive.direction : "flat"}>{marketPriceText(xauusdLive.currentPrice, 2)} {signed(xauusdLive.delta, 2)}</span></div>
-      </div>
-      {!eurusdLive.endpointConnected || !xauusdLive.endpointConnected ? <p className="price-unavailable-note">Price data unavailable - backend endpoint /api/mt5/price not connected</p> : null}
-    </section>
+    </aside>
   );
 }
 
@@ -1343,11 +1457,11 @@ function MarketHoursCard() {
   const londonOpen = sessionStatus.london.isOpen;
   const newYorkOpen = sessionStatus.newyork.isOpen;
   const markers = [
-    { key: "newyork", name: "New York", x: 104, y: 67, color: FOREX_SESSIONS.newyork.color, open: sessionStatus.newyork.isOpen },
-    { key: "london", name: "London", x: 202, y: 55, color: FOREX_SESSIONS.london.color, open: sessionStatus.london.isOpen },
-    { key: "tokyo", name: "Tokyo", x: 334, y: 78, color: FOREX_SESSIONS.tokyo.color, open: sessionStatus.tokyo.isOpen },
-    { key: "mumbai", name: "Mumbai", x: 279, y: 87, color: "#34D399", open: false },
+    { key: "newyork", name: "New York", x: 104, y: 68, color: FOREX_SESSIONS.newyork.color, open: sessionStatus.newyork.isOpen },
+    { key: "london", name: "London", x: 204, y: 57, color: FOREX_SESSIONS.london.color, open: sessionStatus.london.isOpen },
+    { key: "tokyo", name: "Tokyo", x: 336, y: 80, color: FOREX_SESSIONS.tokyo.color, open: sessionStatus.tokyo.isOpen },
   ];
+  const localTimezone = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "Local timezone";
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Market hours</p>
@@ -1364,24 +1478,28 @@ function MarketHoursCard() {
         </g>
         {markers.map((marker) => (
           <g className={`city-dot ${marker.open ? "open" : ""}`} key={marker.key} style={{ color: marker.color }} transform={`translate(${marker.x} ${marker.y})`}>
-            {marker.open ? <circle className="pulse-ring" r="8" /> : null}
+            {marker.open ? <circle className="pulse-ring" r="10" /> : null}
             <circle r="5" />
-            <text x="8" y="4">{marker.name}</text>
+            <foreignObject height="24" width="84" x="-42" y="-34">
+              <div className={`map-city-pill ${marker.open ? "open" : ""}`} style={{ borderColor: marker.open ? marker.color : "#2A3151", color: marker.open ? marker.color : "#8C93B8" }}>
+                {marker.name}
+              </div>
+            </foreignObject>
           </g>
         ))}
       </svg>
-      <p className="timezone-note">Your timezone: IST (UTC+5:30)</p>
-      {londonOpen && newYorkOpen ? <div className="overlap-banner">London + New York overlap - High liquidity - 6:30 PM - 10:30 PM IST</div> : null}
-      <div className="session-list">
+      <div className="session-summary-row">
         {sessions.map((session) => (
-          <div className="session-row" key={session.name}>
-            <span>{session.flag} {session.name}</span>
-            <strong className={session.isOpen ? "open" : ""}><span className="session-status-dot" /> {session.statusText}</strong>
-            <em className={session.isOpen ? "open" : ""}>{session.countdown}</em>
-            <small>{session.istTimes}</small>
+          <div className="session-summary-cell" key={session.name}>
+            <div className="session-icon" aria-hidden="true">{session.isOpen ? "SUN" : "MOON"}</div>
+            <strong>{session.name}</strong>
+            <span className={session.isOpen ? "open" : ""}>{session.countdown} {session.isOpen ? "left" : "to go"}</span>
+            <small>{session.localTimes}</small>
           </div>
         ))}
       </div>
+      <p className="timezone-note">Times shown in your local timezone - {localTimezone}</p>
+      {londonOpen && newYorkOpen ? <div className="overlap-banner">London + New York overlap - High liquidity window</div> : null}
     </section>
   );
 }
@@ -1511,6 +1629,7 @@ function normalizeStoredTrade(trade: ApiRecord): ApiRecord | null {
   const pnl = readNumber(trade, ["profit", "pnl", "net_pnl", "profit_loss", "realized_pnl"], 0);
   return {
     id: id || `${readText(trade, ["closed_at", "closeTime", "close_time"], "")}-${readNumber(trade, ["entry", "entryPrice", "openPrice"], 0)}`,
+    symbol: "EURUSD",
     openTime: readText(trade, ["openTime", "open_time", "opened_at", "entry_time"], ""),
     closeTime: readText(trade, ["closeTime", "close_time", "closed_at", "exit_time"], ""),
     type: readText(trade, ["type", "side", "direction"], "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
@@ -1556,6 +1675,127 @@ function buildEurusdTestResults(existing: ApiRecord | null, incomingTrades: ApiR
     completedAt: trades.length >= target ? readText(base, ["completedAt"], "") || new Date().toISOString() : readText(base, ["completedAt"], "") || null,
     trades,
   };
+}
+
+function readEurusdTestResults(): ApiRecord {
+  if (typeof window === "undefined") return emptyEurusdTestResults();
+  try {
+    return { ...emptyEurusdTestResults(), ...(JSON.parse(window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY) ?? "null") as ApiRecord | null ?? {}) };
+  } catch {
+    return emptyEurusdTestResults();
+  }
+}
+
+function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
+  const [filter, setFilter] = useState<"All" | "EURUSD" | "Wins" | "Losses">("All");
+  const [results, setResults] = useState<ApiRecord>(() => readEurusdTestResults());
+  useEffect(() => {
+    if (closedTrades.length) {
+      const next = buildEurusdTestResults(readEurusdTestResults(), closedTrades, null, 30);
+      window.localStorage.setItem(EURUSD_TEST_RESULTS_KEY, JSON.stringify(next));
+      window.setTimeout(() => setResults(next), 0);
+    }
+    const sync = () => setResults(readEurusdTestResults());
+    window.addEventListener("storage", sync);
+    const interval = window.setInterval(sync, 2000);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.clearInterval(interval);
+    };
+  }, [closedTrades]);
+  const trades = Array.isArray(results.trades) ? (results.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const filtered = trades.filter((trade) => {
+    if (filter === "All") return true;
+    if (filter === "EURUSD") return readText(trade, ["symbol"], "EURUSD").toUpperCase() === "EURUSD";
+    if (filter === "Wins") return readText(trade, ["result"], "") === "WIN";
+    return readText(trade, ["result"], "") === "LOSS";
+  });
+  const wins = trades.filter((trade) => readText(trade, ["result"], "") === "WIN").length;
+  const losses = trades.filter((trade) => readText(trade, ["result"], "") === "LOSS").length;
+  const netPnl = trades.reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0);
+  const exportCSV = () => {
+    const header = ["#", "Symbol", "Type", "Entry", "Exit", "Open Time", "Close Time", "Lots", "P&L", "Result"];
+    const rows = trades.map((trade, index) => [
+      String(index + 1),
+      readText(trade, ["symbol"], "EURUSD"),
+      readText(trade, ["type"], ""),
+      String(readNumber(trade, ["entryPrice"], 0)),
+      String(readNumber(trade, ["exitPrice"], 0)),
+      readText(trade, ["openTime"], ""),
+      readText(trade, ["closeTime"], ""),
+      String(readNumber(trade, ["lots"], 0)),
+      String(readNumber(trade, ["pnl"], 0)),
+      readText(trade, ["result"], ""),
+    ]);
+    const csv = [header, ...rows].map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "algopilot_trades.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <section className="portal-bottom-card trade-history-panel">
+      <div className="trade-history-top">
+        <div>
+          <p className="premium-section-eyebrow">Trade History</p>
+          <h3 className="portal-card-title">All trades from validation rounds</h3>
+        </div>
+        <div className="trade-history-actions">
+          <div className="trade-filter-tabs">
+            {(["All", "EURUSD", "Wins", "Losses"] as const).map((item) => (
+              <button className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)} type="button">{item}</button>
+            ))}
+          </div>
+          <button className="export-csv-button" disabled={!trades.length} onClick={exportCSV} type="button">Export CSV</button>
+        </div>
+      </div>
+      {filtered.length ? (
+        <div className="trade-history-table-wrap">
+          <table className="trade-history-table">
+            <thead>
+              <tr>{["#", "Symbol", "Type", "Entry Price", "Exit Price", "Open Time", "Close Time", "Lots", "P&L", "Result"].map((item) => <th key={item}>{item}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.map((trade, index) => {
+                const type = readText(trade, ["type"], "BUY");
+                const result = readText(trade, ["result"], "");
+                const pnl = readNumber(trade, ["pnl"], 0);
+                return (
+                  <tr key={readText(trade, ["id"], String(index))}>
+                    <td>{index + 1}</td>
+                    <td>{readText(trade, ["symbol"], "EURUSD")}</td>
+                    <td><span className={`trade-type-pill ${type === "SELL" ? "sell" : "buy"}`}>{type}</span></td>
+                    <td>{marketPriceText(readNumber(trade, ["entryPrice"], 0))}</td>
+                    <td>{marketPriceText(readNumber(trade, ["exitPrice"], 0))}</td>
+                    <td>{formatTradeTime(readText(trade, ["openTime"], ""))}</td>
+                    <td>{formatTradeTime(readText(trade, ["closeTime"], ""))}</td>
+                    <td>{readNumber(trade, ["lots"], 0).toFixed(2)}</td>
+                    <td className={pnlClass(pnl)}>{money(pnl)}</td>
+                    <td><span className={`result-pill ${result === "LOSS" ? "loss" : "win"}`}>{result || "WIN"}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="trade-history-empty">
+          <strong>No trades recorded yet.</strong>
+          <span>Trades will appear here automatically as validation closes positions.</span>
+        </div>
+      )}
+      <div className="trade-history-summary">
+        <span>Total Trades: {trades.length}</span>
+        <span>Wins: {wins}</span>
+        <span>Losses: {losses}</span>
+        <span>Win Rate: {trades.length ? `${((wins / trades.length) * 100).toFixed(2)}%` : "-%"}</span>
+        <span>Net P&L: {money(netPnl)}</span>
+      </div>
+    </section>
+  );
 }
 
 function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecord[] }) {

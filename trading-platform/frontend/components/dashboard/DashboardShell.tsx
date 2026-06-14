@@ -71,6 +71,7 @@ const ROUND_2_START_PAYLOAD: ApiRecord = {
   client_dashboard_scope: "CURRENT_SESSION_ONLY",
 };
 const EURUSD_TEST_RESULTS_KEY = "algopilot_eurusd_test_results";
+const FOREX_DISPLAY_TIME_ZONE = "Asia/Kolkata";
 const FOREX_SESSIONS = {
   tokyo: {
     name: "Tokyo",
@@ -78,6 +79,13 @@ const FOREX_SESSIONS = {
     color: "#EC4899",
     openUTC: { h: 0, m: 0 },
     closeUTC: { h: 9, m: 0 },
+  },
+  sydney: {
+    name: "Sydney",
+    flag: "AU",
+    color: "#A855F7",
+    openUTC: { h: 22, m: 0 },
+    closeUTC: { h: 7, m: 0 },
   },
   london: {
     name: "London",
@@ -224,61 +232,51 @@ function pointsToPath(points: LivePricePoint[], width: number, height: number, p
     .join(" ");
 }
 
-function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now = new Date()): {
+function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now = new Date(), localTimes = "Loading local time"): {
+  closeAt: Date;
   color: string;
   countdown: string;
+  countdownMinutes: number;
   flag: string;
   isOpen: boolean;
   istTimes: string;
   localTimes: string;
   name: string;
+  openAt: Date;
   stateLabel: string;
   statusText: string;
 } {
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const openMin = session.openUTC.h * 60 + session.openUTC.m;
-  const closeMin = session.closeUTC.h * 60 + session.closeUTC.m;
-  if (!isForexGloballyOpen(now)) {
+  const currentWindow = findCurrentSessionWindow(session, now);
+  if (currentWindow) {
+    const minsLeft = minutesBetween(now, currentWindow.closeAt);
     return {
+      closeAt: currentWindow.closeAt,
       color: session.color,
-      countdown: formatMins(getMinutesUntilSundayOpen(now)),
-      flag: session.flag,
-      isOpen: false,
-      istTimes: sessionTimesInLocalTZ(session),
-      localTimes: sessionTimesInLocalTZ(session),
-      name: session.name,
-      stateLabel: "Market closed",
-      statusText: "Closed",
-    };
-  }
-  const isOpen = nowMin >= openMin && nowMin < closeMin;
-  if (isOpen) {
-    const minsLeft = closeMin - nowMin;
-    const h = Math.floor(minsLeft / 60);
-    const m = minsLeft % 60;
-    return {
-      color: session.color,
-      countdown: h > 0 ? `Closes in ${h}h ${m}m` : `Closes in ${m}m`,
+      countdown: `Closes in ${formatMins(minsLeft)}`,
+      countdownMinutes: minsLeft,
       flag: session.flag,
       isOpen: true,
-      istTimes: sessionTimesInLocalTZ(session),
-      localTimes: sessionTimesInLocalTZ(session),
+      istTimes: localTimes,
+      localTimes,
       name: session.name,
+      openAt: currentWindow.openAt,
       stateLabel: "Closes in",
       statusText: "Open",
     };
   }
-  const minsToOpen = nowMin < openMin ? openMin - nowMin : 1440 - nowMin + openMin;
-  const h = Math.floor(minsToOpen / 60);
-  const m = minsToOpen % 60;
+  const nextWindow = findNextSessionWindow(session, now);
+  const minsToOpen = minutesBetween(now, nextWindow.openAt);
   return {
+    closeAt: nextWindow.closeAt,
     color: session.color,
-    countdown: h > 0 ? `Opens in ${h}h ${m}m` : `Opens in ${m}m`,
+    countdown: `Opens in ${formatMins(minsToOpen)}`,
+    countdownMinutes: minsToOpen,
     flag: session.flag,
     isOpen: false,
-    istTimes: sessionTimesInLocalTZ(session),
-    localTimes: sessionTimesInLocalTZ(session),
+    istTimes: localTimes,
+    localTimes,
     name: session.name,
+    openAt: nextWindow.openAt,
     stateLabel: "Opens in",
     statusText: "Closed",
   };
@@ -293,12 +291,32 @@ function isForexGloballyOpen(now = new Date()): boolean {
   return true;
 }
 
-function getMinutesUntilSundayOpen(now: Date): number {
-  const target = new Date(now);
-  target.setUTCHours(22, 0, 0, 0);
-  const daysUntilSunday = (7 - now.getUTCDay()) % 7 || 7;
-  target.setUTCDate(target.getUTCDate() + daysUntilSunday);
-  return Math.max(0, Math.floor((target.getTime() - now.getTime()) / 60000));
+function buildSessionWindow(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now: Date, dayOffset: number) {
+  const openAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + dayOffset, session.openUTC.h, session.openUTC.m, 0, 0));
+  const closeAt = new Date(Date.UTC(openAt.getUTCFullYear(), openAt.getUTCMonth(), openAt.getUTCDate(), session.closeUTC.h, session.closeUTC.m, 0, 0));
+  if (closeAt.getTime() <= openAt.getTime()) closeAt.setUTCDate(closeAt.getUTCDate() + 1);
+  return { openAt, closeAt };
+}
+
+function findCurrentSessionWindow(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now: Date) {
+  if (!isForexGloballyOpen(now)) return null;
+  for (const dayOffset of [-1, 0]) {
+    const window = buildSessionWindow(session, now, dayOffset);
+    if (now.getTime() >= window.openAt.getTime() && now.getTime() < window.closeAt.getTime()) return window;
+  }
+  return null;
+}
+
+function findNextSessionWindow(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now: Date) {
+  for (let dayOffset = 0; dayOffset <= 7; dayOffset += 1) {
+    const window = buildSessionWindow(session, now, dayOffset);
+    if (window.openAt.getTime() > now.getTime() && isForexGloballyOpen(window.openAt)) return window;
+  }
+  return buildSessionWindow(session, now, 1);
+}
+
+function minutesBetween(from: Date, to: Date): number {
+  return Math.max(0, Math.ceil((to.getTime() - from.getTime()) / 60000));
 }
 
 function formatMins(mins: number): string {
@@ -307,13 +325,26 @@ function formatMins(mins: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function sessionTimesInLocalTZ(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS]): string {
+function sessionTimesInLocalTZ(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], timeZone: string): string {
   const openDate = new Date();
   openDate.setUTCHours(session.openUTC.h, session.openUTC.m, 0, 0);
   const closeDate = new Date();
   closeDate.setUTCHours(session.closeUTC.h, session.closeUTC.m, 0, 0);
-  const fmt = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const fmt = (date: Date) => date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone });
   return `${fmt(openDate)} - ${fmt(closeDate)} local`;
+}
+
+function formatInTimeZone(date: Date, timeZone: string): string {
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    timeZone,
+  });
 }
 
 function isMarketOpen(tick: ApiRecord | null): boolean {
@@ -1274,13 +1305,18 @@ function readStoredPoints(key: string): LivePricePoint[] {
 
 function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketOpen: boolean }) {
   const [period, setPeriod] = useState<"1D" | "1W" | "1M" | "1Y">("1W");
-  const [history, setHistory] = useState<LivePricePoint[]>(() => readStoredPoints(BALANCE_HISTORY_KEY));
-  const [chartNow, setChartNow] = useState(() => Date.now());
+  const [isMounted, setIsMounted] = useState(false);
+  const [history, setHistory] = useState<LivePricePoint[]>([]);
+  const [chartNow, setChartNow] = useState(0);
   useEffect(() => {
+    setHistory(readStoredPoints(BALANCE_HISTORY_KEY));
+    setChartNow(Date.now());
+    setIsMounted(true);
     const interval = window.setInterval(() => setChartNow(Date.now()), 60000);
     return () => window.clearInterval(interval);
   }, []);
   useEffect(() => {
+    if (!isMounted) return;
     if (!Number.isFinite(balance) || balance <= 0) return;
     const existing = readStoredPoints(BALANCE_HISTORY_KEY);
     const last = existing.at(-1);
@@ -1292,7 +1328,7 @@ function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketO
       setChartNow(Date.now());
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [balance]);
+  }, [balance, isMounted]);
   const periodMs = period === "1D" ? 86400000 : period === "1W" ? 7 * 86400000 : period === "1M" ? 30 * 86400000 : 365 * 86400000;
   const cutoff = chartNow - periodMs;
   const filtered = history.filter((point) => point.time >= cutoff);
@@ -1316,7 +1352,7 @@ function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketO
         </div>
       </div>
       <div className="balance-chart-area">
-        {filtered.length ? (
+        {isMounted && filtered.length ? (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={filtered}>
               <defs>
@@ -1340,11 +1376,15 @@ function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketO
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="balance-chart-empty">Balance chart will populate as account activity is recorded.</div>
+          <BalanceChartPlaceholder />
         )}
       </div>
     </>
   );
+}
+
+function BalanceChartPlaceholder() {
+  return <div className="balance-chart-empty">Balance chart will populate as account activity is recorded.</div>;
 }
 
 function StatusDetail({ label, value, tone }: { label: string; value: string; tone: "healthy" | "warning" | "danger" }) {
@@ -1443,25 +1483,46 @@ function PositionCalculatorPanel({ accountBalance }: { accountBalance: number })
 }
 
 function MarketHoursCard() {
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const interval = window.setInterval(() => setNow(new Date()), 60000);
     return () => window.clearInterval(interval);
   }, []);
+  const displayNow = now ?? new Date("2026-01-05T00:00:00.000Z");
+  const localTimesFor = (session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS]) => (now ? sessionTimesInLocalTZ(session, FOREX_DISPLAY_TIME_ZONE) : "Loading local time");
   const sessionStatus = {
-    tokyo: getSessionStatus(FOREX_SESSIONS.tokyo, now),
-    london: getSessionStatus(FOREX_SESSIONS.london, now),
-    newyork: getSessionStatus(FOREX_SESSIONS.newyork, now),
+    tokyo: getSessionStatus(FOREX_SESSIONS.tokyo, displayNow, localTimesFor(FOREX_SESSIONS.tokyo)),
+    sydney: getSessionStatus(FOREX_SESSIONS.sydney, displayNow, localTimesFor(FOREX_SESSIONS.sydney)),
+    london: getSessionStatus(FOREX_SESSIONS.london, displayNow, localTimesFor(FOREX_SESSIONS.london)),
+    newyork: getSessionStatus(FOREX_SESSIONS.newyork, displayNow, localTimesFor(FOREX_SESSIONS.newyork)),
   };
-  const sessions = [sessionStatus.london, sessionStatus.newyork, sessionStatus.tokyo];
+  const sessions = [sessionStatus.newyork, sessionStatus.london, sessionStatus.tokyo, sessionStatus.sydney];
+  useEffect(() => {
+    if (!now || process.env.NODE_ENV === "production") return;
+    sessions.forEach((session) => {
+      console.log("[ForexSessionTiming]", {
+        session: session.name,
+        currentUtcTime: now.toISOString(),
+        currentAsiaKolkataTime: formatInTimeZone(now, FOREX_DISPLAY_TIME_ZONE),
+        calculatedSessionOpenUtc: session.openAt.toISOString(),
+        calculatedSessionOpenAsiaKolkata: formatInTimeZone(session.openAt, FOREX_DISPLAY_TIME_ZONE),
+        calculatedSessionCloseUtc: session.closeAt.toISOString(),
+        calculatedSessionCloseAsiaKolkata: formatInTimeZone(session.closeAt, FOREX_DISPLAY_TIME_ZONE),
+        countdownMinutes: session.countdownMinutes,
+        countdownValue: session.countdown,
+        status: session.statusText,
+      });
+    });
+  }, [now, sessions]);
   const londonOpen = sessionStatus.london.isOpen;
   const newYorkOpen = sessionStatus.newyork.isOpen;
   const markers = [
     { key: "newyork", name: "New York", x: 104, y: 68, color: FOREX_SESSIONS.newyork.color, open: sessionStatus.newyork.isOpen },
     { key: "london", name: "London", x: 204, y: 57, color: FOREX_SESSIONS.london.color, open: sessionStatus.london.isOpen },
     { key: "tokyo", name: "Tokyo", x: 336, y: 80, color: FOREX_SESSIONS.tokyo.color, open: sessionStatus.tokyo.isOpen },
+    { key: "sydney", name: "Sydney", x: 368, y: 134, color: FOREX_SESSIONS.sydney.color, open: sessionStatus.sydney.isOpen },
   ];
-  const localTimezone = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "Local timezone";
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Market hours</p>
@@ -1491,14 +1552,15 @@ function MarketHoursCard() {
       <div className="session-summary-row">
         {sessions.map((session) => (
           <div className="session-summary-cell" key={session.name}>
-            <div className="session-icon" aria-hidden="true">{session.isOpen ? "SUN" : "MOON"}</div>
+            <div className={`session-status-button ${session.isOpen ? "on" : "off"}`} aria-hidden="true">
+              <span />
+            </div>
             <strong>{session.name}</strong>
-            <span className={session.isOpen ? "open" : ""}>{session.countdown} {session.isOpen ? "left" : "to go"}</span>
-            <small>{session.localTimes}</small>
+            <span className={session.isOpen ? "open" : ""}>{session.isOpen ? `Open - ${session.countdown}` : session.countdown}</span>
           </div>
         ))}
       </div>
-      <p className="timezone-note">Times shown in your local timezone - {localTimezone}</p>
+      <p className="timezone-note">Times shown in Asia/Kolkata</p>
       {londonOpen && newYorkOpen ? <div className="overlap-banner">London + New York overlap - High liquidity window</div> : null}
     </section>
   );

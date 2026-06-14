@@ -51,6 +51,7 @@ type DashboardData = {
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
 type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
 type DashboardView = "dashboard" | "developer";
+type PortalView = "portal" | "testEnvironment";
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
@@ -347,6 +348,7 @@ export function DashboardShell(_: {
   const [heldReadySignals, setHeldReadySignals] = useState<HeldSignals>({});
   const [nowMs, setNowMs] = useState(0);
   const [activeView, setActiveView] = useState<DashboardView>("dashboard");
+  const [activePortalView, setActivePortalView] = useState<PortalView>("portal");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
   const [backendConnected, setBackendConnected] = useState(true);
@@ -808,7 +810,7 @@ export function DashboardShell(_: {
       const recoveredClosed = readNumber(currentAutoValidation, ["recovered_closed_trades"], 0);
       const recoveredOpen = readNumber(currentAutoValidation, ["recovered_open_trades"], 0);
       const recoveredSessionId = readText(currentAutoValidation, ["recovered_session_id"], "");
-      let startPayload: ApiRecord = action === "start" ? { ...ROUND_2_START_PAYLOAD } : {};
+      const startPayload: ApiRecord = action === "start" ? { ...ROUND_2_START_PAYLOAD } : {};
       if (action === "start" && recoverable) {
         const confirmed = window.confirm(
           `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start Round 2 as a fresh EURUSD-only session and reset current client validation counters?`,
@@ -859,10 +861,35 @@ export function DashboardShell(_: {
 
   return (
     <main className="premium-dashboard-root">
-      <div className="premium-dashboard-frame">
-        <ViewSelector activeView={activeView} onChange={setActiveView} />
-        {toast ? <Toast tone={toast.tone} message={toast.message} onDismiss={() => setToast(null)} /> : null}
-        {activeView === "dashboard" ? (
+      <div className="client-portal-shell">
+        <ClientPortalSidebar
+          activeView={activePortalView}
+          botTone={backendConnected ? "healthy" : "danger"}
+          onChange={setActivePortalView}
+        />
+        <section className="client-portal-main">
+          <ClientPortalTopbar activeView={activePortalView} onRefresh={() => void handleClientRefresh()} />
+          {toast ? <Toast tone={toast.tone} message={toast.message} onDismiss={() => setToast(null)} /> : null}
+          {activePortalView === "portal" ? (
+            <ClientPortalOverview
+              backendConnected={backendConnected}
+              data={data}
+              lastSuccessfulSync={lastSuccessfulSync}
+              loading={loading}
+              onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
+              openFloatingPnl={openFloatingPnl}
+              scopedOpenPositions={clientOpenPositions}
+              todayPnl={todayPnl(clientClosedTrades)}
+              workingAction={workingAction}
+            />
+          ) : (
+            <section className="portal-test-shell">
+              <div className="portal-test-heading">
+                <p className="premium-section-eyebrow">Test Environment</p>
+                <h2 className="premium-section-title">AI Multi-Market Trading Bot</h2>
+              </div>
+              <ViewSelector activeView={activeView} onChange={setActiveView} />
+              {activeView === "dashboard" ? (
           !dashboardHasSnapshot && loading ? (
             <ClientDashboardLoadingView />
           ) : (
@@ -883,7 +910,7 @@ export function DashboardShell(_: {
             workingAction={workingAction}
           />
           )
-        ) : (
+              ) : (
           <>
         <header className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-2xl shadow-black/30">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -975,6 +1002,7 @@ export function DashboardShell(_: {
 
         <AutoValidationPanel
           status={data.autoValidation}
+          nowMs={nowMs}
           pollError={panelErrors.autoValidation ?? ""}
           workingAction={workingAction}
           onAction={(action) => void handleAutoValidationAction(action)}
@@ -1122,7 +1150,10 @@ export function DashboardShell(_: {
           )}
         </section>
           </>
-        )}
+              )}
+            </section>
+          )}
+        </section>
       </div>
 
       {confirmOpen && (
@@ -1164,6 +1195,298 @@ function ViewSelector({ activeView, onChange }: { activeView: DashboardView; onC
         </button>
       </div>
     </div>
+  );
+}
+
+function ClientPortalSidebar({ activeView, botTone, onChange }: { activeView: PortalView; botTone: "healthy" | "warning" | "danger"; onChange: (view: PortalView) => void }) {
+  const items = [
+    ["Dashboard", "◆", "portal"],
+    ["Trader Profile", "◇", "portal"],
+    ["Support", "?", "portal"],
+    ["Settings", "⌄", "portal"],
+    ["Funds", "$", "portal"],
+    ["News", "•", "portal"],
+  ] as const;
+  return (
+    <aside className="client-sidebar">
+      <div className="client-sidebar-logo">
+        <span className="client-sidebar-mark">A</span>
+        <span>AlgoPilot</span>
+      </div>
+      <nav className="client-sidebar-nav" aria-label="Client portal">
+        {items.map(([label, icon, view]) => (
+          <button className={`client-sidebar-item ${activeView === view && label === "Dashboard" ? "active" : ""}`} key={label} onClick={() => onChange(view)} type="button">
+            <span className="client-sidebar-icon">{icon}</span>
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="client-sidebar-spacer" />
+      <div className="client-sidebar-divider" />
+      <button className={`client-sidebar-item test ${activeView === "testEnvironment" ? "active" : ""}`} onClick={() => onChange("testEnvironment")} type="button">
+        <span className="client-sidebar-icon">⚗</span>
+        <span>Test Environment</span>
+        <span className={`client-sidebar-dot ${botTone}`} />
+      </button>
+    </aside>
+  );
+}
+
+function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView; onRefresh: () => void }) {
+  return (
+    <header className="client-topbar">
+      <p className="client-breadcrumb">Dashboard &gt; {activeView === "portal" ? "Overview" : "Test Environment"}</p>
+      <div className="client-topbar-actions">
+        <button aria-label="Search" className="client-icon-button" type="button">⌕</button>
+        <button aria-label="Notifications" className="client-icon-button" type="button">◦</button>
+        <div className="client-user-chip">
+          <span className="client-avatar">S</span>
+          <span>Swati</span>
+        </div>
+        <button className="portal-primary-button !m-0 !w-auto !px-5" onClick={onRefresh} type="button">Refresh</button>
+      </div>
+    </header>
+  );
+}
+
+function ClientPortalOverview({
+  backendConnected,
+  data,
+  lastSuccessfulSync,
+  loading,
+  onAutoValidationAction,
+  openFloatingPnl,
+  scopedOpenPositions,
+  todayPnl,
+  workingAction,
+}: {
+  backendConnected: boolean;
+  data: DashboardData;
+  lastSuccessfulSync: string | null;
+  loading: boolean;
+  onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  openFloatingPnl: number;
+  scopedOpenPositions: ApiRecord[];
+  todayPnl: number;
+  workingAction: string | null;
+}) {
+  const autoStatus = asRecord(data.autoValidation);
+  const session = asRecord(autoStatus?.session);
+  const config = asRecord(autoStatus?.config);
+  const mt5Health = asRecord(autoStatus?.mt5_health);
+  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
+  const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
+  const open = readNumber(session, ["current_open_trades", "current_session_open_trades"], scopedOpenPositions.length);
+  const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
+  const mode = readText(session, ["status"], "");
+  const botState = clientBotState(mode, closed, open, target, Boolean(readText(session, ["session_id", "id", "validation_session_id"], "") || mode || closed || open));
+  const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
+  const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
+  const validationSymbol = Array.isArray(config?.allowed_symbols) ? String(config.allowed_symbols[0] ?? "EURUSD") : "EURUSD";
+  const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
+
+  return (
+    <div className="portal-dashboard">
+      <section className="portal-stat-grid">
+        <PortalStatCard label="Account Balance" value={moneyOrWaiting(numeric(data.account, ["balance"]))} delta="Shared account data" />
+        <PortalStatCard label="Equity" value={moneyOrWaiting(numeric(data.account, ["equity"]))} delta="MT5 account snapshot" />
+        <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" />
+        <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" />
+      </section>
+
+      <section className="portal-main-grid">
+        <div className="portal-chart-card">
+          <div className="portal-card-header">
+            <div>
+              <p className="premium-section-eyebrow">Main chart</p>
+              <h2 className="portal-card-title">{validationSymbol}</h2>
+            </div>
+            <div className="portal-pill-row">
+              {["1D", "1W", "1M", "1Y"].map((item) => <button className={`portal-pill ${item === "1W" ? "active" : ""}`} key={item} type="button">{item}</button>)}
+            </div>
+          </div>
+          <p className="portal-price">{marketNumber(readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN))}</p>
+          <PortalAreaChart />
+          {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={[]} /> : <EmptyState text="No Active Positions" />}
+        </div>
+
+        <BotStatusPanel
+          backendConnected={backendConnected}
+          botStatus={botState.statusText}
+          loading={loading}
+          mt5Connected={mt5Connected}
+          lastSuccessfulSync={lastSuccessfulSync}
+          onStart={() => onAutoValidationAction("start")}
+          startDisabled={quickStartDisabled}
+        />
+      </section>
+
+      <section className="portal-bottom-grid">
+        <ValidationSummaryCard closed={closed} remaining={remaining} target={target} symbol={validationSymbol} />
+        <MarketsSummaryCard data={data} symbol={validationSymbol} />
+        <MarketHoursCard />
+      </section>
+    </div>
+  );
+}
+
+function PortalStatCard({ label, value, delta }: { label: string; value: string; delta: string }) {
+  return (
+    <div className="portal-stat-card">
+      <div className="portal-stat-header">
+        <p className="premium-metric-label">{label}</p>
+        <span className="premium-badge">Live</span>
+      </div>
+      <p className="portal-stat-value">{value}</p>
+      <p className="portal-stat-delta">{delta}</p>
+      <PortalSparkline />
+    </div>
+  );
+}
+
+function PortalSparkline() {
+  return (
+    <svg className="portal-sparkline" preserveAspectRatio="none" viewBox="0 0 220 62" aria-hidden="true">
+      <defs>
+        <linearGradient id="sparkStroke" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stopColor="var(--accent-secondary)" />
+          <stop offset="100%" stopColor="var(--accent-primary)" />
+        </linearGradient>
+        <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="var(--chart-gradient-start)" />
+          <stop offset="100%" stopColor="var(--chart-gradient-end)" />
+        </linearGradient>
+      </defs>
+      <path d="M0 50 L24 42 L48 45 L72 30 L96 35 L120 22 L144 26 L168 14 L192 20 L220 8 L220 62 L0 62 Z" fill="url(#sparkFill)" />
+      <path d="M0 50 L24 42 L48 45 L72 30 L96 35 L120 22 L144 26 L168 14 L192 20 L220 8" fill="none" stroke="url(#sparkStroke)" strokeLinecap="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function PortalAreaChart() {
+  return (
+    <svg className="portal-chart-svg" preserveAspectRatio="none" viewBox="0 0 720 300" role="img" aria-label="Dual tone validation chart">
+      <defs>
+        <linearGradient id="portalChartStroke" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stopColor="var(--accent-secondary)" />
+          <stop offset="100%" stopColor="var(--accent-primary)" />
+        </linearGradient>
+        <linearGradient id="portalChartFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="var(--chart-gradient-start)" />
+          <stop offset="100%" stopColor="var(--chart-gradient-end)" />
+        </linearGradient>
+      </defs>
+      {[60, 120, 180, 240].map((y) => <line key={y} x1="0" x2="720" y1={y} y2={y} stroke="var(--border-subtle)" strokeDasharray="6 8" />)}
+      <path d="M0 230 C70 210 95 238 146 190 S248 118 318 148 S430 242 492 158 S612 64 720 104 L720 300 L0 300 Z" fill="url(#portalChartFill)" />
+      <path d="M0 230 C70 210 95 238 146 190 S248 118 318 148 S430 242 492 158 S612 64 720 104" fill="none" stroke="url(#portalChartStroke)" strokeLinecap="round" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function BotStatusPanel({ backendConnected, botStatus, loading, mt5Connected, lastSuccessfulSync, onStart, startDisabled }: { backendConnected: boolean; botStatus: string; loading: boolean; mt5Connected: boolean; lastSuccessfulSync: string | null; onStart: () => void; startDisabled: boolean }) {
+  const [tab, setTab] = useState<"status" | "calculator">("status");
+  return (
+    <aside className="portal-side-panel">
+      <div className="portal-tabs">
+        <button className={`portal-panel-tab ${tab === "status" ? "active" : ""}`} onClick={() => setTab("status")} type="button">Bot Status</button>
+        <button className={`portal-panel-tab ${tab === "calculator" ? "active" : ""}`} onClick={() => setTab("calculator")} type="button">Position Calculator</button>
+      </div>
+      {tab === "status" ? (
+        <>
+          <p className="premium-section-eyebrow">Current state</p>
+          <p className="portal-readout">{botStatus}</p>
+          <div className="portal-detail-list">
+            <StatusDetail label="Backend Status" value={backendConnected ? "Connected" : "Reconnecting"} tone={backendConnected ? "healthy" : "danger"} />
+            <StatusDetail label="MT5 Status" value={mt5Connected ? "Connected" : "Checking"} tone={mt5Connected ? "healthy" : "warning"} />
+            <StatusDetail label="Validation Status" value={botStatus} tone="warning" />
+            <StatusDetail label="Last Sync" value={lastSuccessfulSync ?? "Waiting"} tone={lastSuccessfulSync ? "healthy" : "warning"} />
+          </div>
+          <button className="portal-primary-button" disabled={startDisabled} onClick={onStart} type="button">{loading ? "Refreshing..." : "Start Validation"}</button>
+        </>
+      ) : (
+        <PositionCalculatorPlaceholder />
+      )}
+    </aside>
+  );
+}
+
+function StatusDetail({ label, value, tone }: { label: string; value: string; tone: "healthy" | "warning" | "danger" }) {
+  return (
+    <div className="portal-detail-row">
+      <span>{label}</span>
+      <span><span className={`premium-status-dot ${tone} inline-block align-middle`} /> {value}</span>
+    </div>
+  );
+}
+
+function PositionCalculatorPlaceholder() {
+  const fields = ["Funds", "Deposit slip", "Opening price", "Stop loss price", "Account balance", "Risky %"];
+  return (
+    <>
+      <span className="portal-coming-soon">Coming soon</span>
+      <div className="portal-calculator-grid mt-4">
+        {fields.map((field) => (
+          <div className="portal-field" key={field}>
+            <label>{field}</label>
+            <input disabled placeholder="Coming soon" />
+          </div>
+        ))}
+      </div>
+      <button className="portal-primary-button" disabled type="button">Calculate</button>
+    </>
+  );
+}
+
+function ValidationSummaryCard({ closed, remaining, symbol, target }: { closed: number; remaining: number; symbol: string; target: number }) {
+  return (
+    <section className="portal-bottom-card">
+      <p className="premium-section-eyebrow">Validation summary</p>
+      <h3 className="portal-card-title">Round 2</h3>
+      <div className="portal-detail-list">
+        <div className="portal-detail-row"><span>Symbol</span><span>{symbol}</span></div>
+        <div className="portal-detail-row"><span>Target</span><span>{target}</span></div>
+        <div className="portal-detail-row"><span>Closed</span><span>{closed}</span></div>
+        <div className="portal-detail-row"><span>Remaining</span><span>{remaining}</span></div>
+      </div>
+    </section>
+  );
+}
+
+function MarketsSummaryCard({ data, symbol }: { data: DashboardData; symbol: string }) {
+  const price = marketNumber(readNumber(data.eurusdTick, ["bid", "price", "last"], Number.NaN));
+  return (
+    <section className="portal-bottom-card">
+      <p className="premium-section-eyebrow">Markets</p>
+      <h3 className="portal-card-title">Tracked symbols</h3>
+      <div className="portal-detail-list">
+        <div className="portal-detail-row"><span>{symbol}</span><span>{price}</span></div>
+        <div className="portal-detail-row"><span>XAUUSD</span><span>{marketNumber(readNumber(data.xauusdTick, ["bid", "price", "last"], Number.NaN), 2)}</span></div>
+      </div>
+    </section>
+  );
+}
+
+function MarketHoursCard() {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const londonOpen = utcHour >= 7 && utcHour < 16;
+  const newYorkOpen = utcHour >= 12 && utcHour < 21;
+  const tokyoOpen = utcHour >= 0 && utcHour < 9;
+  return (
+    <section className="portal-bottom-card">
+      <p className="premium-section-eyebrow">Market hours</p>
+      <h3 className="portal-card-title">Forex sessions</h3>
+      <div className="portal-mini-map">
+        <span className="portal-map-tag" style={{ left: "18%", top: "35%" }}>New York</span>
+        <span className="portal-map-tag" style={{ left: "43%", top: "30%" }}>London</span>
+        <span className="portal-map-tag" style={{ right: "12%", top: "50%" }}>Tokyo</span>
+      </div>
+      <div className="portal-detail-list">
+        <div className="portal-detail-row"><span>New York</span><span>{newYorkOpen ? "Open" : "Closed"}</span></div>
+        <div className="portal-detail-row"><span>London</span><span>{londonOpen ? "Open" : "Closed"}</span></div>
+        <div className="portal-detail-row"><span>Tokyo</span><span>{tokyoOpen ? "Open" : "Closed"}</span></div>
+      </div>
+    </section>
   );
 }
 
@@ -1750,11 +2073,13 @@ function ExecutionModePanel({
 
 function AutoValidationPanel({
   status,
+  nowMs,
   pollError,
   workingAction,
   onAction,
 }: {
   status: ApiRecord | null;
+  nowMs: number;
   pollError: string;
   workingAction: string | null;
   onAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
@@ -1809,7 +2134,7 @@ function AutoValidationPanel({
   const lastDisconnectAt = readText(session, ["last_mt5_disconnect_at"], "");
   const reconnectAttempts = readNumber(session, ["mt5_reconnect_attempts"], 0);
   const reconnectTimeout = readNumber(config, ["mt5_disconnect_timeout_seconds"], 600);
-  const reconnectElapsed = lastDisconnectAt ? Math.max(0, Math.floor((Date.now() - new Date(lastDisconnectAt).getTime()) / 1000)) : 0;
+  const reconnectElapsed = lastDisconnectAt ? Math.max(0, Math.floor((nowMs - new Date(lastDisconnectAt).getTime()) / 1000)) : 0;
   const reconnectRemaining = lastDisconnectAt ? Math.max(0, reconnectTimeout - reconnectElapsed) : reconnectTimeout;
   const activeStrategyProfile = readText(config, ["strategy_profile"], readText(status, ["strategy_profile"], "AUTO_VALIDATION"));
   const slTpSource = readText(watched, ["sl_tp_source"], readText(watchedAudit, ["sl_tp_source"], "Unknown"));

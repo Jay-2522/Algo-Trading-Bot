@@ -4,8 +4,8 @@
   height: 100vh;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(8, 10, 15, 0.2) 0%, var(--hero-bg) 74%),
-    linear-gradient(90deg, rgba(0, 229, 160, 0.08), transparent 28%, transparent 72%, rgba(200, 241, 53, 0.04)),
+    linear-gradient(180deg, rgba(10, 14, 31, 0.2) 0%, var(--hero-bg) 74%),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.08), transparent 28%, transparent 72%, rgba(34, 211, 238, 0.06)),
     var(--hero-bg);
   color: var(--text-primary);
   isolation: isolate;
@@ -16,8 +16,8 @@
   position: absolute;
   inset: auto 12% 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0, 229, 160, 0.6), transparent);
-  box-shadow: 0 0 36px rgba(0, 229, 160, 0.4);
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.6), rgba(168, 85, 247, 0.5), transparent);
+  box-shadow: 0 0 36px rgba(168, 85, 247, 0.34);
   z-index: 5;
 }
 
@@ -30,7 +30,7 @@
 }
 
 .landing-nav.scrolled {
-  background: rgba(8, 10, 15, 0.8);
+  background: rgba(10, 14, 31, 0.8);
   border-bottom-color: var(--nav-pill-border);
   backdrop-filter: blur(20px);
 }
@@ -216,7 +216,7 @@
   height: 44vh;
   min-height: 280px;
   overflow: visible;
-  filter: drop-shadow(0 0 14px rgba(0, 229, 160, 0.22));
+  filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.22));
   opacity: 0.92;
   transform: translateY(-50%);
   animation: chartFloat 6s ease-in-out 2s infinite;
@@ -244,14 +244,14 @@
 }
 
 .chart-line-right path {
-  stroke: rgba(0, 229, 160, 0.35);
+  stroke: rgba(34, 211, 238, 0.35);
   animation-delay: 300ms;
 }
 
 .hero-vignette {
   background:
-    linear-gradient(180deg, rgba(8, 10, 15, 0.2), transparent 38%, rgba(8, 10, 15, 0.72)),
-    linear-gradient(90deg, rgba(8, 10, 15, 0.82), transparent 28%, transparent 72%, rgba(8, 10, 15, 0.82));
+    linear-gradient(180deg, rgba(10, 14, 31, 0.2), transparent 38%, rgba(10, 14, 31, 0.72)),
+    linear-gradient(90deg, rgba(10, 14, 31, 0.82), transparent 28%, transparent 72%, rgba(10, 14, 31, 0.82));
 }
 
 .hero-content {
@@ -274,10 +274,10 @@
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  border: 1px solid rgba(0, 229, 160, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.2);
   border-radius: 99px;
-  background: rgba(0, 229, 160, 0.08);
-  color: var(--glow-green);
+  background: rgba(168, 85, 247, 0.08);
+  color: var(--glow-violet);
   font-family: var(--font-body), sans-serif;
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -289,7 +289,7 @@
 
 .hero-headline {
   margin: 0;
-  background: linear-gradient(135deg, #f0f2f8 58%, var(--glow-green) 100%);
+  background: linear-gradient(135deg, #f4f5fa 58%, var(--glow-violet) 100%);
   background-clip: text;
   color: transparent;
   font-family: var(--font-display), sans-serif;
@@ -319,21 +319,21 @@
   padding: 16px 36px;
   border: 0;
   border-radius: 99px;
-  background: var(--glow-green);
-  color: #050607;
+  background: var(--glow-violet);
+  color: #ffffff;
   cursor: pointer;
   font-family: var(--font-display), sans-serif;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  box-shadow: 0 0 32px rgba(0, 229, 160, 0.3);
+  box-shadow: 0 0 32px rgba(168, 85, 247, 0.3);
   transition: background 200ms ease, box-shadow 200ms ease, transform 200ms ease;
 }
 
 .cta-primary:hover {
-  background: #00ffb3;
-  box-shadow: 0 0 48px rgba(0, 229, 160, 0.5);
+  background: #c084fc;
+  box-shadow: 0 0 48px rgba(168, 85, 247, 0.5);
   transform: translateY(-2px);
 }
 

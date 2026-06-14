@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export function LandingNavbar() {
@@ -15,13 +14,7 @@ export function LandingNavbar() {
 
   return (
     <header className={`landing-nav ${scrolled ? "scrolled" : ""}`}>
-      <div className="landing-nav-inner">
-        <div className="landing-nav-actions">
-          <Link className="nav-signin" href="/dashboard">
-            Sign In
-          </Link>
-        </div>
-      </div>
+      <div className="landing-nav-inner" />
     </header>
   );
 }

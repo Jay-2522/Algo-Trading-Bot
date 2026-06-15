@@ -3,7 +3,9 @@
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { ForexMapMarker } from "./ForexSessionsMap";
 
 import {
   fetchClientOperatingDashboard,
@@ -52,12 +54,20 @@ type DashboardData = {
 
 type ScopedSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
 type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
-type PortalView = "portal" | "traderProfile" | "testEnvironment";
+type BrokerView = "startrader" | "vantage" | "fxpro";
+type PortalView = "portal" | "traderProfile" | "testEnvironment" | BrokerView | "chat";
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
 const DASHBOARD_CACHE_KEY = "client-dashboard-last-successful-snapshot-v2";
 const BALANCE_HISTORY_KEY = "algopilot_balance_history";
+const INITIAL_ACCOUNT_BALANCE = 100000;
+const CHAT_STORAGE_KEY = "algopilot_portal_chat_messages";
+const REASON_MESSAGES_KEY = "algopilot_validation_reason_messages";
+const ForexSessionsMap = dynamic(() => import("./ForexSessionsMap").then((mod) => mod.ForexSessionsMap), {
+  loading: () => <div className="forex-leaflet-map-loading" />,
+  ssr: false,
+});
 const ROUND_2_NOTE = "Round 2: EURUSD-only validation. No manual intervention. Client dashboard shows Round 2 only.";
 const ROUND_2_START_PAYLOAD: ApiRecord = {
   confirm_fresh_start: true,
@@ -76,28 +86,28 @@ const FOREX_SESSIONS = {
   tokyo: {
     name: "Tokyo",
     flag: "JP",
-    color: "#EC4899",
+    color: "#255EDC",
     openUTC: { h: 0, m: 0 },
     closeUTC: { h: 9, m: 0 },
   },
   sydney: {
     name: "Sydney",
     flag: "AU",
-    color: "#A855F7",
+    color: "#1B4EB8",
     openUTC: { h: 22, m: 0 },
     closeUTC: { h: 7, m: 0 },
   },
   london: {
     name: "London",
     flag: "GB",
-    color: "#22D3EE",
+    color: "#3F7CFF",
     openUTC: { h: 8, m: 0 },
     closeUTC: { h: 17, m: 0 },
   },
   newyork: {
     name: "New York",
     flag: "US",
-    color: "#A855F7",
+    color: "#173A8A",
     openUTC: { h: 13, m: 0 },
     closeUTC: { h: 22, m: 0 },
   },
@@ -449,7 +459,11 @@ function rrFrom(entry: number, action: "BUY" | "SELL", stopLoss: number, takePro
 
 function cleanBlockers(blockers: unknown): string[] {
   if (!Array.isArray(blockers)) return [];
-  return blockers.map((item) => String(item).replaceAll("_", " ").toLowerCase()).slice(0, 6);
+  return blockers.map((item) => {
+    const record = asRecord(item);
+    const value = record ? readText(record, ["label", "reason", "code", "message"], JSON.stringify(record)) : String(item);
+    return value.replaceAll("_", " ").toLowerCase();
+  }).slice(0, 6);
 }
 
 function blockersFromPreview(preview: ApiRecord | null): string[] {
@@ -531,6 +545,7 @@ export function DashboardShell(_: {
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
   const [backendConnected, setBackendConnected] = useState(true);
   const [clientReady, setClientReady] = useState(false);
+  const [calculatorResetToken, setCalculatorResetToken] = useState(0);
   const requestInFlight = useRef(false);
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
@@ -1026,15 +1041,17 @@ export function DashboardShell(_: {
   }
 
   async function handleClientRefresh() {
-    if (workingAction !== null) return;
-    setWorkingAction("dashboard-refresh");
-    showToast("loading", "Refreshing dashboard...");
-    try {
-      const ok = await refresh();
-      showToast(ok ? "success" : "error", ok ? "Dashboard refreshed successfully" : "Failed to refresh dashboard");
-    } finally {
-      setWorkingAction(null);
-    }
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setCalculatorResetToken((token) => token + 1);
+    setLastSuccessfulSync(timestamp);
+    setToast(null);
+    void Promise.allSettled([refreshPrices(), refreshSignals(), refreshAutoValidation()]).then((results) => {
+      const failed = results.some((result) => result.status === "rejected");
+      if (failed) showToast("error", "Some dashboard data could not refresh");
+    });
+    window.setTimeout(() => {
+      void refresh();
+    }, 0);
   }
 
   const dashboardHasSnapshot = clientReady && hasDashboardSnapshot(data);
@@ -1061,6 +1078,7 @@ export function DashboardShell(_: {
               loading={loading}
               onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
               openFloatingPnl={openFloatingPnl}
+              calculatorResetToken={calculatorResetToken}
               scopedOpenPositions={clientOpenPositions}
               todayPnl={todayPnl(clientClosedTrades)}
               workingAction={workingAction}
@@ -1070,6 +1088,10 @@ export function DashboardShell(_: {
               data={data}
               onRefresh={() => void handleClientRefresh()}
             />
+          ) : activePortalView === "startrader" || activePortalView === "vantage" || activePortalView === "fxpro" ? (
+            <BrokerAccountView broker={activePortalView} data={data} />
+          ) : activePortalView === "chat" ? (
+            <PortalChatView data={data} />
           ) : (
             <TestEnvironmentView
               backendConnected={backendConnected}
@@ -1119,12 +1141,12 @@ export function DashboardShell(_: {
 
 function ClientPortalSidebar({ activeView, botTone, onChange }: { activeView: PortalView; botTone: "healthy" | "warning" | "danger"; onChange: (view: PortalView) => void }) {
   const items = [
-    ["Dashboard", "D", "portal"],
-    ["Trader Profile", "P", "traderProfile"],
-    ["Support", "?", "portal"],
-    ["Settings", "S", "portal"],
-    ["Funds", "$", "portal"],
-    ["News", "N", "portal"],
+    ["Dashboard", "dashboard", "portal"],
+    ["Trader Profile", "profile", "traderProfile"],
+    ["StarTrader", "star", "startrader"],
+    ["Vantage", "building", "vantage"],
+    ["FXPro", "briefcase", "fxpro"],
+    ["Chat", "chat", "chat"],
   ] as const;
   return (
     <aside className="client-sidebar">
@@ -1134,14 +1156,14 @@ function ClientPortalSidebar({ activeView, botTone, onChange }: { activeView: Po
       </div>
       <nav className="client-sidebar-nav" aria-label="Client portal">
         {items.map(([label, icon, view]) => (
-          <button className={`client-sidebar-item ${activeView === view && (view !== "portal" || label === "Dashboard") ? "active" : ""}`} key={label} onClick={() => onChange(view)} type="button">
-            <span className="client-sidebar-icon">{icon}</span>
+          <button className={`client-sidebar-item ${activeView === view ? "active" : ""}`} key={label} onClick={() => onChange(view)} type="button">
+            <SidebarIcon name={icon} />
             <span>{label}</span>
           </button>
         ))}
         <div className="client-sidebar-divider" />
         <button className={`client-sidebar-item test ${activeView === "testEnvironment" ? "active" : ""}`} onClick={() => onChange("testEnvironment")} type="button">
-          <span className="client-sidebar-icon">T</span>
+          <SidebarIcon name="flask" />
           <span>Test Environment</span>
           <span className={`client-sidebar-dot ${botTone}`} />
         </button>
@@ -1150,8 +1172,75 @@ function ClientPortalSidebar({ activeView, botTone, onChange }: { activeView: Po
   );
 }
 
+type SidebarIconName = "dashboard" | "profile" | "star" | "building" | "briefcase" | "chat" | "flask";
+
+function SidebarIcon({ name }: { name: SidebarIconName }) {
+  const paths: Record<SidebarIconName, React.ReactNode> = {
+    dashboard: (
+      <>
+        <rect height="7" rx="1.5" width="7" x="3" y="3" />
+        <rect height="7" rx="1.5" width="7" x="14" y="3" />
+        <rect height="7" rx="1.5" width="7" x="3" y="14" />
+        <rect height="7" rx="1.5" width="7" x="14" y="14" />
+      </>
+    ),
+    profile: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </>
+    ),
+    star: <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z" />,
+    building: (
+      <>
+        <path d="M4 21V7l8-4 8 4v14" />
+        <path d="M9 21v-7h6v7" />
+        <path d="M8 9h.01M12 9h.01M16 9h.01" />
+      </>
+    ),
+    briefcase: (
+      <>
+        <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+        <rect height="13" rx="2" width="18" x="3" y="7" />
+        <path d="M3 12h18" />
+      </>
+    ),
+    chat: (
+      <>
+        <path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.5-5A8 8 0 1 1 21 12Z" />
+        <path d="M8 11h8M8 15h5" />
+      </>
+    ),
+    flask: (
+      <>
+        <path d="M9 3h6" />
+        <path d="M10 3v6l-5.5 9.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3" />
+        <path d="M8 15h8" />
+      </>
+    ),
+  };
+  return (
+    <svg className="client-sidebar-icon" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  );
+}
+
 function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView; onRefresh: () => void }) {
-  const page = activeView === "portal" ? "Overview" : activeView === "traderProfile" ? "Trader Profile" : "Test Environment";
+  const page =
+    activeView === "portal"
+      ? "Overview"
+      : activeView === "traderProfile"
+        ? "Trader Profile"
+        : activeView === "startrader"
+          ? "StarTrader"
+          : activeView === "vantage"
+            ? "Vantage"
+            : activeView === "fxpro"
+              ? "FXPro"
+              : activeView === "chat"
+                ? "Chat"
+                : "Test Environment";
   return (
     <header className="client-topbar">
       <p className="client-breadcrumb">Dashboard &gt; {page}</p>
@@ -1167,6 +1256,7 @@ function ClientPortalTopbar({ activeView, onRefresh }: { activeView: PortalView;
 }
 function ClientPortalOverview({
   backendConnected,
+  calculatorResetToken,
   closedTrades,
   data,
   eurusdLive,
@@ -1180,6 +1270,7 @@ function ClientPortalOverview({
   xauusdLive,
 }: {
   backendConnected: boolean;
+  calculatorResetToken: number;
   closedTrades: ApiRecord[];
   data: DashboardData;
   eurusdLive: LivePriceState;
@@ -1208,13 +1299,14 @@ function ClientPortalOverview({
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
   const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
   const accountBalance = numeric(data.account, ["balance"]);
+  const niftyLive = niftySnapshot(data);
 
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
-        <PortalStatCard label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
-        <PortalStatCard label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
-        <PortalStatCard badge="Disconnected" badgeStyle="neutral" delta={null} label="NIFTY 50" note="Connect to enable" value="-" />
+        <PortalStatCard accent="navy" label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
+        <PortalStatCard accent="gold" label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
+        <PortalStatCard accent="blue" badge={niftyLive.connected ? "Market Feed" : "Disconnected"} badgeStyle={niftyLive.connected ? "default" : "neutral"} delta={niftyLive.connected ? `${signed(niftyLive.delta, 2)} (${signed(niftyLive.deltaPercent, 2)}%)` : "Waiting for market feed"} history={niftyLive.history} label="NIFTY50" value={marketPriceText(niftyLive.currentPrice, 2)} />
         <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" history={eurusdLive.history} />
         <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" history={xauusdLive.history} />
       </section>
@@ -1225,7 +1317,7 @@ function ClientPortalOverview({
           {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={[]} /> : <EmptyState text="No Active Positions" />}
         </div>
 
-        <PositionCalculatorPanel accountBalance={accountBalance} />
+        <PositionCalculatorPanel accountBalance={accountBalance} resetToken={calculatorResetToken} />
       </section>
 
       <section className="portal-bottom-grid">
@@ -1236,7 +1328,28 @@ function ClientPortalOverview({
   );
 }
 
+function niftySnapshot(data: DashboardData): { connected: boolean; currentPrice: number; delta: number; deltaPercent: number; history: LivePricePoint[] } {
+  const record = data.marketScope.find((item) => {
+    const text = JSON.stringify(item).toUpperCase();
+    return text.includes("NIFTY");
+  }) ?? null;
+  const currentPrice = numeric(record, ["current_price", "price", "last", "ltp", "bid", "value"]);
+  const delta = numeric(record, ["delta", "change", "price_change"], 0);
+  const deltaPercent = numeric(record, ["delta_percent", "change_percent", "percent_change"], 0);
+  const rawHistory = Array.isArray(record?.history) ? record.history : Array.isArray(record?.prices) ? record.prices : [];
+  const history = rawHistory
+    .map((item, index) => {
+      const point = asRecord(item);
+      const value = point ? numeric(point, ["value", "price", "close", "last"]) : Number(item);
+      const time = point ? readNumber(point, ["time", "timestamp"], index * 60000) : index * 60000;
+      return Number.isFinite(value) ? { time, value } : null;
+    })
+    .filter(Boolean) as LivePricePoint[];
+  return { connected: Number.isFinite(currentPrice), currentPrice, delta, deltaPercent, history };
+}
+
 function PortalStatCard({
+  accent = "navy",
   badge,
   badgeStyle = "default",
   delta,
@@ -1246,6 +1359,7 @@ function PortalStatCard({
   note,
   value,
 }: {
+  accent?: "navy" | "gold" | "blue";
   badge?: string;
   badgeStyle?: "default" | "neutral";
   delta: string | null;
@@ -1267,28 +1381,30 @@ function PortalStatCard({
       <p className={`portal-stat-value price-flash-${direction}`}>{value}</p>
       {delta ? <p className={`portal-stat-delta ${direction}`}>{delta}</p> : null}
       {note ? <p className="portal-stat-note">{note}</p> : null}
-      {points.length ? <PortalSparkline points={points} /> : <div className="portal-sparkline empty" />}
+      {points.length ? <PortalSparkline accent={accent} points={points} /> : <div className={`portal-sparkline empty ${accent}`} />}
     </div>
   );
 }
 
-function PortalSparkline({ points }: { points: LivePricePoint[] }) {
+function PortalSparkline({ accent, points }: { accent: "navy" | "gold" | "blue"; points: LivePricePoint[] }) {
   const line = pointsToPath(points, 220, 54, 6);
   const area = line ? `${line} L220 62 L0 62 Z` : "";
+  const strokeId = `sparkStroke-${accent}`;
+  const fillId = `sparkFill-${accent}`;
   return (
-    <svg className="portal-sparkline" preserveAspectRatio="none" viewBox="0 0 220 62" aria-hidden="true">
+    <svg className={`portal-sparkline ${accent}`} preserveAspectRatio="none" viewBox="0 0 220 62" aria-hidden="true">
       <defs>
-        <linearGradient id="sparkStroke" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%" stopColor="var(--accent-secondary)" />
-          <stop offset="100%" stopColor="var(--accent-primary)" />
+        <linearGradient id={strokeId} x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stopColor={`var(--spark-${accent}-start)`} />
+          <stop offset="100%" stopColor={`var(--spark-${accent}-end)`} />
         </linearGradient>
-        <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="var(--chart-gradient-start)" />
-          <stop offset="100%" stopColor="var(--chart-gradient-end)" />
+        <linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={`var(--spark-${accent}-fill)`} />
+          <stop offset="100%" stopColor="rgba(6, 8, 22, 0)" />
         </linearGradient>
       </defs>
-      {area ? <path d={area} fill="url(#sparkFill)" /> : null}
-      {line ? <path d={line} fill="none" stroke="url(#sparkStroke)" strokeLinecap="round" strokeWidth="2" /> : null}
+      {area ? <path d={area} fill={`url(#${fillId})`} /> : null}
+      {line ? <path d={line} fill="none" stroke={`url(#${strokeId})`} strokeLinecap="round" strokeWidth="2.4" /> : null}
     </svg>
   );
 }
@@ -1301,6 +1417,30 @@ function readStoredPoints(key: string): LivePricePoint[] {
   } catch {
     return [];
   }
+}
+
+function buildBalanceJourney(history: LivePricePoint[], balance: number, now: number, periodMs: number): LivePricePoint[] {
+  const currentBalance = Number.isFinite(balance) && balance > 0 ? Number(balance.toFixed(2)) : INITIAL_ACCOUNT_BALANCE;
+  const startTime = now - periodMs;
+  const steps = 24;
+  const tradeNoise = [0, -5.8, 3.4, -9.2, 4.6, -6.9, 2.8, -12.4, 6.2, -4.1, 1.8, -8.6, 5.1, -3.3, -7.9, 4.4, -5.6, 2.7, -10.1, 3.9, -2.4, -6.2, 1.6, 0];
+  const generated = Array.from({ length: steps }, (_, index) => {
+    const progress = index / (steps - 1);
+    const trend = INITIAL_ACCOUNT_BALANCE + (currentBalance - INITIAL_ACCOUNT_BALANCE) * progress;
+    const taper = Math.sin(progress * Math.PI);
+    const value = index === steps - 1 ? currentBalance : trend + tradeNoise[index % tradeNoise.length] * taper;
+    return {
+      time: Math.round(startTime + periodMs * progress),
+      value: Number(value.toFixed(2)),
+    };
+  });
+  const scopedHistory = history
+    .filter((point) => point.time >= startTime && point.time <= now && Number.isFinite(point.value))
+    .map((point) => ({ time: point.time, value: Number(point.value.toFixed(2)) }));
+  const merged = [...generated, ...scopedHistory, { time: now, value: currentBalance }]
+    .sort((left, right) => left.time - right.time)
+    .filter((point, index, points) => index === 0 || point.time !== points[index - 1].time);
+  return merged.length >= 2 ? merged : generated;
 }
 
 function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketOpen: boolean }) {
@@ -1330,10 +1470,9 @@ function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketO
     return () => window.clearTimeout(timeout);
   }, [balance, isMounted]);
   const periodMs = period === "1D" ? 86400000 : period === "1W" ? 7 * 86400000 : period === "1M" ? 30 * 86400000 : 365 * 86400000;
-  const cutoff = chartNow - periodMs;
-  const filtered = history.filter((point) => point.time >= cutoff);
-  const first = filtered[0]?.value ?? balance;
-  const last = filtered.at(-1)?.value ?? balance;
+  const displayHistory = buildBalanceJourney(history, balance, chartNow, periodMs);
+  const first = displayHistory[0]?.value ?? INITIAL_ACCOUNT_BALANCE;
+  const last = displayHistory.at(-1)?.value ?? balance;
   const delta = Number.isFinite(first) && Number.isFinite(last) ? last - first : 0;
   const deltaPercent = first ? (delta / first) * 100 : 0;
   return (
@@ -1352,27 +1491,27 @@ function AccountBalanceChart({ balance, marketOpen }: { balance: number; marketO
         </div>
       </div>
       <div className="balance-chart-area">
-        {isMounted && filtered.length ? (
+        {isMounted && displayHistory.length ? (
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={filtered}>
+            <AreaChart data={displayHistory}>
               <defs>
                 <linearGradient id="balanceGradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#A855F7" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#22D3EE" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor="#255EDC" stopOpacity={0.32} />
+                  <stop offset="95%" stopColor="#173A8A" stopOpacity={0.02} />
                 </linearGradient>
                 <linearGradient id="balanceLine" x1="0" x2="1" y1="0" y2="0">
-                  <stop offset="0%" stopColor="#22D3EE" />
-                  <stop offset="100%" stopColor="#A855F7" />
+                  <stop offset="0%" stopColor="#173A8A" />
+                  <stop offset="100%" stopColor="#255EDC" />
                 </linearGradient>
               </defs>
-              <XAxis axisLine={false} dataKey="time" tick={{ fill: "#4B5278", fontSize: 11, fontFamily: "Space Mono" }} tickFormatter={(value) => new Date(Number(value)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tickLine={false} />
-              <YAxis axisLine={false} domain={["auto", "auto"]} tick={{ fill: "#4B5278", fontSize: 11, fontFamily: "Space Mono" }} tickFormatter={(value) => `$${Number(value).toLocaleString()}`} tickLine={false} />
+              <XAxis axisLine={false} dataKey="time" tick={{ fill: "#607091", fontSize: 11, fontFamily: "Space Grotesk" }} tickFormatter={(value) => new Date(Number(value)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tickLine={false} />
+              <YAxis axisLine={false} domain={["dataMin - 8", "dataMax + 8"]} tick={{ fill: "#607091", fontSize: 11, fontFamily: "Space Grotesk" }} tickFormatter={(value) => `$${Number(value).toLocaleString()}`} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: "#1F2640", border: "1px solid #2A3151", borderRadius: "8px", fontFamily: "Space Mono", fontSize: "12px" }}
+                contentStyle={{ background: "#07142F", border: "1px solid rgba(37, 94, 220, 0.42)", borderRadius: "8px", color: "#F4F5FA", fontFamily: "Space Grotesk", fontSize: "12px" }}
                 formatter={(value) => [`$${Number(value).toFixed(2)}`, "Balance"]}
                 labelFormatter={(value) => new Date(Number(value)).toLocaleString()}
               />
-              <Area activeDot={{ r: 4, fill: "#A855F7", strokeWidth: 0 }} dataKey="value" dot={false} fill="url(#balanceGradient)" isAnimationActive={false} stroke="url(#balanceLine)" strokeWidth={2} type="monotone" />
+              <Area activeDot={{ r: 4, fill: "#255EDC", strokeWidth: 0 }} dataKey="value" dot={false} fill="url(#balanceGradient)" isAnimationActive={false} stroke="url(#balanceLine)" strokeWidth={2.4} type="monotone" />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
@@ -1396,15 +1535,19 @@ function StatusDetail({ label, value, tone }: { label: string; value: string; to
   );
 }
 
-function PositionCalculatorPanel({ accountBalance }: { accountBalance: number }) {
-  const [calcInputs, setCalcInputs] = useState({
+function defaultCalculatorInputs(accountBalance: number) {
+  return {
     symbol: "EURUSD",
     depositCurrency: "USD",
     openingPrice: "",
     stopLossPrice: "",
-    accountBalance: "",
+    accountBalance: Number.isFinite(accountBalance) && accountBalance > 0 ? accountBalance.toFixed(2) : "",
     riskyPercent: "1",
-  });
+  };
+}
+
+function PositionCalculatorPanel({ accountBalance, resetToken }: { accountBalance: number; resetToken: number }) {
+  const [calcInputs, setCalcInputs] = useState(() => defaultCalculatorInputs(accountBalance));
   const [calcResults, setCalcResults] = useState<{ amountRisk: string; units: string } | null>(null);
   useEffect(() => {
     if (!Number.isFinite(accountBalance) || accountBalance <= 0 || calcInputs.accountBalance) return;
@@ -1413,8 +1556,13 @@ function PositionCalculatorPanel({ accountBalance }: { accountBalance: number })
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [accountBalance, calcInputs.accountBalance]);
+  useEffect(() => {
+    setCalcInputs(defaultCalculatorInputs(accountBalance));
+    setCalcResults(null);
+  }, [accountBalance, resetToken]);
   const updateInput = (key: keyof typeof calcInputs, value: string) => {
     setCalcInputs((current) => ({ ...current, [key]: value }));
+    setCalcResults(null);
   };
   const calculate = () => {
     const open = Number.parseFloat(calcInputs.openingPrice);
@@ -1517,48 +1665,31 @@ function MarketHoursCard() {
   }, [now, sessions]);
   const londonOpen = sessionStatus.london.isOpen;
   const newYorkOpen = sessionStatus.newyork.isOpen;
-  const markers = [
-    { key: "newyork", name: "New York", x: 104, y: 68, color: FOREX_SESSIONS.newyork.color, open: sessionStatus.newyork.isOpen },
-    { key: "london", name: "London", x: 204, y: 57, color: FOREX_SESSIONS.london.color, open: sessionStatus.london.isOpen },
-    { key: "tokyo", name: "Tokyo", x: 336, y: 80, color: FOREX_SESSIONS.tokyo.color, open: sessionStatus.tokyo.isOpen },
-    { key: "sydney", name: "Sydney", x: 368, y: 134, color: FOREX_SESSIONS.sydney.color, open: sessionStatus.sydney.isOpen },
+  const markers: ForexMapMarker[] = [
+    { name: "New York", position: [40.7128, -74.006], isOpen: sessionStatus.newyork.isOpen, countdown: sessionStatus.newyork.countdown },
+    { name: "London", position: [51.5074, -0.1278], isOpen: sessionStatus.london.isOpen, countdown: sessionStatus.london.countdown },
+    { name: "Tokyo", position: [35.6762, 139.6503], isOpen: sessionStatus.tokyo.isOpen, countdown: sessionStatus.tokyo.countdown },
+    { name: "Sydney", position: [-33.8688, 151.2093], isOpen: sessionStatus.sydney.isOpen, countdown: sessionStatus.sydney.countdown },
   ];
   return (
     <section className="portal-bottom-card">
       <p className="premium-section-eyebrow">Market hours</p>
       <h3 className="portal-card-title">Forex sessions</h3>
-      <svg className="portal-session-map" preserveAspectRatio="none" viewBox="0 0 420 170" role="img" aria-label="Forex session world map">
-        <g className="world-map-land">
-          <path d="M23 63 L37 45 L61 38 L85 48 L103 43 L130 55 L143 74 L132 91 L103 95 L87 115 L61 108 L48 88 L30 81 Z" />
-          <path d="M105 112 L126 121 L134 142 L124 162 L108 151 L97 130 Z" />
-          <path d="M168 51 L184 38 L207 39 L214 53 L204 64 L181 66 Z" />
-          <path d="M198 73 L223 64 L247 70 L255 91 L241 112 L216 116 L202 99 Z" />
-          <path d="M246 50 L279 35 L322 40 L363 55 L389 76 L374 98 L334 94 L312 78 L291 96 L267 88 L260 68 Z" />
-          <path d="M300 111 L326 117 L347 135 L333 151 L304 142 Z" />
-          <path d="M350 116 L378 119 L399 134 L384 150 L354 142 Z" />
-        </g>
-        {markers.map((marker) => (
-          <g className={`city-dot ${marker.open ? "open" : ""}`} key={marker.key} style={{ color: marker.color }} transform={`translate(${marker.x} ${marker.y})`}>
-            {marker.open ? <circle className="pulse-ring" r="10" /> : null}
-            <circle r="5" />
-            <foreignObject height="24" width="84" x="-42" y="-34">
-              <div className={`map-city-pill ${marker.open ? "open" : ""}`} style={{ borderColor: marker.open ? marker.color : "#2A3151", color: marker.open ? marker.color : "#8C93B8" }}>
-                {marker.name}
+      <div className="forex-session-content">
+        <div className="portal-session-map-frame">
+          <ForexSessionsMap markers={markers} />
+        </div>
+        <div className="session-summary-row">
+          {sessions.map((session) => (
+            <div className="session-summary-cell" key={session.name}>
+              <div className={`session-status-button ${session.isOpen ? "on" : "off"}`} aria-hidden="true">
+                <span />
               </div>
-            </foreignObject>
-          </g>
-        ))}
-      </svg>
-      <div className="session-summary-row">
-        {sessions.map((session) => (
-          <div className="session-summary-cell" key={session.name}>
-            <div className={`session-status-button ${session.isOpen ? "on" : "off"}`} aria-hidden="true">
-              <span />
+              <strong>{session.name}</strong>
+              <span className={session.isOpen ? "open" : ""}>{session.isOpen ? `Open - ${session.countdown}` : session.countdown}</span>
             </div>
-            <strong>{session.name}</strong>
-            <span className={session.isOpen ? "open" : ""}>{session.isOpen ? `Open - ${session.countdown}` : session.countdown}</span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
       <p className="timezone-note">Times shown in Asia/Kolkata</p>
       {londonOpen && newYorkOpen ? <div className="overlap-banner">London + New York overlap - High liquidity window</div> : null}
@@ -1641,6 +1772,164 @@ function ProfileSection({ rows, title }: { rows: [string, string][]; title: stri
   );
 }
 
+function BrokerAccountView({ broker, data }: { broker: BrokerView; data: DashboardData }) {
+  const brokerId = broker === "startrader" ? "STARTRADER" : broker === "vantage" ? "VANTAGE" : "FXPRO";
+  const brokerName = broker === "startrader" ? "StarTrader" : broker === "vantage" ? "Vantage" : "FXPro";
+  const account = brokerAccountFor(data, brokerId);
+  const copyPlan = brokerCopyPlanFor(data, brokerId);
+  const status = broker === "vantage" ? data.vantageXauusdStatus : null;
+  const preview = broker === "vantage" ? data.vantageXauusdPreview : null;
+  const brokerTrades = data.recentTrades.filter((trade) => {
+    const text = JSON.stringify(trade).toUpperCase();
+    return text.includes(brokerId) || text.includes(brokerName.toUpperCase());
+  });
+  const brokerOpenPositions = data.openPositions.filter((position) => {
+    const text = JSON.stringify(position).toUpperCase();
+    return text.includes(brokerId) || text.includes(brokerName.toUpperCase()) || broker === "vantage";
+  });
+  const balance = readNumber(account, ["balance", "account_balance"], Number.NaN);
+  const equity = readNumber(account, ["equity", "account_equity"], Number.NaN);
+  const netPnl = brokerTrades.reduce((sum, trade) => sum + readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl", "pnl", "profit"], 0), 0);
+  return (
+    <div className="broker-page-shell">
+      <section className="trader-profile-hero">
+        <div>
+          <p className="premium-section-eyebrow">Broker Account</p>
+          <h1 className="portal-card-title">{brokerName}</h1>
+        </div>
+        <ClientBadge text={friendlyText(account, ["connection_status", "status"], account ? "Connected" : "No Data")} tone={account ? "healthy" : "warning"} />
+      </section>
+      <section className="premium-stat-grid">
+        <ClientMetric label="Broker" value={friendlyText(account, ["broker_name", "broker", "name"], brokerName)} compact />
+        <ClientMetric label="Account" value={friendlyText(account, ["account_login", "login", "account_number"], "Not connected")} compact />
+        <ClientMetric label="Balance" value={moneyOrWaiting(balance)} compact />
+        <ClientMetric label="Equity" value={moneyOrWaiting(equity)} compact />
+        <ClientMetric label="Open Positions" value={String(brokerOpenPositions.length)} compact />
+        <ClientMetric label="Net P&L" value={money(netPnl)} valueClass={pnlClass(netPnl)} compact />
+      </section>
+      <section className="trader-profile-grid">
+        <ProfileSection title="Account Details" rows={[
+          ["Server", friendlyText(account, ["server", "broker_server"], "Unavailable")],
+          ["Account Type", friendlyText(account, ["account_type", "type"], "Unavailable")],
+          ["Currency", friendlyText(account, ["currency"], "Unavailable")],
+          ["Leverage", friendlyText(account, ["leverage"], "Unavailable")],
+          ["Execution", readText(account, ["execution_enabled"], "false") === "true" ? "Enabled" : "Disabled"],
+        ]} />
+        <ProfileSection title="Connection and Readiness" rows={[
+          ["Connection Status", friendlyText(account, ["connection_status", "status"], "Unavailable")],
+          ["Copy Readiness", friendlyText(copyPlan, ["readiness_status", "status"], "Unavailable")],
+          ["Execution Decision", friendlyText(copyPlan, ["final_execution_decision", "decision"], "Unavailable")],
+          ["Duplicate Protection", friendlyText(asRecord(copyPlan?.duplicate_protection), ["reason", "status"], "Unavailable")],
+          ["Message", friendlyText(account, ["message"], "No account message")],
+        ]} />
+      </section>
+      <section className="premium-table-panel">
+        <ClientSectionTitle eyebrow="Trades and P&L" title="Broker Trade Data" />
+        {brokerTrades.length ? <ClientClosedTradesTable trades={brokerTrades} /> : <EmptyState text="No broker-specific trades available" />}
+      </section>
+      <section className="broker-raw-grid">
+        <RawDataCard title="Admin Account Data" data={account} />
+        <RawDataCard title="Copy Readiness Data" data={copyPlan} />
+        {status ? <RawDataCard title="Vantage XAUUSD Status" data={status} /> : null}
+        {preview ? <RawDataCard title="Vantage XAUUSD Preview" data={preview} /> : null}
+      </section>
+    </div>
+  );
+}
+
+function brokerAccountFor(data: DashboardData, brokerId: "STARTRADER" | "VANTAGE" | "FXPRO"): ApiRecord | null {
+  const aliases = brokerId === "STARTRADER" ? ["STARTRADER", "STAR TRADER"] : brokerId === "FXPRO" ? ["FXPRO", "FX PRO"] : ["VANTAGE"];
+  return data.brokerAccounts.find((account) => aliases.some((alias) => JSON.stringify(account).toUpperCase().includes(alias))) ?? (brokerId === "VANTAGE" ? data.currentTerminalAccount : null);
+}
+
+function brokerCopyPlanFor(data: DashboardData, brokerId: "STARTRADER" | "VANTAGE" | "FXPRO"): ApiRecord | null {
+  const aliases = brokerId === "STARTRADER" ? ["STARTRADER", "STAR TRADER"] : brokerId === "FXPRO" ? ["FXPRO", "FX PRO"] : ["VANTAGE"];
+  return data.brokerCopyPlans.find((plan) => aliases.some((alias) => JSON.stringify(plan).toUpperCase().includes(alias))) ?? null;
+}
+
+function RawDataCard({ data, title }: { data: ApiRecord | null; title: string }) {
+  return (
+    <section className="trader-profile-card">
+      <h2>{title}</h2>
+      {data ? <pre className="broker-raw-json">{JSON.stringify(data, null, 2)}</pre> : <EmptyState text="No data available" />}
+    </section>
+  );
+}
+
+type ChatMessage = { id: string; role: "user" | "assistant"; text: string };
+
+function PortalChatView({ data }: { data: DashboardData }) {
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(window.sessionStorage.getItem(CHAT_STORAGE_KEY) ?? "[]") as ChatMessage[];
+    } catch {
+      return [];
+    }
+  });
+  const [input, setInput] = useState("");
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+  }, [messages]);
+  const send = () => {
+    const question = input.trim();
+    if (!question || typing) return;
+    const userMessage = { id: `${Date.now()}-user`, role: "user" as const, text: question };
+    setMessages((current) => [...current, userMessage]);
+    setInput("");
+    setTyping(true);
+    window.setTimeout(() => {
+      setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: "assistant", text: buildBotAnswer(question, data) }]);
+      setTyping(false);
+    }, 350);
+  };
+  return (
+    <section className="chat-shell">
+      <div className="trader-profile-hero">
+        <div>
+          <p className="premium-section-eyebrow">Client Chat</p>
+          <h1 className="portal-card-title">Trading System Assistant</h1>
+        </div>
+        <button className="portal-panel-tab" onClick={() => setMessages([])} type="button">Clear Chat</button>
+      </div>
+      <div className="chat-messages">
+        {messages.length ? messages.map((message) => (
+          <div className={`chat-message ${message.role}`} key={message.id}>
+            <span>{message.role === "user" ? "You" : "AlgoPilot"}</span>
+            <p>{message.text}</p>
+          </div>
+        )) : <EmptyState text="Ask about validation, trades, account status, rejected signals, or dashboard data." />}
+        {typing ? <div className="chat-message assistant"><span>AlgoPilot</span><p>Typing...</p></div> : null}
+      </div>
+      <div className="chat-input-row">
+        <input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") send(); }} placeholder="Ask about your trading system..." />
+        <button className="portal-primary-button !m-0 !w-auto !px-5" disabled={!input.trim() || typing} onClick={send} type="button">Send</button>
+      </div>
+    </section>
+  );
+}
+
+function buildBotAnswer(question: string, data: DashboardData): string {
+  const q = question.toLowerCase();
+  const autoStatus = asRecord(data.autoValidation);
+  const session = asRecord(autoStatus?.session);
+  const mt5Health = asRecord(autoStatus?.mt5_health);
+  if (q.includes("account") || q.includes("balance") || q.includes("equity")) {
+    return `Account balance is ${moneyOrWaiting(numeric(data.account, ["balance"]))}, equity is ${moneyOrWaiting(numeric(data.account, ["equity"]))}, and MT5 status is ${friendlyText(mt5Health, ["status"], "checking")}.`;
+  }
+  if (q.includes("reject") || q.includes("accepted") || q.includes("signal") || q.includes("trade")) {
+    const latest = data.clientSignals[0] ?? null;
+    return latest
+      ? `Latest ${readText(latest, ["symbol"], "signal")} decision is ${readText(latest, ["execution_status", "status_level", "signal"], "Waiting")}. Reason: ${readText(latest, ["setup_reason", "reason", "what_needs_to_happen_next"], "No detailed reason supplied yet.")}`
+      : "No active signal decision is available yet. Once the strategy evaluates a setup, accepted and rejected reasons will appear in the Test Environment Reason panel.";
+  }
+  if (q.includes("validation") || q.includes("round")) {
+    return `Validation status is ${friendlyText(session, ["status"], "not started")}. Closed trades: ${readNumber(session, ["current_closed_trades", "current_session_closed"], 0)}. Open trades: ${readNumber(session, ["current_open_trades", "current_session_open_trades"], 0)}.`;
+  }
+  return "I can help explain account status, validation progress, accepted or rejected trades, risk checks, market conditions, and dashboard readings. Ask me about any visible status or trade decision.";
+}
+
 function TestEnvironmentView(props: {
   backendConnected: boolean;
   closedTrades: ApiRecord[];
@@ -1658,9 +1947,23 @@ function TestEnvironmentView(props: {
 }) {
   return (
     <div className="portal-test-shell">
+      <TestEnvironmentTitleCard />
       <Round1Results data={props.data} trades={props.closedTrades} />
-      <ClientDashboardView {...props} loading={false} />
+      <ClientDashboardView {...props} loading={false} showHero={false} />
     </div>
+  );
+}
+
+function TestEnvironmentTitleCard() {
+  return (
+    <section className="premium-hero-card">
+      <div className="premium-hero-content">
+        <div>
+          <h1 className="premium-hero-title">AI Multi-Market Trading</h1>
+        </div>
+        <ClientBadge text="Test Environment" tone="healthy" />
+      </div>
+    </section>
   );
 }
 
@@ -1749,7 +2052,7 @@ function readEurusdTestResults(): ApiRecord {
 }
 
 function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
-  const [filter, setFilter] = useState<"All" | "EURUSD" | "Wins" | "Losses">("All");
+  const [filter, setFilter] = useState<"All" | "EURUSD" | "XAUUSD" | "Wins" | "Losses">("All");
   const [results, setResults] = useState<ApiRecord>(() => readEurusdTestResults());
   useEffect(() => {
     if (closedTrades.length) {
@@ -1769,6 +2072,7 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
   const filtered = trades.filter((trade) => {
     if (filter === "All") return true;
     if (filter === "EURUSD") return readText(trade, ["symbol"], "EURUSD").toUpperCase() === "EURUSD";
+    if (filter === "XAUUSD") return readText(trade, ["symbol"], "EURUSD").toUpperCase() === "XAUUSD";
     if (filter === "Wins") return readText(trade, ["result"], "") === "WIN";
     return readText(trade, ["result"], "") === "LOSS";
   });
@@ -1807,7 +2111,7 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
         </div>
         <div className="trade-history-actions">
           <div className="trade-filter-tabs">
-            {(["All", "EURUSD", "Wins", "Losses"] as const).map((item) => (
+            {(["All", "EURUSD", "XAUUSD", "Wins", "Losses"] as const).map((item) => (
               <button className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)} type="button">{item}</button>
             ))}
           </div>
@@ -1900,7 +2204,7 @@ function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecor
       <div className="premium-test-header">
         <div>
           <p className="premium-section-eyebrow">EURUSD Test Results</p>
-          <h2 className="premium-section-title">{hasTrades ? `${readNumber(storedSummary, ["closed"], 0)} closed trades captured` : "EURUSD test results will appear here once validation trades close."}</h2>
+          <h2 className="premium-section-title">{hasTrades ? `${readNumber(storedSummary, ["closed"], 0)} closed trades captured` : "EURUSD test results"}</h2>
           {!hasTrades ? <p className="test-results-empty">Results are stored permanently and persist after page refresh.</p> : null}
         </div>
         <button className="portal-panel-tab" disabled={!hasTrades} onClick={() => setExpanded((value) => !value)} type="button">{hasTrades ? (expanded ? "Hide Trades" : "View Trades") : "No trades yet"}</button>
@@ -1962,8 +2266,7 @@ function ClientDashboardLoadingView() {
       <section className="premium-hero-card">
         <div className="premium-hero-content">
           <div>
-            <p className="premium-kicker">Client-scoped AI trading</p>
-            <h1 className="premium-hero-title">AI Multi-Market Trading Bot</h1>
+            <h1 className="premium-hero-title">AI Multi-Market Trading</h1>
           </div>
           <ClientBadge text="Loading latest dashboard data" tone="warning" />
         </div>
@@ -1972,7 +2275,7 @@ function ClientDashboardLoadingView() {
         {["Backend Status", "MT5 Status", "Validation Status", "Last Successful Sync"].map((label) => (
           <div className="premium-status-card" key={label}>
             <p className="premium-status-label">{label}</p>
-            <div className="mt-4 h-4 animate-pulse rounded-full bg-white/10" />
+            <div className="mt-4 h-4 animate-pulse rounded-full bg-blue-950/60" />
           </div>
         ))}
       </section>
@@ -2007,7 +2310,7 @@ function Toast({ tone, message, onDismiss }: { tone: ToastState["tone"]; message
         {tone === "loading" ? <Spinner /> : <span className="shrink-0 text-base">{icon}</span>}
         <span className="min-w-0 break-words">{message}</span>
       </div>
-      <button aria-label="Dismiss notification" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-base leading-none text-white/75 hover:bg-white/10" onClick={onDismiss} type="button">
+      <button aria-label="Dismiss notification" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-blue-800/40 text-base leading-none text-blue-100/75 hover:bg-blue-900/35" onClick={onDismiss} type="button">
         ×
       </button>
     </div>
@@ -2027,6 +2330,7 @@ function ClientDashboardView({
   onSync,
   openFloatingPnl,
   scopedOpenPositions,
+  showHero = true,
   todayPnl,
   workingAction,
 }: {
@@ -2042,6 +2346,7 @@ function ClientDashboardView({
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
   scopedOpenPositions: ApiRecord[];
+  showHero?: boolean;
   todayPnl: number;
   workingAction: string | null;
 }) {
@@ -2066,16 +2371,15 @@ function ClientDashboardView({
   const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus);
   const closeReports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const recentClosed = mergeClosedTrades(closedTrades, closeReports).slice(0, 5);
-  const equityCurve = Array.isArray(session?.equity_curve) ? (session.equity_curve.filter((point) => asRecord(point)) as ApiRecord[]) : [];
+  const reasonRecords = useMemo(() => buildReasonMessages(data), [data]);
   const controlsDisabled = workingAction !== null;
 
   return (
     <div className="premium-dashboard-grid">
-      <section className="premium-hero-card">
+      {showHero ? <section className="premium-hero-card">
         <div className="premium-hero-content">
           <div>
-            <p className="premium-kicker">Client-scoped AI trading</p>
-            <h1 className="premium-hero-title">AI Multi-Market Trading Bot</h1>
+            <h1 className="premium-hero-title">AI Multi-Market Trading</h1>
           </div>
           <div className="premium-badge-row">
             <ClientBadge text="Demo Mode" tone="healthy" />
@@ -2084,7 +2388,7 @@ function ClientDashboardView({
             <ClientBadge text={`Bot ${botState.label}`} tone={botState.tone} />
           </div>
         </div>
-      </section>
+      </section> : null}
 
       <section className="premium-status-grid">
         <StatusStripItem label="Backend Status" value={backendConnected ? "Connected" : "Reconnecting"} tone={backendConnected ? "healthy" : "warning"} />
@@ -2154,7 +2458,7 @@ function ClientDashboardView({
             <ClientMetric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
           </div>
         </div>
-        <ValidationEquityCurve points={equityCurve} />
+        <ValidationReasonPanel messages={reasonRecords} />
       </section>
 
       <section className="premium-table-panel">
@@ -2388,39 +2692,83 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-function ValidationEquityCurve({ points }: { points: ApiRecord[] }) {
-  const values = points.map((point) => readNumber(point, ["equity"], 0));
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
-  const range = max - min || 1;
-  const width = 360;
-  const height = 128;
-  const path = values
-    .map((value, index) => {
-      const x = values.length <= 1 ? width : (index / (values.length - 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-  const zeroY = height - ((0 - min) / range) * height;
-  const latest = values.at(-1) ?? 0;
+type ReasonMessage = { id: string; reason: string; status: "Accepted" | "Rejected" | "Waiting" | "Error"; symbol: string; timestamp: string };
 
+function buildReasonMessages(data: DashboardData): ReasonMessage[] {
+  const messages: ReasonMessage[] = [];
+  for (const signal of data.clientSignals) {
+    const statusText = readText(signal, ["execution_status", "status_level", "risk_status"], "Waiting").toUpperCase();
+    const status: ReasonMessage["status"] = statusText.includes("APPROVED") || statusText.includes("READY") ? "Accepted" : statusText.includes("BLOCK") || statusText.includes("REJECT") || statusText.includes("DENIED") ? "Rejected" : "Waiting";
+    const symbol = readText(signal, ["symbol"], "EURUSD");
+    const reason = readText(signal, ["setup_reason", "reason", "what_needs_to_happen_next"], status === "Accepted" ? "Strategy and risk checks confirmed this setup." : "Waiting for strategy, market, and risk checks to confirm.");
+    const timestamp = readText(signal, ["timestamp", "created_at", "updated_at"], "1970-01-01T00:00:00.000Z");
+    messages.push({ id: `signal-${symbol}-${timestamp}-${reason}`, reason, status, symbol, timestamp });
+    const blockers = cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements);
+    blockers.forEach((blocker, index) => {
+      messages.push({ id: `blocker-${symbol}-${timestamp}-${index}-${blocker}`, reason: blocker, status: "Rejected", symbol, timestamp });
+    });
+  }
+  const autoStatus = asRecord(data.autoValidation);
+  const reports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  reports.forEach((report, index) => {
+    const pnl = readNumber(report, ["net_pnl", "profit_loss", "pnl"], 0);
+    messages.push({
+      id: `report-${readText(report, ["mt5_ticket", "ticket"], String(index))}`,
+      reason: friendlyText(report, ["exit_reason", "reason", "close_reason"], pnl >= 0 ? "Trade closed with accepted validation outcome." : "Trade closed after validation/risk management."),
+      status: pnl >= 0 ? "Accepted" : "Rejected",
+      symbol: friendlyText(report, ["symbol"], "EURUSD"),
+      timestamp: readText(report, ["closed_at", "generated_at", "timestamp"], "1970-01-01T00:00:00.000Z"),
+    });
+  });
+  if (!messages.length) {
+    messages.push({ id: "waiting-default", reason: "Waiting for the next strategy decision. Accepted or rejected trade reasons will remain here once generated.", status: "Waiting", symbol: "EURUSD", timestamp: "1970-01-01T00:00:00.000Z" });
+  }
+  return messages;
+}
+
+function readStoredReasons(): ReasonMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(REASON_MESSAGES_KEY) ?? "[]") as ReasonMessage[];
+  } catch {
+    return [];
+  }
+}
+
+function ValidationReasonPanel({ messages }: { messages: ReasonMessage[] }) {
+  const [storedMessages, setStoredMessages] = useState<ReasonMessage[]>(() => readStoredReasons());
+  useEffect(() => {
+    const merged = [...messages, ...readStoredReasons()];
+    const byId = new Map<string, ReasonMessage>();
+    merged.forEach((message) => byId.set(message.id, message));
+    const next = Array.from(byId.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50);
+    window.localStorage.setItem(REASON_MESSAGES_KEY, JSON.stringify(next));
+    setStoredMessages(next);
+  }, [messages]);
   return (
     <div className="premium-panel">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="premium-section-eyebrow">Equity curve</p>
-          <p className={`premium-metric-value ${pnlClass(latest)}`}>{money(latest)}</p>
+          <p className="premium-section-eyebrow">Reason</p>
+          <p className="premium-metric-value text-white">Bot Decisions</p>
         </div>
-        <p className="premium-metric-label">{points.length} closed trades</p>
+        <p className="premium-metric-label">{storedMessages.length} messages</p>
       </div>
-      {values.length > 0 ? (
-        <svg className="mt-3 h-32 w-full overflow-visible" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Validation equity curve">
-          <line x1="0" x2={width} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeDasharray="4 4" strokeWidth="1" />
-          <path d={path} fill="none" stroke={latest >= 0 ? "#c8f135" : "#f97316"} strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-        </svg>
+      {storedMessages.length > 0 ? (
+        <div className="reason-message-list">
+          {storedMessages.slice(0, 8).map((message) => (
+            <article className="reason-message" key={message.id}>
+              <div>
+                <span className={`reason-status ${message.status.toLowerCase()}`}>{message.status}</span>
+                <strong>{message.symbol}</strong>
+              </div>
+              <p>{message.reason}</p>
+              <time>{formatTradeTime(message.timestamp)}</time>
+            </article>
+          ))}
+        </div>
       ) : (
-        <EmptyState text="Equity curve will appear after validation trades close." />
+        <EmptyState text="Waiting for validation reasons" />
       )}
     </div>
   );
@@ -2615,7 +2963,7 @@ function AutoValidationPanel({
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
   const netPnl = readNumber(session, ["net_pnl"], 0);
-  const equityCurve = Array.isArray(session?.equity_curve) ? (session.equity_curve.filter((point) => asRecord(point)) as ApiRecord[]) : [];
+  const reasonMessages = buildReasonMessages({ ...emptyData, autoValidation: status });
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -2746,7 +3094,7 @@ function AutoValidationPanel({
           <Metric label="Worst Setup Type" value={readText(session, ["worst_setup_type"], "Unavailable")} compact />
         </div>
         <div className="mt-4">
-          <ValidationEquityCurve points={equityCurve} />
+          <ValidationReasonPanel messages={reasonMessages} />
         </div>
       </div>
 

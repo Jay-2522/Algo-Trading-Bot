@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk, Space_Mono } from "next/font/google";
+import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
 const inter = Inter({
@@ -19,7 +20,7 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Multi-Market Trading Bot",
+  title: "AI Multi-Market Trading",
   description: "VPS Dashboard and Simulation Control Center",
 };
 

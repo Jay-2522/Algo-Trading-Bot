@@ -83,6 +83,7 @@ export async function fetchClientOperatingDashboard() {
     account: fetchJson<ApiRecord>("/mt5-demo/account", {}),
     eurusdTick: fetchJson<ApiRecord>("/mt5-demo/market-data/tick/EURUSD", {}),
     xauusdTick: fetchJson<ApiRecord>("/mt5-demo/market-data/tick/XAUUSD", {}),
+    niftyTick: fetchJson<ApiRecord>("/mt5-demo/market-data/tick/NIFTY50", {}),
     marketScope: fetchJson<ApiRecord[]>("/market-scope/instruments/status", []),
     clientSignals: fetchJson<ApiRecord>("/client-signals-engine/current", { signals: [] }),
     brokerAccounts: fetchJson<ApiRecord>("/brokers/accounts", { accounts: [] }),
@@ -148,19 +149,46 @@ export function previewClientDemoTrade(payload: ClientOrderPayload) {
 
 export async function fetchClientMarketPrices() {
   try {
-    const [eurusdTick, xauusdTick] = await Promise.all([
+    const [eurusdTick, xauusdTick, niftyTick, marketScope] = await Promise.all([
       fetchJson<ApiRecord>("/mt5-demo/market-data/tick/EURUSD", {}, 1500),
       fetchJson<ApiRecord>("/mt5-demo/market-data/tick/XAUUSD", {}, 1500),
+      fetchJson<ApiRecord>("/mt5-demo/market-data/tick/NIFTY50", {}, 1500),
+      fetchJson<ApiRecord[]>("/market-scope/instruments/status", [], 1500),
     ]);
-    const errors = [eurusdTick.error, xauusdTick.error].filter((error): error is string => Boolean(error));
+    const errors = [eurusdTick.error, xauusdTick.error, niftyTick.error, marketScope.error].filter((error): error is string => Boolean(error));
     return {
       errors,
       eurusdTick: eurusdTick.ok ? eurusdTick.data : null,
+      marketScope: marketScope.ok ? marketScope.data : null,
+      niftyTick: niftyTick.ok ? niftyTick.data : null,
       ok: errors.length === 0,
       xauusdTick: xauusdTick.ok ? xauusdTick.data : null,
     };
   } catch (error) {
-    return { errors: [fetchFailureMessage("/mt5-demo/market-data/tick", error)], eurusdTick: null, ok: false, xauusdTick: null };
+    return { errors: [fetchFailureMessage("/mt5-demo/market-data/tick", error)], eurusdTick: null, marketScope: null, niftyTick: null, ok: false, xauusdTick: null };
+  }
+}
+
+export async function sendPortalChatMessage(payload: ApiRecord): Promise<{ reply: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const data = (await response.json().catch(() => ({}))) as ApiRecord;
+    if (!response.ok) {
+      throw new Error(typeof data.error === "string" ? data.error : `/api/chat returned ${response.status}`);
+    }
+    return { reply: typeof data.reply === "string" ? data.reply : "I could not produce a response from the trading assistant." };
+  } catch (error) {
+    throw new Error(fetchFailureMessage("/api/chat", error));
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

@@ -20,6 +20,7 @@ import {
   resumeAutoValidation,
   runAutoValidationExitManagement,
   sendGuardedClientDemoTrade,
+  sendPortalChatMessage,
   setExecutionMode,
   startAutoValidation,
   stopAutoValidation,
@@ -36,6 +37,7 @@ type DashboardData = {
   account: ApiRecord | null;
   eurusdTick: ApiRecord | null;
   xauusdTick: ApiRecord | null;
+  niftyTick: ApiRecord | null;
   marketScope: ApiRecord[];
   clientSignals: ApiRecord[];
   brokerAccounts: ApiRecord[];
@@ -117,6 +119,7 @@ const emptyData: DashboardData = {
   account: null,
   eurusdTick: null,
   xauusdTick: null,
+  niftyTick: null,
   marketScope: [],
   clientSignals: [],
   brokerAccounts: [],
@@ -208,12 +211,12 @@ function numeric(record: ApiRecord | null | undefined, keys: string[], fallback 
 }
 
 function marketNumber(value: number | null | undefined, digits = 5): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "Unavailable";
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "Unavailable";
   return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function marketPriceText(value: number | null | undefined, digits = 5): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "-";
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "-";
   return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
@@ -585,6 +588,7 @@ export function DashboardShell(_: {
           account: "account" in payload ? recordOrPrevious(payload.account, current.account) : current.account,
           eurusdTick: "eurusdTick" in payload ? recordOrPrevious(payload.eurusdTick, current.eurusdTick) : current.eurusdTick,
           xauusdTick: "xauusdTick" in payload ? recordOrPrevious(payload.xauusdTick, current.xauusdTick) : current.xauusdTick,
+          niftyTick: "niftyTick" in payload ? recordOrPrevious(payload.niftyTick, current.niftyTick) : current.niftyTick,
           marketScope: "marketScope" in payload ? arrayRecordsOrPrevious(payload.marketScope, current.marketScope, fullSuccess) : current.marketScope,
           clientSignals: "clientSignals" in payload ? recordsOrPrevious(payload.clientSignals, "signals", current.clientSignals, fullSuccess) : current.clientSignals,
           brokerAccounts: "brokerAccounts" in payload ? recordsOrPrevious(payload.brokerAccounts, "accounts", current.brokerAccounts, fullSuccess) : current.brokerAccounts,
@@ -625,12 +629,14 @@ export function DashboardShell(_: {
     priceRequestInFlight.current = true;
     try {
       const prices = await fetchClientMarketPrices();
-      if (prices.ok) {
+      if (prices.eurusdTick || prices.xauusdTick || prices.niftyTick || prices.marketScope) {
         setData((current) => {
           const next = {
             ...current,
-            eurusdTick: asRecord(prices.eurusdTick),
-            xauusdTick: asRecord(prices.xauusdTick),
+            eurusdTick: recordOrPrevious(prices.eurusdTick, current.eurusdTick),
+            xauusdTick: recordOrPrevious(prices.xauusdTick, current.xauusdTick),
+            niftyTick: recordOrPrevious(prices.niftyTick, current.niftyTick),
+            marketScope: Array.isArray(prices.marketScope) ? arrayRecordsOrPrevious(prices.marketScope, current.marketScope, false) : current.marketScope,
           };
           writeCachedDashboardData(next);
           return next;
@@ -807,8 +813,9 @@ export function DashboardShell(_: {
   const openFloatingPnl = floatingPnl(data.openPositions);
   const lastTrade = closedTrades[0] ?? null;
   const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
-  const eurusdLive = useLivePrice("EURUSD");
-  const xauusdLive = useLivePrice("XAUUSD");
+  const eurusdLive = useLivePrice("EURUSD", data.eurusdTick);
+  const xauusdLive = useLivePrice("XAUUSD", data.xauusdTick);
+  const niftyLive = useLivePrice("NIFTY50", data.niftyTick ?? findNiftyMarketRecord(data));
 
   const orderPayload = (signal: ApiRecord | null = selectedSignal): ClientOrderPayload => ({
     symbol: readText(signal, ["symbol"], selectedSymbol) === "XAUUSD" ? "XAUUSD" : "EURUSD",
@@ -1073,6 +1080,7 @@ export function DashboardShell(_: {
               closedTrades={clientClosedTrades}
               data={data}
               eurusdLive={eurusdLive}
+              niftyLive={niftyLive}
               xauusdLive={xauusdLive}
               lastSuccessfulSync={lastSuccessfulSync}
               loading={loading}
@@ -1262,6 +1270,7 @@ function ClientPortalOverview({
   eurusdLive,
   lastSuccessfulSync,
   loading,
+  niftyLive,
   onAutoValidationAction,
   openFloatingPnl,
   scopedOpenPositions,
@@ -1276,6 +1285,7 @@ function ClientPortalOverview({
   eurusdLive: LivePriceState;
   lastSuccessfulSync: string | null;
   loading: boolean;
+  niftyLive: LivePriceState;
   onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
   openFloatingPnl: number;
   scopedOpenPositions: ApiRecord[];
@@ -1299,14 +1309,13 @@ function ClientPortalOverview({
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
   const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
   const accountBalance = numeric(data.account, ["balance"]);
-  const niftyLive = niftySnapshot(data);
 
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
         <PortalStatCard accent="navy" label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
         <PortalStatCard accent="gold" label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
-        <PortalStatCard accent="blue" badge={niftyLive.connected ? "Market Feed" : "Disconnected"} badgeStyle={niftyLive.connected ? "default" : "neutral"} delta={niftyLive.connected ? `${signed(niftyLive.delta, 2)} (${signed(niftyLive.deltaPercent, 2)}%)` : "Waiting for market feed"} history={niftyLive.history} label="NIFTY50" value={marketPriceText(niftyLive.currentPrice, 2)} />
+        <PortalStatCard accent="blue" delta={niftyLive.endpointConnected ? `${signed(niftyLive.delta, 2)} (${signed(niftyLive.deltaPercent, 2)}%)` : "Waiting for market feed"} label="NIFTY50" live={niftyLive} value={marketPriceText(niftyLive.currentPrice, 2)} />
         <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" history={eurusdLive.history} />
         <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" history={xauusdLive.history} />
       </section>
@@ -1328,11 +1337,15 @@ function ClientPortalOverview({
   );
 }
 
-function niftySnapshot(data: DashboardData): { connected: boolean; currentPrice: number; delta: number; deltaPercent: number; history: LivePricePoint[] } {
-  const record = data.marketScope.find((item) => {
+function findNiftyMarketRecord(data: DashboardData): ApiRecord | null {
+  return data.marketScope.find((item) => {
     const text = JSON.stringify(item).toUpperCase();
     return text.includes("NIFTY");
   }) ?? null;
+}
+
+function niftySnapshot(data: DashboardData): { connected: boolean; currentPrice: number; delta: number; deltaPercent: number; history: LivePricePoint[] } {
+  const record = data.niftyTick ?? findNiftyMarketRecord(data);
   const currentPrice = numeric(record, ["current_price", "price", "last", "ltp", "bid", "value"]);
   const delta = numeric(record, ["delta", "change", "price_change"], 0);
   const deltaPercent = numeric(record, ["delta_percent", "change_percent", "percent_change"], 0);
@@ -1371,7 +1384,7 @@ function PortalStatCard({
 }) {
   const direction = live?.marketOpen ? live.direction : "flat";
   const points = live ? live.history : (history ?? []);
-  const badgeText = badge ?? (live ? (live.endpointConnected ? (live.marketOpen ? "MT5 Live" : "Closed") : "No Feed") : "Live");
+  const badgeText = badge ?? (live ? (live.endpointConnected ? (live.marketOpen ? "MT5 Live" : live.statusMessage || "Market Closed") : "Waiting") : "Live");
   return (
     <div className="portal-stat-card">
       <div className="portal-stat-header">
@@ -1686,7 +1699,7 @@ function MarketHoursCard() {
                 <span />
               </div>
               <strong>{session.name}</strong>
-              <span className={session.isOpen ? "open" : ""}>{session.isOpen ? `Open - ${session.countdown}` : session.countdown}</span>
+              <span className={session.isOpen ? "open" : ""}>{session.countdown}</span>
             </div>
           ))}
         </div>
@@ -1872,17 +1885,32 @@ function PortalChatView({ data }: { data: DashboardData }) {
   useEffect(() => {
     window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
   }, [messages]);
-  const send = () => {
+  const send = async () => {
     const question = input.trim();
     if (!question || typing) return;
     const userMessage = { id: `${Date.now()}-user`, role: "user" as const, text: question };
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setTyping(true);
-    window.setTimeout(() => {
-      setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: "assistant", text: buildBotAnswer(question, data) }]);
+    try {
+      const response = await sendPortalChatMessage({
+        context: buildChatContext(data),
+        messages: [...messages, userMessage].map((message) => ({ role: message.role, text: message.text })),
+        question,
+      });
+      setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: "assistant", text: response.reply }]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-assistant-error`,
+          role: "assistant",
+          text: `I could not reach the Groq assistant right now. ${error instanceof Error ? error.message : "Please try again shortly."}`,
+        },
+      ]);
+    } finally {
       setTyping(false);
-    }, 350);
+    }
   };
   return (
     <section className="chat-shell">
@@ -1903,11 +1931,63 @@ function PortalChatView({ data }: { data: DashboardData }) {
         {typing ? <div className="chat-message assistant"><span>AlgoPilot</span><p>Typing...</p></div> : null}
       </div>
       <div className="chat-input-row">
-        <input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") send(); }} placeholder="Ask about your trading system..." />
-        <button className="portal-primary-button !m-0 !w-auto !px-5" disabled={!input.trim() || typing} onClick={send} type="button">Send</button>
+        <input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void send(); }} placeholder="Ask about your trading system..." />
+        <button className="portal-primary-button !m-0 !w-auto !px-5" disabled={!input.trim() || typing} onClick={() => void send()} type="button">Send</button>
       </div>
     </section>
   );
+}
+
+function buildChatContext(data: DashboardData): string {
+  const autoStatus = asRecord(data.autoValidation);
+  const session = asRecord(autoStatus?.session);
+  const mt5Health = asRecord(autoStatus?.mt5_health);
+  const latestSignal = data.clientSignals[0] ?? null;
+  const latestTrade = data.recentTrades[0] ?? null;
+  const context = {
+    account: {
+      balance: numeric(data.account, ["balance"]),
+      equity: numeric(data.account, ["equity"]),
+      currency: readText(data.account, ["currency"], ""),
+      login: readText(data.account, ["login", "account", "account_id"], ""),
+      server: readText(data.account, ["server"], ""),
+    },
+    marketPrices: {
+      EURUSD: data.eurusdTick,
+      XAUUSD: data.xauusdTick,
+      NIFTY50: data.niftyTick ?? findNiftyMarketRecord(data),
+    },
+    mt5Status: {
+      status: friendlyText(mt5Health, ["status"], "not available"),
+      terminal: friendlyText(mt5Health, ["terminal"], "not available"),
+    },
+    validation: {
+      status: friendlyText(session, ["status"], "not started"),
+      closedTrades: readNumber(session, ["current_closed_trades", "current_session_closed"], 0),
+      openTrades: readNumber(session, ["current_open_trades", "current_session_open_trades"], 0),
+      targetTrades: readNumber(session, ["target_closed_trades", "target_validation_trades"], 30),
+      latestDecision: latestSignal
+        ? {
+            symbol: readText(latestSignal, ["symbol"], ""),
+            status: readText(latestSignal, ["execution_status", "status_level", "signal"], ""),
+            reason: readText(latestSignal, ["setup_reason", "reason", "what_needs_to_happen_next"], ""),
+          }
+        : null,
+    },
+    brokerAccounts: data.brokerAccounts,
+    brokerCopyPlans: data.brokerCopyPlans,
+    tradeHistory: {
+      count: data.recentTrades.length,
+      latestTrade,
+      journalSummary: data.journalSummary,
+      outcomeSummary: data.outcomeSummary,
+    },
+    openPositions: data.openPositions,
+    reasonPanel: buildReasonMessages(data).slice(0, 8),
+    forexSessions: "Shown in Asia/Kolkata with New York, London, Tokyo, and Sydney session countdowns.",
+    guidance: "Use only these values. If a requested value is absent, say it is not available yet.",
+  };
+  return JSON.stringify(context, null, 2);
 }
 
 function buildBotAnswer(question: string, data: DashboardData): string {

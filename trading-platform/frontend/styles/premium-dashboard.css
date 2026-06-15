@@ -1360,8 +1360,8 @@ select.calc-field {
   display: block;
   color: var(--accent-primary);
   font-family: var(--font-data), monospace;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 19px;
+  font-weight: 800;
   line-height: 1.35;
 }
 

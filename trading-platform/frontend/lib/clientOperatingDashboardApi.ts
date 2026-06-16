@@ -97,7 +97,7 @@ export async function fetchClientOperatingDashboard() {
       broker_execution_enabled: false,
     }),
     openPositions: fetchJson<ApiRecord>("/mt5-demo/position-monitor/open", { positions: [] }),
-    recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/recent?limit=20", []),
+    recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/recent?limit=100", []),
     journalSummary: fetchJson<ApiRecord>("/trade-journal/persistence/summary", {}),
     outcomeSummary: fetchJson<ApiRecord>("/analytics/outcomes/summary", {}),
     guardedStatus: fetchJson<ApiRecord>("/mt5-demo/guarded-demo-order/status", {}),
@@ -190,6 +190,25 @@ export async function sendPortalChatMessage(payload: ApiRecord): Promise<{ reply
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function fetchReasonMessages(): Promise<ApiRecord[]> {
+  const response = await fetch("/api/reasons", { cache: "no-store" });
+  const data = (await response.json().catch(() => ({}))) as ApiRecord;
+  if (!response.ok) return [];
+  return Array.isArray(data.messages) ? (data.messages.filter((item) => typeof item === "object" && item !== null) as ApiRecord[]) : [];
+}
+
+export async function syncReasonMessages(contexts: ApiRecord[]): Promise<ApiRecord[]> {
+  const response = await fetch("/api/reasons", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contexts }),
+    cache: "no-store",
+  });
+  const data = (await response.json().catch(() => ({}))) as ApiRecord;
+  if (!response.ok) return [];
+  return Array.isArray(data.messages) ? (data.messages.filter((item) => typeof item === "object" && item !== null) as ApiRecord[]) : [];
 }
 
 export function sendGuardedClientDemoTrade(payload: ClientOrderPayload) {

@@ -11,6 +11,7 @@ import {
   fetchClientOperatingDashboard,
   fetchClientMarketPrices,
   fetchClientSignals,
+  fetchReasonMessages,
   approveExecutionModeSignal,
   emergencyStopAutoValidation,
   fetchAutoValidationStatus,
@@ -21,6 +22,7 @@ import {
   runAutoValidationExitManagement,
   sendGuardedClientDemoTrade,
   sendPortalChatMessage,
+  syncReasonMessages,
   setExecutionMode,
   startAutoValidation,
   stopAutoValidation,
@@ -65,7 +67,6 @@ const DASHBOARD_CACHE_KEY = "client-dashboard-last-successful-snapshot-v2";
 const BALANCE_HISTORY_KEY = "algopilot_balance_history";
 const INITIAL_ACCOUNT_BALANCE = 100000;
 const CHAT_STORAGE_KEY = "algopilot_portal_chat_messages";
-const REASON_MESSAGES_KEY = "algopilot_validation_reason_messages";
 const ForexSessionsMap = dynamic(() => import("./ForexSessionsMap").then((mod) => mod.ForexSessionsMap), {
   loading: () => <div className="forex-leaflet-map-loading" />,
   ssr: false,
@@ -534,6 +535,7 @@ export function DashboardShell(_: {
   const [backendConnected, setBackendConnected] = useState(true);
   const [clientReady, setClientReady] = useState(false);
   const [calculatorResetToken, setCalculatorResetToken] = useState(0);
+  const [reasonRefreshToken, setReasonRefreshToken] = useState(0);
   const requestInFlight = useRef(false);
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
@@ -1047,6 +1049,7 @@ export function DashboardShell(_: {
   async function handleClientRefresh() {
     const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setCalculatorResetToken((token) => token + 1);
+    setReasonRefreshToken((token) => token + 1);
     setLastSuccessfulSync(timestamp);
     setToast(null);
     void Promise.allSettled([refreshPrices(), refreshSignals(), refreshAutoValidation()]).then((results) => {
@@ -1109,6 +1112,7 @@ export function DashboardShell(_: {
               onRefresh={() => void handleClientRefresh()}
               onSync={(action) => void handleSync(action)}
               openFloatingPnl={openFloatingPnl}
+              reasonRefreshToken={reasonRefreshToken}
               scopedOpenPositions={clientOpenPositions}
               todayPnl={todayPnl(clientClosedTrades)}
               workingAction={workingAction}
@@ -1850,9 +1854,23 @@ function PortalChatView({ data }: { data: DashboardData }) {
   });
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [reasonMessages, setReasonMessages] = useState<ReasonMessage[]>([]);
   useEffect(() => {
     window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
   }, [messages]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadReasons = async () => {
+      const records = await fetchReasonMessages();
+      if (!cancelled) setReasonMessages(normalizeReasonMessages(records).slice(0, 3));
+    };
+    void loadReasons();
+    const interval = window.setInterval(loadReasons, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
   const send = async () => {
     const question = input.trim();
     if (!question || typing) return;
@@ -1862,8 +1880,8 @@ function PortalChatView({ data }: { data: DashboardData }) {
     setTyping(true);
     try {
       const response = await sendPortalChatMessage({
-        context: buildChatContext(data),
-        messages: [...messages, userMessage].map((message) => ({ role: message.role, text: message.text })),
+        context: buildChatContext(data, reasonMessages),
+        messages: [...messages, userMessage].slice(-6).map((message) => ({ role: message.role, text: message.text })),
         question,
       });
       setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: "assistant", text: response.reply }]);
@@ -1873,7 +1891,7 @@ function PortalChatView({ data }: { data: DashboardData }) {
         {
           id: `${Date.now()}-assistant-error`,
           role: "assistant",
-          text: `I could not reach the Groq assistant right now. ${error instanceof Error ? error.message : "Please try again shortly."}`,
+          text: "The assistant is temporarily busy. Please try again in a few seconds.",
         },
       ]);
     } finally {
@@ -1906,12 +1924,14 @@ function PortalChatView({ data }: { data: DashboardData }) {
   );
 }
 
-function buildChatContext(data: DashboardData): string {
+function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): string {
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
   const mt5Health = asRecord(autoStatus?.mt5_health);
   const latestSignal = data.clientSignals[0] ?? null;
   const latestTrade = data.recentTrades[0] ?? null;
+  const eurusdStatus = data.eurusdTick ? { price: numeric(data.eurusdTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN), status: readText(data.eurusdTick, ["market_status", "status", "freshness"], "available") } : null;
+  const xauusdStatus = data.xauusdTick ? { price: numeric(data.xauusdTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN), status: readText(data.xauusdTick, ["market_status", "status", "freshness"], "available") } : null;
   const context = {
     account: {
       balance: numeric(data.account, ["balance"]),
@@ -1920,11 +1940,7 @@ function buildChatContext(data: DashboardData): string {
       login: readText(data.account, ["login", "account", "account_id"], ""),
       server: readText(data.account, ["server"], ""),
     },
-    marketPrices: {
-      EURUSD: data.eurusdTick,
-      XAUUSD: data.xauusdTick,
-      NIFTY50: data.niftyTick ?? findNiftyMarketRecord(data),
-    },
+    marketPrices: { EURUSD: eurusdStatus, XAUUSD: xauusdStatus },
     mt5Status: {
       status: friendlyText(mt5Health, ["status"], "not available"),
       terminal: friendlyText(mt5Health, ["terminal"], "not available"),
@@ -1942,16 +1958,17 @@ function buildChatContext(data: DashboardData): string {
           }
         : null,
     },
-    brokerAccounts: data.brokerAccounts,
-    brokerCopyPlans: data.brokerCopyPlans,
+    brokerStatus: {
+      accounts: data.brokerAccounts.slice(0, 3).map((account) => ({ broker: readText(account, ["broker", "broker_name", "name"], "Unavailable"), status: readText(account, ["status", "connection_status"], "Unavailable") })),
+      copyPlans: data.brokerCopyPlans.slice(0, 3).map((plan) => ({ broker: readText(plan, ["broker", "broker_name", "name"], "Unavailable"), status: readText(plan, ["status", "readiness_status"], "Unavailable") })),
+    },
     tradeHistory: {
       count: data.recentTrades.length,
       latestTrade,
       journalSummary: data.journalSummary,
       outcomeSummary: data.outcomeSummary,
     },
-    openPositions: data.openPositions,
-    reasonPanel: buildReasonMessages(data).slice(0, 8),
+    latestReasons: reasons.slice(0, 3).map((reason) => ({ symbol: reason.symbol, status: reason.status, reason: reason.reason, timestamp: reason.timestamp })),
     forexSessions: "Shown in Asia/Kolkata with New York, London, Tokyo, and Sydney session countdowns.",
     guidance: "Use only these values. If a requested value is absent, say it is not available yet.",
   };
@@ -1989,6 +2006,7 @@ function TestEnvironmentView(props: {
   onRefresh: () => void;
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
+  reasonRefreshToken: number;
   scopedOpenPositions: ApiRecord[];
   todayPnl: number;
   workingAction: string | null;
@@ -2101,45 +2119,31 @@ function readEurusdTestResults(): ApiRecord {
 
 function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
   const [filter, setFilter] = useState<"All" | "EURUSD" | "XAUUSD" | "Wins" | "Losses">("All");
-  const [results, setResults] = useState<ApiRecord>(() => readEurusdTestResults());
-  useEffect(() => {
-    if (closedTrades.length) {
-      const next = buildEurusdTestResults(readEurusdTestResults(), closedTrades, null, 30);
-      window.localStorage.setItem(EURUSD_TEST_RESULTS_KEY, JSON.stringify(next));
-      window.setTimeout(() => setResults(next), 0);
-    }
-    const sync = () => setResults(readEurusdTestResults());
-    window.addEventListener("storage", sync);
-    const interval = window.setInterval(sync, 2000);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.clearInterval(interval);
-    };
-  }, [closedTrades]);
-  const trades = Array.isArray(results.trades) ? (results.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const trades = closedTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
   const filtered = trades.filter((trade) => {
     if (filter === "All") return true;
     if (filter === "EURUSD") return readText(trade, ["symbol"], "EURUSD").toUpperCase() === "EURUSD";
     if (filter === "XAUUSD") return readText(trade, ["symbol"], "EURUSD").toUpperCase() === "XAUUSD";
-    if (filter === "Wins") return readText(trade, ["result"], "") === "WIN";
-    return readText(trade, ["result"], "") === "LOSS";
+    if (filter === "Wins") return readText(trade, ["result"], "").toUpperCase() === "WIN";
+    return readText(trade, ["result"], "").toUpperCase() === "LOSS";
   });
-  const wins = trades.filter((trade) => readText(trade, ["result"], "") === "WIN").length;
-  const losses = trades.filter((trade) => readText(trade, ["result"], "") === "LOSS").length;
-  const netPnl = trades.reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0);
+  const wins = trades.filter((trade) => readText(trade, ["result"], "").toUpperCase() === "WIN").length;
+  const losses = trades.filter((trade) => readText(trade, ["result"], "").toUpperCase() === "LOSS").length;
+  const netPnl = trades.reduce((sum, trade) => sum + readNumber(trade, ["net_pnl", "total_pnl", "profit_loss", "pnl"], 0), 0);
   const exportCSV = () => {
-    const header = ["#", "Symbol", "Type", "Entry", "Exit", "Open Time", "Close Time", "Lots", "P&L", "Result"];
+    const header = ["Time", "Symbol", "Buy/Sell", "Entry", "Stop Loss", "Take Profit", "Exit", "Result", "P&L", "Status", "Reason"];
     const rows = trades.map((trade, index) => [
-      String(index + 1),
+      readText(trade, ["closed_at", "closeTime", "close_time"], ""),
       readText(trade, ["symbol"], "EURUSD"),
-      readText(trade, ["type"], ""),
-      String(readNumber(trade, ["entryPrice"], 0)),
-      String(readNumber(trade, ["exitPrice"], 0)),
-      readText(trade, ["openTime"], ""),
-      readText(trade, ["closeTime"], ""),
-      String(readNumber(trade, ["lots"], 0)),
-      String(readNumber(trade, ["pnl"], 0)),
+      readText(trade, ["side", "type"], ""),
+      String(readNumber(trade, ["entry_price", "entryPrice"], 0)),
+      String(readNumber(trade, ["stop_loss", "stopLoss"], 0)),
+      String(readNumber(trade, ["take_profit", "takeProfit"], 0)),
+      String(readNumber(trade, ["close_price", "exitPrice"], 0)),
       readText(trade, ["result"], ""),
+      String(readNumber(trade, ["net_pnl", "total_pnl", "profit_loss", "pnl"], 0)),
+      readText(trade, ["status"], ""),
+      readText(trade, ["exit_reason", "setup_reason", "reason"], ""),
     ]);
     const csv = [header, ...rows].map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -2170,25 +2174,28 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
         <div className="trade-history-table-wrap">
           <table className="trade-history-table">
             <thead>
-              <tr>{["#", "Symbol", "Type", "Entry Price", "Exit Price", "Open Time", "Close Time", "Lots", "P&L", "Result"].map((item) => <th key={item}>{item}</th>)}</tr>
+              <tr>{["Time", "Symbol", "Buy/Sell", "Entry", "Stop Loss", "Take Profit", "Exit", "Result", "P&L", "Status", "Reason"].map((item) => <th key={item}>{item}</th>)}</tr>
             </thead>
             <tbody>
               {filtered.map((trade, index) => {
-                const type = readText(trade, ["type"], "BUY");
-                const result = readText(trade, ["result"], "");
-                const pnl = readNumber(trade, ["pnl"], 0);
+                const type = readText(trade, ["side", "type"], "BUY");
+                const result = readText(trade, ["result"], "").toUpperCase();
+                const pnl = readNumber(trade, ["net_pnl", "total_pnl", "profit_loss", "pnl"], 0);
+                const symbol = readText(trade, ["symbol"], "EURUSD");
+                const digits = symbol === "XAUUSD" ? 2 : 5;
                 return (
-                  <tr key={readText(trade, ["id"], String(index))}>
-                    <td>{index + 1}</td>
-                    <td>{readText(trade, ["symbol"], "EURUSD")}</td>
+                  <tr key={readText(trade, ["trade_id", "id", "mt5_ticket"], String(index))}>
+                    <td>{formatTradeTime(readText(trade, ["closed_at", "closeTime", "close_time"], ""))}</td>
+                    <td>{symbol}</td>
                     <td><span className={`trade-type-pill ${type === "SELL" ? "sell" : "buy"}`}>{type}</span></td>
-                    <td>{marketPriceText(readNumber(trade, ["entryPrice"], 0))}</td>
-                    <td>{marketPriceText(readNumber(trade, ["exitPrice"], 0))}</td>
-                    <td>{formatTradeTime(readText(trade, ["openTime"], ""))}</td>
-                    <td>{formatTradeTime(readText(trade, ["closeTime"], ""))}</td>
-                    <td>{readNumber(trade, ["lots"], 0).toFixed(2)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["entry_price", "entryPrice"], Number.NaN), digits)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["stop_loss", "stopLoss"], Number.NaN), digits)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["take_profit", "takeProfit"], Number.NaN), digits)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["close_price", "exitPrice"], Number.NaN), digits)}</td>
+                    <td><span className={`result-pill ${result === "LOSS" ? "loss" : "win"}`}>{result || "UNKNOWN"}</span></td>
                     <td className={pnlClass(pnl)}>{money(pnl)}</td>
-                    <td><span className={`result-pill ${result === "LOSS" ? "loss" : "win"}`}>{result || "WIN"}</span></td>
+                    <td>{readText(trade, ["status"], "CLOSED")}</td>
+                    <td>{readText(trade, ["exit_reason", "setup_reason", "reason"], "Closed trade")}</td>
                   </tr>
                 );
               })}
@@ -2377,6 +2384,7 @@ function ClientDashboardView({
   onRefresh,
   onSync,
   openFloatingPnl,
+  reasonRefreshToken = 0,
   scopedOpenPositions,
   showHero = true,
   todayPnl,
@@ -2393,6 +2401,7 @@ function ClientDashboardView({
   onRefresh: () => void;
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
+  reasonRefreshToken?: number;
   scopedOpenPositions: ApiRecord[];
   showHero?: boolean;
   todayPnl: number;
@@ -2419,7 +2428,7 @@ function ClientDashboardView({
   const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus);
   const closeReports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const recentClosed = mergeClosedTrades(closedTrades, closeReports).slice(0, 5);
-  const reasonRecords = useMemo(() => buildReasonMessages(data), [data]);
+  const reasonContexts = useMemo(() => buildReasonContexts(data), [data]);
   const controlsDisabled = workingAction !== null;
 
   return (
@@ -2506,7 +2515,7 @@ function ClientDashboardView({
             <ClientMetric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
           </div>
         </div>
-        <ValidationReasonPanel messages={reasonRecords} />
+        <ValidationReasonPanel contexts={reasonContexts} refreshToken={reasonRefreshToken} />
       </section>
 
       <section className="premium-table-panel">
@@ -2740,59 +2749,98 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonMessage = { id: string; reason: string; status: "Accepted" | "Rejected" | "Waiting" | "Error"; symbol: string; timestamp: string };
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
+type ReasonMessage = { id: string; reason: string; status: ReasonStatus; symbol: string; timestamp: string; groqGenerated?: boolean };
+type ReasonContext = ApiRecord & { status: ReasonStatus; symbol: string; timestamp: string };
 
-function buildReasonMessages(data: DashboardData): ReasonMessage[] {
-  const messages: ReasonMessage[] = [];
+function buildReasonContexts(data: DashboardData): ReasonContext[] {
+  const messages: ReasonContext[] = [];
+  const niftyConnected = Boolean(data.niftyTick && numeric(data.niftyTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN));
   for (const signal of data.clientSignals) {
     const statusText = readText(signal, ["execution_status", "status_level", "risk_status"], "Waiting").toUpperCase();
-    const status: ReasonMessage["status"] = statusText.includes("APPROVED") || statusText.includes("READY") ? "Accepted" : statusText.includes("BLOCK") || statusText.includes("REJECT") || statusText.includes("DENIED") ? "Rejected" : "Waiting";
-    const symbol = readText(signal, ["symbol"], "EURUSD");
+    const status: ReasonStatus = statusText.includes("APPROVED") || statusText.includes("READY") ? "Accepted" : statusText.includes("BLOCK") || statusText.includes("REJECT") || statusText.includes("DENIED") ? "Rejected" : "Waiting";
+    const symbol = readText(signal, ["symbol"], "EURUSD").toUpperCase();
+    if (symbol === "NIFTY50" && !niftyConnected) continue;
     const reason = readText(signal, ["setup_reason", "reason", "what_needs_to_happen_next"], status === "Accepted" ? "Strategy and risk checks confirmed this setup." : "Waiting for strategy, market, and risk checks to confirm.");
     const timestamp = readText(signal, ["timestamp", "created_at", "updated_at"], "1970-01-01T00:00:00.000Z");
-    messages.push({ id: `signal-${symbol}-${timestamp}-${reason}`, reason, status, symbol, timestamp });
-    const blockers = cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements);
-    blockers.forEach((blocker, index) => {
-      messages.push({ id: `blocker-${symbol}-${timestamp}-${index}-${blocker}`, reason: blocker, status: "Rejected", symbol, timestamp });
+    messages.push({
+      symbol,
+      status,
+      timestamp,
+      reason,
+      confidence: numeric(signal, ["confidence", "signal_confidence", "confidence_score"], Number.NaN),
+      riskReward: numeric(signal, ["risk_reward_ratio", "rr"], Number.NaN),
+      requiredRR: numeric(signal, ["required_rr", "minimum_rr"], 1.5),
+      trendAlignment: signal.trend_alignment ?? signal.trendAlignment ?? signal.trend_confirmed,
+      liquiditySweep: signal.liquidity_sweep ?? signal.liquiditySweep,
+      bosConfirmed: signal.bos_confirmed ?? signal.bosConfirmed,
+      orderBlockConfirmed: signal.order_block_confirmed ?? signal.orderBlockConfirmed,
+      signalHash: readText(signal, ["signal_hash", "hash"], ""),
+      blockers: cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements),
+      setupReason: reason,
+      niftyConnected,
     });
+    const blockers = cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements);
+    if (blockers.length && status === "Rejected") messages[messages.length - 1].blockers = blockers;
   }
   const autoStatus = asRecord(data.autoValidation);
   const reports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   reports.forEach((report, index) => {
     const pnl = readNumber(report, ["net_pnl", "profit_loss", "pnl"], 0);
+    const symbol = friendlyText(report, ["symbol"], "EURUSD").toUpperCase();
+    if (symbol === "NIFTY50" && !niftyConnected) return;
     messages.push({
-      id: `report-${readText(report, ["mt5_ticket", "ticket"], String(index))}`,
+      ticket: readText(report, ["mt5_ticket", "ticket"], String(index)),
       reason: friendlyText(report, ["exit_reason", "reason", "close_reason"], pnl >= 0 ? "Trade closed with accepted validation outcome." : "Trade closed after validation/risk management."),
       status: pnl >= 0 ? "Accepted" : "Rejected",
-      symbol: friendlyText(report, ["symbol"], "EURUSD"),
+      symbol,
       timestamp: readText(report, ["closed_at", "generated_at", "timestamp"], "1970-01-01T00:00:00.000Z"),
+      pnl,
+      niftyConnected,
     });
   });
-  if (!messages.length) {
-    messages.push({ id: "waiting-default", reason: "Waiting for the next strategy decision. Accepted or rejected trade reasons will remain here once generated.", status: "Waiting", symbol: "EURUSD", timestamp: "1970-01-01T00:00:00.000Z" });
-  }
   return messages;
 }
 
-function readStoredReasons(): ReasonMessage[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(window.localStorage.getItem(REASON_MESSAGES_KEY) ?? "[]") as ReasonMessage[];
-  } catch {
-    return [];
-  }
+function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
+  return records
+    .map((record) => ({
+      id: readText(record, ["id"], ""),
+      reason: readText(record, ["reason"], ""),
+      status: (["Accepted", "Rejected", "Waiting", "Error"].includes(readText(record, ["status"], "")) ? readText(record, ["status"], "") : "Waiting") as ReasonStatus,
+      symbol: readText(record, ["symbol"], "EURUSD"),
+      timestamp: readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z"),
+      groqGenerated: record.groqGenerated === true,
+    }))
+    .filter((message) => message.id && message.reason && message.groqGenerated);
 }
 
-function ValidationReasonPanel({ messages }: { messages: ReasonMessage[] }) {
-  const [storedMessages, setStoredMessages] = useState<ReasonMessage[]>(() => readStoredReasons());
+function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: ReasonContext[]; refreshToken?: number }) {
+  const [storedMessages, setStoredMessages] = useState<ReasonMessage[]>([]);
   useEffect(() => {
-    const merged = [...messages, ...readStoredReasons()];
-    const byId = new Map<string, ReasonMessage>();
-    merged.forEach((message) => byId.set(message.id, message));
-    const next = Array.from(byId.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50);
-    window.localStorage.setItem(REASON_MESSAGES_KEY, JSON.stringify(next));
-    setStoredMessages(next);
-  }, [messages]);
+    let cancelled = false;
+    const load = async () => {
+      const records = await fetchReasonMessages();
+      if (!cancelled) setStoredMessages(normalizeReasonMessages(records));
+    };
+    void load();
+    const interval = window.setInterval(load, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [refreshToken]);
+  const contextKey = useMemo(() => JSON.stringify(contexts.slice(0, 6)), [contexts]);
+  useEffect(() => {
+    if (!contexts.length) return;
+    let cancelled = false;
+    void syncReasonMessages(contexts).then((records) => {
+      if (!cancelled && records.length) setStoredMessages(normalizeReasonMessages(records));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contextKey, contexts]);
   return (
     <div className="premium-panel">
       <div className="flex items-start justify-between gap-3">
@@ -2816,7 +2864,7 @@ function ValidationReasonPanel({ messages }: { messages: ReasonMessage[] }) {
           ))}
         </div>
       ) : (
-        <EmptyState text="Waiting for validation reasons" />
+        <EmptyState text="Waiting for Groq-generated validation reasons" />
       )}
     </div>
   );
@@ -3011,7 +3059,7 @@ function AutoValidationPanel({
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
   const netPnl = readNumber(session, ["net_pnl"], 0);
-  const reasonMessages = buildReasonMessages({ ...emptyData, autoValidation: status });
+  const reasonMessages = buildReasonContexts({ ...emptyData, autoValidation: status });
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -3142,7 +3190,7 @@ function AutoValidationPanel({
           <Metric label="Worst Setup Type" value={readText(session, ["worst_setup_type"], "Unavailable")} compact />
         </div>
         <div className="mt-4">
-          <ValidationReasonPanel messages={reasonMessages} />
+          <ValidationReasonPanel contexts={reasonMessages} />
         </div>
       </div>
 

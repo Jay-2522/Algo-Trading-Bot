@@ -9,7 +9,8 @@ type ChatMessage = {
 };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+const DEFAULT_GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
+const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 
 const SYSTEM_PROMPT = `You are AlgoPilot's client trading assistant.
 Speak clearly to non-technical traders while staying professional.
@@ -31,10 +32,9 @@ function normalizeMessages(value: unknown): ChatMessage[] {
 }
 
 export async function POST(request: Request) {
-  console.log("Groq key loaded:", Boolean(process.env.GROQ_API_KEY));
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "Groq API key is not configured. Add GROQ_API_KEY to the server environment." }, { status: 503 });
+    return NextResponse.json({ error: BUSY_MESSAGE }, { status: 503 });
   }
 
   try {
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     const context = typeof body.context === "string" ? body.context.slice(0, 12000) : "";
-    const history = normalizeMessages(body.messages).slice(-12);
+    const history = normalizeMessages(body.messages).slice(-6);
     const groqResponse = await fetch(GROQ_CHAT_URL, {
       method: "POST",
       headers: {
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: DEFAULT_GROQ_MODEL,
         temperature: 0.25,
-        max_tokens: 700,
+        max_tokens: 500,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "system", content: `Current project data snapshot:\n${context || "No dashboard data snapshot was supplied."}` },
@@ -68,8 +68,7 @@ export async function POST(request: Request) {
 
     const payload = (await groqResponse.json().catch(() => ({}))) as Record<string, unknown>;
     if (!groqResponse.ok) {
-      const error = typeof payload.error === "object" && payload.error !== null && "message" in payload.error ? String((payload.error as Record<string, unknown>).message) : `Groq returned ${groqResponse.status}`;
-      return NextResponse.json({ error }, { status: 502 });
+      return NextResponse.json({ error: BUSY_MESSAGE }, { status: 502 });
     }
 
     const choices = Array.isArray(payload.choices) ? payload.choices : [];
@@ -78,6 +77,6 @@ export async function POST(request: Request) {
     const reply = typeof message?.content === "string" ? message.content.trim() : "";
     return NextResponse.json({ reply: reply || "I could not produce a response from the trading assistant." });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Groq chat request failed." }, { status: 500 });
+    return NextResponse.json({ error: BUSY_MESSAGE }, { status: 500 });
   }
 }

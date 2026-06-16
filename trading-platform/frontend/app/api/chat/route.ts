@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 type ChatMessage = {
   role: "user" | "assistant" | "system";
   content?: string;
@@ -29,6 +31,7 @@ function normalizeMessages(value: unknown): ChatMessage[] {
 }
 
 export async function POST(request: Request) {
+  console.log("Groq key loaded:", Boolean(process.env.GROQ_API_KEY));
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "Groq API key is not configured. Add GROQ_API_KEY to the server environment." }, { status: 503 });

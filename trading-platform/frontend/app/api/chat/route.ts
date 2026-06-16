@@ -13,7 +13,7 @@ const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 
-const SYSTEM_PROMPT = "You are AlgoPilot. Answer briefly using only provided data. If data is missing, say it is not available yet. Do not invent trades, prices, balances, or reasons.";
+const SYSTEM_PROMPT = 'You are AlgoPilot. Answer briefly using only provided data. Do not invent trades, prices, balances, reasons, candle counts, or timeframes. If validator diagnostics are unavailable, say "Validator diagnostics are not available for this decision."';
 
 function normalizeMessages(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) return [];

@@ -7,13 +7,19 @@ export const runtime = "nodejs";
 type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
 type ApiRecord = Record<string, unknown>;
 type ReasonMessage = {
+  candles_loaded?: number | null;
+  candles_required?: number | null;
+  data_source?: string;
   id: string;
   groqGenerated: boolean;
   reason: string;
+  rejection_reason?: string;
   source?: "groq" | "rule";
   status: ReasonStatus;
   symbol: string;
   timestamp: string;
+  timeframe?: string;
+  validation_status?: string;
 };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -43,6 +49,22 @@ function numberValue(value: unknown): number | null {
   return null;
 }
 
+function firstText(record: ApiRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = text(record[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function firstNumber(record: ApiRecord, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberValue(record[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function booleanValue(value: unknown): boolean | null {
   if (typeof value === "boolean") return value;
   const normalized = text(value).toLowerCase();
@@ -62,6 +84,9 @@ function stableId(context: ApiRecord): string {
     timestamp: text(context.timestamp),
     reason: text(context.reason || context.setupReason),
     signalHash: text(context.signalHash),
+    timeframe: text(context.timeframe),
+    candlesLoaded: text(context.candles_loaded),
+    rejectionReason: text(context.rejection_reason),
   });
   let hash = 0;
   for (let index = 0; index < raw.length; index += 1) {
@@ -87,6 +112,17 @@ function isMeaningfulContext(context: ApiRecord): boolean {
   return Boolean(symbol && (reason || text(context.status) || text(context.signalHash) || text(context.ticket)));
 }
 
+function validatorDiagnostics(context: ApiRecord): Pick<ReasonMessage, "candles_loaded" | "candles_required" | "data_source" | "rejection_reason" | "timeframe" | "validation_status"> {
+  return {
+    candles_loaded: firstNumber(context, ["candles_loaded", "candlesLoaded", "loaded_candles", "loadedCandles", "bars_loaded", "barsLoaded", "history_bars", "candle_count"]),
+    candles_required: firstNumber(context, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]),
+    data_source: firstText(context, ["data_source", "dataSource", "source", "feed_source", "feedSource"]),
+    rejection_reason: firstText(context, ["rejection_reason", "rejectionReason", "final_rejection_reason", "finalRejectionReason", "reason", "setupReason", "whatNeedsToHappenNext"]),
+    timeframe: firstText(context, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase(),
+    validation_status: firstText(context, ["validation_status", "validationStatus", "status", "execution_status", "executionStatus", "status_level", "risk_status"]),
+  };
+}
+
 async function readStore(): Promise<ReasonMessage[]> {
   try {
     const raw = await readFile(STORE_PATH, "utf-8");
@@ -106,6 +142,27 @@ async function readStore(): Promise<ReasonMessage[]> {
 async function writeStore(messages: ReasonMessage[]): Promise<void> {
   await mkdir(path.dirname(STORE_PATH), { recursive: true });
   await writeFile(STORE_PATH, JSON.stringify(messages.slice(0, 50), null, 2), "utf-8");
+}
+
+function normalizeReasonForDedupe(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").replace(/[.。]+$/g, "").trim();
+}
+
+function meaningfulReasonKey(message: ReasonMessage): string {
+  return [text(message.symbol).toUpperCase(), message.status, normalizeReasonForDedupe(text(message.reason))].join("|");
+}
+
+function dedupeMeaningfully(messages: ReasonMessage[]): ReasonMessage[] {
+  const seenIds = new Set<string>();
+  const seenReasons = new Set<string>();
+  return messages.filter((message) => {
+    const id = text(message.id);
+    const reasonKey = meaningfulReasonKey(message);
+    if (!id || !text(message.reason) || seenIds.has(id) || seenReasons.has(reasonKey)) return false;
+    seenIds.add(id);
+    seenReasons.add(reasonKey);
+    return true;
+  });
 }
 
 function containsBlocker(blockers: string[], patterns: RegExp[]): boolean {
@@ -252,14 +309,18 @@ export async function POST(request: Request) {
     const body = (await request.json()) as ApiRecord;
     const contexts = Array.isArray(body.contexts) ? (body.contexts.filter((item) => item && typeof item === "object") as ApiRecord[]) : [];
     const existing = await readStore();
-    const byId = new Map(existing.map((message) => [message.id, message]));
+    const existingIds = new Set(existing.map((message) => message.id));
+    const existingReasonKeys = new Set(existing.map(meaningfulReasonKey));
+    const newMessages: ReasonMessage[] = [];
     for (const context of contexts.filter(isMeaningfulContext).slice(0, 6)) {
       const id = stableId(context);
-      if (byId.has(id)) continue;
+      if (existingIds.has(id)) continue;
       const fallbackReason = ruleBasedReason(context);
       const groqReason = await generateReason(fallbackReason);
       const reason = groqReason || fallbackReason;
-      byId.set(id, {
+      const diagnostics = validatorDiagnostics(context);
+      const message: ReasonMessage = {
+        ...diagnostics,
         id,
         groqGenerated: Boolean(groqReason),
         reason,
@@ -267,11 +328,14 @@ export async function POST(request: Request) {
         status: normalizeStatus(context.status),
         symbol: text(context.symbol).toUpperCase(),
         timestamp: text(context.timestamp) || new Date().toISOString(),
-      });
+      };
+      const reasonKey = meaningfulReasonKey(message);
+      if (existingReasonKeys.has(reasonKey) || newMessages.some((item) => meaningfulReasonKey(item) === reasonKey)) continue;
+      newMessages.push(message);
+      existingIds.add(id);
+      existingReasonKeys.add(reasonKey);
     }
-    const next = Array.from(byId.values())
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 50);
+    const next = dedupeMeaningfully([...newMessages, ...existing]).slice(0, 50);
     await writeStore(next);
     return NextResponse.json({ messages: next });
   } catch {

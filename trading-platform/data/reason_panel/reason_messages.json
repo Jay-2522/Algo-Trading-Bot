@@ -1,1 +1,47 @@
-[]
+[
+  {
+    "id": "reason-89db8ba6",
+    "groqGenerated": true,
+    "reason": "The EURUSD was rejected due to a lack of sufficient real candles in its 15-minute history.",
+    "source": "groq",
+    "status": "Rejected",
+    "symbol": "EURUSD",
+    "timestamp": "2026-06-16T21:42:48.163618+00:00"
+  },
+  {
+    "id": "reason-23da96d1",
+    "groqGenerated": true,
+    "reason": "The EURUSD was rejected due to a lack of sufficient real candles in its h4 history.",
+    "source": "groq",
+    "status": "Rejected",
+    "symbol": "EURUSD",
+    "timestamp": "2026-06-16T21:37:54.486130+00:00"
+  },
+  {
+    "id": "reason-a7472eba",
+    "groqGenerated": true,
+    "reason": "The XAUUSD was rejected due to a lack of sufficient real candles in its 15-minute history.",
+    "source": "groq",
+    "status": "Rejected",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-06-16T21:36:09.789155+00:00"
+  },
+  {
+    "id": "reason-70edd481",
+    "groqGenerated": false,
+    "reason": "XAUUSD is waiting because BOS confirmation has not appeared yet.",
+    "source": "rule",
+    "status": "Waiting",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-06-16T21:33:25.244924+00:00"
+  },
+  {
+    "id": "reason-da1b8fba",
+    "groqGenerated": false,
+    "reason": "EURUSD is waiting because BOS confirmation has not appeared yet.",
+    "source": "rule",
+    "status": "Waiting",
+    "symbol": "EURUSD",
+    "timestamp": "2026-06-16T21:33:24.906729+00:00"
+  }
+]

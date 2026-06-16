@@ -1900,7 +1900,7 @@ function PortalChatView({ data }: { data: DashboardData }) {
     let cancelled = false;
     const loadReasons = async () => {
       const records = await fetchReasonMessages();
-      if (!cancelled) setReasonMessages(normalizeReasonMessages(records).slice(0, 1));
+      if (!cancelled) setReasonMessages(normalizeReasonMessages(records).slice(0, 50));
     };
     void loadReasons();
     const interval = window.setInterval(loadReasons, 5000);
@@ -1916,6 +1916,12 @@ function PortalChatView({ data }: { data: DashboardData }) {
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setTyping(true);
+    const diagnosticAnswer = answerValidatorDiagnosticQuestion(question, reasonMessages);
+    if (diagnosticAnswer) {
+      setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: "assistant", text: diagnosticAnswer }]);
+      setTyping(false);
+      return;
+    }
     try {
       const response = await sendPortalChatMessage({
         context: buildChatContext(data, reasonMessages),
@@ -2010,8 +2016,82 @@ function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): s
       summary: data.journalSummary,
     },
     latestReason: reasons.slice(0, 1).map((reason) => ({ symbol: reason.symbol, status: reason.status, reason: reason.reason, timestamp: reason.timestamp }))[0] ?? null,
+    validatorDiagnostics: buildChatValidatorDiagnostics(reasons),
   };
   return JSON.stringify(context);
+}
+
+function questionSymbol(question: string): string | null {
+  const upper = question.toUpperCase();
+  if (upper.includes("EURUSD")) return "EURUSD";
+  if (upper.includes("XAUUSD")) return "XAUUSD";
+  if (upper.includes("NIFTY50") || upper.includes("NIFTY 50")) return "NIFTY50";
+  return null;
+}
+
+function hasValidatorDiagnostics(message: ReasonMessage): boolean {
+  return Boolean(
+    message.timeframe ||
+      message.candles_loaded != null ||
+      message.candles_required != null ||
+      message.data_source ||
+      message.validation_status ||
+      message.rejection_reason,
+  );
+}
+
+function findValidatorDiagnostic(question: string, reasons: ReasonMessage[]): ReasonMessage | null {
+  const symbol = questionSymbol(question);
+  const candidates = symbol ? reasons.filter((reason) => reason.symbol.toUpperCase() === symbol) : reasons;
+  return candidates.find(hasValidatorDiagnostics) ?? null;
+}
+
+function answerValidatorDiagnosticQuestion(question: string, reasons: ReasonMessage[]): string | null {
+  const normalized = question.toLowerCase();
+  const asksCandles = normalized.includes("candles") || normalized.includes("candle");
+  const asksRejected = normalized.includes("why") && normalized.includes("reject");
+  const asksTimeframe = normalized.includes("timeframe") && (normalized.includes("failed") || normalized.includes("fail") || normalized.includes("which"));
+  if (!asksCandles && !asksRejected && !asksTimeframe) return null;
+  const diagnostic = findValidatorDiagnostic(question, reasons);
+  if (!diagnostic) return "Validator diagnostics are not available for this decision.";
+  if (asksCandles) {
+    if (diagnostic.candles_loaded === null && diagnostic.candles_required === null) return "Validator diagnostics are not available for this decision.";
+    const loaded = diagnostic.candles_loaded !== null && diagnostic.candles_loaded !== undefined ? `${diagnostic.candles_loaded}` : "not available";
+    const required = diagnostic.candles_required !== null && diagnostic.candles_required !== undefined ? `${diagnostic.candles_required}` : "not available";
+    return `${diagnostic.symbol} loaded ${loaded} candles. Required candles: ${required}.`;
+  }
+  if (asksTimeframe) {
+    if (!diagnostic.timeframe) return "Validator diagnostics are not available for this decision.";
+    return `${diagnostic.symbol} validation timeframe: ${diagnostic.timeframe}.`;
+  }
+  if (asksRejected) {
+    const reason = diagnostic.rejection_reason || (diagnostic.status === "Rejected" ? diagnostic.reason : "");
+    if (!reason) return "Validator diagnostics are not available for this decision.";
+    return `${diagnostic.symbol} was rejected because ${reason.replace(/\.$/, "")}.`;
+  }
+  return null;
+}
+
+function buildChatValidatorDiagnostics(reasons: ReasonMessage[]): ApiRecord[] {
+  const seen = new Set<string>();
+  return reasons
+    .filter(hasValidatorDiagnostics)
+    .filter((reason) => {
+      const key = reason.symbol.toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3)
+    .map((reason) => ({
+      symbol: reason.symbol,
+      timeframe: reason.timeframe || null,
+      candles_loaded: reason.candles_loaded ?? null,
+      candles_required: reason.candles_required ?? null,
+      data_source: reason.data_source || null,
+      validation_status: reason.validation_status || reason.status,
+      rejection_reason: reason.rejection_reason || null,
+    }));
 }
 
 function buildBotAnswer(question: string, data: DashboardData): string {
@@ -2789,8 +2869,49 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
 }
 
 type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
-type ReasonMessage = { id: string; reason: string; status: ReasonStatus; symbol: string; timestamp: string; groqGenerated?: boolean; source?: "groq" | "rule" };
+type ReasonMessage = {
+  candles_loaded?: number | null;
+  candles_required?: number | null;
+  data_source?: string;
+  id: string;
+  reason: string;
+  rejection_reason?: string;
+  status: ReasonStatus;
+  symbol: string;
+  timestamp: string;
+  timeframe?: string;
+  validation_status?: string;
+  groqGenerated?: boolean;
+  source?: "groq" | "rule";
+};
 type ReasonContext = ApiRecord & { status: ReasonStatus; symbol: string; timestamp: string };
+
+function firstReasonText(record: ApiRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = readText(record, [key], "");
+    if (value) return value;
+  }
+  return "";
+}
+
+function firstReasonNumber(record: ApiRecord, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numeric(record, [key], Number.NaN);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function validatorDiagnosticsFromRecord(record: ApiRecord, fallbackStatus: ReasonStatus, fallbackReason: string): ApiRecord {
+  return {
+    candles_loaded: firstReasonNumber(record, ["candles_loaded", "candlesLoaded", "loaded_candles", "loadedCandles", "bars_loaded", "barsLoaded", "history_bars", "candle_count"]),
+    candles_required: firstReasonNumber(record, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]),
+    data_source: firstReasonText(record, ["data_source", "dataSource", "source", "feed_source", "feedSource"]),
+    rejection_reason: firstReasonText(record, ["rejection_reason", "rejectionReason", "final_rejection_reason", "finalRejectionReason"]) || fallbackReason,
+    timeframe: firstReasonText(record, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase(),
+    validation_status: firstReasonText(record, ["validation_status", "validationStatus", "execution_status", "executionStatus", "status_level", "risk_status"]) || fallbackStatus,
+  };
+}
 
 function buildReasonContexts(data: DashboardData): ReasonContext[] {
   const messages: ReasonContext[] = [];
@@ -2818,6 +2939,7 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
       blockers: cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements),
       setupReason: reason,
       niftyConnected,
+      ...validatorDiagnosticsFromRecord(signal, status, reason),
     });
     const blockers = cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements);
     if (blockers.length && status === "Rejected") messages[messages.length - 1].blockers = blockers;
@@ -2836,6 +2958,7 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
       timestamp: readText(report, ["closed_at", "generated_at", "timestamp"], "1970-01-01T00:00:00.000Z"),
       pnl,
       niftyConnected,
+      ...validatorDiagnosticsFromRecord(report, pnl >= 0 ? "Accepted" : "Rejected", friendlyText(report, ["exit_reason", "reason", "close_reason"], "")),
     });
   });
   return messages;
@@ -2847,10 +2970,22 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
       const source: ReasonMessage["source"] = readText(record, ["source"], "") === "groq" ? "groq" : "rule";
       return {
         id: readText(record, ["id"], ""),
+        candles_loaded: (() => {
+          const value = numeric(record, ["candles_loaded"], Number.NaN);
+          return Number.isFinite(value) ? value : null;
+        })(),
+        candles_required: (() => {
+          const value = numeric(record, ["candles_required"], Number.NaN);
+          return Number.isFinite(value) ? value : null;
+        })(),
+        data_source: readText(record, ["data_source"], ""),
         reason: readText(record, ["reason"], ""),
+        rejection_reason: readText(record, ["rejection_reason"], ""),
         status: (["Accepted", "Rejected", "Waiting", "Error"].includes(readText(record, ["status"], "")) ? readText(record, ["status"], "") : "Waiting") as ReasonStatus,
         symbol: readText(record, ["symbol"], "EURUSD"),
         timestamp: readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z"),
+        timeframe: readText(record, ["timeframe"], ""),
+        validation_status: readText(record, ["validation_status"], ""),
         groqGenerated: record.groqGenerated === true,
         source,
       };
@@ -2891,7 +3026,7 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
           <p className="premium-section-eyebrow">Reason</p>
           <p className="premium-metric-value text-white">Bot Decisions</p>
         </div>
-        <p className="premium-metric-label">{storedMessages.length} messages</p>
+        <p className="premium-metric-label">Latest 50 messages</p>
       </div>
       {storedMessages.length > 0 ? (
         <div className="reason-message-list">

@@ -249,6 +249,8 @@ class RealSignalEngineService:
             trade_plan = {}
         status_level = self._status_level(signal_action, score, missing_requirements) if profile == "PRODUCTION" else self._profile_status_level(signal_action, score, missing_requirements, profile_confidence)
         profile_reasons = self._profile_reasons(profile, reasons, missing_requirements)
+        rejection_reason = "" if signal_action in {"BUY", "SELL"} else self._reason_text(profile_reasons)
+        validator_diagnostics = self._validator_diagnostics(normalized, feed, execution_status, rejection_reason)
 
         signal = {
             "symbol": normalized,
@@ -291,6 +293,7 @@ class RealSignalEngineService:
             "candle_source": feed["candle_source"],
             "signal_hash": self._signal_hash(normalized, signal_action, trade_plan, score),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
+            **validator_diagnostics,
             "strategy_profile": profile,
             "production_rules_unchanged": profile == "PRODUCTION",
             "simulation_only": True,
@@ -372,6 +375,38 @@ class RealSignalEngineService:
             if history.get("status") != "OK" or len(candles) < 30:
                 blockers.append(f"{timeframe} history has insufficient real candles.")
         return {"timeframes": timeframes, "validation": validation, "blockers": blockers, "candle_source": candle_source}
+
+    def _validator_diagnostics(
+        self,
+        symbol: str,
+        feed: dict[str, Any],
+        validation_status: str,
+        rejection_reason: str,
+        default_timeframe: str = "M15",
+    ) -> dict[str, Any]:
+        candle_source = feed.get("candle_source") if isinstance(feed, dict) else {}
+        timeframe_reports = candle_source.get("timeframes", {}) if isinstance(candle_source, dict) else {}
+        failed_timeframe = ""
+        failed_report: dict[str, Any] | None = None
+        for timeframe in self.timeframes:
+            report = timeframe_reports.get(timeframe, {}) if isinstance(timeframe_reports, dict) else {}
+            returned_count = int(report.get("returned_count") or 0)
+            status = str(report.get("status") or "").upper()
+            if status != "OK" or returned_count < 30:
+                failed_timeframe = timeframe
+                failed_report = report
+                break
+        timeframe = failed_timeframe or default_timeframe
+        report = failed_report or (timeframe_reports.get(timeframe, {}) if isinstance(timeframe_reports, dict) else {})
+        return {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "candles_loaded": int(report.get("returned_count") or len(feed.get("timeframes", {}).get(timeframe, []))),
+            "candles_required": 30,
+            "data_source": str(report.get("source") or candle_source.get("source") or "REAL_SMC_MT5_MULTI_TIMEFRAME"),
+            "validation_status": validation_status,
+            "rejection_reason": rejection_reason,
+        }
 
     def _timeframe_context(self, candles: list[dict[str, Any]]) -> dict[str, Any]:
         closes = [float(c["close"]) for c in candles if self._valid_candle(c)]
@@ -1088,15 +1123,18 @@ class RealSignalEngineService:
         return f"Need {needed}. Current confidence {score['confidence']}/{threshold}."
 
     def _wait(self, symbol: str, reasons: list[str], risk_status: str = "NO_SIGNAL", feed: dict[str, Any] | None = None) -> dict[str, Any]:
+        reason_text = self._reason_text(reasons)
+        validation_status = "BLOCKED" if risk_status == "INSUFFICIENT_DATA" else "WAITING"
+        validator_diagnostics = self._validator_diagnostics(symbol, feed or {}, validation_status, reason_text)
         return {
             "symbol": symbol,
             "signal": "WAIT",
             "status_level": "REJECTED" if risk_status in {"INSUFFICIENT_DATA", "REJECTED"} else "WAIT",
             "confidence": None,
-            "reason": self._reason_text(reasons),
-            "what_needs_to_happen_next": self._reason_text(reasons),
-            "missing_requirements": [{"code": "INSUFFICIENT_DATA", "label": self._reason_text(reasons)}],
-            "setup_reason": self._reason_text(reasons),
+            "reason": reason_text,
+            "what_needs_to_happen_next": reason_text,
+            "missing_requirements": [{"code": "INSUFFICIENT_DATA", "label": reason_text}],
+            "setup_reason": reason_text,
             "entry": None,
             "stop_loss": None,
             "take_profit": None,
@@ -1118,12 +1156,13 @@ class RealSignalEngineService:
             "approval_audit": {
                 "status": risk_status,
                 "final_decision": "WAIT",
-                "final_approval_reason": self._reason_text(reasons),
+                "final_approval_reason": reason_text,
                 "confidence_result": "INSUFFICIENT_DATA",
-                "missing_requirements": [{"code": "INSUFFICIENT_DATA", "label": self._reason_text(reasons)}],
+                "missing_requirements": [{"code": "INSUFFICIENT_DATA", "label": reason_text}],
             },
             "candle_source": (feed or {}).get("candle_source", {"symbol": symbol, "timeframes": {}}),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
+            **validator_diagnostics,
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,

@@ -1,47 +1,62 @@
 [
   {
-    "id": "reason-89db8ba6",
-    "groqGenerated": true,
-    "reason": "The EURUSD was rejected due to a lack of sufficient real candles in its 15-minute history.",
-    "source": "groq",
-    "status": "Rejected",
-    "symbol": "EURUSD",
-    "timestamp": "2026-06-16T21:42:48.163618+00:00"
-  },
-  {
-    "id": "reason-23da96d1",
-    "groqGenerated": true,
-    "reason": "The EURUSD was rejected due to a lack of sufficient real candles in its h4 history.",
-    "source": "groq",
-    "status": "Rejected",
-    "symbol": "EURUSD",
-    "timestamp": "2026-06-16T21:37:54.486130+00:00"
-  },
-  {
-    "id": "reason-a7472eba",
-    "groqGenerated": true,
-    "reason": "The XAUUSD was rejected due to a lack of sufficient real candles in its 15-minute history.",
-    "source": "groq",
-    "status": "Rejected",
-    "symbol": "XAUUSD",
-    "timestamp": "2026-06-16T21:36:09.789155+00:00"
-  },
-  {
-    "id": "reason-70edd481",
-    "groqGenerated": false,
-    "reason": "XAUUSD is waiting because BOS confirmation has not appeared yet.",
-    "source": "rule",
-    "status": "Waiting",
-    "symbol": "XAUUSD",
-    "timestamp": "2026-06-16T21:33:25.244924+00:00"
-  },
-  {
-    "id": "reason-da1b8fba",
+    "candles_loaded": null,
+    "candles_required": null,
+    "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
+    "rejection_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 12; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Current time is outside London/New York trading sessions. Spread is not acceptable for preview readiness. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "timeframe": "",
+    "validation_status": "WAITING",
+    "id": "reason-b04c46ea",
     "groqGenerated": false,
     "reason": "EURUSD is waiting because BOS confirmation has not appeared yet.",
     "source": "rule",
     "status": "Waiting",
     "symbol": "EURUSD",
-    "timestamp": "2026-06-16T21:33:24.906729+00:00"
+    "timestamp": "2026-06-16T21:50:30.699174+00:00"
+  },
+  {
+    "candles_loaded": null,
+    "candles_required": null,
+    "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
+    "rejection_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 38; tradeable threshold is 75. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Current time is outside London/New York trading sessions. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "timeframe": "",
+    "validation_status": "WAITING",
+    "id": "reason-b82150fc",
+    "groqGenerated": false,
+    "reason": "XAUUSD is waiting because BOS confirmation has not appeared yet.",
+    "source": "rule",
+    "status": "Waiting",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-06-16T21:50:30.985829+00:00"
+  },
+  {
+    "candles_loaded": 220,
+    "candles_required": 30,
+    "data_source": "VANTAGE_DEMO",
+    "rejection_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 12; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Current time is outside London/New York trading sessions. Spread is not acceptable for preview readiness. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "timeframe": "M15",
+    "validation_status": "WAITING",
+    "id": "reason-11671a3b",
+    "groqGenerated": true,
+    "reason": "The EURUSD trade setup is not valid due to unconfirmed alignment across multiple timeframes and several other key conditions not being met.",
+    "source": "groq",
+    "status": "Rejected",
+    "symbol": "EURUSD",
+    "timestamp": "2026-06-16T21:57:18.546005+00:00"
+  },
+  {
+    "candles_loaded": 220,
+    "candles_required": 30,
+    "data_source": "VANTAGE_DEMO",
+    "rejection_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 38; tradeable threshold is 75. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Current time is outside London/New York trading sessions. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "timeframe": "M15",
+    "validation_status": "WAITING",
+    "id": "reason-7da01c15",
+    "groqGenerated": true,
+    "reason": "The XAUUSD setup is currently in a waiting state due to unconfirmed alignment across M15, H1, and H4 timeframes.",
+    "source": "groq",
+    "status": "Waiting",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-06-16T21:57:18.764497+00:00"
   }
 ]

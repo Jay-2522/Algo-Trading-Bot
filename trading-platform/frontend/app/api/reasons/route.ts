@@ -8,8 +8,9 @@ type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
 type ApiRecord = Record<string, unknown>;
 type ReasonMessage = {
   id: string;
-  groqGenerated: true;
+  groqGenerated: boolean;
   reason: string;
+  source?: "groq" | "rule";
   status: ReasonStatus;
   symbol: string;
   timestamp: string;
@@ -17,6 +18,7 @@ type ReasonMessage = {
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
+const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const STORE_PATH = path.join(process.cwd(), "..", "data", "reason_panel", "reason_messages.json");
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 const NOISY_PATTERNS = [
@@ -39,6 +41,18 @@ function numberValue(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function booleanValue(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  const normalized = text(value).toLowerCase();
+  if (["true", "yes", "passed", "pass", "confirmed", "ready"].includes(normalized)) return true;
+  if (["false", "no", "failed", "fail", "missing", "waiting", "pending"].includes(normalized)) return false;
+  return null;
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function stableId(context: ApiRecord): string {
@@ -77,7 +91,13 @@ async function readStore(): Promise<ReasonMessage[]> {
   try {
     const raw = await readFile(STORE_PATH, "utf-8");
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? (parsed.filter((item) => item && typeof item === "object" && (item as ApiRecord).groqGenerated === true) as ReasonMessage[]) : [];
+    return Array.isArray(parsed)
+      ? (parsed.filter((item) => {
+          if (!item || typeof item !== "object") return false;
+          const record = item as ApiRecord;
+          return Boolean(text(record.id) && text(record.reason) && text(record.symbol));
+        }) as ReasonMessage[])
+      : [];
   } catch {
     return [];
   }
@@ -104,32 +124,91 @@ function fallbackPromptContext(context: ApiRecord): ApiRecord {
   };
 }
 
+function containsBlocker(blockers: string[], patterns: RegExp[]): boolean {
+  return blockers.some((blocker) => patterns.some((pattern) => pattern.test(blocker)));
+}
+
+function ruleBasedReason(context: ApiRecord): string {
+  const symbol = text(context.symbol).toUpperCase() || "This setup";
+  const status = normalizeStatus(context.status);
+  const riskReward = numberValue(context.riskReward);
+  const requiredRR = numberValue(context.requiredRR) ?? 1.5;
+  const bosConfirmed = booleanValue(context.bosConfirmed);
+  const liquiditySweep = booleanValue(context.liquiditySweep);
+  const trendAlignment = booleanValue(context.trendAlignment);
+  const orderBlockConfirmed = booleanValue(context.orderBlockConfirmed);
+  const blockers = Array.isArray(context.blockers) ? context.blockers.map(text).filter(Boolean) : [];
+  const suppliedReason = text(context.reason || context.setupReason || context.whatNeedsToHappenNext);
+
+  if (riskReward !== null && riskReward < requiredRR) {
+    return `${symbol} was rejected because the risk/reward ratio was ${formatNumber(riskReward)}, below the required minimum of ${formatNumber(requiredRR)}.`;
+  }
+  if (containsBlocker(blockers, [/risk.?reward/i, /\brr\b/i]) && riskReward !== null) {
+    return `${symbol} was rejected because the risk/reward ratio was ${formatNumber(riskReward)}, which did not meet the validation requirement.`;
+  }
+  if (bosConfirmed === false || containsBlocker(blockers, [/\bbos\b/i, /break of structure/i])) {
+    return `${symbol} is waiting because BOS confirmation has not appeared yet.`;
+  }
+  if (liquiditySweep === false || containsBlocker(blockers, [/liquidity/i, /sweep/i])) {
+    return `${symbol} is waiting because the liquidity sweep confirmation has not appeared yet.`;
+  }
+  if (trendAlignment === false || containsBlocker(blockers, [/trend/i, /alignment/i])) {
+    return `${symbol} is waiting because trend alignment has not passed yet.`;
+  }
+  if (orderBlockConfirmed === false || containsBlocker(blockers, [/order block/i, /\bob\b/i])) {
+    return `${symbol} is waiting because order block confirmation is still missing.`;
+  }
+  if (blockers.length > 0) {
+    return `${symbol} was ${status === "Rejected" ? "rejected" : "held"} because ${blockers.slice(0, 2).join(" and ")}.`;
+  }
+  if (status === "Accepted") {
+    return `${symbol} was accepted because trend alignment, liquidity sweep, BOS confirmation, and risk checks passed.`;
+  }
+  if (status === "Rejected") {
+    return suppliedReason ? `${symbol} was rejected because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} was rejected because one or more validation rules did not pass.`;
+  }
+  if (status === "Error") {
+    return suppliedReason ? `${symbol} needs attention because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} needs attention because validation could not complete cleanly.`;
+  }
+  return suppliedReason ? `${symbol} is waiting because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for the validation rules to confirm before any trade can be accepted.`;
+}
+
 async function generateReason(context: ApiRecord): Promise<string | null> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return null;
-  const response = await fetch(GROQ_CHAT_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature: 0.15,
-      max_tokens: 120,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You explain AlgoPilot validation decisions to traders. The validation engine is source of truth. Do not accept/reject trades, invent trades, invent prices, or mention internal systems. Return one concise explanation answering what happened, why, which rule passed/failed, and what the user should understand.",
+  const models = [GROQ_MODEL, GROQ_FALLBACK_MODEL].filter((model, index, modelsList) => model && modelsList.indexOf(model) === index);
+  let payload: ApiRecord = {};
+  let response: Response | null = null;
+  for (const model of models) {
+    try {
+      response = await fetch(GROQ_CHAT_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
-        { role: "user", content: JSON.stringify(fallbackPromptContext(context)) },
-      ],
-    }),
-    cache: "no-store",
-  });
-  const payload = (await response.json().catch(() => ({}))) as ApiRecord;
-  if (!response.ok) return null;
+        body: JSON.stringify({
+          model,
+          temperature: 0.15,
+          max_tokens: 120,
+          messages: [
+            {
+              role: "system",
+              content: "Rewrite validation decisions for traders. Validation data is source of truth. Do not decide trades, invent facts, or mention Groq. One concise sentence.",
+            },
+            { role: "user", content: JSON.stringify(fallbackPromptContext(context)) },
+          ],
+        }),
+        cache: "no-store",
+      });
+      payload = (await response.json().catch(() => ({}))) as ApiRecord;
+      if (response.ok) break;
+    } catch {
+      response = null;
+      payload = {};
+    }
+  }
+  if (!response?.ok) return null;
   const choices = Array.isArray(payload.choices) ? payload.choices : [];
   const first = choices[0] as ApiRecord | undefined;
   const message = first?.message as ApiRecord | undefined;
@@ -152,12 +231,14 @@ export async function POST(request: Request) {
     for (const context of contexts.filter(isMeaningfulContext).slice(0, 6)) {
       const id = stableId(context);
       if (byId.has(id)) continue;
-      const reason = await generateReason(context);
-      if (!reason) continue;
+      const fallbackReason = ruleBasedReason(context);
+      const groqReason = await generateReason(context);
+      const reason = groqReason || fallbackReason;
       byId.set(id, {
         id,
-        groqGenerated: true,
+        groqGenerated: Boolean(groqReason),
         reason,
+        source: groqReason ? "groq" : "rule",
         status: normalizeStatus(context.status),
         symbol: text(context.symbol).toUpperCase(),
         timestamp: text(context.timestamp) || new Date().toISOString(),

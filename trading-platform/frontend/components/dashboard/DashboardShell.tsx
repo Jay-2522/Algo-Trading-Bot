@@ -2789,7 +2789,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
 }
 
 type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
-type ReasonMessage = { id: string; reason: string; status: ReasonStatus; symbol: string; timestamp: string; groqGenerated?: boolean };
+type ReasonMessage = { id: string; reason: string; status: ReasonStatus; symbol: string; timestamp: string; groqGenerated?: boolean; source?: "groq" | "rule" };
 type ReasonContext = ApiRecord & { status: ReasonStatus; symbol: string; timestamp: string };
 
 function buildReasonContexts(data: DashboardData): ReasonContext[] {
@@ -2843,15 +2843,19 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
 
 function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
   return records
-    .map((record) => ({
-      id: readText(record, ["id"], ""),
-      reason: readText(record, ["reason"], ""),
-      status: (["Accepted", "Rejected", "Waiting", "Error"].includes(readText(record, ["status"], "")) ? readText(record, ["status"], "") : "Waiting") as ReasonStatus,
-      symbol: readText(record, ["symbol"], "EURUSD"),
-      timestamp: readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z"),
-      groqGenerated: record.groqGenerated === true,
-    }))
-    .filter((message) => message.id && message.reason && message.groqGenerated);
+    .map((record): ReasonMessage => {
+      const source: ReasonMessage["source"] = readText(record, ["source"], "") === "groq" ? "groq" : "rule";
+      return {
+        id: readText(record, ["id"], ""),
+        reason: readText(record, ["reason"], ""),
+        status: (["Accepted", "Rejected", "Waiting", "Error"].includes(readText(record, ["status"], "")) ? readText(record, ["status"], "") : "Waiting") as ReasonStatus,
+        symbol: readText(record, ["symbol"], "EURUSD"),
+        timestamp: readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z"),
+        groqGenerated: record.groqGenerated === true,
+        source,
+      };
+    })
+    .filter((message) => message.id && message.reason);
 }
 
 function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: ReasonContext[]; refreshToken?: number }) {
@@ -2903,7 +2907,7 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
           ))}
         </div>
       ) : (
-        <EmptyState text="Waiting for Groq-generated validation reasons" />
+        <EmptyState text="Waiting for validation decisions" />
       )}
     </div>
   );

@@ -9,14 +9,10 @@ type ChatMessage = {
 };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
+const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 
-const SYSTEM_PROMPT = `You are AlgoPilot's client trading assistant.
-Speak clearly to non-technical traders while staying professional.
-Use only provided project data when discussing balances, prices, brokers, trades, validation, accepted or rejected trades, reasons, MT5 status, and account status.
-If data is missing, say that data is not available yet. Do not invent trade results, broker balances, prices, or strategy outcomes.
-You understand these project areas: Dashboard, MT5 live prices, EURUSD, XAUUSD, NIFTY50, StarTrader, Vantage, FXPro, position size calculator, account balance, trade history, validation rounds, accepted/rejected trades, Reason panel, Test Environment, Forex sessions, risk management, and strategy rule checks.`;
+const SYSTEM_PROMPT = "You are AlgoPilot. Answer briefly using only provided data. If data is missing, say it is not available yet. Do not invent trades, prices, balances, or reasons.";
 
 function normalizeMessages(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) return [];
@@ -29,6 +25,34 @@ function normalizeMessages(value: unknown): ChatMessage[] {
       return role && content.trim() ? { role, content: content.trim() } : null;
     })
     .filter(Boolean) as ChatMessage[];
+}
+
+function parseRetryAfter(value: string | null, milliseconds = false): number | null {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.max(1, Math.ceil(milliseconds ? numeric / 1000 : numeric));
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
+  const match = value.match(/(\d+(?:\.\d+)?)\s*(ms|s|m)?/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return null;
+  const unit = match[2]?.toLowerCase();
+  if (unit === "ms") return Math.max(1, Math.ceil(amount / 1000));
+  if (unit === "m") return Math.max(1, Math.ceil(amount * 60));
+  return Math.max(1, Math.ceil(amount));
+}
+
+function retryAfterSeconds(response: Response): number {
+  const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
+  if (retryAfter) return retryAfter;
+  const retryAfterMs = parseRetryAfter(response.headers.get("retry-after-ms"), true);
+  if (retryAfterMs) return retryAfterMs;
+  const tokenReset = parseRetryAfter(response.headers.get("x-ratelimit-reset-tokens"));
+  if (tokenReset) return tokenReset;
+  const requestReset = parseRetryAfter(response.headers.get("x-ratelimit-reset-requests"));
+  if (requestReset) return requestReset;
+  return 10;
 }
 
 export async function POST(request: Request) {
@@ -44,8 +68,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
 
-    const context = typeof body.context === "string" ? body.context.slice(0, 12000) : "";
-    const history = normalizeMessages(body.messages).slice(-6);
+    console.log("Groq model:", GROQ_MODEL);
+
+    const context = typeof body.context === "string" ? body.context.slice(0, 2000) : "";
+    const history = normalizeMessages(body.messages).slice(-3);
     const groqResponse = await fetch(GROQ_CHAT_URL, {
       method: "POST",
       headers: {
@@ -53,12 +79,12 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: DEFAULT_GROQ_MODEL,
-        temperature: 0.25,
-        max_tokens: 500,
+        model: GROQ_MODEL,
+        temperature: 0.3,
+        max_tokens: 150,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "system", content: `Current project data snapshot:\n${context || "No dashboard data snapshot was supplied."}` },
+          ...(context ? [{ role: "system", content: `Data:\n${context}` }] : []),
           ...history.map((message) => ({ role: message.role, content: message.content })),
           { role: "user", content: question },
         ],
@@ -68,7 +94,10 @@ export async function POST(request: Request) {
 
     const payload = (await groqResponse.json().catch(() => ({}))) as Record<string, unknown>;
     if (!groqResponse.ok) {
-      return NextResponse.json({ error: BUSY_MESSAGE }, { status: 502 });
+      if (groqResponse.status === 429) {
+        return NextResponse.json({ error: BUSY_MESSAGE, rateLimited: true, retryAfterSeconds: retryAfterSeconds(groqResponse) }, { status: 429 });
+      }
+      return NextResponse.json({ error: BUSY_MESSAGE, rateLimited: false }, { status: 502 });
     }
 
     const choices = Array.isArray(payload.choices) ? payload.choices : [];

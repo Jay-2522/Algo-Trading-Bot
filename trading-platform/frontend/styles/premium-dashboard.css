@@ -1502,6 +1502,14 @@ select.calc-field {
   box-shadow: 0 0 0 3px rgba(37, 94, 220, 0.14);
 }
 
+.chat-cooldown {
+  margin: -4px 0 0;
+  color: var(--accent-primary);
+  font-family: var(--font-body), sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .reason-message-list {
   display: grid;
   gap: 10px;

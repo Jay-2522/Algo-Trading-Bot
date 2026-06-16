@@ -1843,26 +1843,64 @@ function RawDataCard({ data, title }: { data: ApiRecord | null; title: string })
 
 type ChatMessage = { id: string; role: "user" | "assistant"; text: string };
 
+type ChatRequestError = Error & { rateLimited?: boolean; retryAfterSeconds?: number };
+
+const RAW_GROQ_ERROR_PATTERN = /(groq|rate.?limit|tokens per minute|retry-after|x-ratelimit|api key|organization|returned 4\d\d|returned 5\d\d|model.*llama|raw provider)/i;
+
+function isRawGroqErrorMessage(message: ChatMessage): boolean {
+  return message.role === "assistant" && RAW_GROQ_ERROR_PATTERN.test(message.text);
+}
+
+function sanitizeChatMessages(value: unknown): ChatMessage[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const id = typeof record.id === "string" ? record.id : `stored-${index}`;
+      const role = record.role === "user" || record.role === "assistant" ? record.role : null;
+      const text = typeof record.text === "string" ? record.text.trim() : "";
+      return role && text ? ({ id, role, text } as ChatMessage) : null;
+    })
+    .filter((message): message is ChatMessage => message !== null)
+    .filter((message) => !isRawGroqErrorMessage(message));
+}
+
 function PortalChatView({ data }: { data: DashboardData }) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     if (typeof window === "undefined") return [];
     try {
-      return JSON.parse(window.sessionStorage.getItem(CHAT_STORAGE_KEY) ?? "[]") as ChatMessage[];
+      return sanitizeChatMessages(JSON.parse(window.sessionStorage.getItem(CHAT_STORAGE_KEY) ?? "[]"));
     } catch {
       return [];
     }
   });
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownNow, setCooldownNow] = useState(0);
   const [reasonMessages, setReasonMessages] = useState<ReasonMessage[]>([]);
+  const cooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - cooldownNow) / 1000));
+  const coolingDown = cooldownSeconds > 0;
   useEffect(() => {
-    window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    const cleanMessages = messages.filter((message) => !isRawGroqErrorMessage(message));
+    if (cleanMessages.length !== messages.length) {
+      setMessages(cleanMessages);
+      return;
+    }
+    window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(cleanMessages));
   }, [messages]);
+  useEffect(() => {
+    if (!coolingDown) return undefined;
+    setCooldownNow(Date.now());
+    const interval = window.setInterval(() => setCooldownNow(Date.now()), 250);
+    return () => window.clearInterval(interval);
+  }, [coolingDown, cooldownUntil]);
   useEffect(() => {
     let cancelled = false;
     const loadReasons = async () => {
       const records = await fetchReasonMessages();
-      if (!cancelled) setReasonMessages(normalizeReasonMessages(records).slice(0, 3));
+      if (!cancelled) setReasonMessages(normalizeReasonMessages(records).slice(0, 1));
     };
     void loadReasons();
     const interval = window.setInterval(loadReasons, 5000);
@@ -1873,7 +1911,7 @@ function PortalChatView({ data }: { data: DashboardData }) {
   }, []);
   const send = async () => {
     const question = input.trim();
-    if (!question || typing) return;
+    if (!question || typing || coolingDown) return;
     const userMessage = { id: `${Date.now()}-user`, role: "user" as const, text: question };
     setMessages((current) => [...current, userMessage]);
     setInput("");
@@ -1881,11 +1919,26 @@ function PortalChatView({ data }: { data: DashboardData }) {
     try {
       const response = await sendPortalChatMessage({
         context: buildChatContext(data, reasonMessages),
-        messages: [...messages, userMessage].slice(-6).map((message) => ({ role: message.role, text: message.text })),
+        messages: messages.slice(-3).map((message) => ({ role: message.role, text: message.text })),
         question,
       });
       setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: "assistant", text: response.reply }]);
     } catch (error) {
+      const chatError = error as ChatRequestError;
+      if (chatError.rateLimited) {
+        const seconds = Math.max(10, Math.ceil(chatError.retryAfterSeconds ?? 10));
+        setCooldownUntil(Date.now() + seconds * 1000);
+        setCooldownNow(Date.now());
+        setMessages((current) => [
+          ...current,
+          {
+            id: `${Date.now()}-assistant-cooldown`,
+            role: "assistant",
+            text: `Assistant is cooling down. Try again in ${seconds} seconds.`,
+          },
+        ]);
+        return;
+      }
       setMessages((current) => [
         ...current,
         {
@@ -1916,9 +1969,10 @@ function PortalChatView({ data }: { data: DashboardData }) {
         )) : <EmptyState text="Ask about validation, trades, account status, rejected signals, or dashboard data." />}
         {typing ? <div className="chat-message assistant"><span>AlgoPilot</span><p>Typing...</p></div> : null}
       </div>
+      {coolingDown ? <p className="chat-cooldown">Assistant is cooling down. Try again in {cooldownSeconds} seconds.</p> : null}
       <div className="chat-input-row">
         <input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void send(); }} placeholder="Ask about your trading system..." />
-        <button className="portal-primary-button !m-0 !w-auto !px-5" disabled={!input.trim() || typing} onClick={() => void send()} type="button">Send</button>
+        <button className="portal-primary-button !m-0 !w-auto !px-5" disabled={!input.trim() || typing || coolingDown} onClick={() => void send()} type="button">Send</button>
       </div>
     </section>
   );
@@ -1929,28 +1983,20 @@ function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): s
   const session = asRecord(autoStatus?.session);
   const mt5Health = asRecord(autoStatus?.mt5_health);
   const latestSignal = data.clientSignals[0] ?? null;
-  const latestTrade = data.recentTrades[0] ?? null;
   const eurusdStatus = data.eurusdTick ? { price: numeric(data.eurusdTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN), status: readText(data.eurusdTick, ["market_status", "status", "freshness"], "available") } : null;
   const xauusdStatus = data.xauusdTick ? { price: numeric(data.xauusdTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN), status: readText(data.xauusdTick, ["market_status", "status", "freshness"], "available") } : null;
   const context = {
     account: {
       balance: numeric(data.account, ["balance"]),
       equity: numeric(data.account, ["equity"]),
-      currency: readText(data.account, ["currency"], ""),
-      login: readText(data.account, ["login", "account", "account_id"], ""),
-      server: readText(data.account, ["server"], ""),
     },
-    marketPrices: { EURUSD: eurusdStatus, XAUUSD: xauusdStatus },
-    mt5Status: {
-      status: friendlyText(mt5Health, ["status"], "not available"),
-      terminal: friendlyText(mt5Health, ["terminal"], "not available"),
-    },
+    markets: { EURUSD: eurusdStatus, XAUUSD: xauusdStatus },
+    mt5: friendlyText(mt5Health, ["status"], "not available"),
     validation: {
       status: friendlyText(session, ["status"], "not started"),
       closedTrades: readNumber(session, ["current_closed_trades", "current_session_closed"], 0),
       openTrades: readNumber(session, ["current_open_trades", "current_session_open_trades"], 0),
-      targetTrades: readNumber(session, ["target_closed_trades", "target_validation_trades"], 30),
-      latestDecision: latestSignal
+      latestSignal: latestSignal
         ? {
             symbol: readText(latestSignal, ["symbol"], ""),
             status: readText(latestSignal, ["execution_status", "status_level", "signal"], ""),
@@ -1958,21 +2004,14 @@ function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): s
           }
         : null,
     },
-    brokerStatus: {
-      accounts: data.brokerAccounts.slice(0, 3).map((account) => ({ broker: readText(account, ["broker", "broker_name", "name"], "Unavailable"), status: readText(account, ["status", "connection_status"], "Unavailable") })),
-      copyPlans: data.brokerCopyPlans.slice(0, 3).map((plan) => ({ broker: readText(plan, ["broker", "broker_name", "name"], "Unavailable"), status: readText(plan, ["status", "readiness_status"], "Unavailable") })),
-    },
-    tradeHistory: {
+    brokers: data.brokerAccounts.slice(0, 3).map((account) => ({ broker: readText(account, ["broker", "broker_name", "name"], "Unavailable"), status: readText(account, ["status", "connection_status"], "Unavailable") })),
+    trades: {
       count: data.recentTrades.length,
-      latestTrade,
-      journalSummary: data.journalSummary,
-      outcomeSummary: data.outcomeSummary,
+      summary: data.journalSummary,
     },
-    latestReasons: reasons.slice(0, 3).map((reason) => ({ symbol: reason.symbol, status: reason.status, reason: reason.reason, timestamp: reason.timestamp })),
-    forexSessions: "Shown in Asia/Kolkata with New York, London, Tokyo, and Sydney session countdowns.",
-    guidance: "Use only these values. If a requested value is absent, say it is not available yet.",
+    latestReason: reasons.slice(0, 1).map((reason) => ({ symbol: reason.symbol, status: reason.status, reason: reason.reason, timestamp: reason.timestamp }))[0] ?? null,
   };
-  return JSON.stringify(context, null, 2);
+  return JSON.stringify(context);
 }
 
 function buildBotAnswer(question: string, data: DashboardData): string {

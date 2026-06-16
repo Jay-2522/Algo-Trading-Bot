@@ -169,7 +169,7 @@ export async function fetchClientMarketPrices() {
   }
 }
 
-export async function sendPortalChatMessage(payload: ApiRecord): Promise<{ reply: string }> {
+export async function sendPortalChatMessage(payload: ApiRecord): Promise<{ rateLimited?: boolean; reply: string; retryAfterSeconds?: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
@@ -182,10 +182,18 @@ export async function sendPortalChatMessage(payload: ApiRecord): Promise<{ reply
     });
     const data = (await response.json().catch(() => ({}))) as ApiRecord;
     if (!response.ok) {
-      throw new Error(typeof data.error === "string" ? data.error : `/api/chat returned ${response.status}`);
+      const error = new Error("The assistant is temporarily busy. Please try again in a few seconds.") as Error & { rateLimited?: boolean; retryAfterSeconds?: number };
+      error.rateLimited = data.rateLimited === true || response.status === 429;
+      error.retryAfterSeconds = typeof data.retryAfterSeconds === "number" && Number.isFinite(data.retryAfterSeconds) ? data.retryAfterSeconds : undefined;
+      throw error;
     }
-    return { reply: typeof data.reply === "string" ? data.reply : "I could not produce a response from the trading assistant." };
+    return {
+      rateLimited: data.rateLimited === true,
+      reply: typeof data.reply === "string" ? data.reply : "I could not produce a response from the trading assistant.",
+      retryAfterSeconds: typeof data.retryAfterSeconds === "number" && Number.isFinite(data.retryAfterSeconds) ? data.retryAfterSeconds : undefined,
+    };
   } catch (error) {
+    if (error instanceof Error && "rateLimited" in error) throw error;
     throw new Error(fetchFailureMessage("/api/chat", error));
   } finally {
     clearTimeout(timeout);

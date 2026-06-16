@@ -108,24 +108,14 @@ async function writeStore(messages: ReasonMessage[]): Promise<void> {
   await writeFile(STORE_PATH, JSON.stringify(messages.slice(0, 50), null, 2), "utf-8");
 }
 
-function fallbackPromptContext(context: ApiRecord): ApiRecord {
-  return {
-    symbol: text(context.symbol).toUpperCase(),
-    status: normalizeStatus(context.status),
-    confidence: numberValue(context.confidence),
-    riskReward: numberValue(context.riskReward),
-    requiredRR: numberValue(context.requiredRR),
-    trendAlignment: context.trendAlignment,
-    liquiditySweep: context.liquiditySweep,
-    bosConfirmed: context.bosConfirmed,
-    orderBlockConfirmed: context.orderBlockConfirmed,
-    reason: text(context.reason || context.setupReason),
-    blockers: Array.isArray(context.blockers) ? context.blockers.slice(0, 6) : [],
-  };
-}
-
 function containsBlocker(blockers: string[], patterns: RegExp[]): boolean {
   return blockers.some((blocker) => patterns.some((pattern) => pattern.test(blocker)));
+}
+
+function joinReasons(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "the validation engine marked the setup accepted";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 }
 
 function ruleBasedReason(context: ApiRecord): string {
@@ -162,7 +152,15 @@ function ruleBasedReason(context: ApiRecord): string {
     return `${symbol} was ${status === "Rejected" ? "rejected" : "held"} because ${blockers.slice(0, 2).join(" and ")}.`;
   }
   if (status === "Accepted") {
-    return `${symbol} was accepted because trend alignment, liquidity sweep, BOS confirmation, and risk checks passed.`;
+    const passedChecks = [
+      trendAlignment === true ? "trend alignment passed" : "",
+      liquiditySweep === true ? "liquidity sweep confirmed" : "",
+      bosConfirmed === true ? "BOS confirmation appeared" : "",
+      orderBlockConfirmed === true ? "order block confirmation passed" : "",
+      riskReward !== null && riskReward >= requiredRR ? `risk/reward ratio was ${formatNumber(riskReward)}, meeting the required minimum of ${formatNumber(requiredRR)}` : "",
+    ].filter(Boolean);
+    if (passedChecks.length > 0) return `${symbol} was accepted because ${joinReasons(passedChecks)}.`;
+    return suppliedReason ? `${symbol} was accepted because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} was accepted because the validation engine marked the setup accepted.`;
   }
   if (status === "Rejected") {
     return suppliedReason ? `${symbol} was rejected because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} was rejected because one or more validation rules did not pass.`;
@@ -173,7 +171,33 @@ function ruleBasedReason(context: ApiRecord): string {
   return suppliedReason ? `${symbol} is waiting because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for the validation rules to confirm before any trade can be accepted.`;
 }
 
-async function generateReason(context: ApiRecord): Promise<string | null> {
+function groqRewriteIsTraceable(rewrite: string, sourceReason: string): boolean {
+  const output = rewrite.toLowerCase();
+  const source = sourceReason.toLowerCase();
+  const unsupportedPatterns = [
+    /news|headline|cpi|fomc|interest rate|inflation|fed|central bank/,
+    /sentiment|market mood|risk-on|risk off/,
+    /institutional|smart money|bank flow|order flow/,
+    /whale|manipulation|accumulation|distribution/,
+    /support|resistance|moving average|rsi|macd|volume/,
+    /bullish|bearish|momentum|breakout|reversal/,
+  ];
+  if (unsupportedPatterns.some((pattern) => pattern.test(output) && !pattern.test(source))) return false;
+  const sourcedTerms = [
+    "risk/reward",
+    "risk reward",
+    "bos",
+    "break of structure",
+    "liquidity sweep",
+    "trend alignment",
+    "order block",
+    "blocker",
+    "validation engine",
+  ];
+  return sourcedTerms.every((term) => !output.includes(term) || source.includes(term));
+}
+
+async function generateReason(sourceReason: string): Promise<string | null> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return null;
   const models = [GROQ_MODEL, GROQ_FALLBACK_MODEL].filter((model, index, modelsList) => model && modelsList.indexOf(model) === index);
@@ -194,9 +218,9 @@ async function generateReason(context: ApiRecord): Promise<string | null> {
           messages: [
             {
               role: "system",
-              content: "Rewrite validation decisions for traders. Validation data is source of truth. Do not decide trades, invent facts, or mention Groq. One concise sentence.",
+              content: "Rewrite only the supplied validation explanation for readability. Do not add facts, conditions, market rationale, sentiment, news, or analysis. One concise sentence.",
             },
-            { role: "user", content: JSON.stringify(fallbackPromptContext(context)) },
+            { role: "user", content: sourceReason },
           ],
         }),
         cache: "no-store",
@@ -214,6 +238,7 @@ async function generateReason(context: ApiRecord): Promise<string | null> {
   const message = first?.message as ApiRecord | undefined;
   const content = text(message?.content);
   if (!content || NOISY_PATTERNS.some((pattern) => pattern.test(content))) return null;
+  if (!groqRewriteIsTraceable(content, sourceReason)) return null;
   return content;
 }
 
@@ -232,7 +257,7 @@ export async function POST(request: Request) {
       const id = stableId(context);
       if (byId.has(id)) continue;
       const fallbackReason = ruleBasedReason(context);
-      const groqReason = await generateReason(context);
+      const groqReason = await generateReason(fallbackReason);
       const reason = groqReason || fallbackReason;
       byId.set(id, {
         id,

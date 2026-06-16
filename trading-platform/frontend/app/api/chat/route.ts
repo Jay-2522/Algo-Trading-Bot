@@ -10,6 +10,7 @@ type ChatMessage = {
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
+const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 
 const SYSTEM_PROMPT = "You are AlgoPilot. Answer briefly using only provided data. If data is missing, say it is not available yet. Do not invent trades, prices, balances, or reasons.";
@@ -55,6 +56,55 @@ function retryAfterSeconds(response: Response): number {
   return 10;
 }
 
+function textFromPayload(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  const error = typeof record.error === "object" && record.error !== null ? (record.error as Record<string, unknown>) : record;
+  return [error.message, error.code, error.type]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ")
+    .toLowerCase();
+}
+
+function isModelAvailabilityError(response: Response, payload: Record<string, unknown>): boolean {
+  if (response.status !== 400 && response.status !== 404) return false;
+  const errorText = textFromPayload(payload);
+  return errorText.includes("model") && /(not found|not_found|unavailable|decommissioned|deprecated|does not exist|not supported)/i.test(errorText);
+}
+
+function shouldRetryWithFallback(response: Response, payload: Record<string, unknown>): boolean {
+  if (isModelAvailabilityError(response, payload)) return true;
+  return response.status === 429 || response.status === 503 || response.status === 500 || response.status === 502 || response.status === 504;
+}
+
+function buildGroqRequestBody(model: string, context: string, history: ChatMessage[], question: string) {
+  return JSON.stringify({
+    model,
+    temperature: 0.3,
+    max_tokens: 150,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...(context ? [{ role: "system", content: `Data:\n${context}` }] : []),
+      ...history.map((message) => ({ role: message.role, content: message.content })),
+      { role: "user", content: question },
+    ],
+  });
+}
+
+async function requestGroq(apiKey: string, model: string, context: string, history: ChatMessage[], question: string) {
+  const response = await fetch(GROQ_CHAT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: buildGroqRequestBody(model, context, history, question),
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  return { payload, response };
+}
+
 export async function POST(request: Request) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
@@ -68,31 +118,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
 
-    console.log("Groq model:", GROQ_MODEL);
-
     const context = typeof body.context === "string" ? body.context.slice(0, 2000) : "";
     const history = normalizeMessages(body.messages).slice(-3);
-    const groqResponse = await fetch(GROQ_CHAT_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0.3,
-        max_tokens: 150,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...(context ? [{ role: "system", content: `Data:\n${context}` }] : []),
-          ...history.map((message) => ({ role: message.role, content: message.content })),
-          { role: "user", content: question },
-        ],
-      }),
-      cache: "no-store",
-    });
+    console.log("Groq primary model:", GROQ_MODEL);
+    console.log("Groq fallback model:", GROQ_FALLBACK_MODEL || "not configured");
 
-    const payload = (await groqResponse.json().catch(() => ({}))) as Record<string, unknown>;
+    let fallbackUsed = false;
+    let groqResponse: Response;
+    let payload: Record<string, unknown>;
+    try {
+      const primary = await requestGroq(apiKey, GROQ_MODEL, context, history, question);
+      payload = primary.payload;
+      groqResponse = primary.response;
+      console.log("Groq primary status:", groqResponse.status);
+    } catch (error) {
+      if (!GROQ_FALLBACK_MODEL || GROQ_FALLBACK_MODEL === GROQ_MODEL) throw error;
+      fallbackUsed = true;
+      const fallback = await requestGroq(apiKey, GROQ_FALLBACK_MODEL, context, history, question);
+      payload = fallback.payload;
+      groqResponse = fallback.response;
+      console.log("Groq fallback status:", groqResponse.status);
+    }
+
+    if (!groqResponse.ok && GROQ_FALLBACK_MODEL && GROQ_FALLBACK_MODEL !== GROQ_MODEL && shouldRetryWithFallback(groqResponse, payload)) {
+      fallbackUsed = true;
+      const fallback = await requestGroq(apiKey, GROQ_FALLBACK_MODEL, context, history, question);
+      payload = fallback.payload;
+      groqResponse = fallback.response;
+      console.log("Groq fallback status:", groqResponse.status);
+    }
+    console.log("Groq fallback used:", fallbackUsed);
+
     if (!groqResponse.ok) {
       if (groqResponse.status === 429) {
         return NextResponse.json({ error: BUSY_MESSAGE, rateLimited: true, retryAfterSeconds: retryAfterSeconds(groqResponse) }, { status: 429 });

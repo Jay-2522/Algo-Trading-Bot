@@ -177,6 +177,10 @@ function hasDashboardSnapshot(data: DashboardData): boolean {
   );
 }
 
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
 function asRecord(value: unknown): ApiRecord | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as ApiRecord) : null;
 }
@@ -224,25 +228,6 @@ function signed(value: number | null | undefined, digits = 5): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "0";
   const prefix = value > 0 ? "+" : "";
   return `${prefix}${value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-}
-
-function pointsToCoordinates(points: LivePricePoint[], width: number, height: number, padding: number): { x: number; y: number }[] {
-  const recent = points.slice(-80).filter((point) => Number.isFinite(point.value));
-  if (recent.length < 2) return [];
-  const values = recent.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  return recent.map((point, index) => ({
-    x: recent.length === 1 ? 0 : (index / (recent.length - 1)) * width,
-    y: padding + ((max - point.value) / range) * (height - padding * 2),
-  }));
-}
-
-function pointsToPath(points: LivePricePoint[], width: number, height: number, padding: number): string {
-  return pointsToCoordinates(points, width, height, padding)
-    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-    .join(" ");
 }
 
 function getSessionStatus(session: (typeof FOREX_SESSIONS)[keyof typeof FOREX_SESSIONS], now = new Date(), localTimes = "Loading local time"): {
@@ -631,12 +616,24 @@ export function DashboardShell(_: {
       const prices = await fetchClientMarketPrices();
       if (prices.eurusdTick || prices.xauusdTick || prices.niftyTick || prices.marketScope) {
         setData((current) => {
+          const eurusdTick = recordOrPrevious(prices.eurusdTick, current.eurusdTick);
+          const xauusdTick = recordOrPrevious(prices.xauusdTick, current.xauusdTick);
+          const niftyTick = recordOrPrevious(prices.niftyTick, current.niftyTick);
+          const marketScope = Array.isArray(prices.marketScope) ? arrayRecordsOrPrevious(prices.marketScope, current.marketScope, false) : current.marketScope;
+          if (
+            sameJsonValue(eurusdTick, current.eurusdTick) &&
+            sameJsonValue(xauusdTick, current.xauusdTick) &&
+            sameJsonValue(niftyTick, current.niftyTick) &&
+            sameJsonValue(marketScope, current.marketScope)
+          ) {
+            return current;
+          }
           const next = {
             ...current,
-            eurusdTick: recordOrPrevious(prices.eurusdTick, current.eurusdTick),
-            xauusdTick: recordOrPrevious(prices.xauusdTick, current.xauusdTick),
-            niftyTick: recordOrPrevious(prices.niftyTick, current.niftyTick),
-            marketScope: Array.isArray(prices.marketScope) ? arrayRecordsOrPrevious(prices.marketScope, current.marketScope, false) : current.marketScope,
+            eurusdTick,
+            xauusdTick,
+            niftyTick,
+            marketScope,
           };
           writeCachedDashboardData(next);
           return next;
@@ -711,7 +708,7 @@ export function DashboardShell(_: {
   }, [refresh]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => void refreshPrices(), 1000);
+    const interval = window.setInterval(() => void refreshPrices(), 5000);
     return () => window.clearInterval(interval);
   }, [refreshPrices]);
 
@@ -1313,11 +1310,11 @@ function ClientPortalOverview({
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
-        <PortalStatCard accent="navy" label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
-        <PortalStatCard accent="gold" label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
-        <PortalStatCard accent="blue" delta={niftyLive.endpointConnected ? `${signed(niftyLive.delta, 2)} (${signed(niftyLive.deltaPercent, 2)}%)` : "Waiting for market feed"} label="NIFTY50" live={niftyLive} value={marketPriceText(niftyLive.currentPrice, 2)} />
-        <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" history={eurusdLive.history} />
-        <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" history={xauusdLive.history} />
+        <PortalStatCard label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
+        <PortalStatCard label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
+        <PortalStatCard delta={niftyLive.endpointConnected ? `${signed(niftyLive.delta, 2)} (${signed(niftyLive.deltaPercent, 2)}%)` : "Waiting for market feed"} label="NIFTY50" live={niftyLive} value={marketPriceText(niftyLive.currentPrice, 2)} />
+        <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" />
+        <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" />
       </section>
 
       <section className="portal-main-grid">
@@ -1362,28 +1359,23 @@ function niftySnapshot(data: DashboardData): { connected: boolean; currentPrice:
 }
 
 function PortalStatCard({
-  accent = "navy",
   badge,
   badgeStyle = "default",
   delta,
-  history,
   label,
   live,
   note,
   value,
 }: {
-  accent?: "navy" | "gold" | "blue";
   badge?: string;
   badgeStyle?: "default" | "neutral";
   delta: string | null;
-  history?: LivePricePoint[];
   label: string;
   live?: LivePriceState;
   note?: string;
   value: string;
 }) {
   const direction = live?.marketOpen ? live.direction : "flat";
-  const points = live ? live.history : (history ?? []);
   const badgeText = badge ?? (live ? (live.endpointConnected ? (live.marketOpen ? "MT5 Live" : live.statusMessage || "Market Closed") : "Waiting") : "Live");
   return (
     <div className="portal-stat-card">
@@ -1394,31 +1386,7 @@ function PortalStatCard({
       <p className={`portal-stat-value price-flash-${direction}`}>{value}</p>
       {delta ? <p className={`portal-stat-delta ${direction}`}>{delta}</p> : null}
       {note ? <p className="portal-stat-note">{note}</p> : null}
-      {points.length ? <PortalSparkline accent={accent} points={points} /> : <div className={`portal-sparkline empty ${accent}`} />}
     </div>
-  );
-}
-
-function PortalSparkline({ accent, points }: { accent: "navy" | "gold" | "blue"; points: LivePricePoint[] }) {
-  const line = pointsToPath(points, 220, 54, 6);
-  const area = line ? `${line} L220 62 L0 62 Z` : "";
-  const strokeId = `sparkStroke-${accent}`;
-  const fillId = `sparkFill-${accent}`;
-  return (
-    <svg className={`portal-sparkline ${accent}`} preserveAspectRatio="none" viewBox="0 0 220 62" aria-hidden="true">
-      <defs>
-        <linearGradient id={strokeId} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%" stopColor={`var(--spark-${accent}-start)`} />
-          <stop offset="100%" stopColor={`var(--spark-${accent}-end)`} />
-        </linearGradient>
-        <linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={`var(--spark-${accent}-fill)`} />
-          <stop offset="100%" stopColor="rgba(6, 8, 22, 0)" />
-        </linearGradient>
-      </defs>
-      {area ? <path d={area} fill={`url(#${fillId})`} /> : null}
-      {line ? <path d={line} fill="none" stroke={`url(#${strokeId})`} strokeLinecap="round" strokeWidth="2.4" /> : null}
-    </svg>
   );
 }
 

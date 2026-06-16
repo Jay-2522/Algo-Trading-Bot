@@ -60,7 +60,7 @@ async def stream_market_ticks(websocket: WebSocket, symbol: str) -> None:
         while market_stream_service.state.is_streaming(normalized_symbol):
             tick = market_stream_service.get_tick_once(normalized_symbol)
             await websocket.send_json(tick.model_dump(mode="json"))
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         pass
     except Exception:

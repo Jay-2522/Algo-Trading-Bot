@@ -30,6 +30,9 @@ type CachedLivePrice = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+const LIVE_POLL_INTERVAL_MS = 1000;
+const CLOSED_POLL_INTERVAL_MS = 60000;
+const STREAM_RECONNECT_MS = 2000;
 
 function cacheKey(symbol: LiveSymbol): string {
   return `algopilot_live_price_${symbol}_v2`;
@@ -38,6 +41,12 @@ function cacheKey(symbol: LiveSymbol): string {
 function buildTickUrl(symbol: LiveSymbol): string {
   const url = new URL(`/mt5-demo/market-data/tick/${symbol}`, API_BASE_URL);
   url.searchParams.set("_ts", String(Date.now()));
+  return url.toString();
+}
+
+function buildStreamUrl(symbol: LiveSymbol): string {
+  const url = new URL(`/ws/market/${symbol}`, API_BASE_URL);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }
 
@@ -75,6 +84,11 @@ function extractPrice(record: TickRecord | null | undefined): number | null {
   const ask = readNumeric(record, ["ask"]);
   if (bid !== null && ask !== null) return (bid + ask) / 2;
   return bid ?? ask;
+}
+
+function isSyntheticTick(record: TickRecord | null | undefined): boolean {
+  const source = String(record?.source ?? record?.feed_source ?? "").toUpperCase();
+  return source.includes("SIMULATION") || source.includes("FALLBACK") || source.includes("MOCK");
 }
 
 function readStatusText(record: TickRecord | null | undefined): string {
@@ -130,7 +144,7 @@ function writeCached(symbol: LiveSymbol, snapshot: CachedLivePrice): void {
 
 function messageFor(marketOpen: boolean, hasFreshPrice: boolean, hasCachedPrice: boolean): string {
   if (marketOpen && hasFreshPrice) return "MT5 live feed connected";
-  if (!marketOpen && (hasFreshPrice || hasCachedPrice)) return "Last Closed Price";
+  if (!marketOpen && (hasFreshPrice || hasCachedPrice)) return "Market Closed";
   if (hasCachedPrice) return "Last known market price";
   return "Waiting for market feed";
 }
@@ -142,6 +156,13 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
   const [statusMessage, setStatusMessage] = useState("Waiting for market feed");
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<number | null>(null);
+  const streamConnectedRef = useRef(false);
+  const currentPriceRef = useRef<number | null>(null);
+  const historyRef = useRef<LivePricePoint[]>([]);
+  const lastUpdatedRef = useRef<string | null>(null);
+  const marketOpenRef = useRef(false);
 
   useEffect(() => {
     const cached = readCached(symbol);
@@ -150,21 +171,32 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
     setMarketOpen(cached.marketOpen);
     setStatusMessage(cached.statusMessage);
     setLastUpdated(cached.lastUpdated);
+    historyRef.current = cached.history;
+    currentPriceRef.current = cached.currentPrice;
+    marketOpenRef.current = cached.marketOpen;
+    lastUpdatedRef.current = cached.lastUpdated;
   }, [symbol]);
 
   const ingestTick = useCallback(
     (tick: TickRecord | null | undefined, fromPoll: boolean) => {
       const price = extractPrice(tick);
-      const hasFreshPrice = price !== null;
+      const hasFreshPrice = price !== null && !isSyntheticTick(tick);
       const nextMarketOpen = inferMarketOpen(symbol, tick, hasFreshPrice);
-      const timestamp = typeof tick?.time === "string" ? tick.time : typeof tick?.timestamp === "string" ? tick.timestamp : hasFreshPrice ? new Date().toISOString() : lastUpdated;
+      const previousPrice = currentPriceRef.current;
+      const previousHistory = historyRef.current;
+      const previousLastUpdated = lastUpdatedRef.current;
+      const timestamp = typeof tick?.time === "string" ? tick.time : typeof tick?.timestamp === "string" ? tick.timestamp : hasFreshPrice ? new Date().toISOString() : previousLastUpdated;
+      marketOpenRef.current = nextMarketOpen;
       setMarketOpen(nextMarketOpen);
-      setStatusMessage(messageFor(nextMarketOpen, hasFreshPrice, currentPrice !== null));
+      setStatusMessage(messageFor(nextMarketOpen, hasFreshPrice, previousPrice !== null));
       if (hasFreshPrice) {
+        currentPriceRef.current = price;
+        lastUpdatedRef.current = timestamp ?? null;
         setCurrentPrice(price);
         setLastUpdated(timestamp ?? null);
         setHistory((current) => {
           const nextHistory = appendPoint(current, price);
+          historyRef.current = nextHistory;
           writeCached(symbol, {
             currentPrice: price,
             history: nextHistory,
@@ -174,17 +206,17 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
           });
           return nextHistory;
         });
-      } else if (fromPoll && currentPrice !== null) {
+      } else if (fromPoll && previousPrice !== null) {
         writeCached(symbol, {
-          currentPrice,
-          history,
-          lastUpdated,
+          currentPrice: previousPrice,
+          history: previousHistory,
+          lastUpdated: previousLastUpdated,
           marketOpen: nextMarketOpen,
           statusMessage: messageFor(nextMarketOpen, false, true),
         });
       }
     },
-    [currentPrice, history, lastUpdated, symbol],
+    [symbol],
   );
 
   useEffect(() => {
@@ -203,11 +235,12 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
       } catch {
         if (!cancelled) {
           setMarketOpen(symbol === "NIFTY50" ? false : isForexMarketOpen());
-          setStatusMessage(currentPrice !== null ? "Last known market price" : "Waiting for market feed");
+          setStatusMessage(currentPriceRef.current !== null ? "Last known market price" : "Waiting for market feed");
         }
       } finally {
         if (!cancelled) {
-          timerRef.current = window.setTimeout(poll, symbol === "NIFTY50" || marketOpen ? 5000 : 60000);
+          const interval = marketOpenRef.current || symbol === "NIFTY50" ? LIVE_POLL_INTERVAL_MS : CLOSED_POLL_INTERVAL_MS;
+          timerRef.current = window.setTimeout(poll, interval);
         }
       }
     };
@@ -218,7 +251,55 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
       cancelled = true;
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
-  }, [currentPrice, ingestTick, marketOpen, symbol]);
+  }, [ingestTick, symbol]);
+
+  useEffect(() => {
+    if (symbol === "NIFTY50") return;
+    let cancelled = false;
+
+    const connect = () => {
+      if (cancelled) return;
+      try {
+        const socket = new WebSocket(buildStreamUrl(symbol));
+        socketRef.current = socket;
+        socket.onopen = () => {
+          streamConnectedRef.current = true;
+        };
+        socket.onmessage = (event) => {
+          try {
+            ingestTick(JSON.parse(String(event.data)) as TickRecord, false);
+          } catch {
+            // Ignore malformed stream payloads and let polling keep the last valid price alive.
+          }
+        };
+        socket.onclose = () => {
+          streamConnectedRef.current = false;
+          if (!cancelled) {
+            reconnectRef.current = window.setTimeout(connect, STREAM_RECONNECT_MS);
+          }
+        };
+        socket.onerror = () => {
+          streamConnectedRef.current = false;
+          socket.close();
+        };
+      } catch {
+        streamConnectedRef.current = false;
+        if (!cancelled) {
+          reconnectRef.current = window.setTimeout(connect, STREAM_RECONNECT_MS);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      streamConnectedRef.current = false;
+      if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current);
+      socketRef.current?.close();
+      socketRef.current = null;
+    };
+  }, [ingestTick, symbol]);
 
   const previous = history.length > 1 ? history[history.length - 2].value : currentPrice;
   const delta = currentPrice !== null && previous !== null ? currentPrice - previous : 0;

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,6 +11,8 @@ except Exception as exc:  # pragma: no cover - depends on local MT5 installation
     MT5_IMPORT_ERROR = exc
 else:
     MT5_IMPORT_ERROR = None
+
+logger = logging.getLogger(__name__)
 
 
 class MT5DemoPositionSyncService:
@@ -99,6 +102,7 @@ class MT5DemoPositionSyncService:
             if raw_positions is None:
                 raw_positions = []
             positions = [self._normalize_position(position, account) for position in raw_positions]
+            self._log_open_positions(positions, symbol)
             return {
                 "status": "POSITIONS_FOUND" if positions else "NO_OPEN_POSITIONS",
                 "environment": "DEMO",
@@ -139,6 +143,22 @@ class MT5DemoPositionSyncService:
             "account_login": str(getattr(account, "login", "")) if account else "",
             "server": str(getattr(account, "server", "")) if account else "",
         }
+
+    def _log_open_positions(self, positions: list[dict[str, Any]], symbol: str | None = None) -> None:
+        logger.info(
+            "MT5 open positions read: count=%s symbol_filter=%s positions=%s",
+            len(positions),
+            symbol or "ALL",
+            [
+                {
+                    "ticket": position.get("ticket"),
+                    "symbol": position.get("symbol"),
+                    "volume": position.get("volume"),
+                    "open_price": position.get("price_open"),
+                }
+                for position in positions
+            ],
+        )
 
     def _journal_payload(self, position: dict[str, Any]) -> dict[str, Any]:
         return {

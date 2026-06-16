@@ -127,6 +127,15 @@ export async function fetchClientOperatingDashboard() {
   return { data, errors };
 }
 
+export async function fetchClientOpenPositions() {
+  const result = await fetchJson<ApiRecord>("/mt5-demo/position-monitor/open", { positions: [] }, 3000);
+  return {
+    positions: Array.isArray(result.data.positions) ? (result.data.positions.filter((item) => typeof item === "object" && item !== null) as ApiRecord[]) : [],
+    error: result.error,
+    ok: result.ok,
+  };
+}
+
 function guardedPayload(payload: ClientOrderPayload): ApiRecord {
   return {
     ...payload,

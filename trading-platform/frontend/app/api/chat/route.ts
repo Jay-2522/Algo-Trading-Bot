@@ -25,7 +25,9 @@ const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const REASON_STORE_PATH = path.join(process.cwd(), "..", "data", "reason_panel", "reason_messages.json");
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
+const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
 
 const SYSTEM_PROMPT = 'You are AlgoPilot. Answer briefly using only provided data. Do not invent trades, prices, balances, reasons, candle counts, or timeframes. If validator diagnostics are unavailable, say "Validator diagnostics are not available for this decision."';
 
@@ -113,6 +115,57 @@ function isDiagnosticQuestion(question: string): boolean {
     normalized.includes("which timeframe") ||
     (normalized.includes("why") && normalized.includes("reject"))
   );
+}
+
+function isOpenTradesQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    (normalized.includes("open trade") || normalized.includes("open position") || normalized.includes("active trade") || normalized.includes("active position")) &&
+    (normalized.includes("how many") || normalized.includes("count") || normalized.includes("currently") || normalized.includes("active"))
+  );
+}
+
+function readPositionField(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== null && value !== undefined && text(value)) return text(value);
+  }
+  return "";
+}
+
+async function answerOpenTradesQuestion(question: string): Promise<string | null> {
+  if (!isOpenTradesQuestion(question)) return null;
+  try {
+    const url = new URL("/mt5-demo/position-monitor/open", API_BASE_URL);
+    url.searchParams.set("_ts", String(Date.now()));
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return "Open trade data is not available right now.";
+    const payload = (await response.json()) as Record<string, unknown>;
+    const rawPositions = Array.isArray(payload.positions) ? payload.positions : [];
+    const positions = rawPositions
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .filter((position) => VALIDATION_SYMBOLS.has(readPositionField(position, ["symbol"]).toUpperCase()));
+    console.log(
+      "Chat live MT5 open positions:",
+      positions.map((position) => ({
+        ticket: readPositionField(position, ["ticket"]),
+        symbol: readPositionField(position, ["symbol"]),
+        volume: readPositionField(position, ["volume", "lot"]),
+        open_price: readPositionField(position, ["price_open", "entry_price"]),
+      })),
+    );
+    if (!positions.length) return "There are 0 active open trades from the live MT5 position source.";
+    const tickets = positions.map((position) => readPositionField(position, ["ticket"])).filter(Boolean);
+    const symbols = positions.reduce<Record<string, number>>((counts, position) => {
+      const symbol = readPositionField(position, ["symbol"]).toUpperCase() || "UNKNOWN";
+      counts[symbol] = (counts[symbol] ?? 0) + 1;
+      return counts;
+    }, {});
+    const symbolText = Object.entries(symbols).map(([symbol, count]) => `${symbol}: ${count}`).join(", ");
+    return `There are ${positions.length} active open trades from the live MT5 position source. ${symbolText}.${tickets.length ? ` Tickets: ${tickets.join(", ")}.` : ""}`;
+  } catch {
+    return "Open trade data is not available right now.";
+  }
 }
 
 function findDiagnostic(records: ReasonDiagnostic[], symbol: string | null, timeframe: string | null): { exact: ReasonDiagnostic | null; latestForSymbol: ReasonDiagnostic | null; latest: ReasonDiagnostic | null } {
@@ -254,6 +307,10 @@ export async function POST(request: Request) {
     const question = typeof body.question === "string" ? body.question.trim() : "";
     if (!question) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
+    }
+    const openTradesAnswer = await answerOpenTradesQuestion(question);
+    if (openTradesAnswer) {
+      return NextResponse.json({ reply: openTradesAnswer });
     }
     const diagnosticAnswer = await answerDiagnosticQuestion(question);
     if (diagnosticAnswer) {

@@ -9,6 +9,7 @@ import type { ForexMapMarker } from "./ForexSessionsMap";
 
 import {
   fetchClientOperatingDashboard,
+  fetchClientOpenPositions,
   fetchClientMarketPrices,
   fetchClientSignals,
   fetchReasonMessages,
@@ -85,6 +86,7 @@ const ROUND_2_START_PAYLOAD: ApiRecord = {
 };
 const EURUSD_TEST_RESULTS_KEY = "algopilot_eurusd_test_results";
 const FOREX_DISPLAY_TIME_ZONE = "Asia/Kolkata";
+const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
 const FOREX_SESSIONS = {
   tokyo: {
     name: "Tokyo",
@@ -424,6 +426,10 @@ function floatingPnl(positions: ApiRecord[]): number {
   return positions.reduce((sum, position) => sum + readNumber(position, ["floating_pnl", "profit"], 0), 0);
 }
 
+function validationOpenPositions(positions: ApiRecord[]): ApiRecord[] {
+  return positions.filter((position) => VALIDATION_SYMBOLS.has(readText(position, ["symbol"], "").toUpperCase()));
+}
+
 function currentValidationSessionId(autoValidation: ApiRecord | null): string {
   const session = asRecord(autoValidation?.session);
   return readText(session, ["session_id", "id", "validation_session_id"], "");
@@ -560,11 +566,22 @@ export function DashboardShell(_: {
     setClientReady(true);
   }, []);
 
+  const refreshOpenPositions = useCallback(async () => {
+    const result = await fetchClientOpenPositions();
+    if (!result.ok) return;
+    setData((current) => {
+      const next = { ...current, openPositions: result.positions };
+      writeCachedDashboardData(next);
+      return next;
+    });
+  }, []);
+
   const refresh = useCallback(async () => {
     if (requestInFlight.current) return true;
     requestInFlight.current = true;
     setLoading(true);
     try {
+      void refreshOpenPositions();
       const result = await fetchClientOperatingDashboard();
       const payload = result.data;
       const fullSuccess = result.errors.length === 0;
@@ -583,7 +600,7 @@ export function DashboardShell(_: {
           currentTerminalAccount: brokerAccounts ? recordOrPrevious(brokerAccounts.current_terminal_account, current.currentTerminalAccount) : current.currentTerminalAccount,
           vantageXauusdStatus: "vantageXauusdStatus" in payload ? recordOrPrevious(payload.vantageXauusdStatus, current.vantageXauusdStatus) : current.vantageXauusdStatus,
           vantageXauusdPreview: "vantageXauusdPreview" in payload ? recordOrPrevious(payload.vantageXauusdPreview, current.vantageXauusdPreview) : current.vantageXauusdPreview,
-          openPositions: "openPositions" in payload ? recordsOrPrevious(payload.openPositions, "positions", current.openPositions, fullSuccess) : current.openPositions,
+          openPositions: "openPositions" in payload ? recordsFrom(payload.openPositions, "positions") : current.openPositions,
           recentTrades: "recentTrades" in payload ? arrayRecordsOrPrevious(payload.recentTrades, current.recentTrades, fullSuccess) : current.recentTrades,
           journalSummary: "journalSummary" in payload ? recordOrPrevious(payload.journalSummary, current.journalSummary) : current.journalSummary,
           outcomeSummary: "outcomeSummary" in payload ? recordOrPrevious(payload.outcomeSummary, current.outcomeSummary) : current.outcomeSummary,
@@ -609,7 +626,7 @@ export function DashboardShell(_: {
       setLoading(false);
       requestInFlight.current = false;
     }
-  }, []);
+  }, [refreshOpenPositions]);
 
   const refreshPrices = useCallback(async () => {
     if (priceRequestInFlight.current) return;
@@ -705,6 +722,12 @@ export function DashboardShell(_: {
   }, [refresh]);
 
   useEffect(() => {
+    void refreshOpenPositions();
+    const interval = window.setInterval(() => void refreshOpenPositions(), 5000);
+    return () => window.clearInterval(interval);
+  }, [refreshOpenPositions]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => void refresh(), 10000);
     return () => window.clearInterval(interval);
   }, [refresh]);
@@ -776,9 +799,9 @@ export function DashboardShell(_: {
   const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
   const activeSessionId = currentValidationSessionId(data.autoValidation);
   const clientClosedTrades = useMemo(() => sessionScopedRecords(closedTrades, activeSessionId), [closedTrades, activeSessionId]);
-  const clientOpenPositions = useMemo(() => sessionScopedRecords(data.openPositions, activeSessionId), [data.openPositions, activeSessionId]);
+  const clientOpenPositions = useMemo(() => validationOpenPositions(data.openPositions), [data.openPositions]);
   const marketOpen = isMarketOpen(data.eurusdTick);
-  const openTradeExists = data.openPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
+  const openTradeExists = clientOpenPositions.length > 0 || readNumber(data.journalSummary, ["open_demo_trades"], 0) > 0;
   const approvalReady = preview?.approved_for_future_demo_order === true || readText(preview, ["readiness_decision"], "") === "READY_FOR_GUARDED_DEMO_TEST";
   const selectedSignal = displayedSignals.find((signal) => readText(signal, ["symbol"], "") === selectedSymbol) ?? null;
   const signalAction = readText(selectedSignal, ["signal"], "WAIT").toUpperCase();
@@ -809,7 +832,7 @@ export function DashboardShell(_: {
   const avgRr = readNumber(data.journalSummary, ["avg_rr"], readNumber(data.outcomeSummary, ["avg_rr"], 0));
   const bestTrade = asRecord(data.outcomeSummary?.best_trade);
   const worstTrade = asRecord(data.outcomeSummary?.worst_trade);
-  const openFloatingPnl = floatingPnl(data.openPositions);
+  const openFloatingPnl = floatingPnl(clientOpenPositions);
   const lastTrade = closedTrades[0] ?? null;
   const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
   const eurusdLive = useLivePrice("EURUSD", data.eurusdTick);
@@ -1300,7 +1323,7 @@ function ClientPortalOverview({
   const mt5Health = asRecord(autoStatus?.mt5_health);
   const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
   const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
-  const open = readNumber(session, ["current_open_trades", "current_session_open_trades"], scopedOpenPositions.length);
+  const open = scopedOpenPositions.length;
   const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
   const mode = readText(session, ["status"], "");
   const botState = clientBotState(mode, closed, open, target, Boolean(readText(session, ["session_id", "id", "validation_session_id"], "") || mode || closed || open));
@@ -2001,7 +2024,7 @@ function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): s
     validation: {
       status: friendlyText(session, ["status"], "not started"),
       closedTrades: readNumber(session, ["current_closed_trades", "current_session_closed"], 0),
-      openTrades: readNumber(session, ["current_open_trades", "current_session_open_trades"], 0),
+      openTrades: validationOpenPositions(data.openPositions).length,
       latestSignal: latestSignal
         ? {
             symbol: readText(latestSignal, ["symbol"], ""),
@@ -2109,7 +2132,7 @@ function buildBotAnswer(question: string, data: DashboardData): string {
       : "No active signal decision is available yet. Once the strategy evaluates a setup, accepted and rejected reasons will appear in the Test Environment Reason panel.";
   }
   if (q.includes("validation") || q.includes("round")) {
-    return `Validation status is ${friendlyText(session, ["status"], "not started")}. Closed trades: ${readNumber(session, ["current_closed_trades", "current_session_closed"], 0)}. Open trades: ${readNumber(session, ["current_open_trades", "current_session_open_trades"], 0)}.`;
+    return `Validation status is ${friendlyText(session, ["status"], "not started")}. Closed trades: ${readNumber(session, ["current_closed_trades", "current_session_closed"], 0)}. Open trades: ${validationOpenPositions(data.openPositions).length}.`;
   }
   return "I can help explain account status, validation progress, accepted or rejected trades, risk checks, market conditions, and dashboard readings. Ask me about any visible status or trade decision.";
 }
@@ -2533,7 +2556,7 @@ function ClientDashboardView({
   const exitManagement = asRecord(autoStatus?.exit_management);
   const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
   const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
-  const open = readNumber(session, ["current_open_trades", "current_session_open_trades"], scopedOpenPositions.length);
+  const open = scopedOpenPositions.length;
   const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
   const progress = target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0;
   const mode = readText(session, ["status"], "");

@@ -17,7 +17,7 @@ class RealSignalEngineService:
     max_spread = {"EURUSD": 0.0003, "XAUUSD": 1.0}
     auto_validation_confidence = 65
     demo_collection_confidence = 55
-    demo_collection_min_rr = 1.2
+    demo_collection_min_rr = 2.0
 
     def __init__(
         self,
@@ -55,12 +55,12 @@ class RealSignalEngineService:
                 "DEMO_COLLECTION": {
                     "min_confidence": self.demo_collection_confidence,
                     "min_rr": self.demo_collection_min_rr,
-                    "bos_mandatory": False,
+                    "bos_mandatory": True,
                     "liquidity_sweep_mandatory": False,
-                    "fvg_mandatory": False,
+                    "fvg_mandatory": True,
                     "order_block_mandatory": False,
-                    "session_filter": "ADVISORY_ONLY",
-                    "requires": ["DIRECTIONAL_BIAS", "VALID_TICK_SPREAD", "SL_TP_VALID_OR_DEMO_RISK_FALLBACK", "RR_1_2"],
+                    "session_filter": "LONDON_NY_REQUIRED",
+                    "requires": ["H4_HISTORY", "M15_HISTORY", "LONDON_NY_SESSION", "BOS", "FVG", "RR_2_0"],
                 },
             },
             "minimum_risk_reward": self.min_rr,
@@ -201,6 +201,15 @@ class RealSignalEngineService:
         if feed["blockers"]:
             signal = self._wait(normalized, feed["blockers"], "INSUFFICIENT_DATA", feed=feed)
             signal["strategy_profile"] = profile
+            if profile == "DEMO_COLLECTION":
+                round3_audit = self._round3_history_audit(normalized, feed)
+                signal["round3_diagnostics"] = round3_audit
+                signal["approval_audit"] = {**signal.get("approval_audit", {}), **round3_audit}
+                signal.update(round3_audit)
+                signal["reason"] = round3_audit["final_decision_reason"]
+                signal["setup_reason"] = round3_audit["final_decision_reason"]
+                signal["what_needs_to_happen_next"] = round3_audit["final_decision_reason"]
+                signal["rejection_reason"] = round3_audit["final_decision_reason"]
             self._latest[normalized] = signal
             return signal
 
@@ -222,8 +231,9 @@ class RealSignalEngineService:
         if profile == "DEMO_COLLECTION":
             trade_plan = self._demo_collection_trade_plan(normalized, direction, tick, candles["M15"], trade_plan)
 
-        if trade_plan.get("risk_reward") is None or trade_plan.get("risk_reward", 0) < self.min_rr:
-            reasons.append("Risk/reward is below the 1.5 minimum or trade plan is incomplete.")
+        profile_min_rr = self.demo_collection_min_rr if profile == "DEMO_COLLECTION" else self.min_rr
+        if trade_plan.get("risk_reward") is None or trade_plan.get("risk_reward", 0) < profile_min_rr:
+            reasons.append(f"Risk/reward is below the {profile_min_rr:.1f} minimum or trade plan is incomplete.")
 
         production_tradeable = (
             direction in {"BUY", "SELL"}
@@ -233,7 +243,8 @@ class RealSignalEngineService:
             and session["valid"]
         )
         auto_tradeable = self._auto_validation_tradeable(direction, score, smc, trade_plan, session, spread)
-        demo_collection_tradeable = self._demo_collection_tradeable(direction, score, trade_plan, spread)
+        round3_audit = self._round3_rule_audit(normalized, feed, direction, smc, session, trade_plan, score)
+        demo_collection_tradeable = self._demo_collection_tradeable(direction, score, smc, trade_plan, session, spread, round3_audit)
         tradeable = demo_collection_tradeable if profile == "DEMO_COLLECTION" else auto_tradeable if profile == "AUTO_VALIDATION" else production_tradeable
         signal_action = direction if tradeable else "WAIT"
         execution_status = "READY_FOR_PREVIEW" if tradeable else "WAITING"
@@ -290,10 +301,12 @@ class RealSignalEngineService:
             },
             "quality_score": score,
             "approval_audit": self._profile_approval_audit(profile, signal_action, score, smc, trade_plan, session, spread, profile_reasons, missing_requirements),
+            "round3_diagnostics": round3_audit if profile == "DEMO_COLLECTION" else {},
             "candle_source": feed["candle_source"],
             "signal_hash": self._signal_hash(normalized, signal_action, trade_plan, score),
             "data_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
             **validator_diagnostics,
+            **(round3_audit if profile == "DEMO_COLLECTION" else {}),
             "strategy_profile": profile,
             "production_rules_unchanged": profile == "PRODUCTION",
             "simulation_only": True,
@@ -302,6 +315,15 @@ class RealSignalEngineService:
             "execution_allowed": False,
             "timestamp": self._timestamp(),
         }
+        if profile == "DEMO_COLLECTION":
+            signal["reason"] = round3_audit["final_decision_reason"]
+            signal["setup_reason"] = round3_audit["final_decision_reason"]
+            signal["what_needs_to_happen_next"] = (
+                "All Round 3 entry rules are currently satisfied."
+                if not round3_audit.get("failed_rules")
+                else round3_audit["final_decision_reason"]
+            )
+            signal["approval_audit"] = {**signal.get("approval_audit", {}), **round3_audit}
         self._latest[normalized] = signal
         return signal
 
@@ -781,17 +803,19 @@ class RealSignalEngineService:
                     "relaxed_blockers": advisory,
                     "demo_collection_rules": {
                         "min_confidence": threshold,
-                        "bos_mandatory": False,
+                        "bos_mandatory": True,
                         "liquidity_sweep_mandatory": False,
-                        "fvg_mandatory": False,
+                        "fvg_mandatory": True,
                         "order_block_mandatory": False,
-                        "session_filter": "ADVISORY_ONLY",
+                        "session_filter": "LONDON_NY_REQUIRED",
                         "requires_directional_bias": True,
+                        "requires_h4_history": True,
+                        "requires_m15_history": True,
                         "requires_valid_tick_spread": True,
                         "requires_sl_tp_valid_or_demo_risk_fallback": True,
                         "min_rr": self.demo_collection_min_rr,
                     },
-                    "approval_note": "DEMO_COLLECTION is demo-only: FVG, order block, BOS, liquidity sweep, and session are advisory so the 30-trade validation can collect real demo outcomes. Production remains unchanged.",
+                    "approval_note": "Round 3 DEMO_COLLECTION requires valid H4/M15 history, London/NY session, BOS, FVG, valid SL/TP, and RR >= 2.0. Liquidity sweep and trend alignment are advisory confidence boosters.",
                 }
             )
             return audit
@@ -982,17 +1006,125 @@ class RealSignalEngineService:
             },
         }
 
+    def _round3_history_audit(self, symbol: str, feed: dict[str, Any]) -> dict[str, Any]:
+        candle_source = feed.get("candle_source") if isinstance(feed, dict) else {}
+        reports = candle_source.get("timeframes", {}) if isinstance(candle_source, dict) else {}
+
+        def history_passed(timeframe: str) -> bool:
+            report = reports.get(timeframe, {}) if isinstance(reports, dict) else {}
+            returned = int(report.get("returned_count") or len(feed.get("timeframes", {}).get(timeframe, [])))
+            return str(report.get("status") or "").upper() == "OK" and returned >= 30
+
+        passed_rules: list[str] = []
+        failed_rules: list[str] = []
+        h4_ok = history_passed("H4")
+        m15_ok = history_passed("M15")
+        (passed_rules if h4_ok else failed_rules).append("H4_HISTORY_AVAILABLE" if h4_ok else "H4_HISTORY_INSUFFICIENT")
+        (passed_rules if m15_ok else failed_rules).append("M15_HISTORY_AVAILABLE" if m15_ok else "M15_HISTORY_INSUFFICIENT")
+        reason = self._round3_reason(symbol, "REJECTED", failed_rules, None)
+        return {
+            "rule_name": "ROUND_3_STRICT_ENTRY_FILTERS",
+            "passed_rules": passed_rules,
+            "failed_rules": failed_rules,
+            "advisory_warnings": [],
+            "session": "UNAVAILABLE",
+            "RR": None,
+            "risk_reward": None,
+            "required_rr": self.demo_collection_min_rr,
+            "bos_status": "UNAVAILABLE",
+            "fvg_status": "UNAVAILABLE",
+            "h4_history_status": "AVAILABLE" if h4_ok else "INSUFFICIENT",
+            "m15_history_status": "AVAILABLE" if m15_ok else "INSUFFICIENT",
+            "final_decision": "REJECTED",
+            "final_decision_reason": reason,
+            "rejection_reason": reason,
+        }
+
+    def _round3_rule_audit(
+        self,
+        symbol: str,
+        feed: dict[str, Any],
+        direction: str,
+        smc: dict[str, Any],
+        session: dict[str, Any],
+        trade_plan: dict[str, Any],
+        score: dict[str, Any],
+    ) -> dict[str, Any]:
+        history = self._round3_history_audit(symbol, feed)
+        passed_rules = [rule for rule in history["passed_rules"]]
+        failed_rules = [rule for rule in history["failed_rules"]]
+        rr = self._number(trade_plan.get("risk_reward"))
+        checks = [
+            ("SESSION_LONDON_NY", "SESSION_OUTSIDE_LONDON_NY", bool(session.get("valid"))),
+            ("BOS_PRESENT", "BOS_MISSING", bool(smc.get("bos"))),
+            ("FVG_PRESENT", "FVG_MISSING", bool(smc.get("fvg"))),
+            ("RR_2_0_OR_HIGHER", "RR_BELOW_2_0", rr is not None and rr >= self.demo_collection_min_rr),
+        ]
+        for passed_code, failed_code, passed in checks:
+            (passed_rules if passed else failed_rules).append(passed_code if passed else failed_code)
+        advisory_warnings: list[str] = []
+        if not smc.get("liquidity_sweep"):
+            advisory_warnings.append("LIQUIDITY_SWEEP_MISSING")
+        if direction not in {"BUY", "SELL"} or int(score.get("factors", {}).get("trend_alignment", 0)) <= 0:
+            advisory_warnings.append("TREND_ALIGNMENT_WEAK")
+        decision = "ACCEPTED" if not failed_rules else "REJECTED"
+        reason = self._round3_reason(symbol, decision, failed_rules, rr)
+        return {
+            "rule_name": "ROUND_3_STRICT_ENTRY_FILTERS",
+            "passed_rules": passed_rules,
+            "failed_rules": failed_rules,
+            "advisory_warnings": advisory_warnings,
+            "session": session.get("name") or "UNAVAILABLE",
+            "RR": rr,
+            "risk_reward": rr,
+            "required_rr": self.demo_collection_min_rr,
+            "bos_status": "PRESENT" if smc.get("bos") else "MISSING",
+            "fvg_status": "PRESENT" if smc.get("fvg") else "MISSING",
+            "h4_history_status": history["h4_history_status"],
+            "m15_history_status": history["m15_history_status"],
+            "final_decision": decision,
+            "final_decision_reason": reason,
+            "rejection_reason": "" if decision == "ACCEPTED" else reason,
+        }
+
+    def _round3_reason(self, symbol: str, decision: str, failed_rules: list[str], rr: float | None) -> str:
+        first_failure = failed_rules[0] if failed_rules else ""
+        if decision == "ACCEPTED":
+            rr_text = f"{rr:.1f}" if rr is not None else "2.0"
+            return f"{symbol} accepted because BOS, FVG, London/NY session, valid H4/M15 history, and RR {rr_text} all passed."
+        if first_failure == "BOS_MISSING":
+            return f"{symbol} rejected because BOS was missing."
+        if first_failure == "FVG_MISSING":
+            return f"{symbol} rejected because FVG was missing."
+        if first_failure == "SESSION_OUTSIDE_LONDON_NY":
+            return f"{symbol} rejected because session was outside London/NY."
+        if first_failure == "H4_HISTORY_INSUFFICIENT":
+            return f"{symbol} rejected because H4 history was insufficient."
+        if first_failure == "M15_HISTORY_INSUFFICIENT":
+            return f"{symbol} rejected because M15 history was insufficient."
+        if first_failure == "RR_BELOW_2_0":
+            rr_text = f"{rr:.1f}" if rr is not None else "missing"
+            return f"{symbol} rejected because RR {rr_text} was below required 2.0."
+        return f"{symbol} is waiting for BOS and FVG confirmation before entry."
+
     def _demo_collection_tradeable(
         self,
         direction: str,
         score: dict[str, Any],
+        smc: dict[str, Any],
         trade_plan: dict[str, Any],
+        session: dict[str, Any],
         spread: dict[str, Any],
+        round3_audit: dict[str, Any],
     ) -> bool:
         rr = self._number(trade_plan.get("risk_reward"))
         return (
             direction in {"BUY", "SELL"}
             and int(score.get("confidence", 0)) >= self.demo_collection_confidence
+            and not round3_audit.get("failed_rules")
+            and bool(smc.get("bos"))
+            and bool(smc.get("fvg"))
+            and bool(session.get("valid"))
             and self._sl_tp_valid(direction, trade_plan)
             and rr is not None
             and rr >= self.demo_collection_min_rr
@@ -1014,6 +1146,12 @@ class RealSignalEngineService:
             missing.append({"code": "CONFIDENCE_GAP", "label": f"Confidence needs +{confidence_gap} to reach 55.", "gap": confidence_gap})
         if direction not in {"BUY", "SELL"}:
             missing.append({"code": "DIRECTIONAL_BIAS_MISSING", "label": "DEMO_COLLECTION requires a BUY or SELL directional bias."})
+        if not smc.get("bos"):
+            missing.append({"code": "BOS_MISSING", "label": "Round 3 requires BOS before entry."})
+        if not smc.get("fvg"):
+            missing.append({"code": "FVG_MISSING", "label": "Round 3 requires FVG before entry."})
+        if not session.get("valid"):
+            missing.append({"code": "SESSION_INVALID", "label": "Round 3 requires London/NY session."})
         rr = self._number(trade_plan.get("risk_reward"))
         if rr is None:
             missing.append({"code": "RR_MISSING", "label": "DEMO_COLLECTION requires RR from strategy plan or fallback demo risk model."})
@@ -1029,16 +1167,10 @@ class RealSignalEngineService:
 
     def _demo_collection_advisory_requirements(self, smc: dict[str, Any], session: dict[str, Any]) -> list[dict[str, Any]]:
         advisory: list[dict[str, Any]] = []
-        if not smc.get("bos"):
-            advisory.append({"code": "BOS_MISSING", "label": "BOS missing; advisory only in DEMO_COLLECTION."})
         if not smc.get("liquidity_sweep"):
-            advisory.append({"code": "LIQUIDITY_SWEEP_MISSING", "label": "Liquidity sweep missing; advisory only in DEMO_COLLECTION."})
-        if not smc.get("fvg"):
-            advisory.append({"code": "FVG_MISSING", "label": "FVG missing; advisory only in DEMO_COLLECTION."})
+            advisory.append({"code": "LIQUIDITY_SWEEP_MISSING", "label": "Liquidity sweep missing; advisory confidence only."})
         if not smc.get("order_block"):
-            advisory.append({"code": "ORDER_BLOCK_MISSING", "label": "Order block missing; advisory only in DEMO_COLLECTION."})
-        if not session.get("valid"):
-            advisory.append({"code": "SESSION_INVALID", "label": "Session invalid; advisory only in DEMO_COLLECTION."})
+            advisory.append({"code": "ORDER_BLOCK_MISSING", "label": "Order block missing; advisory confidence only."})
         return advisory
 
     def _profile_confidence(self, profile: str) -> int:
@@ -1072,18 +1204,18 @@ class RealSignalEngineService:
         if signal_action in {"BUY", "SELL"}:
             return "READY_FOR_PREVIEW"
         confidence = int(score.get("confidence", 0))
+        if any(item.get("code") in {"BOS_MISSING", "FVG_MISSING", "SESSION_INVALID", "SPREAD_TOO_HIGH", "SL_TP_INVALID", "RR_MISSING", "RR_LOW"} for item in missing_requirements):
+            return "REJECTED"
         if confidence >= threshold:
             return "WATCHLIST"
-        if any(item.get("code") in {"SPREAD_TOO_HIGH", "SL_TP_INVALID", "RR_MISSING", "RR_LOW"} for item in missing_requirements):
-            return "REJECTED"
         return "WAIT"
 
     def _profile_reasons(self, profile: str, reasons: list[str], missing_requirements: list[dict[str, Any]]) -> list[str]:
         if profile == "DEMO_COLLECTION":
             hard_missing = [item for item in missing_requirements if not item.get("advisory")]
             if not hard_missing:
-                return ["DEMO_COLLECTION profile approved for demo collection: directional bias, valid tick/spread, SL/TP, and 1.2 RR are satisfied. Relaxed SMC/session items are advisory only."]
-            return ["DEMO_COLLECTION profile active: FVG, order block, BOS, liquidity sweep, and session are advisory; demo collection still requires direction, tick/spread, SL/TP, and RR >= 1.2."]
+                return ["Round 3 approved: BOS, FVG, London/NY session, valid H4/M15 history, SL/TP, and RR >= 2.0 passed. Liquidity sweep and trend alignment remain advisory confidence boosters."]
+            return ["Round 3 active: require BOS, FVG, London/NY session, valid H4/M15 history, valid SL/TP, and RR >= 2.0 before entry."]
         if profile != "AUTO_VALIDATION":
             return reasons
         if not missing_requirements:

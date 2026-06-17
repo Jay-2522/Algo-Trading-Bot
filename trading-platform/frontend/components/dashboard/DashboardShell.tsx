@@ -3316,14 +3316,13 @@ function rejectionConclusionRow(label: string, pattern: IntelligencePattern | nu
 }
 
 function aiConclusionRow(label: string, observation: string, source?: FeatureImpactRow | IntelligencePattern): StrategyConclusionRow {
-  if (!source) return missingConclusionRow("AI", label);
-  const featureSource = "feature" in source ? source : null;
+  const featureSource = source && "feature" in source ? source : null;
   return {
     label,
     losses: featureSource ? String(featureSource.losses) : "—",
     netPnl: featureSource ? money(featureSource.netPnl) : "—",
     netPnlTone: featureSource ? featureSource.netPnl : null,
-    observation,
+    observation: observation || "â€”",
     trades: featureSource ? String(featureSource.trades) : "—",
     type: "AI",
     winRate: featureSource ? `${featureSource.winRate.toFixed(1)}%` : "—",
@@ -3381,13 +3380,8 @@ function recommendedImprovementObservation(topLoss?: IntelligencePattern, topRej
   return "Require BOS + FVG before entry.";
 }
 
-function buildStrategyConclusionRows(trades: ApiRecord[], losses: IntelligencePattern[], rejections: IntelligencePattern[], featureRows: FeatureImpactRow[]): StrategyConclusionRow[] {
-  const populatedRows = featureRows.filter((row) => row.hasData);
-  const bestRow = [...populatedRows].sort((left, right) => right.winRate - left.winRate || right.netPnl - left.netPnl)[0];
-  const weakestRow = [...populatedRows].sort((left, right) => left.winRate - right.winRate || left.netPnl - right.netPnl)[0];
+function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligencePattern[], rejections: IntelligencePattern[], _featureRows: FeatureImpactRow[]): StrategyConclusionRow[] {
   const topRejection = rejections[0];
-  const topLoss = losses[0];
-  const improvementSource = topLoss ?? topRejection;
   return [
     conclusionFromDna(
       "WINNING",
@@ -3463,11 +3457,12 @@ function buildStrategyConclusionRows(trades: ApiRecord[], losses: IntelligencePa
     rejectionConclusionRow("H1 history insufficient", findPattern(rejections, "H1 history insufficient", ["H1 history", "H1 insufficient"])),
     rejectionConclusionRow("Stop Loss rejection", findPattern(rejections, "Stop Loss rejection", ["stop loss", "sl validation"])),
     rejectionConclusionRow("Risk rejection", findPattern(rejections, "Risk rejection", ["risk validation", "risk rejection"])),
-    aiConclusionRow("Strongest setup", strongestSetupObservation(trades, bestRow), bestRow),
-    aiConclusionRow("Weakest setup", weakestSetupObservation(weakestRow), weakestRow),
-    aiConclusionRow("Major loss contributor", lossContributorObservation(topLoss), topLoss),
-    aiConclusionRow("Main validation blocker", validationBlockerObservation(topRejection), topRejection),
-    aiConclusionRow("Recommended improvement", recommendedImprovementObservation(topLoss, topRejection), improvementSource),
+    aiConclusionRow("Require BOS", "Require BOS before entry."),
+    aiConclusionRow("Require FVG", "Require FVG before entry."),
+    aiConclusionRow("Session filter", "Trade only London/NY sessions."),
+    aiConclusionRow("RR filter", "Require RR >= 2.0."),
+    aiConclusionRow("History filter", "Reject weak history data before signal approval."),
+    aiConclusionRow("Advisory confidence", "Treat liquidity sweep and trend alignment as advisory confidence boosters."),
   ];
 }
 
@@ -3665,6 +3660,16 @@ function validatorDiagnosticsFromRecord(record: ApiRecord, fallbackStatus: Reaso
     rejection_reason: firstReasonText(record, ["rejection_reason", "rejectionReason", "final_rejection_reason", "finalRejectionReason"]) || fallbackReason,
     timeframe: firstReasonText(record, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase(),
     validation_status: firstReasonText(record, ["validation_status", "validationStatus", "execution_status", "executionStatus", "status_level", "risk_status"]) || fallbackStatus,
+    final_decision_reason: firstReasonText(record, ["final_decision_reason", "finalDecisionReason"]),
+    passed_rules: Array.isArray(record.passed_rules) ? record.passed_rules : [],
+    failed_rules: Array.isArray(record.failed_rules) ? record.failed_rules : [],
+    advisory_warnings: Array.isArray(record.advisory_warnings) ? record.advisory_warnings : [],
+    RR: firstReasonNumber(record, ["RR", "risk_reward", "riskReward", "rr"]),
+    required_rr: firstReasonNumber(record, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]),
+    bos_status: firstReasonText(record, ["bos_status", "bosStatus"]),
+    fvg_status: firstReasonText(record, ["fvg_status", "fvgStatus"]),
+    h4_history_status: firstReasonText(record, ["h4_history_status", "h4HistoryStatus"]),
+    m15_history_status: firstReasonText(record, ["m15_history_status", "m15HistoryStatus"]),
   };
 }
 
@@ -3684,11 +3689,15 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
       timestamp,
       reason,
       confidence: numeric(signal, ["confidence", "signal_confidence", "confidence_score"], Number.NaN),
-      riskReward: numeric(signal, ["risk_reward_ratio", "rr"], Number.NaN),
-      requiredRR: numeric(signal, ["required_rr", "minimum_rr"], 1.5),
+      riskReward: numeric(signal, ["risk_reward", "risk_reward_ratio", "rr"], Number.NaN),
+      requiredRR: numeric(signal, ["required_rr", "minimum_rr"], 2.0),
       trendAlignment: signal.trend_alignment ?? signal.trendAlignment ?? signal.trend_confirmed,
       liquiditySweep: signal.liquidity_sweep ?? signal.liquiditySweep,
-      bosConfirmed: signal.bos_confirmed ?? signal.bosConfirmed,
+      bosConfirmed: signal.bos_confirmed ?? signal.bosConfirmed ?? asRecord(signal.strategy_components)?.bos,
+      fvgConfirmed: signal.fvg_confirmed ?? signal.fvgConfirmed ?? asRecord(signal.strategy_components)?.fvg,
+      sessionValid: signal.session_valid ?? signal.sessionValid ?? asRecord(signal.strategy_components)?.session_valid,
+      h4HistoryValid: readText(signal, ["h4_history_status"], "").toUpperCase() === "AVAILABLE",
+      m15HistoryValid: readText(signal, ["m15_history_status"], "").toUpperCase() === "AVAILABLE",
       orderBlockConfirmed: signal.order_block_confirmed ?? signal.orderBlockConfirmed,
       signalHash: readText(signal, ["signal_hash", "hash"], ""),
       blockers: cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements),

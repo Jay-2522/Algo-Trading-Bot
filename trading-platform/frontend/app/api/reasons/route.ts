@@ -30,6 +30,16 @@ type ReasonMessage = {
   timestamp: string;
   timeframe?: string;
   validation_status?: string;
+  final_decision_reason?: string;
+  passed_rules?: string[];
+  failed_rules?: string[];
+  advisory_warnings?: string[];
+  RR?: number | null;
+  required_rr?: number | null;
+  bos_status?: string;
+  fvg_status?: string;
+  h4_history_status?: string;
+  m15_history_status?: string;
 };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -196,14 +206,16 @@ function acceptedExecutionFallback(message: ReasonMessage): string {
 
 function rejectedFallback(message: ReasonMessage): string {
   const symbol = text(message.symbol).toUpperCase() || "This signal";
+  const finalReason = cleanDisplayText(message.final_decision_reason);
+  if (finalReason) return finalReason;
   const diagnostic = cleanDisplayText(message.rejection_reason);
   if (diagnostic) return `${symbol} was rejected because ${diagnostic.replace(/\.$/, "")}.`;
-  return `${symbol} was rejected because the latest validation checks did not pass. No trade was opened for this signal.`;
+  return `${symbol} rejected because a required Round 3 entry rule failed.`;
 }
 
 function waitingFallback(message: ReasonMessage): string {
   const symbol = text(message.symbol).toUpperCase() || "This signal";
-  return `${symbol} is waiting for the next valid confirmation before making a trading decision.`;
+  return `${symbol} is waiting for BOS and FVG confirmation before entry.`;
 }
 
 function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
@@ -223,6 +235,7 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
     mt5_retcode: cleanDisplayText(message.mt5_retcode),
     reason,
     rejection_reason: rejectionReason,
+    final_decision_reason: cleanDisplayText(message.final_decision_reason),
     side: cleanDisplayText(message.side).toUpperCase(),
     signal_hash: cleanDisplayText(message.signal_hash),
     source: message.source,
@@ -265,7 +278,7 @@ function containsBlocker(blockers: string[], patterns: RegExp[]): boolean {
 }
 
 function joinReasons(parts: string[]): string {
-  if (parts.length <= 1) return parts[0] ?? "the validation engine marked the setup accepted";
+  if (parts.length <= 1) return parts[0] ?? "the Round 3 entry rules passed";
   if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
   return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 }
@@ -273,30 +286,46 @@ function joinReasons(parts: string[]): string {
 function ruleBasedReason(context: ApiRecord): string {
   const symbol = text(context.symbol).toUpperCase() || "This setup";
   const status = normalizeStatus(context.status);
+  const finalDecisionReason = cleanDisplayText(context.final_decision_reason);
+  if (finalDecisionReason) return finalDecisionReason;
   const riskReward = numberValue(context.riskReward);
-  const requiredRR = numberValue(context.requiredRR) ?? 1.5;
+  const requiredRR = numberValue(context.requiredRR) ?? 2.0;
   const bosConfirmed = booleanValue(context.bosConfirmed);
+  const fvgConfirmed = booleanValue(context.fvgConfirmed);
   const liquiditySweep = booleanValue(context.liquiditySweep);
   const trendAlignment = booleanValue(context.trendAlignment);
+  const sessionValid = booleanValue(context.sessionValid);
+  const h4HistoryValid = booleanValue(context.h4HistoryValid);
+  const m15HistoryValid = booleanValue(context.m15HistoryValid);
   const orderBlockConfirmed = booleanValue(context.orderBlockConfirmed);
   const blockers = Array.isArray(context.blockers) ? context.blockers.map(text).filter(Boolean) : [];
   const suppliedReason = text(context.reason || context.setupReason || context.whatNeedsToHappenNext);
   const cleanSuppliedReason = cleanDisplayText(suppliedReason);
 
   if (riskReward !== null && riskReward < requiredRR) {
-    return `${symbol} was rejected because the risk/reward ratio was ${formatNumber(riskReward)}, below the required minimum of ${formatNumber(requiredRR)}.`;
+    return `${symbol} rejected because RR ${formatNumber(riskReward)} was below required ${formatNumber(requiredRR)}.`;
   }
   if (containsBlocker(blockers, [/risk.?reward/i, /\brr\b/i]) && riskReward !== null) {
-    return `${symbol} was rejected because the risk/reward ratio was ${formatNumber(riskReward)}, which did not meet the validation requirement.`;
+    return `${symbol} rejected because RR ${formatNumber(riskReward)} was below required ${formatNumber(requiredRR)}.`;
   }
   if (bosConfirmed === false || containsBlocker(blockers, [/\bbos\b/i, /break of structure/i])) {
-    return `${symbol} is waiting because BOS confirmation has not appeared yet.`;
+    return status === "Rejected" ? `${symbol} rejected because BOS was missing.` : `${symbol} is waiting for BOS and FVG confirmation before entry.`;
   }
-  if (liquiditySweep === false || containsBlocker(blockers, [/liquidity/i, /sweep/i])) {
-    return `${symbol} is waiting because the liquidity sweep confirmation has not appeared yet.`;
+  if (fvgConfirmed === false || containsBlocker(blockers, [/\bfvg\b/i, /fair value gap/i])) {
+    return status === "Rejected" ? `${symbol} rejected because FVG was missing.` : `${symbol} is waiting for BOS and FVG confirmation before entry.`;
   }
-  if (trendAlignment === false || containsBlocker(blockers, [/trend/i, /alignment/i])) {
-    return `${symbol} is waiting because trend alignment has not passed yet.`;
+  if (sessionValid === false || containsBlocker(blockers, [/session/i, /london/i, /new york/i])) {
+    return `${symbol} rejected because session was outside London/NY.`;
+  }
+  if (h4HistoryValid === false || containsBlocker(blockers, [/h4.*history/i])) {
+    return `${symbol} rejected because H4 history was insufficient.`;
+  }
+  if (m15HistoryValid === false || containsBlocker(blockers, [/m15.*history/i])) {
+    return `${symbol} rejected because M15 history was insufficient.`;
+  }
+  if (liquiditySweep === false || trendAlignment === false) {
+    // Round 3 treats these as advisory confidence boosters only.
+    return cleanSuppliedReason || `${symbol} is waiting for BOS and FVG confirmation before entry.`;
   }
   if (orderBlockConfirmed === false || containsBlocker(blockers, [/order block/i, /\bob\b/i])) {
     return `${symbol} is waiting because order block confirmation is still missing.`;
@@ -322,18 +351,21 @@ function ruleBasedReason(context: ApiRecord): string {
       liquiditySweep === true ? "liquidity sweep confirmed" : "",
       bosConfirmed === true ? "BOS confirmation appeared" : "",
       orderBlockConfirmed === true ? "order block confirmation passed" : "",
-      riskReward !== null && riskReward >= requiredRR ? `risk/reward ratio was ${formatNumber(riskReward)}, meeting the required minimum of ${formatNumber(requiredRR)}` : "",
+      fvgConfirmed === true ? "FVG passed" : "",
+      sessionValid === true ? "London/NY session passed" : "",
+      h4HistoryValid === true && m15HistoryValid === true ? "valid H4/M15 history passed" : "",
+      riskReward !== null && riskReward >= requiredRR ? `RR ${formatNumber(riskReward)} passed` : "",
     ].filter(Boolean);
     if (passedChecks.length > 0) return `${symbol} was accepted because ${joinReasons(passedChecks)}.`;
-    return cleanSuppliedReason ? `${symbol} was accepted because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} was accepted because the validation engine marked the setup accepted.`;
+    return cleanSuppliedReason ? `${symbol} was accepted because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} accepted because the Round 3 entry rules passed.`;
   }
   if (status === "Rejected") {
-    return cleanSuppliedReason ? `${symbol} was rejected because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} was rejected because the latest validation checks did not pass. No trade was opened for this signal.`;
+    return cleanSuppliedReason ? `${symbol} was rejected because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} rejected because a required Round 3 entry rule failed.`;
   }
   if (status === "Error") {
     return cleanSuppliedReason ? `${symbol} needs attention because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} needs attention because validation could not complete cleanly.`;
   }
-  return cleanSuppliedReason ? `${symbol} is waiting because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for the next valid confirmation before making a trading decision.`;
+  return cleanSuppliedReason ? `${symbol} is waiting because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for BOS and FVG confirmation before entry.`;
 }
 
 function groqRewriteIsTraceable(rewrite: string, sourceReason: string): boolean {

@@ -88,11 +88,13 @@ class ExecutionReasonPanelService:
         retcode = self._text(result.get("retcode") or result.get("final_retcode") or decision.get("mt5_retcode"))
         comment = self._text(result.get("comment") or result.get("final_comment") or decision.get("mt5_comment"))
         strategy_metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
+        round3 = strategy_metadata.get("round3_diagnostics") if isinstance(strategy_metadata.get("round3_diagnostics"), dict) else {}
+        final_reason = self._text(round3.get("final_decision_reason"))
         data_source = self._text(payload.get("data_source") or signal.get("data_source") or strategy_metadata.get("data_source"))
         return {
             "id": self._id(ticket, signal_hash),
             "groqGenerated": False,
-            "reason": f"{symbol} was accepted and opened as a {side or 'trade'} trade because the guarded demo validation passed, risk status was approved, and MT5 executed the order successfully. Ticket: {ticket}.",
+            "reason": final_reason or f"{symbol} was accepted and opened as a {side or 'trade'} trade because the Round 3 entry rules passed and MT5 executed the demo order successfully. Ticket: {ticket}.",
             "source": "execution",
             "status": "Accepted",
             "symbol": symbol,
@@ -106,6 +108,17 @@ class ExecutionReasonPanelService:
             "order_opened": True,
             "mt5_retcode": retcode,
             "mt5_comment": comment,
+            "rule_name": self._text(round3.get("rule_name")),
+            "passed_rules": round3.get("passed_rules") if isinstance(round3.get("passed_rules"), list) else [],
+            "failed_rules": round3.get("failed_rules") if isinstance(round3.get("failed_rules"), list) else [],
+            "advisory_warnings": round3.get("advisory_warnings") if isinstance(round3.get("advisory_warnings"), list) else [],
+            "session": self._text(round3.get("session")),
+            "RR": round3.get("RR"),
+            "bos_status": self._text(round3.get("bos_status")),
+            "fvg_status": self._text(round3.get("fvg_status")),
+            "h4_history_status": self._text(round3.get("h4_history_status")),
+            "m15_history_status": self._text(round3.get("m15_history_status")),
+            "final_decision_reason": final_reason,
             "timestamp": timestamp or self._timestamp(),
             "data_source": data_source,
         }

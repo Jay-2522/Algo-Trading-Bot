@@ -1,5 +1,49 @@
 [
   {
+    "candles_loaded": 220,
+    "candles_required": 30,
+    "data_source": "VANTAGE_DEMO",
+    "rejection_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "timeframe": "M15",
+    "validation_status": "WAITING",
+    "id": "reason-910657e8",
+    "groqGenerated": false,
+    "reason": "XAUUSD is waiting for BOS and FVG confirmation before entry.",
+    "source": "rule",
+    "status": "Waiting",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-06-17T19:04:02.145590+00:00",
+    "mt5_comment": "",
+    "mt5_retcode": "",
+    "final_decision_reason": "",
+    "side": "",
+    "signal_hash": "",
+    "strategy_profile": "",
+    "ticket": ""
+  },
+  {
+    "candles_loaded": 220,
+    "candles_required": 30,
+    "data_source": "VANTAGE_DEMO",
+    "rejection_reason": "M15/H1/H4 timeframe alignment is not confirmed. Setup quality is WAIT with confidence 28; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Fair value gap not confirmed. Order block not confirmed. Risk/reward is below the 1.5 minimum or trade plan is incomplete.",
+    "timeframe": "M15",
+    "validation_status": "WAITING",
+    "id": "reason-d6c6737e",
+    "groqGenerated": false,
+    "reason": "EURUSD is waiting for BOS and FVG confirmation before entry.",
+    "source": "rule",
+    "status": "Waiting",
+    "symbol": "EURUSD",
+    "timestamp": "2026-06-17T19:04:01.867925+00:00",
+    "mt5_comment": "",
+    "mt5_retcode": "",
+    "final_decision_reason": "",
+    "side": "",
+    "signal_hash": "",
+    "strategy_profile": "",
+    "ticket": ""
+  },
+  {
     "id": "execution-order-sent-1451591111",
     "groqGenerated": false,
     "reason": "EURUSD was accepted and opened as a SELL trade because the guarded demo validation passed, risk status was approved, and MT5 executed the order successfully. Ticket: 1451591111.",
@@ -20,7 +64,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451581553",
@@ -43,7 +88,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451555349",
@@ -66,7 +112,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -87,7 +134,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451531354",
@@ -110,7 +158,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -131,7 +180,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -152,7 +202,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -173,7 +224,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451503147",
@@ -196,7 +248,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -217,7 +270,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -238,7 +292,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -259,7 +314,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -280,7 +336,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -301,7 +358,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -322,7 +380,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -343,7 +402,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -364,7 +424,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451408657",
@@ -387,7 +448,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451397915",
@@ -410,7 +472,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -431,7 +494,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451385209",
@@ -454,7 +518,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -475,7 +540,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -496,7 +562,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -517,7 +584,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451324022",
@@ -540,7 +608,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -561,7 +630,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451318141",
@@ -584,7 +654,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -605,7 +676,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1451316129",
@@ -628,7 +700,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -649,7 +722,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1449748982",
@@ -672,7 +746,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1449733129",
@@ -695,7 +770,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -716,7 +792,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -737,7 +814,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1449670856",
@@ -760,7 +838,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1449667283",
@@ -783,7 +862,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -804,7 +884,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "id": "execution-order-sent-1449657114",
@@ -827,7 +908,8 @@
     "data_source": "VANTAGE_DEMO",
     "rejection_reason": "",
     "timeframe": "",
-    "validation_status": ""
+    "validation_status": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -848,7 +930,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -869,7 +952,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 0,
@@ -890,7 +974,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -911,7 +996,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": 220,
@@ -932,7 +1018,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": null,
@@ -953,7 +1040,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": null,
@@ -974,7 +1062,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": null,
@@ -995,7 +1084,8 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   },
   {
     "candles_loaded": null,
@@ -1016,6 +1106,7 @@
     "side": "",
     "signal_hash": "",
     "strategy_profile": "",
-    "ticket": ""
+    "ticket": "",
+    "final_decision_reason": ""
   }
 ]

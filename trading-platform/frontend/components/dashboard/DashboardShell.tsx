@@ -74,15 +74,17 @@ const ForexSessionsMap = dynamic(() => import("./ForexSessionsMap").then((mod) =
   ssr: false,
 });
 const ROUND_2_NOTE = "Round 2: EURUSD-only validation. No manual intervention. Client dashboard shows Round 2 only.";
-const ROUND_2_START_PAYLOAD: ApiRecord = {
+const ROUND_3_NOTE = "Round 3: strict validation. Requires H4/M15 history, London/NY session, BOS, FVG, and RR >= 2.0.";
+const ROUND_3_START_PAYLOAD: ApiRecord = {
   confirm_fresh_start: true,
+  force_new_round: true,
   session_started_by: "user_click",
   strategy_profile: "DEMO_COLLECTION",
   allowed_symbols: ["EURUSD"],
   target_validation_trades: TARGET_TRADES,
   target_closed_trades: TARGET_TRADES,
-  round_label: "ROUND_2",
-  session_note: ROUND_2_NOTE,
+  round_label: "ROUND_3",
+  session_note: ROUND_3_NOTE,
   client_dashboard_scope: "CURRENT_SESSION_ONLY",
 };
 const FOREX_DISPLAY_TIME_ZONE = "Asia/Kolkata";
@@ -404,6 +406,95 @@ function tradeLossCount(trades: ApiRecord[]): number {
 function closedTradeProgressText(actualClosedTrades: number, targetTrades: number): string {
   if (targetTrades > 0 && actualClosedTrades > targetTrades) return `${actualClosedTrades} trades completed (target was ${targetTrades})`;
   return `${actualClosedTrades} of ${targetTrades} closed trades completed.`;
+}
+
+function validationSession(data: DashboardData): ApiRecord | null {
+  return asRecord(asRecord(data.autoValidation)?.session);
+}
+
+function validationSessionId(data: DashboardData): string {
+  return readText(validationSession(data), ["session_id", "id", "validation_session_id"], "");
+}
+
+function validationRoundLabel(data: DashboardData): string {
+  return readText(validationSession(data), ["round_label"], "").toUpperCase();
+}
+
+function isRound3ValidationSession(data: DashboardData): boolean {
+  return validationRoundLabel(data) === "ROUND_3";
+}
+
+function tradeSessionId(trade: ApiRecord): string {
+  return readText(trade, ["validation_session_id", "session_id"], "");
+}
+
+function closedTradesOnly(trades: ApiRecord[]): ApiRecord[] {
+  return trades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
+}
+
+function round3ClosedTrades(data: DashboardData, trades: ApiRecord[]): ApiRecord[] {
+  const sessionId = validationSessionId(data);
+  if (!sessionId || !isRound3ValidationSession(data)) return [];
+  return closedTradesOnly(trades).filter((trade) => tradeSessionId(trade) === sessionId);
+}
+
+function round2ClosedTrades(data: DashboardData, trades: ApiRecord[]): ApiRecord[] {
+  const round3SessionId = isRound3ValidationSession(data) ? validationSessionId(data) : "";
+  return closedTradesOnly(trades).filter((trade) => {
+    if (round3SessionId && tradeSessionId(trade) === round3SessionId) return false;
+    const symbol = readText(trade, ["symbol"], "").toUpperCase();
+    return !symbol || symbol === "EURUSD";
+  });
+}
+
+function round3OpenPositions(data: DashboardData, positions: ApiRecord[]): ApiRecord[] {
+  const sessionId = validationSessionId(data);
+  if (!sessionId || !isRound3ValidationSession(data)) return [];
+  return positions.filter((position) => readText(position, ["validation_session_id", "session_id"], "") === sessionId);
+}
+
+function round3DashboardData(data: DashboardData): DashboardData {
+  if (isRound3ValidationSession(data)) return data;
+  const autoStatus = asRecord(data.autoValidation);
+  const config = asRecord(autoStatus?.config);
+  const resetSession: ApiRecord = {
+    ...(validationSession(data) ?? {}),
+    session_id: "",
+    status: "READY_ROUND_3",
+    round_label: "ROUND_3",
+    session_note: ROUND_3_NOTE,
+    target_closed_trades: TARGET_TRADES,
+    target_validation_trades: TARGET_TRADES,
+    current_closed_trades: 0,
+    current_session_closed: 0,
+    current_open_trades: 0,
+    current_session_open_trades: 0,
+    wins: 0,
+    losses: 0,
+    net_pnl: 0,
+    max_drawdown: 0,
+    profit_factor: 0,
+  };
+  return {
+    ...data,
+    autoValidation: {
+      ...(autoStatus ?? {}),
+      blocked_reasons: [],
+      current_signal_watched: null,
+      last_execution_decision: null,
+      latest_validation_close_report: null,
+      validation_close_reports: [],
+      config: {
+        ...(config ?? {}),
+        allowed_symbols: ["EURUSD"],
+        min_rr: 2.0,
+        strategy_profile: "DEMO_COLLECTION",
+        target_closed_trades: TARGET_TRADES,
+        target_validation_trades: TARGET_TRADES,
+      },
+      session: resetSession,
+    },
+  };
 }
 
 function formatDuration(value: unknown): string {
@@ -1051,10 +1142,10 @@ export function DashboardShell(_: {
       const recoveredClosed = readNumber(currentAutoValidation, ["recovered_closed_trades"], 0);
       const recoveredOpen = readNumber(currentAutoValidation, ["recovered_open_trades"], 0);
       const recoveredSessionId = readText(currentAutoValidation, ["recovered_session_id"], "");
-      const startPayload: ApiRecord = action === "start" ? { ...ROUND_2_START_PAYLOAD } : {};
+      const startPayload: ApiRecord = action === "start" ? { ...ROUND_3_START_PAYLOAD } : {};
       if (action === "start" && recoverable) {
         const confirmed = window.confirm(
-          `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start Round 2 as a fresh EURUSD-only session and reset current client validation counters?`,
+          `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start Round 3 as a fresh strict-validation session and reset current client validation counters?`,
         );
         if (!confirmed) {
           setToast(null);
@@ -1133,6 +1224,7 @@ export function DashboardShell(_: {
             />
           ) : activePortalView === "traderProfile" ? (
             <TraderProfileView
+              closedTrades={clientClosedTrades}
               data={data}
               onRefresh={() => void handleClientRefresh()}
             />
@@ -1721,12 +1813,13 @@ function MarketHoursCard() {
   );
 }
 
-function TraderProfileView({ data, onRefresh }: { data: DashboardData; onRefresh: () => void }) {
+function TraderProfileView({ closedTrades, data, onRefresh }: { closedTrades: ApiRecord[]; data: DashboardData; onRefresh: () => void }) {
   const [editing, setEditing] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
   const broker = asRecord(data.brokerAccounts[0]) ?? {};
   const config = asRecord(data.autoValidation?.config);
   const mode = asRecord(data.executionMode);
+  const round2Trades = round2ClosedTrades(data, closedTrades);
   const mask = (value: string) => showSensitive ? value : value ? "*".repeat(Math.min(12, Math.max(6, value.length))) : "Not configured";
   useEffect(() => {
     if (!showSensitive) return;
@@ -1779,6 +1872,7 @@ function TraderProfileView({ data, onRefresh }: { data: DashboardData; onRefresh
           ["Status", readText(data.guardedStatus, ["status"], "Monitoring")],
         ]} />
       </section>
+      <RoundResultsCard data={data} detailsTitle="Round 2 Trade Details" filename="round-2-results.csv" title="Round 2 Results" trades={round2Trades} />
     </div>
   );
 }
@@ -2171,12 +2265,15 @@ function TestEnvironmentView(props: {
   todayPnl: number;
   workingAction: string | null;
 }) {
+  const round3Data = round3DashboardData(props.data);
+  const round3Trades = round3ClosedTrades(props.data, props.closedTrades);
+  const round3Positions = round3OpenPositions(props.data, props.scopedOpenPositions);
   return (
     <div className="portal-test-shell">
       <TestEnvironmentTitleCard />
-      <Round1Results data={props.data} trades={props.closedTrades} />
-      <ClientDashboardView {...props} loading={false} showHero={false} />
-      <TradeIntelligenceSection closedTrades={props.closedTrades} reasonContexts={buildReasonContexts(props.data)} />
+      <RoundResultsCard data={round3Data} detailsTitle="Round 3 Trade Details" emptyAsZero filename="round-3-results.csv" title="Round 3 Results" trades={round3Trades} />
+      <ClientDashboardView {...props} data={round3Data} closedTrades={round3Trades} loading={false} scopedOpenPositions={round3Positions} showHero={false} />
+      <TradeIntelligenceSection closedTrades={round3Trades} reasonContexts={buildReasonContexts(round3Data)} />
     </div>
   );
 }
@@ -2326,30 +2423,44 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
   );
 }
 
-function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecord[] }) {
+function RoundResultsCard({
+  data,
+  detailsTitle,
+  emptyAsZero = false,
+  filename,
+  title,
+  trades,
+}: {
+  data: DashboardData;
+  detailsTitle: string;
+  emptyAsZero?: boolean;
+  filename: string;
+  title: string;
+  trades: ApiRecord[];
+}) {
   const [expanded, setExpanded] = useState(false);
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
-  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
-  const round2Trades = trades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
-  const actualClosedTrades = actualClosedTradeCount(round2Trades);
-  const actualWins = tradeWinCount(round2Trades);
+  const target = title.includes("Round 2") ? TARGET_TRADES : readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
+  const resultTrades = closedTradesOnly(trades);
+  const actualClosedTrades = actualClosedTradeCount(resultTrades);
+  const actualWins = tradeWinCount(resultTrades);
   const actualWinRate = actualClosedTrades ? (actualWins / actualClosedTrades) * 100 : 0;
-  const netPnl = round2Trades.reduce((sum, trade) => sum + tradePnl(trade), 0);
+  const netPnl = resultTrades.reduce((sum, trade) => sum + tradePnl(trade), 0);
   const hasTrades = actualClosedTrades > 0;
   const downloadReport = () => {
     const header = ["Ticket", "Symbol", "Direction", "Result", "P&L", "Entry Price", "Exit Price", "Exit Reason", "Open Time", "Close Time"];
-    const rows = round2Trades.map((trade, index) => round2TradeCsvRow(trade, index));
-    downloadCsv("round-2-results.csv", [header, ...rows]);
+    const rows = resultTrades.map((trade, index) => round2TradeCsvRow(trade, index));
+    downloadCsv(filename, [header, ...rows]);
   };
   return (
     <section className="round1-card">
       <div className="premium-test-header">
         <div>
           <p className="premium-section-eyebrow">EURUSD Test Results</p>
-          <h2 className="premium-section-title">Round 2 Results</h2>
-          {!hasTrades ? <p className="test-results-empty">Round 2 trades will appear here from the trade journal.</p> : null}
+          <h2 className="premium-section-title">{title}</h2>
+          {!hasTrades ? <p className="test-results-empty">{title} trades will appear here from the trade journal.</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="portal-panel-tab round2-results-action" disabled={!hasTrades} onClick={() => setExpanded((value) => !value)} type="button">{hasTrades ? (expanded ? "Hide Trades" : "View Trades") : "No trades yet"}</button>
@@ -2358,20 +2469,20 @@ function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecor
       </div>
       <div className="premium-stat-grid">
         <ClientMetric label="Target" value={String(target)} compact />
-        <ClientMetric label="Closed" value={hasTrades ? String(actualClosedTrades) : "-"} compact />
-        <ClientMetric label="Win Rate" value={hasTrades ? `${actualWinRate.toFixed(2)}%` : "-"} compact />
-        <ClientMetric label="Net P&L" value={hasTrades ? money(netPnl) : "-"} compact />
+        <ClientMetric label="Closed" value={hasTrades || emptyAsZero ? String(actualClosedTrades) : "-"} compact />
+        <ClientMetric label="Win Rate" value={hasTrades ? `${actualWinRate.toFixed(2)}%` : emptyAsZero ? "0%" : "-"} compact />
+        <ClientMetric label="Net P&L" value={hasTrades || emptyAsZero ? money(netPnl) : "-"} compact />
       </div>
-      {expanded ? <EurusdTradeHistory trades={round2Trades} onClose={() => setExpanded(false)} /> : null}
+      {expanded ? <EurusdTradeHistory trades={resultTrades} title={detailsTitle} onClose={() => setExpanded(false)} /> : null}
     </section>
   );
 }
 
-function EurusdTradeHistory({ trades, onClose }: { trades: ApiRecord[]; onClose: () => void }) {
+function EurusdTradeHistory({ trades, title, onClose }: { trades: ApiRecord[]; title: string; onClose: () => void }) {
   return (
     <div className="test-trade-history">
       <div className="test-trade-history-header">
-        <h3>Round 2 Trade Details</h3>
+        <h3>{title}</h3>
         <button onClick={onClose} type="button">Close x</button>
       </div>
       {trades.length ? (
@@ -2434,7 +2545,7 @@ function ClientDashboardLoadingView() {
           <div>
             <p className="premium-section-eyebrow">Test Environment</p>
             <h2 className="premium-section-title">Preparing validation workspace</h2>
-            <p className="premium-test-note">Round 2 controls and verification data will appear when the latest dashboard snapshot is ready.</p>
+            <p className="premium-test-note">Round 3 controls and verification data will appear when the latest dashboard snapshot is ready.</p>
           </div>
           <strong className="premium-test-progress">--</strong>
         </div>
@@ -2568,7 +2679,7 @@ function ClientDashboardView({
             <p className="premium-section-eyebrow">Test Environment</p>
             <h2 className="premium-section-title">{botState.statusText}</h2>
             <p className="premium-test-note">{closedTradeProgressText(actualClosedTrades, target)}</p>
-            <p className="premium-test-note">{sessionNote || ROUND_2_NOTE}</p>
+            <p className="premium-test-note">{sessionNote || ROUND_3_NOTE}</p>
           </div>
           <strong className="premium-test-progress">{progress}%</strong>
         </div>
@@ -2577,7 +2688,7 @@ function ClientDashboardView({
         </div>
         <div className="premium-sub-grid">
           <div className="premium-sub-card">
-            <p className="premium-section-eyebrow">Round 2 validation</p>
+            <p className="premium-section-eyebrow">Round 3 validation</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <ClientMetric label="Target Closed Trades" value={String(target)} compact />
               <ClientMetric label="Closed Trades" value={String(actualClosedTrades)} compact />
@@ -3507,6 +3618,7 @@ function moneyOrWaiting(value: number): string {
 }
 
 function clientBotState(mode: string, closed: number, open: number, target: number, hasValidationSession: boolean): { label: string; statusText: string; tone: "healthy" | "warning" | "danger" } {
+  if (mode === "READY_ROUND_3") return { label: "Ready", statusText: "Ready for Round 3 Validation", tone: "healthy" };
   if (closed >= target && target > 0) return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
   if (mode === "RUNNING") return { label: "Running", statusText: open > 0 ? "Waiting for Open Trades to Close" : "Validation in Progress", tone: "healthy" };
   if (["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)) return { label: "Paused", statusText: "Validation Paused", tone: "warning" };

@@ -255,6 +255,23 @@ function isProgressQuestion(question: string): boolean {
   return normalized.includes("validation progress") || normalized.includes("remaining trade") || normalized.includes("current progress") || normalized.includes("progress");
 }
 
+function isStrategyRulesQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("round 3 rules") ||
+    normalized.includes("entry rules") ||
+    normalized.includes("strategy rules") ||
+    normalized.includes("validation rules") ||
+    (normalized.includes("round 3") && (normalized.includes("require") || normalized.includes("filter"))) ||
+    (normalized.includes("what") && normalized.includes("rules") && (normalized.includes("entry") || normalized.includes("strategy") || normalized.includes("validation")))
+  );
+}
+
+function answerStrategyRulesQuestion(question: string): string | null {
+  if (!isStrategyRulesQuestion(question)) return null;
+  return "Round 3 requires H4 history, M15 history, London/NY session, BOS present, FVG present, and RR >= 2.0. Liquidity sweep and trend alignment are advisory only.";
+}
+
 function readPositionField(record: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
     const value = record[key];
@@ -638,6 +655,10 @@ export async function POST(request: Request) {
     const question = typeof body.question === "string" ? body.question.trim() : "";
     if (!question) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
+    }
+    const strategyRulesAnswer = answerStrategyRulesQuestion(question);
+    if (strategyRulesAnswer) {
+      return NextResponse.json({ reply: strategyRulesAnswer });
     }
     const openTicketAnswer = await answerOpenTicketQuestion(question);
     if (openTicketAnswer) {

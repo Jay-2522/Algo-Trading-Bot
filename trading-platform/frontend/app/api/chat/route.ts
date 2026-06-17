@@ -351,6 +351,90 @@ async function readBackendRecord(endpoint: string): Promise<Record<string, unkno
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function isHistoryReadinessQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("history ready") ||
+    normalized.includes("history sync") ||
+    normalized.includes("h4 candle") ||
+    normalized.includes("h1 candle") ||
+    normalized.includes("m15 candle") ||
+    normalized.includes("candles loaded") ||
+    normalized.includes("loaded 0") ||
+    (normalized.includes("history") && normalized.includes("0")) ||
+    (normalized.includes("why") && normalized.includes("no") && normalized.includes("trade") && (normalized.includes("open") || normalized.includes("opening")))
+  );
+}
+
+function historyWarmupFromStatus(status: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!status) return null;
+  return asRecord(status.history_warmup) ?? asRecord(asRecord(status.last_execution_decision)?.history_warmup);
+}
+
+function historyDiagnostics(warmup: Record<string, unknown> | null): Record<string, unknown>[] {
+  const raw = Array.isArray(warmup?.diagnostics) ? warmup.diagnostics : [];
+  return raw.filter((item): item is Record<string, unknown> => Boolean(asRecord(item)));
+}
+
+function historyDiagnosticSummary(diagnostic: Record<string, unknown>): string {
+  const symbol = cleanText(diagnostic.requested_symbol) || cleanText(diagnostic.symbol) || "EURUSD";
+  const resolved = cleanText(diagnostic.resolved_symbol) || symbol;
+  const timeframe = cleanText(diagnostic.timeframe) || "H4";
+  const loaded = numberValue(diagnostic.candles_loaded) ?? 0;
+  const required = numberValue(diagnostic.candles_required) ?? 300;
+  return `${symbol} ${timeframe} resolved as ${resolved}: loaded ${loaded} / required ${required} candles`;
+}
+
+function historyErrorSummary(diagnostic: Record<string, unknown>): string {
+  const error = cleanText(diagnostic.mt5_last_error) || cleanText(diagnostic.symbol_select_error);
+  const connection = cleanText(diagnostic.connection_id);
+  const process = cleanText(diagnostic.process_id);
+  const connectionText = connection ? ` Connection: ${connection}.` : process ? ` Process id: ${process}.` : "";
+  return (error ? ` MT5 last_error: ${error}.` : " MT5 did not report a last_error.") + connectionText;
+}
+
+function firstPendingHistoryDiagnostic(diagnostics: Record<string, unknown>[]): Record<string, unknown> | null {
+  const pending = diagnostics.filter((item) => item.history_ready !== true);
+  const rank: Record<string, number> = { H4: 0, M15: 1, H1: 2 };
+  return pending.sort((left, right) => (rank[cleanText(left.timeframe).toUpperCase()] ?? 9) - (rank[cleanText(right.timeframe).toUpperCase()] ?? 9))[0] ?? null;
+}
+
+async function answerHistoryReadinessQuestion(question: string): Promise<string | null> {
+  if (!isHistoryReadinessQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const warmup = historyWarmupFromStatus(status);
+  const diagnostics = historyDiagnostics(warmup);
+  if (!diagnostics.length) return "MT5 history warmup diagnostics have not been recorded yet.";
+  const timeframe = questionTimeframe(question);
+  const symbol = questionSymbol(question);
+  if (timeframe) {
+    const match = diagnostics.find((item) => cleanText(item.timeframe).toUpperCase() === timeframe && (!symbol || cleanText(item.symbol).toUpperCase() === symbol));
+    if (match) {
+      const readyText = match.history_ready === true ? "ready" : "not ready";
+      return `${historyDiagnosticSummary(match)}. History is ${readyText}.${historyErrorSummary(match)}`;
+    }
+  }
+  const pending = firstPendingHistoryDiagnostic(diagnostics);
+  const normalized = question.toLowerCase();
+  if (normalized.includes("loaded 0") || (normalized.includes("history") && normalized.includes("0"))) {
+    const zero = diagnostics.find((item) => (numberValue(item.candles_loaded) ?? 0) === 0) ?? pending;
+    if (zero) return `History is loaded 0 because MT5 returned no candles for the resolved symbol/timeframe. ${historyDiagnosticSummary(zero)}.${historyErrorSummary(zero)}`;
+  }
+  if (normalized.includes("why") && normalized.includes("trade")) {
+    if (pending) return `No trades are opening because MT5 history sync is still warming. ${historyDiagnosticSummary(pending)}.${historyErrorSummary(pending)}`;
+    return "MT5 history is ready. If no trades open, Round 3 is still waiting for London/NY session, BOS, FVG, and RR >= 2.0.";
+  }
+  if (normalized.includes("history ready") || normalized.includes("history sync")) {
+    if (pending) return `History is not ready. ${historyDiagnosticSummary(pending)}.${historyErrorSummary(pending)}`;
+    return "History is ready for Round 3 M15, H1, and H4 validation.";
+  }
+  return diagnostics.map(historyDiagnosticSummary).join(". ") + ".";
+}
+
 function logOpenPositionsForChat(positions: Record<string, unknown>[]): void {
   console.log(
     "Chat live MT5 open positions:",
@@ -659,6 +743,10 @@ export async function POST(request: Request) {
     const strategyRulesAnswer = answerStrategyRulesQuestion(question);
     if (strategyRulesAnswer) {
       return NextResponse.json({ reply: strategyRulesAnswer });
+    }
+    const historyReadinessAnswer = await answerHistoryReadinessQuestion(question);
+    if (historyReadinessAnswer) {
+      return NextResponse.json({ reply: historyReadinessAnswer });
     }
     const openTicketAnswer = await answerOpenTicketQuestion(question);
     if (openTicketAnswer) {

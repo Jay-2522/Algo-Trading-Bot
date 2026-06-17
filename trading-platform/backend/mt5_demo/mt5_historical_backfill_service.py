@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import copy
 from typing import Any
 
 from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
@@ -16,6 +17,7 @@ class MT5HistoricalBackfillService:
         "H4": 4 * 60 * 60,
         "D1": 24 * 60 * 60,
     }
+    _shared_history_cache: dict[tuple[str, str], dict[str, Any]] = {}
 
     def __init__(self, market_data_service: MT5MarketDataService | None = None) -> None:
         self.market_data_service = market_data_service or MT5MarketDataService()
@@ -42,20 +44,39 @@ class MT5HistoricalBackfillService:
         if normalized_timeframe not in self.supported_timeframes:
             return self._error_payload(normalized_symbol, normalized_timeframe, count, "INVALID_TIMEFRAME", f"Unsupported timeframe: {timeframe}")
 
+        cache_key = (normalized_symbol, normalized_timeframe)
         raw_payload = self.market_data_service.get_symbol_candles(normalized_symbol, normalized_timeframe, count=count)
         if raw_payload.get("status") != "OK":
+            cached = self._cached_history(cache_key, count)
+            if cached is not None:
+                cached["cache_hit"] = True
+                cached["cache_reason"] = "MT5_HISTORY_READ_FAILED_REUSED_LAST_SUCCESS"
+                cached["latest_mt5_error"] = raw_payload.get("mt5_last_error")
+                cached["latest_read_status"] = raw_payload.get("status")
+                return cached
             return self._error_payload(
                 normalized_symbol,
                 normalized_timeframe,
                 count,
                 raw_payload.get("status", "HISTORY_UNAVAILABLE"),
                 raw_payload.get("message", f"History unavailable for {normalized_symbol} {normalized_timeframe}."),
+                raw_payload,
             )
 
         candles = self.normalize_candles(raw_payload.get("candles", []))
+        if not candles:
+            cached = self._cached_history(cache_key, count)
+            if cached is not None:
+                cached["cache_hit"] = True
+                cached["cache_reason"] = "MT5_HISTORY_EMPTY_REUSED_LAST_SUCCESS"
+                cached["latest_mt5_error"] = raw_payload.get("mt5_last_error")
+                cached["latest_read_status"] = raw_payload.get("status")
+                return cached
         validation = self.validate_candles(candles, normalized_timeframe)
-        return {
+        payload = {
             "symbol": normalized_symbol,
+            "requested_symbol": raw_payload.get("requested_symbol", normalized_symbol),
+            "resolved_symbol": raw_payload.get("resolved_symbol", normalized_symbol),
             "timeframe": normalized_timeframe,
             "requested_count": count,
             "returned_count": len(candles),
@@ -66,6 +87,14 @@ class MT5HistoricalBackfillService:
             "account_login": raw_payload.get("account_login", ""),
             "server": raw_payload.get("server", ""),
             "account_type": raw_payload.get("account_type", "DEMO"),
+            "mt5_last_error": raw_payload.get("mt5_last_error"),
+            "symbol_select_result": raw_payload.get("symbol_select_result"),
+            "symbol_select_error": raw_payload.get("symbol_select_error"),
+            "symbol_resolution": raw_payload.get("symbol_resolution") or {},
+            "process_id": raw_payload.get("process_id"),
+            "connection_id": raw_payload.get("connection_id"),
+            "terminal_path": raw_payload.get("terminal_path"),
+            "cache_hit": False,
             "status": "OK" if candles else "HISTORY_UNAVAILABLE",
             "simulation_only": True,
             "live_execution_enabled": False,
@@ -73,6 +102,22 @@ class MT5HistoricalBackfillService:
             "execution_allowed": False,
             "timestamp": self._timestamp(),
         }
+        if candles:
+            self._shared_history_cache[cache_key] = copy.deepcopy(payload)
+        return payload
+
+    def _cached_history(self, cache_key: tuple[str, str], count: int) -> dict[str, Any] | None:
+        cached = self._shared_history_cache.get(cache_key)
+        if not cached:
+            return None
+        candles = cached.get("candles") if isinstance(cached.get("candles"), list) else []
+        if len(candles) < count:
+            return None
+        result = copy.deepcopy(cached)
+        result["requested_count"] = count
+        result["returned_count"] = len(candles)
+        result["status"] = "OK"
+        return result
 
     def normalize_candles(self, raw_candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
         candles: list[dict[str, Any]] = []
@@ -150,6 +195,8 @@ class MT5HistoricalBackfillService:
         last_time = candles[-1]["time"] if candles else None
         return {
             "symbol": history.get("symbol"),
+            "requested_symbol": history.get("requested_symbol"),
+            "resolved_symbol": history.get("resolved_symbol"),
             "timeframe": history.get("timeframe"),
             "requested_count": history.get("requested_count"),
             "returned_count": history.get("returned_count"),
@@ -162,6 +209,8 @@ class MT5HistoricalBackfillService:
             "account_login": history.get("account_login", ""),
             "server": history.get("server", ""),
             "account_type": history.get("account_type", "DEMO"),
+            "mt5_last_error": history.get("mt5_last_error"),
+            "symbol_resolution": history.get("symbol_resolution") or {},
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -169,9 +218,12 @@ class MT5HistoricalBackfillService:
             "timestamp": self._timestamp(),
         }
 
-    def _error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str) -> dict[str, Any]:
+    def _error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str, raw_payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        raw_payload = raw_payload or {}
         return {
             "symbol": symbol,
+            "requested_symbol": raw_payload.get("requested_symbol", symbol),
+            "resolved_symbol": raw_payload.get("resolved_symbol", symbol),
             "timeframe": timeframe,
             "requested_count": count,
             "returned_count": 0,
@@ -183,6 +235,14 @@ class MT5HistoricalBackfillService:
                 "warnings": [message],
             },
             "source": "MT5_DEMO",
+            "mt5_last_error": raw_payload.get("mt5_last_error"),
+            "symbol_select_result": raw_payload.get("symbol_select_result"),
+            "symbol_select_error": raw_payload.get("symbol_select_error"),
+            "symbol_resolution": raw_payload.get("symbol_resolution") or {},
+            "process_id": raw_payload.get("process_id"),
+            "connection_id": raw_payload.get("connection_id"),
+            "terminal_path": raw_payload.get("terminal_path"),
+            "cache_hit": False,
             "status": status,
             "error": True,
             "message": message,

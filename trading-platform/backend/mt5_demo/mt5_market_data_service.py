@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 import time
 from typing import Any
 
@@ -106,7 +107,7 @@ class MT5MarketDataService:
     def get_symbol_candles(self, symbol: str, timeframe: str, count: int = 50) -> dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
         normalized_timeframe = self._normalize_timeframe(timeframe)
-        count = max(1, min(int(count or 50), 500))
+        count = max(1, min(int(count or 50), 1000))
 
         if normalized not in self.supported_symbols:
             return self._candle_error_payload(normalized, normalized_timeframe, count, "INVALID_SYMBOL", f"Unsupported symbol: {symbol}")
@@ -121,45 +122,73 @@ class MT5MarketDataService:
             account = mt5.account_info()
             source = self._source_from_account(account)
             account_type = self._account_type(account)
-            availability = self._symbol_availability(normalized)
+            resolution = self._resolve_market_watch_symbol(normalized)
+            resolved_symbol = str(resolution.get("resolved_symbol") or normalized)
+            if not resolution.get("resolved"):
+                return self._candle_error_payload(
+                    normalized,
+                    normalized_timeframe,
+                    count,
+                    "SYMBOL_NOT_FOUND",
+                    str(resolution.get("message") or f"{normalized} could not be resolved in MT5 Market Watch."),
+                    resolution=resolution,
+                )
+            select_result = bool(mt5.symbol_select(resolved_symbol, True))
+            select_error = mt5.last_error()
+            availability = self._symbol_availability(resolved_symbol)
             if availability["classification"] in {"SYMBOL_NOT_FOUND", "SYMBOL_HIDDEN"}:
-                return self._candle_error_payload(normalized, normalized_timeframe, count, availability["classification"], availability["message"])
+                return self._candle_error_payload(
+                    normalized,
+                    normalized_timeframe,
+                    count,
+                    availability["classification"],
+                    availability["message"],
+                    resolution={**resolution, "symbol_select_result": select_result, "last_error": select_error},
+                )
             mt5_timeframe = self._mt5_timeframe(normalized_timeframe)
-            rates = mt5.copy_rates_from_pos(normalized, mt5_timeframe, 0, count)
+            rates = mt5.copy_rates_from_pos(resolved_symbol, mt5_timeframe, 0, count)
+            last_error = mt5.last_error()
             if rates is None or len(rates) == 0:
                 return self._candle_error_payload(
                     normalized,
                     normalized_timeframe,
                     count,
                     "CANDLES_UNAVAILABLE",
-                    f"No candles returned for {normalized} {normalized_timeframe}: {mt5.last_error()}",
+                    f"No candles returned for {normalized} resolved as {resolved_symbol} {normalized_timeframe}: {last_error}",
+                    resolution={**resolution, "symbol_select_result": select_result, "last_error": last_error},
                 )
             candles = [self._rate_to_candle(rate) for rate in rates]
             return {
                 "symbol": normalized,
+                "requested_symbol": normalized,
+                "resolved_symbol": resolved_symbol,
                 "timeframe": normalized_timeframe,
                 "count": len(candles),
                 "requested_count": count,
+                "returned_count": len(candles),
                 "candles": candles,
                 "source": source,
                 "broker_source": source,
                 "account_login": str(getattr(account, "login", "")) if account else "",
                 "server": str(getattr(account, "server", "")) if account else "",
                 "account_type": account_type,
+                **self._connection_diagnostics(account),
                 "status": "OK",
                 "simulation_only": True,
                 "live_execution_enabled": False,
                 "broker_execution_enabled": False,
                 "execution_allowed": False,
                 "symbol_availability": availability["classification"],
-                "symbol_select_result": availability["symbol_select_result"],
-                "symbol_select_error": availability["last_error"],
+                "symbol_select_result": select_result,
+                "symbol_select_error": select_error,
+                "mt5_last_error": last_error,
+                "symbol_resolution": resolution,
                 "timestamp": self._timestamp(),
             }
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return self._candle_error_payload(normalized, normalized_timeframe, count, "CANDLE_READ_FAILED", str(exc))
         finally:
-            mt5.shutdown()
+            pass
 
     def get_symbol_spread(self, symbol: str) -> dict[str, Any]:
         tick = self.get_symbol_tick(symbol)
@@ -291,6 +320,25 @@ class MT5MarketDataService:
         except Exception as exc:  # pragma: no cover - depends on terminal state
             return False, f"MT5 initialize raised an exception: {exc}"
 
+    def _connection_diagnostics(self, account: Any = None) -> dict[str, Any]:
+        terminal = None
+        try:
+            terminal = mt5.terminal_info() if mt5 is not None else None
+        except Exception:
+            terminal = None
+        return {
+            "process_id": os.getpid(),
+            "connection_id": "|".join(
+                [
+                    f"pid:{os.getpid()}",
+                    f"login:{getattr(account, 'login', '') if account else ''}",
+                    f"server:{getattr(account, 'server', '') if account else ''}",
+                    f"terminal:{getattr(terminal, 'path', '') if terminal else ''}",
+                ]
+            ),
+            "terminal_path": str(getattr(terminal, "path", "")) if terminal else "",
+        }
+
     def _read_connection_state(self) -> dict[str, Any]:
         warnings: list[str] = []
         initialized, error = self._initialize()
@@ -381,6 +429,86 @@ class MT5MarketDataService:
             "symbol_select_result": False,
             "last_error": select_error,
         }
+
+    def _resolve_market_watch_symbol(self, symbol: str) -> dict[str, Any]:
+        requested = self._normalize_symbol(symbol)
+        candidates: list[str] = []
+        for candidate in [symbol, requested, requested.lower(), requested.capitalize()]:
+            candidate_text = str(candidate or "").strip()
+            if candidate_text and candidate_text not in candidates:
+                candidates.append(candidate_text)
+        discovered = self._matching_market_watch_symbols(requested)
+        for candidate in discovered:
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+        attempts: list[dict[str, Any]] = []
+        for candidate in candidates:
+            info = mt5.symbol_info(candidate)
+            select_result = bool(mt5.symbol_select(candidate, True)) if info is not None else False
+            last_error = mt5.last_error()
+            attempts.append(
+                {
+                    "symbol": candidate,
+                    "symbol_info_found": info is not None,
+                    "visible": bool(getattr(info, "visible", False)) if info is not None else False,
+                    "symbol_select_result": select_result,
+                    "last_error": last_error,
+                }
+            )
+            if info is not None and (select_result or bool(getattr(info, "visible", False))):
+                return {
+                    "requested_symbol": requested,
+                    "resolved_symbol": candidate,
+                    "resolved": True,
+                    "resolution_method": "MARKET_WATCH_SYMBOL",
+                    "attempts": attempts,
+                    "last_error": last_error,
+                }
+        return {
+            "requested_symbol": requested,
+            "resolved_symbol": requested,
+            "resolved": False,
+            "resolution_method": "UNRESOLVED",
+            "attempts": attempts,
+            "last_error": attempts[-1]["last_error"] if attempts else None,
+            "message": f"{requested} was not found in MT5 Market Watch or available broker symbols.",
+        }
+
+    def _matching_market_watch_symbols(self, requested: str) -> list[str]:
+        try:
+            symbols = mt5.symbols_get() or []
+        except Exception:
+            return []
+        requested_key = self._symbol_key(requested)
+        exact: list[str] = []
+        prefixed_or_suffixed: list[str] = []
+        contains: list[str] = []
+        for item in symbols:
+            name = str(getattr(item, "name", "") or "")
+            if not name:
+                continue
+            key = self._symbol_key(name)
+            if key == requested_key:
+                exact.append(name)
+            elif key.startswith(requested_key) or key.endswith(requested_key):
+                prefixed_or_suffixed.append(name)
+            elif requested_key in key:
+                contains.append(name)
+        return self._dedupe_symbols(exact + prefixed_or_suffixed + contains)[:20]
+
+    def _symbol_key(self, symbol: str) -> str:
+        return "".join(ch for ch in str(symbol or "").upper() if ch.isalnum())
+
+    def _dedupe_symbols(self, symbols: list[str]) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+        for symbol in symbols:
+            if symbol in seen:
+                continue
+            seen.add(symbol)
+            result.append(symbol)
+        return result
 
     def _recover_tick_quote(self, symbol: str, tick: Any, info: Any, availability: dict[str, Any]) -> dict[str, Any]:
         tick_bid = self._positive_float(getattr(tick, "bid", None)) if tick is not None else None
@@ -591,17 +719,26 @@ class MT5MarketDataService:
             return float("inf")
         return max(0.0, (datetime.now(timezone.utc) - timestamp).total_seconds())
 
-    def _candle_error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str) -> dict[str, Any]:
+    def _candle_error_payload(self, symbol: str, timeframe: str, count: int, status: str, message: str, resolution: dict[str, Any] | None = None) -> dict[str, Any]:
+        resolution = resolution or {}
         return {
             "symbol": symbol,
+            "requested_symbol": resolution.get("requested_symbol", symbol),
+            "resolved_symbol": resolution.get("resolved_symbol", symbol),
             "timeframe": timeframe,
             "count": 0,
             "requested_count": count,
+            "returned_count": 0,
             "candles": [],
             "source": "MT5_DEMO",
             "status": status,
             "error": True,
             "message": message,
+            "symbol_select_result": resolution.get("symbol_select_result"),
+            "symbol_select_error": resolution.get("last_error"),
+            "mt5_last_error": resolution.get("last_error"),
+            "symbol_resolution": resolution,
+            **self._connection_diagnostics(),
             "simulation_only": True,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,

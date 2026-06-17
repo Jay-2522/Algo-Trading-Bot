@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
+from backend.api.mt5_demo_routes import real_signal_engine_service
 from backend.strategy.client_signal_engine import ClientSignalEngine
 
 
 router = APIRouter(prefix="/client-signals-engine", tags=["Client Signal Engine"])
-client_signal_engine = ClientSignalEngine()
+client_signal_engine = ClientSignalEngine(real_signal_service=real_signal_engine_service)
 
 
 @router.get("/status")

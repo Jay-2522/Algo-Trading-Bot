@@ -40,6 +40,12 @@ type ReasonMessage = {
   fvg_status?: string;
   h4_history_status?: string;
   m15_history_status?: string;
+  history_ready?: boolean | null;
+  requested_symbol?: string;
+  resolved_symbol?: string;
+  mt5_last_error?: string;
+  process_id?: string;
+  connection_id?: string;
 };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -154,7 +160,7 @@ function isMeaningfulContext(context: ApiRecord): boolean {
   return Boolean(symbol && (reason || text(context.status) || text(context.signalHash) || text(context.ticket)));
 }
 
-function validatorDiagnostics(context: ApiRecord): Pick<ReasonMessage, "candles_loaded" | "candles_required" | "data_source" | "rejection_reason" | "timeframe" | "validation_status"> {
+function validatorDiagnostics(context: ApiRecord): Pick<ReasonMessage, "candles_loaded" | "candles_required" | "data_source" | "rejection_reason" | "timeframe" | "validation_status" | "history_ready" | "requested_symbol" | "resolved_symbol" | "mt5_last_error" | "process_id" | "connection_id"> {
   return {
     candles_loaded: firstNumber(context, ["candles_loaded", "candlesLoaded", "loaded_candles", "loadedCandles", "bars_loaded", "barsLoaded", "history_bars", "candle_count"]),
     candles_required: firstNumber(context, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]),
@@ -162,6 +168,12 @@ function validatorDiagnostics(context: ApiRecord): Pick<ReasonMessage, "candles_
     rejection_reason: firstText(context, ["rejection_reason", "rejectionReason", "final_rejection_reason", "finalRejectionReason", "reason", "setupReason", "whatNeedsToHappenNext"]),
     timeframe: firstText(context, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase(),
     validation_status: firstText(context, ["validation_status", "validationStatus", "status", "execution_status", "executionStatus", "status_level", "risk_status"]),
+    history_ready: booleanValue(context.history_ready ?? context.historyReady),
+    requested_symbol: firstText(context, ["requested_symbol", "requestedSymbol"]),
+    resolved_symbol: firstText(context, ["resolved_symbol", "resolvedSymbol"]),
+    mt5_last_error: firstText(context, ["mt5_last_error", "mt5LastError"]),
+    process_id: firstText(context, ["process_id", "processId"]),
+    connection_id: firstText(context, ["connection_id", "connectionId"]),
   };
 }
 
@@ -245,6 +257,12 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
     ticket: cleanDisplayText(message.ticket),
     timeframe: cleanDisplayText(message.timeframe).toUpperCase(),
     validation_status: cleanDisplayText(message.validation_status),
+    history_ready: booleanValue(message.history_ready),
+    requested_symbol: cleanDisplayText(message.requested_symbol),
+    resolved_symbol: cleanDisplayText(message.resolved_symbol),
+    mt5_last_error: cleanDisplayText(message.mt5_last_error),
+    process_id: cleanDisplayText(message.process_id),
+    connection_id: cleanDisplayText(message.connection_id),
   };
 }
 
@@ -297,11 +315,20 @@ function ruleBasedReason(context: ApiRecord): string {
   const sessionValid = booleanValue(context.sessionValid);
   const h4HistoryValid = booleanValue(context.h4HistoryValid);
   const m15HistoryValid = booleanValue(context.m15HistoryValid);
+  const historyReady = booleanValue(context.history_ready ?? context.historyReady);
+  const historyTimeframe = firstText(context, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase();
+  const requestedSymbol = firstText(context, ["requested_symbol", "requestedSymbol"]) || symbol;
+  const resolvedSymbol = firstText(context, ["resolved_symbol", "resolvedSymbol"]) || requestedSymbol;
+  const candlesLoaded = firstNumber(context, ["candles_loaded", "candlesLoaded", "loaded_candles", "loadedCandles", "bars_loaded", "barsLoaded", "history_bars", "candle_count"]);
+  const candlesRequired = firstNumber(context, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]);
   const orderBlockConfirmed = booleanValue(context.orderBlockConfirmed);
   const blockers = Array.isArray(context.blockers) ? context.blockers.map(text).filter(Boolean) : [];
   const suppliedReason = text(context.reason || context.setupReason || context.whatNeedsToHappenNext);
   const cleanSuppliedReason = cleanDisplayText(suppliedReason);
 
+  if (historyReady === false && historyTimeframe && candlesLoaded !== null && candlesRequired !== null) {
+    return `Waiting for MT5 ${historyTimeframe} history sync: ${requestedSymbol} resolved as ${resolvedSymbol}, loaded ${formatNumber(candlesLoaded)} / required ${formatNumber(candlesRequired)} candles.`;
+  }
   if (riskReward !== null && riskReward < requiredRR) {
     return `${symbol} rejected because RR ${formatNumber(riskReward)} was below required ${formatNumber(requiredRR)}.`;
   }

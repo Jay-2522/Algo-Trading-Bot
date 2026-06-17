@@ -18,6 +18,8 @@ class RealSignalEngineService:
     auto_validation_confidence = 65
     demo_collection_confidence = 55
     demo_collection_min_rr = 2.0
+    history_preload_candles = 300
+    history_required_candles = 300
 
     def __init__(
         self,
@@ -61,6 +63,7 @@ class RealSignalEngineService:
                     "order_block_mandatory": False,
                     "session_filter": "LONDON_NY_REQUIRED",
                     "requires": ["H4_HISTORY", "M15_HISTORY", "LONDON_NY_SESSION", "BOS", "FVG", "RR_2_0"],
+                    "history_required_candles": self.history_required_candles,
                 },
             },
             "minimum_risk_reward": self.min_rr,
@@ -375,7 +378,7 @@ class RealSignalEngineService:
             "timeframes": {},
         }
         for timeframe in self.timeframes:
-            history = self.backfill_service.fetch_history(symbol, timeframe, count=220)
+            history = self.backfill_service.fetch_history(symbol, timeframe, count=self.history_preload_candles)
             candles = history.get("candles", [])
             timeframes[timeframe] = candles
             validation[timeframe] = history.get("validation", {})
@@ -387,14 +390,14 @@ class RealSignalEngineService:
                 candle_source["account_type"] = history.get("account_type", "")
             candle_source["timeframes"][timeframe] = {
                 "timeframe": timeframe,
-                "requested_count": history.get("requested_count", 220),
+                "requested_count": history.get("requested_count", self.history_preload_candles),
                 "returned_count": history.get("returned_count", len(candles)),
                 "last_candle_timestamp": candles[-1].get("time") if candles else None,
                 "status": history.get("status"),
                 "source": history.get("source", candle_source["source"]),
                 "broker_source": history.get("broker_source", candle_source["broker_source"]),
             }
-            if history.get("status") != "OK" or len(candles) < 30:
+            if history.get("status") != "OK" or len(candles) < self.history_required_candles:
                 blockers.append(f"{timeframe} history has insufficient real candles.")
         return {"timeframes": timeframes, "validation": validation, "blockers": blockers, "candle_source": candle_source}
 
@@ -414,7 +417,7 @@ class RealSignalEngineService:
             report = timeframe_reports.get(timeframe, {}) if isinstance(timeframe_reports, dict) else {}
             returned_count = int(report.get("returned_count") or 0)
             status = str(report.get("status") or "").upper()
-            if status != "OK" or returned_count < 30:
+            if status != "OK" or returned_count < self.history_required_candles:
                 failed_timeframe = timeframe
                 failed_report = report
                 break
@@ -424,7 +427,7 @@ class RealSignalEngineService:
             "symbol": symbol,
             "timeframe": timeframe,
             "candles_loaded": int(report.get("returned_count") or len(feed.get("timeframes", {}).get(timeframe, []))),
-            "candles_required": 30,
+            "candles_required": self.history_required_candles,
             "data_source": str(report.get("source") or candle_source.get("source") or "REAL_SMC_MT5_MULTI_TIMEFRAME"),
             "validation_status": validation_status,
             "rejection_reason": rejection_reason,
@@ -1013,7 +1016,7 @@ class RealSignalEngineService:
         def history_passed(timeframe: str) -> bool:
             report = reports.get(timeframe, {}) if isinstance(reports, dict) else {}
             returned = int(report.get("returned_count") or len(feed.get("timeframes", {}).get(timeframe, [])))
-            return str(report.get("status") or "").upper() == "OK" and returned >= 30
+            return str(report.get("status") or "").upper() == "OK" and returned >= self.history_required_candles
 
         passed_rules: list[str] = []
         failed_rules: list[str] = []

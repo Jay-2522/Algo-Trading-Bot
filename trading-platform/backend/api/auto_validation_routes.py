@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body
 from backend.api.client_signal_engine_routes import client_signal_engine
 from backend.api.mt5_demo_routes import (
     guarded_demo_order_sender_service,
+    historical_backfill_service,
     market_data_service,
     mt5_position_monitoring_service,
     mt5_trade_close_sync_service,
@@ -31,6 +32,7 @@ auto_validation_service = AutoValidationService(
     journal_service=persistent_trade_journal_service,
     position_service=mt5_position_monitoring_service,
     mt5_demo_service=mt5_demo_service,
+    history_backfill_service=historical_backfill_service,
     lifecycle_service=mt5_trade_lifecycle_service,
     close_sync_service=mt5_trade_close_sync_service,
     exit_management_service=exit_management_service,

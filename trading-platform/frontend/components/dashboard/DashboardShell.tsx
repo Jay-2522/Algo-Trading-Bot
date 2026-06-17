@@ -3629,6 +3629,7 @@ function moneyOrWaiting(value: number): string {
 function clientBotState(mode: string, closed: number, open: number, target: number, hasValidationSession: boolean): { label: string; statusText: string; tone: "healthy" | "warning" | "danger" } {
   if (mode === "READY_ROUND_3") return { label: "Ready", statusText: "Ready for Round 3 Validation", tone: "healthy" };
   if (closed >= target && target > 0) return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
+  if (mode === "WAITING_FOR_MT5_HISTORY_SYNC") return { label: "Waiting", statusText: "Waiting for MT5 history sync", tone: "warning" };
   if (mode === "RUNNING") return { label: "Running", statusText: open > 0 ? "Waiting for Open Trades to Close" : "Validation in Progress", tone: "healthy" };
   if (["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)) return { label: "Paused", statusText: "Validation Paused", tone: "warning" };
   if (mode === "COMPLETED") return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
@@ -3703,6 +3704,7 @@ type ReasonMessage = {
   timestamp: string;
   timeframe?: string;
   validation_status?: string;
+  history_ready?: boolean | null;
   groqGenerated?: boolean;
   source?: "groq" | "rule" | "execution";
 };
@@ -3791,6 +3793,7 @@ function validatorDiagnosticsFromRecord(record: ApiRecord, fallbackStatus: Reaso
     fvg_status: firstReasonText(record, ["fvg_status", "fvgStatus"]),
     h4_history_status: firstReasonText(record, ["h4_history_status", "h4HistoryStatus"]),
     m15_history_status: firstReasonText(record, ["m15_history_status", "m15HistoryStatus"]),
+    history_ready: record.history_ready === true ? true : record.history_ready === false ? false : null,
   };
 }
 
@@ -3830,6 +3833,35 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
     if (blockers.length && status === "Rejected") messages[messages.length - 1].blockers = blockers;
   }
   const autoStatus = asRecord(data.autoValidation);
+  const historyWarmup = asRecord(autoStatus?.history_warmup ?? asRecord(autoStatus?.last_execution_decision)?.history_warmup);
+  const historyDiagnostics = Array.isArray(historyWarmup?.diagnostics) ? (historyWarmup.diagnostics.filter((item) => asRecord(item)) as ApiRecord[]) : [];
+  const pendingHistory = historyDiagnostics.find((item) => item.history_ready !== true);
+  if (pendingHistory) {
+    const symbol = readText(pendingHistory, ["symbol"], "EURUSD").toUpperCase();
+    const requestedSymbol = readText(pendingHistory, ["requested_symbol", "requestedSymbol"], symbol).toUpperCase();
+    const resolvedSymbol = readText(pendingHistory, ["resolved_symbol", "resolvedSymbol"], requestedSymbol);
+    const timeframe = readText(pendingHistory, ["timeframe"], "H4").toUpperCase();
+    const loaded = firstReasonNumber(pendingHistory, ["candles_loaded", "candlesLoaded", "returned_count", "returnedCount"]) ?? 0;
+    const required = firstReasonNumber(pendingHistory, ["candles_required", "candlesRequired", "requested_count", "requestedCount"]) ?? 300;
+    messages.unshift({
+      symbol,
+      status: "Waiting",
+      timestamp: readText(historyWarmup, ["timestamp"], new Date(0).toISOString()),
+      reason: `Waiting for MT5 ${timeframe} history sync: ${requestedSymbol} resolved as ${resolvedSymbol}, loaded ${loaded} / required ${required} candles.`,
+      timeframe,
+      requested_symbol: requestedSymbol,
+      resolved_symbol: resolvedSymbol,
+      candles_loaded: loaded,
+      candles_required: required,
+      data_source: firstReasonText(pendingHistory, ["data_source", "dataSource", "source"]) || "MT5_DEMO",
+      mt5_last_error: firstReasonText(pendingHistory, ["mt5_last_error", "mt5LastError"]),
+      process_id: firstReasonText(pendingHistory, ["process_id", "processId"]),
+      connection_id: firstReasonText(pendingHistory, ["connection_id", "connectionId"]),
+      validation_status: "WAITING_FOR_MT5_HISTORY_SYNC",
+      history_ready: false,
+      niftyConnected,
+    });
+  }
   const reports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   reports.forEach((report, index) => {
     const pnl = readNumber(report, ["net_pnl", "profit_loss", "pnl"], 0);
@@ -3872,6 +3904,7 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
         timestamp: readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z"),
         timeframe: readText(record, ["timeframe"], ""),
         validation_status: readText(record, ["validation_status"], ""),
+        history_ready: record.history_ready === true ? true : record.history_ready === false ? false : null,
         groqGenerated: record.groqGenerated === true,
         source,
       };
@@ -3905,6 +3938,10 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
       cancelled = true;
     };
   }, [contextKey, contexts]);
+  const currentHistoryWaiting = contexts.some((context) => context.history_ready === false || readText(context, ["validation_status"], "").toUpperCase() === "WAITING_FOR_MT5_HISTORY_SYNC");
+  const visibleMessages = currentHistoryWaiting
+    ? storedMessages
+    : storedMessages.filter((message) => !/history sync/i.test(message.reason) && message.validation_status !== "WAITING_FOR_MT5_HISTORY_SYNC");
   return (
     <div className="premium-panel">
       <div className="flex items-start justify-between gap-3">
@@ -3914,9 +3951,9 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
         </div>
         <p className="premium-metric-label">Latest 50 messages</p>
       </div>
-      {storedMessages.length > 0 ? (
+      {visibleMessages.length > 0 ? (
         <div className="reason-message-list">
-          {storedMessages.slice(0, 8).map((message) => (
+          {visibleMessages.slice(0, 8).map((message) => (
             <article className="reason-message" key={message.id}>
               <div>
                 <span className={`reason-status ${message.status.toLowerCase()}`}>{message.status}</span>

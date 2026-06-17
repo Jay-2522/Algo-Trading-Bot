@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from backend.mt5_demo.mt5_historical_backfill_service import MT5HistoricalBackfillService
 from backend.reason_panel.execution_reason_service import ExecutionReasonPanelService
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +24,7 @@ class AutoValidationService:
         journal_service: Any | None = None,
         position_service: Any | None = None,
         mt5_demo_service: Any | None = None,
+        history_backfill_service: Any | None = None,
         lifecycle_service: Any | None = None,
         close_sync_service: Any | None = None,
         exit_management_service: Any | None = None,
@@ -33,6 +35,7 @@ class AutoValidationService:
         self.journal_service = journal_service
         self.position_service = position_service
         self.mt5_demo_service = mt5_demo_service
+        self.history_backfill_service = history_backfill_service or self._provider_history_backfill_service(signal_provider) or MT5HistoricalBackfillService()
         self.lifecycle_service = lifecycle_service
         self.close_sync_service = close_sync_service
         self.exit_management_service = exit_management_service
@@ -51,6 +54,7 @@ class AutoValidationService:
         self._open_position_sync_diagnostics: dict[str, Any] = self._empty_open_position_sync_diagnostics()
         self._lifecycle_sync_diagnostics: dict[str, Any] = self._empty_lifecycle_sync_diagnostics()
         self._exit_management_diagnostics: dict[str, Any] = self._empty_exit_management_diagnostics()
+        self._history_warmup_diagnostics: dict[str, Any] = self._empty_history_warmup_diagnostics()
         self._execution_timelines: list[dict[str, Any]] = []
         self._validation_close_reports: list[dict[str, Any]] = []
         self._reported_close_keys: set[str] = set()
@@ -78,6 +82,8 @@ class AutoValidationService:
             "next_eligible_time": self._next_eligible_time(),
             "events": self.events[-50:],
             "mt5_health": copy.deepcopy(self.mt5_health_state),
+            "history_warmup": copy.deepcopy(self._history_warmup_diagnostics),
+            "history_ready": bool(self._history_warmup_diagnostics.get("history_ready")),
             "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
             "last_sender_rejection": copy.deepcopy(self._last_sender_rejection),
             "last_duplicate_check": copy.deepcopy(self._last_duplicate_check),
@@ -147,6 +153,8 @@ class AutoValidationService:
         self._last_duplicate_check = None
         self._last_hash_change_audit = None
         self._last_sender_rejection = None
+        self._history_warmup_diagnostics = self._warmup_history_before_validation()
+        self._apply_history_warmup_state()
         self._log(
             "SESSION_STARTED",
             {
@@ -155,13 +163,14 @@ class AutoValidationService:
                 "closed_trade_count": 0,
                 "open_position_count": 0,
                 "new_session_created": True,
+                "history_ready": self._history_warmup_diagnostics.get("history_ready"),
             },
         )
         self._save_state()
         return self.status()
 
     def pause(self) -> dict[str, Any]:
-        if self.session["status"] in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
+        if self.session["status"] in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
             self.session["status"] = "PAUSED"
             self._log("SESSION_PAUSED")
             self._save_state()
@@ -171,12 +180,14 @@ class AutoValidationService:
         if self.session["status"] in {"PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             self.session["status"] = "RUNNING"
             self.config["auto_validation_enabled"] = True
+            self._history_warmup_diagnostics = self._warmup_history_before_validation()
+            self._apply_history_warmup_state()
             self._log("SESSION_RESUMED")
             self._save_state()
         return self.status()
 
     def stop(self, reason: str = "Stopped manually.") -> dict[str, Any]:
-        if self.session["status"] in {"RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
+        if self.session["status"] in {"RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             self.session["status"] = "STOPPED"
             self.session["stopped_at"] = self._timestamp()
             self.session["reason_stopped"] = reason
@@ -210,6 +221,8 @@ class AutoValidationService:
                 self.session["paused_reason"] = ""
                 self.session["reason_stopped"] = ""
                 self.config["auto_validation_enabled"] = True
+                self._history_warmup_diagnostics = self._warmup_history_before_validation()
+                self._apply_history_warmup_state()
             self._refresh_session_metrics()
             self._log_recovery_decision(session_id, int(candidate.get("closed_count") or 0), int(candidate.get("open_count") or 0), False, trigger, "current_session_already_active")
             self._save_state()
@@ -235,6 +248,9 @@ class AutoValidationService:
             "reason_stopped": "" if activate else "RECOVERED_FROM_TRADE_JOURNAL_REQUIRES_START",
         }
         self._refresh_session_metrics()
+        if activate:
+            self._history_warmup_diagnostics = self._warmup_history_before_validation()
+            self._apply_history_warmup_state()
         self._log_recovery_decision(session_id, int(self.session.get("current_closed_trades") or 0), int(self.session.get("current_open_trades") or 0), False, trigger, "resumed_incomplete_session")
         self._save_state()
         return dict(candidate)
@@ -294,7 +310,7 @@ class AutoValidationService:
         }
 
     def run_once(self, signals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        if self.session["status"] not in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} or self.config["auto_validation_enabled"] is not True:
+        if self.session["status"] not in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"} or self.config["auto_validation_enabled"] is not True:
             return self._decision("IDLE", ["AUTO_VALIDATION_NOT_RUNNING"])
         self._sync_lifecycle_services(manual=False)
         self._refresh_session_metrics()
@@ -312,6 +328,20 @@ class AutoValidationService:
                 return self._decision("WAITING_FOR_MT5_RECONNECT", ["MT5_DISCONNECTED"], extra={"mt5_health": copy.deepcopy(mt5_health)})
         elif mt5_health.get("status") == "MT5_DISCONNECTED":
             return self._pause_for_mt5_disconnect(mt5_health)
+        self._history_warmup_diagnostics = self._warmup_history_before_validation()
+        self._apply_history_warmup_state()
+        if self._history_warmup_diagnostics.get("history_ready") is not True:
+            decision = self._decision(
+                "WAITING_FOR_MT5_HISTORY_SYNC",
+                ["MT5_HISTORY_SYNC_PENDING"],
+                extra={
+                    "history_warmup": copy.deepcopy(self._history_warmup_diagnostics),
+                    "reason": self._history_warmup_diagnostics.get("message"),
+                    "final_decision_reason": self._history_warmup_diagnostics.get("message"),
+                },
+            )
+            self._log("WAITING_FOR_MT5_HISTORY_SYNC", self._history_warmup_diagnostics)
+            return decision
         halt = self._risk_halt_reason()
         if halt:
             return self._halt(halt)
@@ -853,6 +883,113 @@ class AutoValidationService:
         symbols = self.config.get("allowed_symbols", ["XAUUSD", "EURUSD"])
         return {str(symbol).upper() for symbol in symbols if str(symbol).upper()}
 
+    def _history_symbols(self) -> list[str]:
+        return [symbol for symbol in sorted(self._allowed_symbols()) if symbol in {"EURUSD", "XAUUSD"}] or ["EURUSD"]
+
+    def _history_timeframes(self) -> list[str]:
+        raw = self.config.get("history_warmup_timeframes", ["M15", "H1", "H4"])
+        return [str(timeframe).upper() for timeframe in raw if str(timeframe).upper() in {"M15", "H1", "H4"}] or ["M15", "H1", "H4"]
+
+    def _history_required_candles(self) -> int:
+        return max(300, int(self.config.get("history_required_candles") or 300))
+
+    def _provider_history_backfill_service(self, provider: Any | None) -> Any | None:
+        if provider is None:
+            return None
+        service = getattr(provider, "backfill_service", None)
+        if service is None:
+            real_signal_service = getattr(provider, "real_signal_service", None)
+            service = getattr(real_signal_service, "backfill_service", None)
+        return service if service is not None and hasattr(service, "fetch_history") else None
+
+    def _empty_history_warmup_diagnostics(self) -> dict[str, Any]:
+        return {
+            "status": "NOT_STARTED",
+            "message": "MT5 history sync has not run.",
+            "history_ready": False,
+            "symbols": [],
+            "timeframes": ["M15", "H1", "H4"],
+            "required_candles": 300,
+            "diagnostics": [],
+            "timestamp": self._timestamp(),
+        }
+
+    def _warmup_history_before_validation(self) -> dict[str, Any]:
+        required = self._history_required_candles()
+        diagnostics: list[dict[str, Any]] = []
+        for symbol in self._history_symbols():
+            for timeframe in self._history_timeframes():
+                try:
+                    history = self.history_backfill_service.fetch_history(symbol, timeframe, count=required)
+                except Exception as exc:
+                    history = {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "returned_count": 0,
+                        "source": "MT5_DEMO",
+                        "status": "HISTORY_SYNC_ERROR",
+                        "message": str(exc),
+                    }
+                candles_loaded = int(history.get("returned_count") or len(history.get("candles", []) or []))
+                ready = str(history.get("status") or "").upper() == "OK" and candles_loaded >= required
+                diagnostics.append(
+                    {
+                        "symbol": str(history.get("symbol") or symbol).upper(),
+                        "requested_symbol": str(history.get("requested_symbol") or symbol).upper(),
+                        "resolved_symbol": str(history.get("resolved_symbol") or history.get("symbol") or symbol),
+                        "timeframe": str(history.get("timeframe") or timeframe).upper(),
+                        "candles_loaded": candles_loaded,
+                        "candles_required": required,
+                        "data_source": str(history.get("broker_source") or history.get("source") or "MT5_DEMO"),
+                        "source": str(history.get("broker_source") or history.get("source") or "MT5_DEMO"),
+                        "mt5_last_error": history.get("mt5_last_error"),
+                        "process_id": history.get("process_id"),
+                        "connection_id": history.get("connection_id"),
+                        "terminal_path": history.get("terminal_path"),
+                        "cache_hit": history.get("cache_hit") is True,
+                        "cache_reason": history.get("cache_reason"),
+                        "symbol_select_result": history.get("symbol_select_result"),
+                        "symbol_select_error": history.get("symbol_select_error"),
+                        "symbol_resolution": history.get("symbol_resolution") if isinstance(history.get("symbol_resolution"), dict) else {},
+                        "history_ready": ready,
+                        "status": "READY" if ready else "WAITING_FOR_MT5_HISTORY_SYNC",
+                        "mt5_status": str(history.get("status") or "HISTORY_UNAVAILABLE"),
+                        "message": str(history.get("message") or ""),
+                    }
+                )
+        pending = self._first_pending_history_diagnostic(diagnostics)
+        history_ready = pending is None and bool(diagnostics)
+        message = "MT5 history sync ready."
+        if pending:
+            message = (
+                f"Waiting for MT5 {pending.get('timeframe')} history sync: {pending.get('requested_symbol')} resolved as {pending.get('resolved_symbol')}, "
+                f"loaded {pending.get('candles_loaded')} / required {pending.get('candles_required')} candles."
+            )
+        return {
+            "status": "HISTORY_READY" if history_ready else "WAITING_FOR_MT5_HISTORY_SYNC",
+            "message": message,
+            "history_ready": history_ready,
+            "symbols": self._history_symbols(),
+            "timeframes": self._history_timeframes(),
+            "required_candles": required,
+            "diagnostics": diagnostics,
+            "timestamp": self._timestamp(),
+        }
+
+    def _first_pending_history_diagnostic(self, diagnostics: list[dict[str, Any]]) -> dict[str, Any] | None:
+        pending = [item for item in diagnostics if item.get("history_ready") is not True]
+        if not pending:
+            return None
+        timeframe_rank = {"H4": 0, "M15": 1, "H1": 2}
+        return sorted(pending, key=lambda item: (timeframe_rank.get(str(item.get("timeframe") or "").upper(), 9), str(item.get("symbol") or "")))[0]
+
+    def _apply_history_warmup_state(self) -> None:
+        self.session["history_ready"] = bool(self._history_warmup_diagnostics.get("history_ready"))
+        self.session["history_status"] = str(self._history_warmup_diagnostics.get("status") or "NOT_STARTED")
+        if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_HISTORY_SYNC"}:
+            self.session["status"] = "RUNNING" if self.session["history_ready"] else "WAITING_FOR_MT5_HISTORY_SYNC"
+            self.session["paused_reason"] = "" if self.session["history_ready"] else "MT5_HISTORY_SYNC_PENDING"
+
     def _mt5_health_check(self) -> dict[str, Any]:
         self._tick_cache = {}
         status = self._account_status({})
@@ -983,7 +1120,7 @@ class AutoValidationService:
         def history_ok(timeframe: str) -> bool:
             report = timeframes.get(timeframe, {}) if isinstance(timeframes, dict) else {}
             returned = int(report.get("returned_count") or 0)
-            return str(report.get("status") or "").upper() == "OK" and returned >= 30
+            return str(report.get("status") or "").upper() == "OK" and returned >= self._history_required_candles()
 
         h4_ok = history_ok("H4")
         m15_ok = history_ok("M15")
@@ -1018,6 +1155,7 @@ class AutoValidationService:
             "RR": rr,
             "risk_reward": rr,
             "required_rr": 2.0,
+            "history_required_candles": self._history_required_candles(),
             "bos_status": "PRESENT" if components.get("bos") else "MISSING",
             "fvg_status": "PRESENT" if components.get("fvg") else "MISSING",
             "h4_history_status": "AVAILABLE" if h4_ok else "INSUFFICIENT",
@@ -1581,7 +1719,7 @@ class AutoValidationService:
         self.runner_state.update(updates)
 
     def should_auto_start_runner(self) -> bool:
-        return self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"} and self.config.get("auto_validation_enabled") is True
+        return self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"} and self.config.get("auto_validation_enabled") is True
 
     def _has_recoverable_progress(self) -> bool:
         if self.session.get("status") not in {"PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
@@ -1619,6 +1757,9 @@ class AutoValidationService:
 
     def waiting_for_mt5_reconnect(self) -> bool:
         return self.session.get("status") == "WAITING_FOR_MT5_RECONNECT"
+
+    def waiting_for_mt5_history_sync(self) -> bool:
+        return self.session.get("status") == "WAITING_FOR_MT5_HISTORY_SYNC"
 
     def watched_signal_is_watchlist(self) -> bool:
         watched = self._current_signal_watched if isinstance(self._current_signal_watched, dict) else {}
@@ -2065,6 +2206,8 @@ class AutoValidationService:
             "order_build_failed": 0,
             "order_send_attempted": 0,
             "order_send_failed": 0,
+            "history_ready": False,
+            "history_status": "NOT_STARTED",
         }
 
     def _load_state(self) -> None:
@@ -2103,6 +2246,12 @@ class AutoValidationService:
                 self.config["max_open_trades_per_symbol"] = 1
             self.config["live_execution_enabled"] = False
             self.config["broker_execution_enabled"] = False
+            self.config["history_required_candles"] = max(300, int(self.config.get("history_required_candles") or 300))
+            self.config["history_warmup_timeframes"] = [
+                str(timeframe).upper()
+                for timeframe in self.config.get("history_warmup_timeframes", ["M15", "H1", "H4"])
+                if str(timeframe).upper() in {"M15", "H1", "H4"}
+            ] or ["M15", "H1", "H4"]
         if isinstance(data.get("session"), dict):
             self.session = {**self._empty_session(), **data["session"]}
         if isinstance(data.get("events"), list):
@@ -2123,6 +2272,8 @@ class AutoValidationService:
             self._lifecycle_sync_diagnostics = data["lifecycle_sync"]
         if isinstance(data.get("exit_management"), dict):
             self._exit_management_diagnostics = data["exit_management"]
+        if isinstance(data.get("history_warmup"), dict):
+            self._history_warmup_diagnostics = data["history_warmup"]
         if isinstance(data.get("execution_timelines"), list):
             self._execution_timelines = [item for item in data["execution_timelines"] if isinstance(item, dict)][-100:]
         if isinstance(data.get("validation_close_reports"), list):
@@ -2132,7 +2283,7 @@ class AutoValidationService:
             self._sent_signal_keys = {str(item) for item in data["sent_signal_keys"] if item}
         if isinstance(data.get("confidence_timeline"), dict):
             self._confidence_timeline = data["confidence_timeline"]
-        if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT"}:
+        if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
             updated_at = str(data.get("updated_at") or self.session.get("started_at") or "")
             if not self.config.get("allow_persisted_auto_resume", False):
                 self.session["status"] = "PAUSED_REQUIRES_USER_RESUME"
@@ -2166,6 +2317,7 @@ class AutoValidationService:
                 "open_position_sync": self._open_position_sync_diagnostics,
                 "lifecycle_sync": self._lifecycle_sync_diagnostics,
                 "exit_management": self._exit_management_diagnostics,
+                "history_warmup": self._history_warmup_diagnostics,
                 "validation_close_reports": self._validation_close_reports[-30:],
                 "execution_timelines": self._execution_timelines[-100:],
                 "confidence_timeline": self._confidence_timeline,
@@ -2252,6 +2404,8 @@ class AutoValidationService:
             "cooldown_after_trade_minutes": 15,
             "stop_after_target_reached": True,
             "mt5_disconnect_timeout_seconds": 600,
+            "history_required_candles": 300,
+            "history_warmup_timeframes": ["M15", "H1", "H4"],
             "allow_persisted_auto_resume": False,
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
@@ -2384,10 +2538,13 @@ class AutoValidationService:
             "max_open_trades_per_symbol",
             "duplicate_recent_seconds",
             "mt5_disconnect_timeout_seconds",
+            "history_required_candles",
             "allow_persisted_auto_resume",
         ]:
             if key in payload:
                 safe[key] = payload[key]
+        if "history_warmup_timeframes" in payload:
+            safe["history_warmup_timeframes"] = payload["history_warmup_timeframes"]
         safe["auto_validation_enabled"] = bool(payload.get("auto_validation_enabled", safe["auto_validation_enabled"]))
         safe["allowed_symbols"] = [symbol for symbol in payload.get("allowed_symbols", safe["allowed_symbols"]) if symbol in {"XAUUSD", "EURUSD", "NIFTY50"}] or ["XAUUSD", "EURUSD"]
         safe["lot_size"] = min(float(payload.get("lot_size", 0.01)), 0.01)
@@ -2398,6 +2555,8 @@ class AutoValidationService:
         safe["target_closed_trades"] = int(safe["target_validation_trades"])
         safe["max_daily_demo_trades"] = int(safe.get("max_daily_demo_trades") or safe.get("max_daily_trades") or 30)
         safe["max_daily_trades"] = int(safe["max_daily_demo_trades"])
+        safe["history_required_candles"] = max(300, int(safe.get("history_required_candles") or 300))
+        safe["history_warmup_timeframes"] = [str(timeframe).upper() for timeframe in safe.get("history_warmup_timeframes", ["M15", "H1", "H4"]) if str(timeframe).upper() in {"M15", "H1", "H4"}] or ["M15", "H1", "H4"]
         if safe["strategy_profile"] == "DEMO_COLLECTION":
             safe["min_confidence"] = 55
             safe["min_rr"] = 2.0

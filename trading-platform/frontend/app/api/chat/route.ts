@@ -21,6 +21,24 @@ type ReasonDiagnostic = {
   validation_status?: string;
 };
 
+type ReasonRecord = ReasonDiagnostic & {
+  decision?: string;
+  execution_status?: string;
+  id?: string;
+  mt5_comment?: string;
+  mt5_retcode?: string;
+  order_opened?: boolean;
+  reason?: string;
+  risk_status?: string;
+  side?: string;
+  signal_hash?: string;
+  source?: string;
+  status?: string;
+  strategy_profile?: string;
+  ticket?: string;
+  timestamp?: string;
+};
+
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
@@ -29,7 +47,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
 
-const SYSTEM_PROMPT = 'You are AlgoPilot. Answer briefly using only provided data. Do not invent trades, prices, balances, reasons, candle counts, or timeframes. If validator diagnostics are unavailable, say "Validator diagnostics are not available for this decision."';
+const SYSTEM_PROMPT = "You are AlgoPilot. Answer briefly using only provided data. Do not invent trades, prices, balances, reasons, candle counts, or timeframes.";
+const POSITION_FIELD_MISSING = "That field is not available in the live position data yet.";
 
 function normalizeMessages(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) return [];
@@ -46,6 +65,25 @@ function normalizeMessages(value: unknown): ChatMessage[] {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : value === null || value === undefined ? "" : String(value).trim();
+}
+
+function isBadText(value: unknown): boolean {
+  const normalized = text(value).toLowerCase();
+  return (
+    !normalized ||
+    normalized === "unknown" ||
+    normalized === "null" ||
+    normalized === "undefined" ||
+    normalized === "[object object]" ||
+    normalized.includes("unspecified reason") ||
+    normalized.includes("because unknown") ||
+    normalized.includes("unknown reason")
+  );
+}
+
+function cleanText(value: unknown): string {
+  const cleaned = text(value).replace(/\s+/g, " ").replace(/\.\.+/g, ".").trim();
+  return isBadText(cleaned) ? "" : cleaned;
 }
 
 function numberValue(value: unknown): number | null {
@@ -70,22 +108,58 @@ function normalizeReasonDiagnostic(record: Record<string, unknown>): ReasonDiagn
   return {
     candles_loaded: numberValue(readField(record, ["candles_loaded", "candlesLoaded"])),
     candles_required: numberValue(readField(record, ["candles_required", "candlesRequired"])),
-    data_source: text(readField(record, ["data_source", "dataSource"])),
-    rejection_reason: text(readField(record, ["rejection_reason", "rejectionReason"])),
+    data_source: cleanText(readField(record, ["data_source", "dataSource"])),
+    rejection_reason: cleanText(readField(record, ["rejection_reason", "rejectionReason"])),
     symbol: text(readField(record, ["symbol"])).toUpperCase(),
     timeframe: text(readField(record, ["timeframe"])).toUpperCase(),
-    validation_status: text(readField(record, ["validation_status", "validationStatus"])),
+    validation_status: cleanText(readField(record, ["validation_status", "validationStatus"])),
   };
 }
 
-async function readReasonDiagnostics(): Promise<ReasonDiagnostic[]> {
+function normalizeReasonRecord(record: Record<string, unknown>): ReasonRecord {
+  const diagnostic = normalizeReasonDiagnostic(record);
+  return {
+    ...diagnostic,
+    decision: cleanText(readField(record, ["decision"])),
+    execution_status: cleanText(readField(record, ["execution_status", "executionStatus"])),
+    id: text(readField(record, ["id"])),
+    mt5_comment: cleanText(readField(record, ["mt5_comment", "mt5Comment"])),
+    mt5_retcode: cleanText(readField(record, ["mt5_retcode", "mt5Retcode", "retcode"])),
+    order_opened: record.order_opened === true || record.orderOpened === true,
+    reason: cleanText(readField(record, ["reason"])),
+    risk_status: cleanText(readField(record, ["risk_status", "riskStatus"])),
+    side: text(readField(record, ["side", "type", "action"])).toUpperCase(),
+    signal_hash: text(readField(record, ["signal_hash", "signalHash"])),
+    source: cleanText(readField(record, ["source"])),
+    status: cleanText(readField(record, ["status"])),
+    strategy_profile: cleanText(readField(record, ["strategy_profile", "strategyProfile"])),
+    ticket: cleanText(readField(record, ["ticket", "mt5_ticket", "mt5Ticket"])),
+    timestamp: text(readField(record, ["timestamp", "created_at", "createdAt"])),
+  };
+}
+
+function sortReasonRecords(records: ReasonRecord[]): ReasonRecord[] {
+  return [...records].sort((left, right) => {
+    const leftTime = Date.parse(left.timestamp || "");
+    const rightTime = Date.parse(right.timestamp || "");
+    return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+  });
+}
+
+async function readReasonRecords(): Promise<ReasonRecord[]> {
   try {
     const raw = await readFile(REASON_STORE_PATH, "utf-8");
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-      .map(normalizeReasonDiagnostic)
+    return sortReasonRecords(parsed.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")).map(normalizeReasonRecord));
+  } catch {
+    return [];
+  }
+}
+
+async function readReasonDiagnostics(): Promise<ReasonDiagnostic[]> {
+  try {
+    return (await readReasonRecords())
       .filter((item) => Boolean(item.symbol || item.timeframe || item.candles_loaded !== null || item.candles_required !== null || item.rejection_reason));
   } catch {
     return [];
@@ -125,47 +199,303 @@ function isOpenTradesQuestion(question: string): boolean {
   );
 }
 
+function isOpenTicketQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return normalized.includes("ticket") && (normalized.includes("open") || normalized.includes("currently active") || normalized.includes("active"));
+}
+
+function isLatestAcceptanceQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("latest") &&
+    (normalized.includes("accepted") || normalized.includes("rejected") || normalized.includes("accept") || normalized.includes("reject")) &&
+    (normalized.includes("signal") || normalized.includes("eurusd") || normalized.includes("xauusd") || normalized.includes("trade"))
+  );
+}
+
+function isOpenTradeReasonQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return normalized.includes("why") && normalized.includes("open") && (normalized.includes("trade") || normalized.includes("position"));
+}
+
+function isLivePositionQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("tp") ||
+    normalized.includes("take profit") ||
+    normalized.includes("sl") ||
+    normalized.includes("stop loss") ||
+    normalized.includes("entry") ||
+    normalized.includes("floating") ||
+    normalized.includes("p&l") ||
+    normalized.includes("pnl") ||
+    normalized.includes("profit") ||
+    normalized.includes("trade age") ||
+    normalized.includes("age") ||
+    normalized.includes("position status") ||
+    normalized.includes("being monitored") ||
+    normalized.includes("monitored") ||
+    (normalized.includes("what symbols") && (normalized.includes("open") || normalized.includes("position")))
+  );
+}
+
+function isClosedTradeQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("closed") ||
+    normalized.includes("win") ||
+    normalized.includes("loss") ||
+    normalized.includes("net p&l") ||
+    normalized.includes("net pnl")
+  ) && !isLivePositionQuestion(question);
+}
+
+function isProgressQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return normalized.includes("validation progress") || normalized.includes("remaining trade") || normalized.includes("current progress") || normalized.includes("progress");
+}
+
 function readPositionField(record: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
     const value = record[key];
-    if (value !== null && value !== undefined && text(value)) return text(value);
+    if (value !== null && value !== undefined && cleanText(value)) return cleanText(value);
   }
   return "";
+}
+
+function readPositionNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberValue(record[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function formatNumber(value: number | null, digits = 5): string {
+  if (value === null) return POSITION_FIELD_MISSING;
+  return value.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: value >= 100 ? 2 : 0 });
+}
+
+function formatMoney(value: number | null): string {
+  if (value === null) return POSITION_FIELD_MISSING;
+  return `$${value.toFixed(2)}`;
+}
+
+function formatPositionLine(position: Record<string, unknown>, detail: "levels" | "pnl" | "entry" | "monitoring" | "status"): string {
+  const symbol = readPositionField(position, ["symbol"]) || "Position";
+  const ticket = readPositionField(position, ["ticket"]) || POSITION_FIELD_MISSING;
+  const side = readPositionField(position, ["side", "type"]) || "position";
+  if (detail === "levels") {
+    const sl = readPositionNumber(position, ["stop_loss", "sl"]);
+    const tp = readPositionNumber(position, ["take_profit", "tp"]);
+    return `${symbol} ticket ${ticket}: SL ${formatNumber(sl)}, TP ${formatNumber(tp)}.`;
+  }
+  if (detail === "pnl") {
+    const pnl = readPositionNumber(position, ["floating_pnl", "profit"]);
+    return `${symbol} ticket ${ticket}: floating P&L ${formatMoney(pnl)}.`;
+  }
+  if (detail === "entry") {
+    const entry = readPositionNumber(position, ["entry_price", "price_open"]);
+    return `${symbol} ticket ${ticket}: entry ${formatNumber(entry)}.`;
+  }
+  if (detail === "status") {
+    const status = readPositionField(position, ["lifecycle_status", "status"]) || "OPEN";
+    return `${symbol} ticket ${ticket}: ${status}.`;
+  }
+  return `${symbol} ticket ${ticket}: ${side}, monitored as an open MT5 position.`;
+}
+
+async function readLiveOpenPositions(): Promise<Record<string, unknown>[]> {
+  try {
+    const url = new URL("/mt5-demo/position-monitor/open", API_BASE_URL);
+    url.searchParams.set("_ts", String(Date.now()));
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return [];
+    const payload = (await response.json()) as Record<string, unknown>;
+    const rawPositions = Array.isArray(payload.positions) ? payload.positions : [];
+    return rawPositions
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .filter((position) => VALIDATION_SYMBOLS.has(readPositionField(position, ["symbol"]).toUpperCase()));
+  } catch {
+    return [];
+  }
+}
+
+async function readBackendRecord(endpoint: string): Promise<Record<string, unknown> | null> {
+  try {
+    const url = new URL(endpoint, API_BASE_URL);
+    url.searchParams.set("_ts", String(Date.now()));
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as unknown;
+    return payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function logOpenPositionsForChat(positions: Record<string, unknown>[]): void {
+  console.log(
+    "Chat live MT5 open positions:",
+    positions.map((position) => ({
+      ticket: readPositionField(position, ["ticket"]),
+      symbol: readPositionField(position, ["symbol"]),
+      volume: readPositionField(position, ["volume", "lot"]),
+      open_price: readPositionField(position, ["price_open", "entry_price"]),
+    })),
+  );
 }
 
 async function answerOpenTradesQuestion(question: string): Promise<string | null> {
   if (!isOpenTradesQuestion(question)) return null;
   try {
-    const url = new URL("/mt5-demo/position-monitor/open", API_BASE_URL);
-    url.searchParams.set("_ts", String(Date.now()));
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) return "Open trade data is not available right now.";
-    const payload = (await response.json()) as Record<string, unknown>;
-    const rawPositions = Array.isArray(payload.positions) ? payload.positions : [];
-    const positions = rawPositions
-      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-      .filter((position) => VALIDATION_SYMBOLS.has(readPositionField(position, ["symbol"]).toUpperCase()));
-    console.log(
-      "Chat live MT5 open positions:",
-      positions.map((position) => ({
-        ticket: readPositionField(position, ["ticket"]),
-        symbol: readPositionField(position, ["symbol"]),
-        volume: readPositionField(position, ["volume", "lot"]),
-        open_price: readPositionField(position, ["price_open", "entry_price"]),
-      })),
-    );
+    const positions = await readLiveOpenPositions();
+    logOpenPositionsForChat(positions);
     if (!positions.length) return "There are 0 active open trades from the live MT5 position source.";
     const tickets = positions.map((position) => readPositionField(position, ["ticket"])).filter(Boolean);
     const symbols = positions.reduce<Record<string, number>>((counts, position) => {
-      const symbol = readPositionField(position, ["symbol"]).toUpperCase() || "UNKNOWN";
+      const symbol = readPositionField(position, ["symbol"]).toUpperCase() || "Unlabeled symbol";
       counts[symbol] = (counts[symbol] ?? 0) + 1;
       return counts;
     }, {});
     const symbolText = Object.entries(symbols).map(([symbol, count]) => `${symbol}: ${count}`).join(", ");
     return `There are ${positions.length} active open trades from the live MT5 position source. ${symbolText}.${tickets.length ? ` Tickets: ${tickets.join(", ")}.` : ""}`;
   } catch {
-    return "Open trade data is not available right now.";
+    return "Open trade data could not be read from the live MT5 position source right now.";
   }
+}
+
+async function answerLivePositionQuestion(question: string): Promise<string | null> {
+  if (!isLivePositionQuestion(question)) return null;
+  const positions = await readLiveOpenPositions();
+  logOpenPositionsForChat(positions);
+  const symbol = questionSymbol(question);
+  const scoped = symbol ? positions.filter((position) => readPositionField(position, ["symbol"]).toUpperCase() === symbol) : positions;
+  if (!scoped.length) return symbol ? `${symbol} has no active open positions in the live MT5 source.` : "There are no active open positions in the live MT5 source.";
+  const normalized = question.toLowerCase();
+  if (normalized.includes("what symbols")) {
+    const symbols = [...new Set(scoped.map((position) => readPositionField(position, ["symbol"]).toUpperCase()).filter(Boolean))];
+    return `Open position symbols: ${symbols.join(", ")}.`;
+  }
+  if (normalized.includes("tp") || normalized.includes("take profit") || normalized.includes("sl") || normalized.includes("stop loss")) {
+    return scoped.map((position) => formatPositionLine(position, "levels")).join(" ");
+  }
+  if (normalized.includes("floating") || normalized.includes("p&l") || normalized.includes("pnl") || normalized.includes("profit")) {
+    const total = scoped.reduce((sum, position) => sum + (readPositionNumber(position, ["floating_pnl", "profit"]) ?? 0), 0);
+    return `${scoped.map((position) => formatPositionLine(position, "pnl")).join(" ")} Total floating P&L: ${formatMoney(total)}.`;
+  }
+  if (normalized.includes("entry")) return scoped.map((position) => formatPositionLine(position, "entry")).join(" ");
+  if (normalized.includes("status")) return scoped.map((position) => formatPositionLine(position, "status")).join(" ");
+  return scoped.map((position) => formatPositionLine(position, "monitoring")).join(" ");
+}
+
+async function answerClosedTradeQuestion(question: string): Promise<string | null> {
+  if (!isClosedTradeQuestion(question)) return null;
+  const summary = await readBackendRecord("/trade-journal/persistence/summary");
+  if (!summary) return "Closed trade data could not be read from the trade journal right now.";
+  const closed = numberValue(summary.closed_demo_trades) ?? 0;
+  const wins = numberValue(summary.wins) ?? 0;
+  const losses = numberValue(summary.losses) ?? 0;
+  const netPnl = numberValue(summary.net_pnl) ?? 0;
+  return `Closed validation trades recorded in the trade journal: ${closed}. Wins: ${wins}, losses: ${losses}, net P&L: ${formatMoney(netPnl)}.`;
+}
+
+async function answerProgressQuestion(question: string): Promise<string | null> {
+  if (!isProgressQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const session = status && typeof status.session === "object" && status.session !== null ? (status.session as Record<string, unknown>) : null;
+  if (!session) return "Validation progress could not be read from the auto-validation session right now.";
+  const closed = numberValue(session.current_closed_trades) ?? numberValue(session.current_session_closed) ?? 0;
+  const target = numberValue(session.target_closed_trades) ?? numberValue(session.target_validation_trades) ?? 30;
+  const remaining = numberValue(session.remaining_closed_trades) ?? Math.max(0, target - closed);
+  const open = numberValue(session.current_open_trades) ?? numberValue(session.current_session_open_trades) ?? 0;
+  const mode = cleanText(session.status) || "not started";
+  return `Validation progress: ${closed}/${target} closed trades completed, ${remaining} remaining, ${open} open, status ${mode}.`;
+}
+
+function executionAcceptedRecords(records: ReasonRecord[], symbol: string | null = null): ReasonRecord[] {
+  return records.filter((record) => {
+    const isExecution = record.source === "execution";
+    const isAccepted = text(record.status).toUpperCase() === "ACCEPTED";
+    const isOpen = record.order_opened === true;
+    const symbolMatches = symbol ? record.symbol === symbol : true;
+    return isExecution && isAccepted && isOpen && symbolMatches;
+  });
+}
+
+function matchAcceptedRecordForPosition(records: ReasonRecord[], position: Record<string, unknown>): ReasonRecord | null {
+  const ticket = readPositionField(position, ["ticket"]);
+  if (ticket) return records.find((record) => record.ticket === ticket) ?? null;
+  const symbol = readPositionField(position, ["symbol"]).toUpperCase();
+  return records.find((record) => symbol && record.symbol === symbol && record.order_opened === true) ?? null;
+}
+
+async function answerOpenTicketQuestion(question: string): Promise<string | null> {
+  if (!isOpenTicketQuestion(question)) return null;
+  const positions = await readLiveOpenPositions();
+  logOpenPositionsForChat(positions);
+  if (positions.length) {
+    const tickets = positions.map((position) => readPositionField(position, ["ticket"])).filter(Boolean);
+    return tickets.length ? `Currently open ticket IDs: ${tickets.join(", ")}.` : POSITION_FIELD_MISSING;
+  }
+  const records = executionAcceptedRecords(await readReasonRecords());
+  const tickets = records.map((record) => record.ticket).filter(Boolean);
+  return tickets.length ? `Latest accepted ORDER_SENT ticket IDs: ${tickets.join(", ")}.` : "There are no currently open ticket IDs in the live MT5 position source.";
+}
+
+function reasonFallback(record: ReasonRecord): string {
+  const symbol = record.symbol || "This signal";
+  const status = cleanText(record.status).toUpperCase();
+  if (status === "ACCEPTED") {
+    const side = cleanText(record.side).toUpperCase();
+    const ticket = cleanText(record.ticket);
+    const sideText = side && !["TRADE", "POSITION"].includes(side) ? ` as a ${side} trade` : "";
+    return `${symbol} was accepted and opened${sideText} because guarded demo validation passed, risk status was approved, and MT5 executed the order successfully.${ticket ? ` Ticket: ${ticket}.` : ""}`;
+  }
+  if (status === "REJECTED") {
+    const blocker = cleanText(record.rejection_reason);
+    return blocker ? `${symbol} was rejected because ${blocker.replace(/\.$/, "")}.` : `${symbol} was rejected because the latest validation checks did not pass. No trade was opened for this signal.`;
+  }
+  if (status === "WAITING") return `${symbol} is waiting for the next valid confirmation before making a trading decision.`;
+  return `${symbol} needs attention because validation could not complete cleanly.`;
+}
+
+async function answerLatestAcceptanceQuestion(question: string): Promise<string | null> {
+  if (!isLatestAcceptanceQuestion(question)) return null;
+  const symbol = questionSymbol(question) ?? "EURUSD";
+  const positions = await readLiveOpenPositions();
+  const records = await readReasonRecords();
+  const openPositions = positions.filter((position) => readPositionField(position, ["symbol"]).toUpperCase() === symbol);
+  if (openPositions.length) {
+    const openTickets = new Set(openPositions.map((position) => readPositionField(position, ["ticket"])).filter(Boolean));
+    const accepted = executionAcceptedRecords(records, symbol).find((record) => record.ticket && openTickets.has(record.ticket)) ?? null;
+    const fallbackPosition = [...openPositions].sort((left, right) => (numberValue(readPositionField(right, ["ticket"])) ?? 0) - (numberValue(readPositionField(left, ["ticket"])) ?? 0))[0];
+    const ticket = accepted?.ticket || readPositionField(fallbackPosition, ["ticket"]);
+    const side = accepted?.side || readPositionField(fallbackPosition, ["side", "type"]).toUpperCase();
+    const reason = accepted?.reason || `${symbol} was accepted because the guarded demo validation passed and MT5 has an active open ${side || "trade"} position.`;
+    return `${symbol} was accepted. ${reason}${ticket && !reason.includes(ticket) ? ` Ticket: ${ticket}.` : ""}`;
+  }
+  const latest = records.find((record) => !symbol || record.symbol === symbol) ?? null;
+  if (!latest) return `I do not have a latest ${symbol} reason record yet.`;
+  const latestStatus = cleanText(latest.status).toLowerCase() || "recorded";
+  return `${symbol} was ${latestStatus}. ${cleanText(latest.reason) || reasonFallback(latest)}`;
+}
+
+async function answerOpenTradeReasonQuestion(question: string): Promise<string | null> {
+  if (!isOpenTradeReasonQuestion(question)) return null;
+  const symbol = questionSymbol(question);
+  const positions = await readLiveOpenPositions();
+  const scopedPositions = symbol ? positions.filter((position) => readPositionField(position, ["symbol"]).toUpperCase() === symbol) : positions;
+  if (!scopedPositions.length) return symbol ? `${symbol} does not have an active open trade in the live MT5 position source.` : "There are no active open trades in the live MT5 position source.";
+  const records = await readReasonRecords();
+  const openTickets = new Set(scopedPositions.map((position) => readPositionField(position, ["ticket"])).filter(Boolean));
+  const accepted = executionAcceptedRecords(records, symbol).find((record) => record.ticket && openTickets.has(record.ticket)) ?? null;
+  if (accepted?.reason) return accepted.reason;
+  const position = scopedPositions[0];
+  const ticket = readPositionField(position, ["ticket"]);
+  const positionSymbol = readPositionField(position, ["symbol"]).toUpperCase();
+  const side = readPositionField(position, ["side", "type"]).toUpperCase();
+  return `${positionSymbol} has an active open ${side || "trade"} position in MT5.${ticket ? ` Ticket: ${ticket}.` : ` ${POSITION_FIELD_MISSING}`}`;
 }
 
 function findDiagnostic(records: ReasonDiagnostic[], symbol: string | null, timeframe: string | null): { exact: ReasonDiagnostic | null; latestForSymbol: ReasonDiagnostic | null; latest: ReasonDiagnostic | null } {
@@ -177,7 +507,7 @@ function findDiagnostic(records: ReasonDiagnostic[], symbol: string | null, time
 }
 
 function diagnosticMissing(): string {
-  return "Validator diagnostics are not available for this decision.";
+  return "Validator diagnostics have not been recorded for this decision.";
 }
 
 function candleSummary(record: ReasonDiagnostic): string {
@@ -198,7 +528,7 @@ async function answerDiagnosticQuestion(question: string): Promise<string | null
   const normalized = question.toLowerCase();
   if (timeframe && latestForSymbol && !exact) {
     if (latestForSymbol.candles_loaded !== null && latestForSymbol.candles_required !== null) {
-      return `I only have latest diagnostics for ${latestForSymbol.symbol} ${latestForSymbol.timeframe || "unknown timeframe"}: ${latestForSymbol.candles_loaded} candles loaded, ${latestForSymbol.candles_required} required. ${timeframe} diagnostics are not available for the latest decision.`;
+      return `I only have latest diagnostics for ${latestForSymbol.symbol} ${latestForSymbol.timeframe || "latest timeframe"}: ${latestForSymbol.candles_loaded} candles loaded, ${latestForSymbol.candles_required} required. ${timeframe} diagnostics have not been recorded for the latest decision.`;
     }
     return diagnosticMissing();
   }
@@ -215,7 +545,8 @@ async function answerDiagnosticQuestion(question: string): Promise<string | null
   }
   if (normalized.includes("candle")) {
     if (record.candles_loaded === null || record.candles_loaded === undefined || record.candles_required === null || record.candles_required === undefined) return diagnosticMissing();
-    return `${candleSummary(record)} loaded ${record.candles_loaded} candles. Minimum required is ${record.candles_required}. Data source: ${record.data_source || "not available"}.`;
+    const source = record.data_source ? ` Data source: ${record.data_source}.` : " Data source has not been recorded.";
+    return `${candleSummary(record)} loaded ${record.candles_loaded} candles. Minimum required is ${record.candles_required}.${source}`;
   }
   if (normalized.includes("why") && normalized.includes("reject")) {
     if (!record.rejection_reason) return diagnosticMissing();
@@ -308,9 +639,33 @@ export async function POST(request: Request) {
     if (!question) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
+    const openTicketAnswer = await answerOpenTicketQuestion(question);
+    if (openTicketAnswer) {
+      return NextResponse.json({ reply: openTicketAnswer });
+    }
+    const livePositionAnswer = await answerLivePositionQuestion(question);
+    if (livePositionAnswer) {
+      return NextResponse.json({ reply: livePositionAnswer });
+    }
+    const latestAcceptanceAnswer = await answerLatestAcceptanceQuestion(question);
+    if (latestAcceptanceAnswer) {
+      return NextResponse.json({ reply: latestAcceptanceAnswer });
+    }
+    const openTradeReasonAnswer = await answerOpenTradeReasonQuestion(question);
+    if (openTradeReasonAnswer) {
+      return NextResponse.json({ reply: openTradeReasonAnswer });
+    }
     const openTradesAnswer = await answerOpenTradesQuestion(question);
     if (openTradesAnswer) {
       return NextResponse.json({ reply: openTradesAnswer });
+    }
+    const closedTradeAnswer = await answerClosedTradeQuestion(question);
+    if (closedTradeAnswer) {
+      return NextResponse.json({ reply: closedTradeAnswer });
+    }
+    const progressAnswer = await answerProgressQuestion(question);
+    if (progressAnswer) {
+      return NextResponse.json({ reply: progressAnswer });
     }
     const diagnosticAnswer = await answerDiagnosticQuestion(question);
     if (diagnosticAnswer) {

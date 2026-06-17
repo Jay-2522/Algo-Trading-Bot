@@ -64,6 +64,7 @@ type PortalView = "portal" | "traderProfile" | "testEnvironment" | BrokerView | 
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
+const TARGET_TRADES = 30;
 const DASHBOARD_CACHE_KEY = "client-dashboard-last-successful-snapshot-v2";
 const BALANCE_HISTORY_KEY = "algopilot_balance_history";
 const INITIAL_ACCOUNT_BALANCE = 100000;
@@ -78,8 +79,8 @@ const ROUND_2_START_PAYLOAD: ApiRecord = {
   session_started_by: "user_click",
   strategy_profile: "DEMO_COLLECTION",
   allowed_symbols: ["EURUSD"],
-  target_validation_trades: 30,
-  target_closed_trades: 30,
+  target_validation_trades: TARGET_TRADES,
+  target_closed_trades: TARGET_TRADES,
   round_label: "ROUND_2",
   session_note: ROUND_2_NOTE,
   client_dashboard_scope: "CURRENT_SESSION_ONLY",
@@ -387,6 +388,23 @@ function pnlClass(value: number): string {
   if (value > 0) return "text-emerald-300";
   if (value < 0) return "text-rose-300";
   return "text-slate-100";
+}
+
+function actualClosedTradeCount(trades: ApiRecord[]): number {
+  return trades.length;
+}
+
+function tradeWinCount(trades: ApiRecord[]): number {
+  return trades.filter((trade) => tradeResultLabel(trade) === "WIN").length;
+}
+
+function tradeLossCount(trades: ApiRecord[]): number {
+  return trades.filter((trade) => tradeResultLabel(trade) === "LOSS").length;
+}
+
+function closedTradeProgressText(actualClosedTrades: number, targetTrades: number): string {
+  if (targetTrades > 0 && actualClosedTrades > targetTrades) return `${actualClosedTrades} trades completed (target was ${targetTrades})`;
+  return `${actualClosedTrades} of ${targetTrades} closed trades completed.`;
 }
 
 function formatDuration(value: unknown): string {
@@ -1321,10 +1339,9 @@ function ClientPortalOverview({
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
   const mt5Health = asRecord(autoStatus?.mt5_health);
-  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
-  const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
+  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
+  const closed = actualClosedTradeCount(closedTrades);
   const open = scopedOpenPositions.length;
-  const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
   const mode = readText(session, ["status"], "");
   const botState = clientBotState(mode, closed, open, target, Boolean(readText(session, ["session_id", "id", "validation_session_id"], "") || mode || closed || open));
   const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
@@ -2012,6 +2029,7 @@ function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): s
   const session = asRecord(autoStatus?.session);
   const mt5Health = asRecord(autoStatus?.mt5_health);
   const latestSignal = data.clientSignals[0] ?? null;
+  const closedTradeCount = actualClosedTradeCount(data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"));
   const eurusdStatus = data.eurusdTick ? { price: numeric(data.eurusdTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN), status: readText(data.eurusdTick, ["market_status", "status", "freshness"], "available") } : null;
   const xauusdStatus = data.xauusdTick ? { price: numeric(data.xauusdTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN), status: readText(data.xauusdTick, ["market_status", "status", "freshness"], "available") } : null;
   const context = {
@@ -2023,7 +2041,7 @@ function buildChatContext(data: DashboardData, reasons: ReasonMessage[] = []): s
     mt5: friendlyText(mt5Health, ["status"], "not available"),
     validation: {
       status: friendlyText(session, ["status"], "not started"),
-      closedTrades: readNumber(session, ["current_closed_trades", "current_session_closed"], 0),
+      closedTrades: closedTradeCount,
       openTrades: validationOpenPositions(data.openPositions).length,
       latestSignal: latestSignal
         ? {
@@ -2122,6 +2140,7 @@ function buildBotAnswer(question: string, data: DashboardData): string {
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
   const mt5Health = asRecord(autoStatus?.mt5_health);
+  const closedTradeCount = actualClosedTradeCount(data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"));
   if (q.includes("account") || q.includes("balance") || q.includes("equity")) {
     return `Account balance is ${moneyOrWaiting(numeric(data.account, ["balance"]))}, equity is ${moneyOrWaiting(numeric(data.account, ["equity"]))}, and MT5 status is ${friendlyText(mt5Health, ["status"], "checking")}.`;
   }
@@ -2132,7 +2151,7 @@ function buildBotAnswer(question: string, data: DashboardData): string {
       : "No active signal decision is available yet. Once the strategy evaluates a setup, accepted and rejected reasons will appear in the Test Environment Reason panel.";
   }
   if (q.includes("validation") || q.includes("round")) {
-    return `Validation status is ${friendlyText(session, ["status"], "not started")}. Closed trades: ${readNumber(session, ["current_closed_trades", "current_session_closed"], 0)}. Open trades: ${validationOpenPositions(data.openPositions).length}.`;
+    return `Validation status is ${friendlyText(session, ["status"], "not started")}. Closed trades: ${closedTradeCount}. Open trades: ${validationOpenPositions(data.openPositions).length}.`;
   }
   return "I can help explain account status, validation progress, accepted or rejected trades, risk checks, market conditions, and dashboard readings. Ask me about any visible status or trade decision.";
 }
@@ -2158,6 +2177,7 @@ function TestEnvironmentView(props: {
       <TestEnvironmentTitleCard />
       <Round1Results data={props.data} trades={props.closedTrades} />
       <ClientDashboardView {...props} loading={false} showHero={false} />
+      <TradeIntelligenceSection closedTrades={props.closedTrades} reasonContexts={buildReasonContexts(props.data)} />
     </div>
   );
 }
@@ -2181,7 +2201,7 @@ function emptyEurusdTestResults(): ApiRecord {
     round: 2,
     startedAt: null,
     completedAt: null,
-    target: 30,
+    target: TARGET_TRADES,
     summary: {
       closed: 0,
       wins: 0,
@@ -2376,10 +2396,13 @@ function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecor
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
-  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
+  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
+  const actualClosedTrades = actualClosedTradeCount(trades);
+  const actualWins = tradeWinCount(trades);
+  const actualWinRate = actualClosedTrades ? (actualWins / actualClosedTrades) * 100 : 0;
   const storedSummary = asRecord(stored?.summary);
   const storedTrades = Array.isArray(stored?.trades) ? (stored.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
-  const hasTrades = storedTrades.length > 0;
+  const hasTrades = actualClosedTrades > 0 || storedTrades.length > 0;
   useEffect(() => {
     if (!trades.length) return;
     const raw = window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY);
@@ -2401,15 +2424,15 @@ function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecor
       <div className="premium-test-header">
         <div>
           <p className="premium-section-eyebrow">EURUSD Test Results</p>
-          <h2 className="premium-section-title">{hasTrades ? `${readNumber(storedSummary, ["closed"], 0)} closed trades captured` : "EURUSD test results"}</h2>
+          <h2 className="premium-section-title">{hasTrades ? `${actualClosedTrades} closed trades captured` : "EURUSD test results"}</h2>
           {!hasTrades ? <p className="test-results-empty">Results are stored permanently and persist after page refresh.</p> : null}
         </div>
         <button className="portal-panel-tab" disabled={!hasTrades} onClick={() => setExpanded((value) => !value)} type="button">{hasTrades ? (expanded ? "Hide Trades" : "View Trades") : "No trades yet"}</button>
       </div>
       <div className="premium-stat-grid">
         <ClientMetric label="Target" value={hasTrades ? String(readNumber(stored, ["target"], target)) : "-"} compact />
-        <ClientMetric label="Closed" value={hasTrades ? String(readNumber(storedSummary, ["closed"], 0)) : "-"} compact />
-        <ClientMetric label="Win Rate" value={hasTrades ? `${readNumber(storedSummary, ["winRate"], 0).toFixed(2)}%` : "-"} compact />
+        <ClientMetric label="Closed" value={hasTrades ? String(actualClosedTrades) : "-"} compact />
+        <ClientMetric label="Win Rate" value={hasTrades ? `${actualWinRate.toFixed(2)}%` : "-"} compact />
         <ClientMetric label="Net P&L" value={hasTrades ? money(readNumber(storedSummary, ["netPnL"], 0)) : "-"} compact />
       </div>
       {expanded ? <EurusdTradeHistory trades={storedTrades} onClose={() => setExpanded(false)} /> : null}
@@ -2554,17 +2577,21 @@ function ClientDashboardView({
   const config = asRecord(autoStatus?.config);
   const mt5Health = asRecord(autoStatus?.mt5_health);
   const exitManagement = asRecord(autoStatus?.exit_management);
-  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], 30));
-  const closed = readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
+  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
+  const actualClosedTrades = actualClosedTradeCount(closedTrades);
+  const closed = actualClosedTrades;
   const open = scopedOpenPositions.length;
-  const remaining = readNumber(session, ["remaining_closed_trades", "remaining_trades_to_target"], Math.max(0, target - closed));
+  const remaining = Math.max(0, target - actualClosedTrades);
   const progress = target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0;
+  const wins = tradeWinCount(closedTrades);
+  const losses = tradeLossCount(closedTrades);
+  const winRate = actualClosedTrades ? (wins / actualClosedTrades) * 100 : 0;
   const mode = readText(session, ["status"], "");
   const sessionNote = readText(session, ["session_note"], "");
   const allowedSymbols = Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD";
   const sessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
   const hasValidationSession = Boolean(sessionId || mode || closed > 0 || open > 0);
-  const botState = clientBotState(mode, closed, open, target, hasValidationSession);
+  const botState = clientBotState(mode, actualClosedTrades, open, target, hasValidationSession);
   const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
   const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
   const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus);
@@ -2610,7 +2637,7 @@ function ClientDashboardView({
           <div>
             <p className="premium-section-eyebrow">Test Environment</p>
             <h2 className="premium-section-title">{botState.statusText}</h2>
-            <p className="premium-test-note">{closed} of {target} closed trades completed.</p>
+            <p className="premium-test-note">{closedTradeProgressText(actualClosedTrades, target)}</p>
             <p className="premium-test-note">{sessionNote || ROUND_2_NOTE}</p>
           </div>
           <strong className="premium-test-progress">{progress}%</strong>
@@ -2623,7 +2650,7 @@ function ClientDashboardView({
             <p className="premium-section-eyebrow">Round 2 validation</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <ClientMetric label="Target Closed Trades" value={String(target)} compact />
-              <ClientMetric label="Closed Trades" value={String(closed)} compact />
+              <ClientMetric label="Closed Trades" value={String(actualClosedTrades)} compact />
               <ClientMetric label="Remaining Trades" value={String(remaining)} compact />
               <ClientMetric label="Open Trades" value={String(open)} compact />
               <ClientMetric label="Validation Symbols" value={allowedSymbols} compact />
@@ -2649,9 +2676,9 @@ function ClientDashboardView({
         <div className="premium-panel">
           <p className="premium-section-eyebrow">Performance summary</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <ClientMetric label="Wins" value={String(readNumber(session, ["wins"], 0))} valueClass="text-emerald-200" compact />
-            <ClientMetric label="Losses" value={String(readNumber(session, ["losses"], 0))} valueClass="text-rose-200" compact />
-            <ClientMetric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
+            <ClientMetric label="Wins" value={String(wins)} valueClass="text-emerald-200" compact />
+            <ClientMetric label="Losses" value={String(losses)} valueClass="text-rose-200" compact />
+            <ClientMetric label="Win Rate" value={`${winRate.toFixed(2)}%`} compact />
             <ClientMetric label="Net P&L" value={money(readNumber(session, ["net_pnl"], 0))} valueClass={pnlClass(readNumber(session, ["net_pnl"], 0))} compact />
             <ClientMetric label="Profit Factor" value={readNumber(session, ["profit_factor"], 0).toFixed(2)} compact />
             <ClientMetric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
@@ -2788,6 +2815,732 @@ function ClientClosedTradesTable({ trades }: { trades: ApiRecord[] }) {
   );
 }
 
+function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrades: ApiRecord[]; reasonContexts: ReasonContext[] }) {
+  const [persistedReasons, setPersistedReasons] = useState<ReasonMessage[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const records = await fetchReasonMessages();
+      if (!cancelled) setPersistedReasons(normalizeReasonMessages(records));
+    };
+    void load();
+    const interval = window.setInterval(load, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const reasonMessages = persistedReasons.length ? persistedReasons : normalizeReasonMessages(reasonContexts);
+  const trades = closedTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
+  const autopsyRows = trades.slice(0, 8);
+  const lossPatterns = aggregatePatterns(trades.filter((trade) => tradePnl(trade) < 0).map(lossReasonForTrade));
+  const rejectionBreakdown = aggregatePatterns(reasonMessages.filter((message) => message.status === "Rejected").map(rejectionReasonLabel));
+  const featureImpactRows = buildFeatureImpactRows(trades);
+  const conclusionRows = buildStrategyConclusionRows(trades, lossPatterns, rejectionBreakdown, featureImpactRows);
+  const winningDnaRows = buildWinningDnaSummaryRows(trades);
+
+  return (
+    <section>
+      <div className="grid gap-6">
+        <div className="premium-sub-card p-5 lg:p-6">
+          <ClientSectionTitle eyebrow="Research Dashboard" title="TRADE INTELLIGENCE" />
+          {autopsyRows.length ? (
+            <div className="premium-table-wrap mt-4">
+              <table className="premium-table text-xs">
+                <thead>
+                  <tr>{["Ticket", "Symbol", "Result", "Entry Setup", "Exit Reason", "Root Cause"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {autopsyRows.map((trade, index) => (
+                    <tr key={`${readText(trade, ["mt5_ticket", "ticket", "trade_id"], String(index))}-${index}`}>
+                      <td className="px-3 py-2">{friendlyText(trade, ["mt5_ticket", "ticket", "trade_id"], "No ticket")}</td>
+                      <td className="px-3 py-2">{friendlyText(trade, ["symbol"], "Symbol pending")}</td>
+                      <td className={`px-3 py-2 ${tradePnl(trade) >= 0 ? "text-emerald-200" : "text-rose-200"}`}>{tradeResultLabel(trade)}</td>
+                      <td className="px-3 py-2" title={entrySetupForTrade(trade)}>
+                        <TradeSetupTags trade={trade} />
+                      </td>
+                      <td className="px-3 py-2">{exitReasonForTrade(trade)}</td>
+                      <td className="px-3 py-2 text-slate-100" title={rootCauseForTrade(trade)}>{compactRootCauseForTrade(trade)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState text="—" />
+          )}
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-2">
+            <div>
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-300">Loss Pattern Analysis</p>
+              <PatternBars patterns={lossPatterns} emptyText="—" />
+            </div>
+            <div>
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-300">Validation Rejection Breakdown</p>
+              <PatternBars patterns={rejectionBreakdown} emptyText="—" />
+            </div>
+          </div>
+
+          <FeatureImpactTable rows={featureImpactRows} />
+        </div>
+
+        <div className="premium-sub-card p-5 lg:p-6">
+          <ClientSectionTitle eyebrow="Research Dashboard" title="STRATEGY CONCLUSIONS" />
+          <StrategyConclusionTable rows={conclusionRows} winningDnaRows={winningDnaRows} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PatternBars({ emptyText, patterns }: { emptyText: string; patterns: IntelligencePattern[] }) {
+  return (
+    <>
+      {patterns.length ? (
+        <div className="mt-3 grid gap-3">
+          {patterns.map((pattern) => (
+            <div key={pattern.label}>
+              <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                <span className="text-slate-100">{pattern.label}</span>
+                <span className={patternValueClass(pattern.percentage)}>{pattern.count} / {pattern.percentage.toFixed(0)}%</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full border border-blue-900/40 bg-[#020815]">
+                <div className={`h-full rounded-full ${patternBarClass(pattern.percentage)}`} style={{ width: `${Math.max(4, pattern.percentage)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState text={emptyText} />
+      )}
+    </>
+  );
+}
+
+function patternBarClass(percentage: number): string {
+  if (percentage > 50) return "bg-gradient-to-r from-rose-700 to-rose-400";
+  if (percentage >= 25) return "bg-gradient-to-r from-amber-600 to-orange-300";
+  return "bg-gradient-to-r from-[#173A8A] to-[#255EDC]";
+}
+
+function patternValueClass(percentage: number): string {
+  const color = percentage > 50 ? "text-rose-200" : percentage >= 25 ? "text-amber-200" : "text-blue-200";
+  return `font-mono ${color}`;
+}
+
+function TradeSetupTags({ trade }: { trade: ApiRecord }) {
+  return (
+    <div className="flex max-w-[360px] flex-wrap gap-1.5">
+      {setupTagsForTrade(trade).map((tag) => (
+        <span className={`rounded border px-2 py-0.5 text-[0.62rem] font-black uppercase tracking-[0.08em] ${tradeTagClass(tag)}`} key={tag}>
+          {tag}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function tradeTagClass(tag: string): string {
+  const text = tag.toUpperCase().replace(/\s+/g, "_");
+  if (text === "DEMO_COLLECTION") return "border-blue-400/25 bg-blue-400/10 text-blue-100";
+  if (text.startsWith("RR_")) return "border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-200";
+  if (text.includes("MISSING") || text === "OUTSIDE_SESSION") return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+  if (text.includes("PRESENT") || text === "TREND_ALIGNED" || text === "LONDON/NY") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+  return "border-slate-500/30 bg-slate-500/10 text-slate-200";
+}
+
+function FeatureImpactTable({ rows }: { rows: FeatureImpactRow[] }) {
+  const unavailable = "—";
+  return (
+      <div className="premium-table-wrap mt-5">
+        <table className="premium-table text-xs">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>State</th>
+              <th>Trades</th>
+              <th>Wins</th>
+              <th>Losses</th>
+              <th>Win Rate</th>
+              <th>Net P&L</th>
+              <th>Insight</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${row.feature}-${row.state}`}>
+                <td className="px-3 py-2 font-bold text-white">{row.feature}</td>
+                <td className="px-3 py-2 text-blue-100">{row.state}</td>
+                <td className="px-3 py-2">{row.hasData ? row.trades : unavailable}</td>
+                <td className="px-3 py-2">{row.hasData ? row.wins : unavailable}</td>
+                <td className="px-3 py-2">{row.hasData ? row.losses : unavailable}</td>
+                <td className="px-3 py-2">{row.hasData ? `${row.winRate.toFixed(1)}%` : unavailable}</td>
+                <td className={`px-3 py-2 font-bold ${row.hasData ? pnlClass(row.netPnl) : "text-slate-400"}`}>{row.hasData ? money(row.netPnl) : unavailable}</td>
+                <td className="px-3 py-2 text-slate-200">{row.insight}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+  );
+}
+
+function StrategyConclusionTable({ rows, winningDnaRows }: { rows: StrategyConclusionRow[]; winningDnaRows: WinningDnaSummaryRow[] }) {
+  const diagnosticRows = rows.filter((row) => row.type !== "AI");
+  const aiRows = rows.filter((row) => row.type === "AI");
+  return (
+    <>
+      <StrategyRowsTable rows={diagnosticRows} />
+      <WinningDnaSummaryTable rows={winningDnaRows} />
+      <StrategyRowsTable rows={aiRows} />
+    </>
+  );
+}
+
+function StrategyRowsTable({ rows }: { rows: StrategyConclusionRow[] }) {
+  if (!rows.length) return <EmptyState text="—" />;
+  return (
+    <div className="premium-table-wrap mt-4">
+      <table className="premium-table text-xs">
+        <thead>
+          <tr>{["Type", "Feature Combination", "Trades", "Wins", "Losses", "Win Rate", "Net P&L", "Observation"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr className={conclusionRowClass(row.type)} key={`${row.type}-${row.label}`}>
+              <td className="px-3 py-2"><ConclusionBadge type={row.type} /></td>
+              <td className="px-3 py-2 font-bold text-white">{row.label}</td>
+              <td className={`px-3 py-2 ${row.trades === "—" ? "text-slate-500" : ""}`}>{row.trades}</td>
+              <td className={`px-3 py-2 ${row.wins === "—" ? "text-slate-500" : ""}`}>{row.wins}</td>
+              <td className={`px-3 py-2 ${row.losses === "—" ? "text-slate-500" : ""}`}>{row.losses}</td>
+              <td className={`px-3 py-2 ${row.winRate === "—" ? "text-slate-500" : ""}`}>{row.winRate}</td>
+              <td className={`px-3 py-2 font-bold ${row.netPnlTone !== null ? pnlClass(row.netPnlTone) : "text-slate-400"}`}>{row.netPnl}</td>
+              <td className="px-3 py-2 text-slate-200">{row.observation}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WinningDnaSummaryTable({ rows }: { rows: WinningDnaSummaryRow[] }) {
+  return (
+    <>
+      <p className="mt-5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-emerald-200">Winning DNA</p>
+      <div className="premium-table-wrap mt-2">
+        <table className="premium-table text-xs">
+          <thead>
+            <tr>{["Feature Combination", "Trades", "Wins", "Win Rate", "Average RR", "Observation"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr className="bg-emerald-400/[0.035]" key={row.label}>
+                <td className="px-3 py-2 font-bold text-white">{row.label}</td>
+                <td className={`px-3 py-2 ${isDash(row.trades) ? "text-slate-500" : ""}`}>{row.trades}</td>
+                <td className={`px-3 py-2 ${isDash(row.wins) ? "text-slate-500" : ""}`}>{row.wins}</td>
+                <td className={`px-3 py-2 ${isDash(row.winRate) ? "text-slate-500" : ""}`}>{row.winRate}</td>
+                <td className={`px-3 py-2 ${isDash(row.averageRr) ? "text-slate-500" : "font-bold text-fuchsia-200"}`}>{row.averageRr}</td>
+                <td className="px-3 py-2 text-slate-200">{row.observation}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function isDash(value: string): boolean {
+  return value === "—" || value === "â€”";
+}
+
+function conclusionRowClass(type: StrategyConclusionRow["type"]): string {
+  if (type === "WINNING") return "bg-emerald-400/[0.035]";
+  if (type === "LOSS") return "bg-rose-400/[0.04]";
+  if (type === "REJECTION") return "bg-amber-400/[0.04]";
+  return "bg-blue-400/[0.035]";
+}
+
+function ConclusionBadge({ type }: { type: StrategyConclusionRow["type"] }) {
+  const className =
+    type === "WINNING"
+      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+      : type === "LOSS"
+        ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
+        : type === "REJECTION"
+          ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+          : "border-blue-400/30 bg-blue-400/10 text-blue-200";
+  return <span className={`inline-flex rounded border px-2 py-1 text-[0.62rem] font-black uppercase tracking-[0.12em] ${className}`}>{type}</span>;
+}
+
+function cleanAnalysisText(value: string): string {
+  const cleaned = value.replace(/_/g, " ").replace(/\s+/g, " ").replace(/\.\.+/g, ".").trim();
+  if (!cleaned || /^(unknown|null|undefined|unspecified reason)$/i.test(cleaned) || /\[object Object\]/i.test(cleaned)) return "";
+  return cleaned.replace(/\b([A-Za-z][A-Za-z0-9-]*)\s+\1\b/gi, "$1");
+}
+
+function nestedRecord(record: ApiRecord | null, key: string): ApiRecord | null {
+  return asRecord(record?.[key]);
+}
+
+function tradeMetadata(trade: ApiRecord): { approval: ApiRecord | null; components: ApiRecord | null; exitManagement: ApiRecord | null; market: ApiRecord | null } {
+  const metadata = nestedRecord(trade, "strategy_metadata");
+  return {
+    approval: nestedRecord(metadata, "approval_audit"),
+    components: nestedRecord(metadata, "strategy_components"),
+    exitManagement: nestedRecord(trade, "exit_management"),
+    market: nestedRecord(metadata, "market_structure_state"),
+  };
+}
+
+function tradePnl(trade: ApiRecord): number {
+  return readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl", "pnl"], 0);
+}
+
+function tradeResultLabel(trade: ApiRecord): string {
+  const result = cleanAnalysisText(readText(trade, ["result"], ""));
+  if (result) return result.toUpperCase();
+  return tradePnl(trade) >= 0 ? "WIN" : "LOSS";
+}
+
+function entrySetupForTrade(trade: ApiRecord): string {
+  const { approval } = tradeMetadata(trade);
+  return cleanAnalysisText(readText(approval, ["final_approval_reason"], "") || readText(trade, ["setup_reason", "notes"], "")) || "Entry setup recorded without additional notes.";
+}
+
+function setupTagsForTrade(trade: ApiRecord): string[] {
+  const { approval, components } = tradeMetadata(trade);
+  const tags: string[] = [];
+  const rawSetup = entrySetupForTrade(trade);
+  const profile = cleanAnalysisText(readText(approval, ["strategy_profile", "profile"], "") || readText(trade, ["strategy_profile", "profile"], ""));
+  if (profile) tags.push(profile.toUpperCase().replace(/\s+/g, "_"));
+  else if (rawSetup.toUpperCase().includes("DEMO COLLECTION")) tags.push("DEMO_COLLECTION");
+  const bos = passFailState(trade, "bos_result", "bos");
+  const sweep = passFailState(trade, "liquidity_sweep_result", "liquidity_sweep");
+  const fvg = passFailState(trade, "fvg_result", "fvg");
+  const trend = trendStateForTrade(trade);
+  const session = sessionStateForTrade(trade);
+  if (bos !== "unknown") tags.push(`BOS ${bos === "present" ? "PRESENT" : "MISSING"}`);
+  if (sweep !== "unknown") tags.push(`LIQUIDITY SWEEP ${sweep === "present" ? "PRESENT" : "MISSING"}`);
+  if (fvg !== "unknown") tags.push(`FVG ${fvg === "present" ? "PRESENT" : "MISSING"}`);
+  if (trend !== "unknown") tags.push(trend === "aligned" ? "TREND ALIGNED" : "TREND NOT ALIGNED");
+  if (session !== "unknown") tags.push(session === "london_ny" ? "LONDON/NY" : "OUTSIDE_SESSION");
+  const rr = readNumber(approval, ["risk_reward", "risk_reward_ratio", "rr"], readNumber(components, ["risk_reward", "risk_reward_ratio", "rr"], Number.NaN));
+  if (Number.isFinite(rr)) tags.push(`RR ${rr.toFixed(1)}`);
+  return tags.length ? tags.slice(0, 7) : ["Diagnostics Pending"];
+}
+
+function exitReasonForTrade(trade: ApiRecord): string {
+  const { exitManagement } = tradeMetadata(trade);
+  return cleanAnalysisText(readText(exitManagement, ["last_exit_reason", "last_exit_action"], "") || readText(trade, ["exit_reason", "close_reason"], "")) || "Closed by lifecycle sync";
+}
+
+function compactRootCauseForTrade(trade: ApiRecord): string {
+  const exitReason = exitReasonForTrade(trade).toLowerCase();
+  const bos = passFailState(trade, "bos_result", "bos");
+  const sweep = passFailState(trade, "liquidity_sweep_result", "liquidity_sweep");
+  const fvg = passFailState(trade, "fvg_result", "fvg");
+  const session = sessionStateForTrade(trade);
+  if (tradePnl(trade) >= 0) {
+    if (exitReason.includes("tp") || exitReason.includes("take profit")) return bos === "present" ? "TP after BOS confirmation" : "TP after confirmation";
+    return "Won despite advisory warnings";
+  }
+  if (exitReason.includes("stop") || exitReason.includes("sl")) return bos === "missing" ? "Stop loss after BOS missing" : "Stop loss after BOS confirmation";
+  if (session === "outside") return "Session weakness";
+  if (exitReason.includes("stale") || exitReason.includes("time")) return "Time exit before continuation";
+  if (sweep === "missing") return "Weak liquidity confirmation";
+  if (bos === "missing") return "Stop loss after BOS missing";
+  if (fvg === "missing") return "Weak confirmation";
+  return "Weak liquidity confirmation";
+}
+
+function requirementLabels(record: ApiRecord | null): string[] {
+  const items = Array.isArray(record?.missing_requirements) ? record?.missing_requirements : Array.isArray(record?.relaxed_blockers) ? record?.relaxed_blockers : [];
+  return items
+    .map((item) => {
+      const object = asRecord(item);
+      return cleanAnalysisText(readText(object, ["label", "code"], ""));
+    })
+    .filter(Boolean);
+}
+
+function rootCauseForTrade(trade: ApiRecord): string {
+  const { approval, components } = tradeMetadata(trade);
+  const exitReason = exitReasonForTrade(trade);
+  const requirements = requirementLabels(approval);
+  const session = cleanAnalysisText(readText(components, ["session"], ""));
+  if (tradePnl(trade) < 0) {
+    if (requirements.length) return `${exitReason}; watch ${requirements.slice(0, 2).join(" and ")}.`;
+    if (session) return `${exitReason}; session condition was ${session}.`;
+    return `${exitReason}; review entry quality and exit timing.`;
+  }
+  return requirements.length ? `Won while advisory checks remained: ${requirements.slice(0, 2).join(" and ")}.` : `${exitReason}; setup completed with positive P&L.`;
+}
+
+function lossReasonForTrade(trade: ApiRecord): string {
+  const { approval } = tradeMetadata(trade);
+  return requirementLabels(approval)[0] || exitReasonForTrade(trade);
+}
+
+function rejectionReasonLabel(message: ReasonMessage): string {
+  return cleanAnalysisText(message.rejection_reason || message.reason) || "Validation checks did not pass";
+}
+
+function aggregatePatterns(labels: string[]): IntelligencePattern[] {
+  const counts = new Map<string, number>();
+  labels.map(cleanAnalysisText).filter(Boolean).forEach((label) => counts.set(label, (counts.get(label) ?? 0) + 1));
+  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  if (!total) return [];
+  return [...counts.entries()]
+    .map(([label, count]) => ({ count, label, percentage: (count / total) * 100 }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+    .slice(0, 5);
+}
+
+function passFailState(trade: ApiRecord, approvalKey: string, componentKey: string): "present" | "missing" | "unknown" {
+  const { approval, components } = tradeMetadata(trade);
+  const result = cleanAnalysisText(readText(approval, [approvalKey], "")).toLowerCase();
+  if (["pass", "passed", "present", "confirmed", "true"].includes(result)) return "present";
+  if (["fail", "failed", "missing", "false"].includes(result)) return "missing";
+  const component = components?.[componentKey];
+  if (typeof component === "boolean") return component ? "present" : "missing";
+  const componentText = cleanAnalysisText(readText(components, [componentKey], "")).toLowerCase();
+  if (["present", "confirmed", "pass", "true"].includes(componentText)) return "present";
+  if (["missing", "fail", "false"].includes(componentText)) return "missing";
+  return "unknown";
+}
+
+function trendStateForTrade(trade: ApiRecord): "aligned" | "not_aligned" | "unknown" {
+  const { components, market } = tradeMetadata(trade);
+  const side = cleanAnalysisText(readText(trade, ["side", "direction", "order_type"], "")).toUpperCase();
+  const componentBias = cleanAnalysisText(readText(components, ["bias", "trend_alignment"], "")).toUpperCase();
+  const marketBias = cleanAnalysisText(readText(market, ["trend_bias", "higher_timeframe_bias"], "")).toUpperCase();
+  const bias = componentBias || marketBias;
+  if (!bias) return "unknown";
+  if (["ALIGNED", "TRUE", "PASS", "PASSED"].includes(bias)) return "aligned";
+  if (["NOT ALIGNED", "MISALIGNED", "FALSE", "FAIL", "FAILED"].includes(bias)) return "not_aligned";
+  if (!side) return "unknown";
+  return bias.includes(side) ? "aligned" : "not_aligned";
+}
+
+function sessionStateForTrade(trade: ApiRecord): "london_ny" | "outside" | "unknown" {
+  const session = cleanAnalysisText(readText(tradeMetadata(trade).components, ["session"], "")).toLowerCase();
+  if (!session) return "unknown";
+  if (session.includes("outside")) return "outside";
+  if (session.includes("london") || session.includes("new york") || session.includes("ny")) return "london_ny";
+  return "unknown";
+}
+
+function featureImpactRow(
+  trades: ApiRecord[],
+  feature: string,
+  state: string,
+  predicate: (trade: ApiRecord) => boolean,
+  positiveInsight: string,
+  negativeInsight: string,
+): FeatureImpactRow {
+  const matchingTrades = trades.filter(predicate);
+  const wins = matchingTrades.filter((trade) => tradePnl(trade) >= 0).length;
+  const losses = matchingTrades.length - wins;
+  const netPnl = matchingTrades.reduce((sum, trade) => sum + tradePnl(trade), 0);
+  const winRate = matchingTrades.length ? (wins / matchingTrades.length) * 100 : 0;
+  const hasData = matchingTrades.length > 0;
+  const insight = hasData ? (winRate >= 50 && netPnl >= 0 ? positiveInsight : negativeInsight) : "—";
+  return { feature, hasData, insight, losses, netPnl, state, trades: matchingTrades.length, winRate, wins };
+}
+
+function buildFeatureImpactRows(trades: ApiRecord[]): FeatureImpactRow[] {
+  return [
+    featureImpactRow(trades, "BOS", "Present", (trade) => passFailState(trade, "bos_result", "bos") === "present", "BOS confirmation helps.", "BOS alone is insufficient."),
+    featureImpactRow(trades, "BOS", "Missing", (trade) => passFailState(trade, "bos_result", "bos") === "missing", "BOS absence is manageable.", "Require BOS confirmation."),
+    featureImpactRow(trades, "Liquidity Sweep", "Present", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "present", "Sweep confirms better entries.", "Sweep needs cleaner timing."),
+    featureImpactRow(trades, "Liquidity Sweep", "Missing", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing", "Sweep absence is manageable.", "Require liquidity sweep."),
+    featureImpactRow(trades, "FVG", "Present", (trade) => passFailState(trade, "fvg_result", "fvg") === "present", "FVG supports continuation.", "FVG needs tighter timing."),
+    featureImpactRow(trades, "FVG", "Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing", "FVG absence is manageable.", "Require FVG confirmation."),
+    featureImpactRow(trades, "Trend Alignment", "Aligned", (trade) => trendStateForTrade(trade) === "aligned", "Trend alignment helps.", "Trend alignment alone is not enough."),
+    featureImpactRow(trades, "Trend Alignment", "Not Aligned", (trade) => trendStateForTrade(trade) === "not_aligned", "Misalignment is manageable.", "Avoid trend-misaligned entries."),
+    featureImpactRow(trades, "Session", "London/NY", (trade) => sessionStateForTrade(trade) === "london_ny", "London/NY has cleaner flow.", "London/NY needs cleaner filters."),
+    featureImpactRow(trades, "Session", "Outside London/NY", (trade) => sessionStateForTrade(trade) === "outside", "Outside session is manageable.", "Avoid outside-session entries."),
+  ];
+}
+
+function strategyDnaRow(trades: ApiRecord[], label: string, predicate: (trade: ApiRecord) => boolean, strongInsight: string, weakInsight: string): StrategyDnaRow | null {
+  const matchingTrades = trades.filter(predicate);
+  if (!matchingTrades.length) return null;
+  const wins = matchingTrades.filter((trade) => tradePnl(trade) >= 0).length;
+  const losses = matchingTrades.length - wins;
+  const netPnl = matchingTrades.reduce((sum, trade) => sum + tradePnl(trade), 0);
+  const winRate = (wins / matchingTrades.length) * 100;
+  return {
+    insight: winRate >= 50 && netPnl >= 0 ? strongInsight : weakInsight,
+    label,
+    losses,
+    netPnl,
+    trades: matchingTrades.length,
+    winRate,
+    wins,
+  };
+}
+
+function riskRewardForTrade(trade: ApiRecord): number {
+  const { approval, components } = tradeMetadata(trade);
+  return readNumber(approval, ["risk_reward", "risk_reward_ratio", "rr"], readNumber(components, ["risk_reward", "risk_reward_ratio", "rr"], Number.NaN));
+}
+
+function winningDnaSummaryRow(trades: ApiRecord[], label: string, predicate: (trade: ApiRecord) => boolean, strongObservation: string, weakObservation: string): WinningDnaSummaryRow {
+  const matchingTrades = trades.filter(predicate);
+  if (!matchingTrades.length) return { averageRr: "—", label, observation: "Not enough samples.", trades: "—", winRate: "—", wins: "—" };
+  const wins = matchingTrades.filter((trade) => tradePnl(trade) >= 0).length;
+  const winRate = (wins / matchingTrades.length) * 100;
+  const rrValues = matchingTrades.map(riskRewardForTrade).filter((value) => Number.isFinite(value));
+  const averageRr = rrValues.length ? rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length : Number.NaN;
+  return {
+    averageRr: Number.isFinite(averageRr) ? averageRr.toFixed(1) : "—",
+    label,
+    observation: winRate >= 30 ? strongObservation : weakObservation,
+    trades: String(matchingTrades.length),
+    winRate: `${winRate.toFixed(1)}%`,
+    wins: String(wins),
+  };
+}
+
+function buildWinningDnaSummaryRows(trades: ApiRecord[]): WinningDnaSummaryRow[] {
+  return [
+    winningDnaSummaryRow(
+      trades,
+      "FVG + Trend Alignment",
+      (trade) => passFailState(trade, "fvg_result", "fvg") === "present" && trendStateForTrade(trade) === "aligned",
+      "Best-performing combination so far.",
+      "Useful, but entry timing needs work.",
+    ),
+    winningDnaSummaryRow(
+      trades,
+      "Trend + London/NY",
+      (trade) => trendStateForTrade(trade) === "aligned" && sessionStateForTrade(trade) === "london_ny",
+      "Works better inside major sessions.",
+      "Session helps, but confirmation is thin.",
+    ),
+    winningDnaSummaryRow(
+      trades,
+      "BOS + FVG + London/NY",
+      (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "fvg_result", "fvg") === "present" && sessionStateForTrade(trade) === "london_ny",
+      "Highest-quality confluence.",
+      "Not enough clean winners yet.",
+    ),
+  ];
+}
+
+function conclusionFromDna(type: "WINNING" | "LOSS", label: string, row: StrategyDnaRow | null): StrategyConclusionRow {
+  if (!row) return missingConclusionRow(type, label);
+  return {
+    label,
+    losses: String(row.losses),
+    netPnl: money(row.netPnl),
+    netPnlTone: row.netPnl,
+    observation: row.insight,
+    trades: String(row.trades),
+    type,
+    winRate: `${row.winRate.toFixed(1)}%`,
+    wins: String(row.wins),
+  };
+}
+
+function missingConclusionRow(type: StrategyConclusionRow["type"], label: string): StrategyConclusionRow {
+  return {
+    label,
+    losses: "—",
+    netPnl: "—",
+    netPnlTone: null,
+    observation: "—",
+    trades: "—",
+    type,
+    winRate: "—",
+    wins: "—",
+  };
+}
+
+function findPattern(patterns: IntelligencePattern[], label: string, aliases: string[] = []): IntelligencePattern | null {
+  const terms = [label, ...aliases].map((item) => cleanAnalysisText(item).toLowerCase()).filter(Boolean);
+  return patterns.find((pattern) => {
+    const text = cleanAnalysisText(pattern.label).toLowerCase();
+    return terms.some((term) => text.includes(term) || term.includes(text));
+  }) ?? null;
+}
+
+function rejectionConclusionRow(label: string, pattern: IntelligencePattern | null): StrategyConclusionRow {
+  if (!pattern) return missingConclusionRow("REJECTION", label);
+  return {
+    label,
+    losses: "—",
+    netPnl: "—",
+    netPnlTone: null,
+    observation: `${pattern.percentage.toFixed(1)}% of rejections. Fix this blocker first.`,
+    trades: String(pattern.count),
+    type: "REJECTION",
+    winRate: "—",
+    wins: "—",
+  };
+}
+
+function aiConclusionRow(label: string, observation: string, source?: FeatureImpactRow | IntelligencePattern): StrategyConclusionRow {
+  if (!source) return missingConclusionRow("AI", label);
+  const featureSource = "feature" in source ? source : null;
+  return {
+    label,
+    losses: featureSource ? String(featureSource.losses) : "—",
+    netPnl: featureSource ? money(featureSource.netPnl) : "—",
+    netPnlTone: featureSource ? featureSource.netPnl : null,
+    observation,
+    trades: featureSource ? String(featureSource.trades) : "—",
+    type: "AI",
+    winRate: featureSource ? `${featureSource.winRate.toFixed(1)}%` : "—",
+    wins: featureSource ? String(featureSource.wins) : "—",
+  };
+}
+
+function strongestSetupObservation(trades: ApiRecord[], fallback?: FeatureImpactRow): string {
+  const candidates = buildWinningDnaSummaryRows(trades).filter((row) => !isDash(row.trades));
+  const best = candidates.sort((left, right) => Number.parseFloat(right.winRate) - Number.parseFloat(left.winRate))[0];
+  if (best) return `Prioritize ${best.label}.`;
+  if (fallback?.feature === "FVG" && fallback.state === "Present") return "Prioritize FVG + trend alignment.";
+  if (fallback?.feature === "Session" && fallback.state === "London/NY") return "Prioritize trend inside London/NY.";
+  return fallback ? `Prioritize ${fallback.feature} ${fallback.state}.` : "—";
+}
+
+function weakestSetupObservation(row?: FeatureImpactRow): string {
+  if (!row) return "—";
+  if (row.feature === "BOS" && row.state === "Present") return "Trades with BOS present alone are underperforming.";
+  if (row.feature === "BOS" && row.state === "Missing") return "Missing BOS confirmation is underperforming.";
+  if (row.feature === "FVG" && row.state === "Missing") return "Missing FVG confirmation is underperforming.";
+  if (row.feature === "Liquidity Sweep" && row.state === "Missing") return "Missing liquidity sweep is underperforming.";
+  if (row.feature === "Session" && row.state.includes("Outside")) return "Outside-session entries are underperforming.";
+  return `${row.feature} ${row.state} is underperforming.`;
+}
+
+function lossContributorObservation(pattern?: IntelligencePattern): string {
+  if (!pattern) return "—";
+  const text = pattern.label.toLowerCase();
+  if (text.includes("bos")) return "Missing BOS confirmation drives most losses.";
+  if (text.includes("liquidity") || text.includes("sweep")) return "Weak liquidity confirmation drives losses.";
+  if (text.includes("fvg")) return "Missing FVG confirmation drives losses.";
+  if (text.includes("session")) return "Session weakness drives losses.";
+  if (text.includes("time") || text.includes("stale")) return "Stale exits are costing continuation.";
+  return `${pattern.label} drives most losses.`;
+}
+
+function validationBlockerObservation(pattern?: IntelligencePattern): string {
+  if (!pattern) return "—";
+  const text = pattern.label.toLowerCase();
+  if (text.includes("h4")) return "Insufficient H4 candle history causes most rejections.";
+  if (text.includes("m15")) return "Insufficient M15 candle history causes most rejections.";
+  if (text.includes("h1")) return "Insufficient H1 candle history causes most rejections.";
+  if (text.includes("risk")) return "Risk validation causes most rejections.";
+  if (text.includes("stop") || text.includes("sl")) return "Stop-loss validation causes most rejections.";
+  return `${pattern.label} causes most rejections.`;
+}
+
+function recommendedImprovementObservation(topLoss?: IntelligencePattern, topRejection?: IntelligencePattern): string {
+  const lossText = topLoss?.label.toLowerCase() ?? "";
+  if (lossText.includes("bos") || lossText.includes("fvg")) return "Require BOS + FVG before entry.";
+  if (lossText.includes("liquidity") || lossText.includes("sweep")) return "Require liquidity sweep plus BOS.";
+  if (lossText.includes("session")) return "Restrict entries to London/NY.";
+  if (topRejection) return "Fix validation history before relaxing filters.";
+  return "Require BOS + FVG before entry.";
+}
+
+function buildStrategyConclusionRows(trades: ApiRecord[], losses: IntelligencePattern[], rejections: IntelligencePattern[], featureRows: FeatureImpactRow[]): StrategyConclusionRow[] {
+  const populatedRows = featureRows.filter((row) => row.hasData);
+  const bestRow = [...populatedRows].sort((left, right) => right.winRate - left.winRate || right.netPnl - left.netPnl)[0];
+  const weakestRow = [...populatedRows].sort((left, right) => left.winRate - right.winRate || left.netPnl - right.netPnl)[0];
+  const topRejection = rejections[0];
+  const topLoss = losses[0];
+  const improvementSource = topLoss ?? topRejection;
+  return [
+    conclusionFromDna(
+      "WINNING",
+      "BOS + FVG + London/NY",
+      strategyDnaRow(
+        trades,
+        "BOS + FVG + London/NY",
+        (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "fvg_result", "fvg") === "present" && sessionStateForTrade(trade) === "london_ny",
+        "Best when structure, FVG, and session align.",
+        "Promising setup, but edge is not proven yet.",
+      ),
+    ),
+    conclusionFromDna(
+      "WINNING",
+      "Trend + Session Alignment",
+      strategyDnaRow(
+        trades,
+        "Trend + Session Alignment",
+        (trade) => trendStateForTrade(trade) === "aligned" && sessionStateForTrade(trade) === "london_ny",
+        "Trend plus session improves selectivity.",
+        "Trend and session need stronger confirmation.",
+      ),
+    ),
+    conclusionFromDna(
+      "WINNING",
+      "FVG + Trend Alignment",
+      strategyDnaRow(
+        trades,
+        "FVG + Trend Alignment",
+        (trade) => passFailState(trade, "fvg_result", "fvg") === "present" && trendStateForTrade(trade) === "aligned",
+        "FVG is useful with aligned trend.",
+        "FVG is useful, but entries need tighter timing.",
+      ),
+    ),
+    conclusionFromDna(
+      "WINNING",
+      "Liquidity Sweep + BOS",
+      strategyDnaRow(
+        trades,
+        "Liquidity Sweep + BOS",
+        (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "present",
+        "Sweep plus BOS confirms cleaner entries.",
+        "Sweep plus BOS needs stricter execution.",
+      ),
+    ),
+    conclusionFromDna(
+      "LOSS",
+      "BOS Missing",
+      strategyDnaRow(trades, "BOS Missing", (trade) => passFailState(trade, "bos_result", "bos") === "missing", "BOS missing is not hurting yet.", "Require BOS before entry."),
+    ),
+    conclusionFromDna(
+      "LOSS",
+      "Liquidity Sweep Missing",
+      strategyDnaRow(trades, "Liquidity Sweep Missing", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing", "Missing sweep is not hurting yet.", "Add sweep confirmation."),
+    ),
+    conclusionFromDna(
+      "LOSS",
+      "FVG Missing",
+      strategyDnaRow(trades, "FVG Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing", "Missing FVG is not hurting yet.", "Filter entries without FVG."),
+    ),
+    conclusionFromDna(
+      "LOSS",
+      "Outside London/NY",
+      strategyDnaRow(trades, "Outside London/NY", (trade) => sessionStateForTrade(trade) === "outside", "Outside session is stable so far.", "Avoid outside-session trades."),
+    ),
+    conclusionFromDna(
+      "LOSS",
+      "Time Stale Exit",
+      strategyDnaRow(trades, "Time Stale Exit", (trade) => exitReasonForTrade(trade).toLowerCase().includes("stale") || exitReasonForTrade(trade).toLowerCase().includes("time"), "Time exits are controlled so far.", "Review stale-exit timing."),
+    ),
+    rejectionConclusionRow("H4 history insufficient", findPattern(rejections, "H4 history insufficient", ["H4 history", "H4 insufficient"])),
+    rejectionConclusionRow("M15 history insufficient", findPattern(rejections, "M15 history insufficient", ["M15 history", "M15 insufficient"])),
+    rejectionConclusionRow("H1 history insufficient", findPattern(rejections, "H1 history insufficient", ["H1 history", "H1 insufficient"])),
+    rejectionConclusionRow("Stop Loss rejection", findPattern(rejections, "Stop Loss rejection", ["stop loss", "sl validation"])),
+    rejectionConclusionRow("Risk rejection", findPattern(rejections, "Risk rejection", ["risk validation", "risk rejection"])),
+    aiConclusionRow("Strongest setup", strongestSetupObservation(trades, bestRow), bestRow),
+    aiConclusionRow("Weakest setup", weakestSetupObservation(weakestRow), weakestRow),
+    aiConclusionRow("Major loss contributor", lossContributorObservation(topLoss), topLoss),
+    aiConclusionRow("Main validation blocker", validationBlockerObservation(topRejection), topRejection),
+    aiConclusionRow("Recommended improvement", recommendedImprovementObservation(topLoss, topRejection), improvementSource),
+  ];
+}
+
 function friendlyText(record: ApiRecord | null, paths: string[], fallback: string): string {
   const value = readText(record, paths, "");
   return value && value !== "Unavailable" ? value : fallback;
@@ -2905,9 +3658,58 @@ type ReasonMessage = {
   timeframe?: string;
   validation_status?: string;
   groqGenerated?: boolean;
-  source?: "groq" | "rule";
+  source?: "groq" | "rule" | "execution";
 };
 type ReasonContext = ApiRecord & { status: ReasonStatus; symbol: string; timestamp: string };
+
+type IntelligencePattern = {
+  count: number;
+  label: string;
+  percentage: number;
+};
+
+type FeatureImpactRow = {
+  feature: string;
+  hasData: boolean;
+  insight: string;
+  losses: number;
+  netPnl: number;
+  state: string;
+  trades: number;
+  winRate: number;
+  wins: number;
+};
+
+type StrategyDnaRow = {
+  insight: string;
+  label: string;
+  losses: number;
+  netPnl: number;
+  trades: number;
+  winRate: number;
+  wins: number;
+};
+
+type StrategyConclusionRow = {
+  label: string;
+  losses: string;
+  netPnl: string;
+  netPnlTone: number | null;
+  observation: string;
+  trades: string;
+  type: "WINNING" | "LOSS" | "REJECTION" | "AI";
+  winRate: string;
+  wins: string;
+};
+
+type WinningDnaSummaryRow = {
+  averageRr: string;
+  label: string;
+  observation: string;
+  trades: string;
+  winRate: string;
+  wins: string;
+};
 
 function firstReasonText(record: ApiRecord, keys: string[]): string {
   for (const key of keys) {
@@ -2990,7 +3792,8 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
 function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
   return records
     .map((record): ReasonMessage => {
-      const source: ReasonMessage["source"] = readText(record, ["source"], "") === "groq" ? "groq" : "rule";
+      const sourceText = readText(record, ["source"], "");
+      const source: ReasonMessage["source"] = sourceText === "groq" ? "groq" : sourceText === "execution" ? "execution" : "rule";
       return {
         id: readText(record, ["id"], ""),
         candles_loaded: (() => {
@@ -3254,20 +4057,22 @@ function AutoValidationPanel({
     : Array.isArray(watchedAudit?.advisory_requirements)
       ? watchedAudit.advisory_requirements.map((item) => readText(asRecord(item), ["code"], String(item))).filter(Boolean)
       : [];
-  const totalTrades = readNumber(session, ["total_trades"], readNumber(session, ["current_closed_trades"], 0) + readNumber(session, ["current_open_trades"], 0));
-  const targetValidationTrades = readNumber(session, ["target_validation_trades"], readNumber(config, ["target_validation_trades", "target_closed_trades"], 30));
-  const remainingTrades = readNumber(session, ["remaining_trades_to_target"], Math.max(0, targetValidationTrades - readNumber(session, ["current_closed_trades"], 0)));
+  const targetValidationTrades = readNumber(session, ["target_validation_trades"], readNumber(config, ["target_validation_trades", "target_closed_trades"], TARGET_TRADES));
   const wins = readNumber(session, ["wins"], 0);
   const losses = readNumber(session, ["losses"], 0);
+  const actualClosedTrades = wins + losses || readNumber(session, ["current_closed_trades", "current_session_closed"], 0);
+  const totalTrades = actualClosedTrades + readNumber(session, ["current_open_trades"], 0);
+  const remainingTrades = Math.max(0, targetValidationTrades - actualClosedTrades);
+  const winRate = actualClosedTrades ? (wins / actualClosedTrades) * 100 : 0;
   const netPnl = readNumber(session, ["net_pnl"], 0);
   const reasonMessages = buildReasonContexts({ ...emptyData, autoValidation: status });
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <SectionTitle eyebrow="AUTO Demo Validation" title={`30-Trade Bot Test: ${mode === "IDLE" ? "OFF" : mode}`} />
+        <SectionTitle eyebrow="AUTO Demo Validation" title={`${TARGET_TRADES}-Trade Bot Test: ${mode === "IDLE" ? "OFF" : mode}`} />
         <div className="flex flex-wrap gap-2">
           <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction(recoverableSession ? "resume" : "start")} type="button">
-            {recoverableSession ? "Resume Validation" : "Start 30-Trade Validation"}
+            {recoverableSession ? "Resume Validation" : `Start ${TARGET_TRADES}-Trade Validation`}
           </button>
           {recoverableSession ? (
             <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("start")} type="button">
@@ -3298,13 +4103,13 @@ function AutoValidationPanel({
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <Metric label="Target Closed Trades" value={String(targetValidationTrades)} compact />
         <Metric label="Remaining Closed Trades" value={String(remainingTrades)} compact />
-        <Metric label="Closed Trades" value={String(readNumber(session, ["current_closed_trades", "current_session_closed"], 0))} compact />
+        <Metric label="Closed Trades" value={String(actualClosedTrades)} compact />
         <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
         <Metric label="Open Trade Limit" value={String(readNumber(config, ["max_open_trades_total"], 0))} compact />
         <Metric label="Per-Symbol Limit" value={String(readNumber(config, ["max_open_trades_per_symbol"], 0))} compact />
         <Metric label="Daily Demo Trades" value={`${readNumber(session, ["daily_demo_trade_count"], 0)} / ${readNumber(config, ["max_daily_demo_trades", "max_daily_trades"], 30)}`} compact />
-        <Metric label="Wins / Losses" value={`${readNumber(session, ["wins"], 0)} / ${readNumber(session, ["losses"], 0)}`} compact />
-        <Metric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
+        <Metric label="Wins / Losses" value={`${wins} / ${losses}`} compact />
+        <Metric label="Win Rate" value={`${winRate.toFixed(2)}%`} compact />
         <Metric label="Net P&L" value={money(readNumber(session, ["net_pnl"], 0))} valueClass={pnlClass(readNumber(session, ["net_pnl"], 0))} compact />
         <Metric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
         <Metric label="Lot" value={String(readNumber(config, ["lot_size"], 0.01))} compact />
@@ -3317,7 +4122,7 @@ function AutoValidationPanel({
         <Metric label="Recovered Open" value={String(recoveredOpenTrades)} compact />
         <Metric label="Session Start Time" value={formatTradeTime(readText(session, ["session_start_time", "started_at"], ""))} compact />
         <Metric label="Current Session Opened" value={String(readNumber(session, ["current_session_opened", "opened", "orders_created"], 0))} compact />
-        <Metric label="Current Session Closed" value={String(readNumber(session, ["current_session_closed", "current_closed_trades"], 0))} compact />
+        <Metric label="Current Session Closed" value={String(actualClosedTrades)} compact />
         <Metric label="Historical/Unowned MT5" value={String(readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0))} valueClass={readNumber(openPositionSync, ["historical_unowned_open_positions", "unmatched_open_positions"], 0) > 0 ? "text-amber-200" : "text-slate-100"} compact />
         <Metric label="SL/TP Source" value={slTpSource} valueClass={slTpSource === "DEMO_RISK_FALLBACK" ? "text-amber-200" : "text-emerald-300"} compact />
         <Metric label="Advisory Blockers" value={relaxedBlockers.length ? relaxedBlockers.join(", ") : "None"} compact />
@@ -3379,10 +4184,10 @@ function AutoValidationPanel({
           <Metric label="Target Closed Trades" value={String(targetValidationTrades)} compact />
           <Metric label="Remaining Closed Trades" value={String(remainingTrades)} compact />
           <Metric label="Open Trades" value={String(readNumber(session, ["current_open_trades"], 0))} compact />
-          <Metric label="Closed Trades" value={String(readNumber(session, ["current_closed_trades"], 0))} compact />
+          <Metric label="Closed Trades" value={String(actualClosedTrades)} compact />
           <Metric label="Wins" value={String(wins)} valueClass="text-emerald-300" compact />
           <Metric label="Losses" value={String(losses)} valueClass="text-rose-300" compact />
-          <Metric label="Win Rate" value={`${readNumber(session, ["win_rate"], 0).toFixed(2)}%`} compact />
+          <Metric label="Win Rate" value={`${winRate.toFixed(2)}%`} compact />
           <Metric label="Net P&L" value={money(netPnl)} valueClass={pnlClass(netPnl)} compact />
           <Metric label="Average RR" value={`${readNumber(session, ["avg_rr", "average_rr"], 0).toFixed(2)}:1`} compact />
           <Metric label="Profit Factor" value={readNumber(session, ["profit_factor"], 0).toFixed(2)} compact />

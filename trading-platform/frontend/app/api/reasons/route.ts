@@ -14,7 +14,17 @@ type ReasonMessage = {
   groqGenerated: boolean;
   reason: string;
   rejection_reason?: string;
-  source?: "groq" | "rule";
+  ticket?: string;
+  signal_hash?: string;
+  side?: string;
+  strategy_profile?: string;
+  decision?: string;
+  risk_status?: string;
+  execution_status?: string;
+  order_opened?: boolean;
+  mt5_retcode?: string;
+  mt5_comment?: string;
+  source?: "groq" | "rule" | "execution";
   status: ReasonStatus;
   symbol: string;
   timestamp: string;
@@ -40,6 +50,28 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : value === null || value === undefined ? "" : String(value).trim();
 }
 
+function isBadText(value: unknown): boolean {
+  const normalized = text(value).toLowerCase();
+  return (
+    !normalized ||
+    normalized === "unknown" ||
+    normalized === "null" ||
+    normalized === "undefined" ||
+    normalized === "[object object]" ||
+    normalized.includes("unspecified reason") ||
+    normalized.includes("because unknown") ||
+    normalized.includes("accepted because unknown") ||
+    normalized.includes("rejected because unknown") ||
+    normalized.includes("unknown reason") ||
+    normalized.includes("trade trade")
+  );
+}
+
+function cleanDisplayText(value: unknown): string {
+  const cleaned = text(value).replace(/\s+/g, " ").replace(/\.\.+/g, ".").trim();
+  return isBadText(cleaned) ? "" : cleaned;
+}
+
 function numberValue(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -51,7 +83,7 @@ function numberValue(value: unknown): number | null {
 
 function firstText(record: ApiRecord, keys: string[]): string {
   for (const key of keys) {
-    const value = text(record[key]);
+    const value = cleanDisplayText(record[key]);
     if (value) return value;
   }
   return "";
@@ -127,13 +159,14 @@ async function readStore(): Promise<ReasonMessage[]> {
   try {
     const raw = await readFile(STORE_PATH, "utf-8");
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed)
+    const messages = Array.isArray(parsed)
       ? (parsed.filter((item) => {
           if (!item || typeof item !== "object") return false;
           const record = item as ApiRecord;
           return Boolean(text(record.id) && text(record.reason) && text(record.symbol));
         }) as ReasonMessage[])
       : [];
+    return messages.map(sanitizeReasonMessage);
   } catch {
     return [];
   }
@@ -141,7 +174,65 @@ async function readStore(): Promise<ReasonMessage[]> {
 
 async function writeStore(messages: ReasonMessage[]): Promise<void> {
   await mkdir(path.dirname(STORE_PATH), { recursive: true });
-  await writeFile(STORE_PATH, JSON.stringify(messages.slice(0, 50), null, 2), "utf-8");
+  await writeFile(STORE_PATH, JSON.stringify(sortNewestFirst(messages.map(sanitizeReasonMessage)).slice(0, 50), null, 2), "utf-8");
+}
+
+function timestampValue(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortNewestFirst(messages: ReasonMessage[]): ReasonMessage[] {
+  return [...messages].sort((left, right) => timestampValue(text(right.timestamp)) - timestampValue(text(left.timestamp)));
+}
+
+function acceptedExecutionFallback(message: ReasonMessage): string {
+  const symbol = text(message.symbol).toUpperCase() || "This signal";
+  const side = cleanDisplayText(message.side).toUpperCase();
+  const ticket = cleanDisplayText(message.ticket);
+  const sideText = side && !["TRADE", "POSITION"].includes(side) ? ` as a ${side} trade` : "";
+  return `${symbol} was accepted and opened${sideText} because guarded demo validation passed, risk status was approved, and MT5 executed the order successfully.${ticket ? ` Ticket: ${ticket}.` : ""}`;
+}
+
+function rejectedFallback(message: ReasonMessage): string {
+  const symbol = text(message.symbol).toUpperCase() || "This signal";
+  const diagnostic = cleanDisplayText(message.rejection_reason);
+  if (diagnostic) return `${symbol} was rejected because ${diagnostic.replace(/\.$/, "")}.`;
+  return `${symbol} was rejected because the latest validation checks did not pass. No trade was opened for this signal.`;
+}
+
+function waitingFallback(message: ReasonMessage): string {
+  const symbol = text(message.symbol).toUpperCase() || "This signal";
+  return `${symbol} is waiting for the next valid confirmation before making a trading decision.`;
+}
+
+function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
+  const status = normalizeStatus(message.status);
+  let reason = cleanDisplayText(message.reason);
+  const rejectionReason = cleanDisplayText(message.rejection_reason);
+  if (!reason) {
+    if (status === "Accepted") reason = acceptedExecutionFallback(message);
+    else if (status === "Rejected") reason = rejectedFallback({ ...message, rejection_reason: rejectionReason });
+    else if (status === "Waiting") reason = waitingFallback(message);
+    else reason = `${text(message.symbol).toUpperCase() || "This signal"} needs attention because validation could not complete cleanly.`;
+  }
+  return {
+    ...message,
+    data_source: cleanDisplayText(message.data_source),
+    mt5_comment: cleanDisplayText(message.mt5_comment),
+    mt5_retcode: cleanDisplayText(message.mt5_retcode),
+    reason,
+    rejection_reason: rejectionReason,
+    side: cleanDisplayText(message.side).toUpperCase(),
+    signal_hash: cleanDisplayText(message.signal_hash),
+    source: message.source,
+    status,
+    strategy_profile: cleanDisplayText(message.strategy_profile),
+    symbol: text(message.symbol).toUpperCase(),
+    ticket: cleanDisplayText(message.ticket),
+    timeframe: cleanDisplayText(message.timeframe).toUpperCase(),
+    validation_status: cleanDisplayText(message.validation_status),
+  };
 }
 
 function normalizeReasonForDedupe(value: string): string {
@@ -149,6 +240,10 @@ function normalizeReasonForDedupe(value: string): string {
 }
 
 function meaningfulReasonKey(message: ReasonMessage): string {
+  const ticket = text(message.ticket);
+  const signalHash = text(message.signal_hash);
+  if (ticket) return [text(message.symbol).toUpperCase(), message.status, "ticket", ticket].join("|");
+  if (text(message.source) === "execution" && signalHash) return [text(message.symbol).toUpperCase(), message.status, "signal", signalHash].join("|");
   return [text(message.symbol).toUpperCase(), message.status, normalizeReasonForDedupe(text(message.reason))].join("|");
 }
 
@@ -186,6 +281,7 @@ function ruleBasedReason(context: ApiRecord): string {
   const orderBlockConfirmed = booleanValue(context.orderBlockConfirmed);
   const blockers = Array.isArray(context.blockers) ? context.blockers.map(text).filter(Boolean) : [];
   const suppliedReason = text(context.reason || context.setupReason || context.whatNeedsToHappenNext);
+  const cleanSuppliedReason = cleanDisplayText(suppliedReason);
 
   if (riskReward !== null && riskReward < requiredRR) {
     return `${symbol} was rejected because the risk/reward ratio was ${formatNumber(riskReward)}, below the required minimum of ${formatNumber(requiredRR)}.`;
@@ -209,6 +305,18 @@ function ruleBasedReason(context: ApiRecord): string {
     return `${symbol} was ${status === "Rejected" ? "rejected" : "held"} because ${blockers.slice(0, 2).join(" and ")}.`;
   }
   if (status === "Accepted") {
+    if (isBadText(suppliedReason) && text(context.ticket)) {
+      return acceptedExecutionFallback({
+        id: "",
+        groqGenerated: false,
+        reason: "",
+        status,
+        symbol,
+        timestamp: "",
+        side: firstText(context, ["side", "action", "type"]),
+        ticket: firstText(context, ["ticket", "mt5_ticket", "mt5Ticket"]),
+      });
+    }
     const passedChecks = [
       trendAlignment === true ? "trend alignment passed" : "",
       liquiditySweep === true ? "liquidity sweep confirmed" : "",
@@ -217,15 +325,15 @@ function ruleBasedReason(context: ApiRecord): string {
       riskReward !== null && riskReward >= requiredRR ? `risk/reward ratio was ${formatNumber(riskReward)}, meeting the required minimum of ${formatNumber(requiredRR)}` : "",
     ].filter(Boolean);
     if (passedChecks.length > 0) return `${symbol} was accepted because ${joinReasons(passedChecks)}.`;
-    return suppliedReason ? `${symbol} was accepted because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} was accepted because the validation engine marked the setup accepted.`;
+    return cleanSuppliedReason ? `${symbol} was accepted because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} was accepted because the validation engine marked the setup accepted.`;
   }
   if (status === "Rejected") {
-    return suppliedReason ? `${symbol} was rejected because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} was rejected because one or more validation rules did not pass.`;
+    return cleanSuppliedReason ? `${symbol} was rejected because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} was rejected because the latest validation checks did not pass. No trade was opened for this signal.`;
   }
   if (status === "Error") {
-    return suppliedReason ? `${symbol} needs attention because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} needs attention because validation could not complete cleanly.`;
+    return cleanSuppliedReason ? `${symbol} needs attention because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} needs attention because validation could not complete cleanly.`;
   }
-  return suppliedReason ? `${symbol} is waiting because ${suppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for the validation rules to confirm before any trade can be accepted.`;
+  return cleanSuppliedReason ? `${symbol} is waiting because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for the next valid confirmation before making a trading decision.`;
 }
 
 function groqRewriteIsTraceable(rewrite: string, sourceReason: string): boolean {
@@ -294,13 +402,13 @@ async function generateReason(sourceReason: string): Promise<string | null> {
   const first = choices[0] as ApiRecord | undefined;
   const message = first?.message as ApiRecord | undefined;
   const content = text(message?.content);
-  if (!content || NOISY_PATTERNS.some((pattern) => pattern.test(content))) return null;
+  if (!content || isBadText(content) || NOISY_PATTERNS.some((pattern) => pattern.test(content))) return null;
   if (!groqRewriteIsTraceable(content, sourceReason)) return null;
   return content;
 }
 
 export async function GET() {
-  const messages = await readStore();
+  const messages = sortNewestFirst(await readStore());
   return NextResponse.json({ messages: messages.slice(0, 50) });
 }
 
@@ -335,7 +443,7 @@ export async function POST(request: Request) {
       existingIds.add(id);
       existingReasonKeys.add(reasonKey);
     }
-    const next = dedupeMeaningfully([...newMessages, ...existing]).slice(0, 50);
+    const next = sortNewestFirst(dedupeMeaningfully([...newMessages, ...existing])).slice(0, 50);
     await writeStore(next);
     return NextResponse.json({ messages: next });
   } catch {

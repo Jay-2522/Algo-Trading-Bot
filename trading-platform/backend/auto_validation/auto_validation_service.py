@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from backend.reason_panel.execution_reason_service import ExecutionReasonPanelService
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATE_PATH = PROJECT_ROOT / "data" / "auto_validation" / "session_state.json"
 
@@ -34,6 +36,7 @@ class AutoValidationService:
         self.lifecycle_service = lifecycle_service
         self.close_sync_service = close_sync_service
         self.exit_management_service = exit_management_service
+        self.reason_panel_service = ExecutionReasonPanelService()
         self.state_path = state_path or DEFAULT_STATE_PATH
         self.config = self._default_config()
         self.session = self._empty_session()
@@ -96,7 +99,12 @@ class AutoValidationService:
 
     def start(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}
-        if self._has_recoverable_progress() and payload.get("confirm_fresh_start") is not True:
+        explicit_reset = payload.get("confirm_fresh_start") is True or payload.get("force_new_round") is True
+        if not explicit_reset:
+            recovered = self._resume_incomplete_validation_session(payload, trigger="start_validation", activate=True)
+            if recovered:
+                return self.status()
+        if self._has_recoverable_progress() and not explicit_reset:
             self._log(
                 "FRESH_START_CONFIRMATION_REQUIRED",
                 {
@@ -139,7 +147,16 @@ class AutoValidationService:
         self._last_duplicate_check = None
         self._last_hash_change_audit = None
         self._last_sender_rejection = None
-        self._log("SESSION_STARTED", {"session_id": self.session["session_id"]})
+        self._log(
+            "SESSION_STARTED",
+            {
+                "session_id": self.session["session_id"],
+                "resumed_session_id": "",
+                "closed_trade_count": 0,
+                "open_position_count": 0,
+                "new_session_created": True,
+            },
+        )
         self._save_state()
         return self.status()
 
@@ -176,6 +193,51 @@ class AutoValidationService:
         if not session_id or self.journal_service is None:
             return []
         return [trade for trade in self.journal_service.list_trades(limit=100000) if trade.get("validation_session_id") == session_id]
+
+    def _resume_incomplete_validation_session(self, payload: dict[str, Any] | None = None, trigger: str = "backend_startup", activate: bool = False) -> dict[str, Any] | None:
+        candidate = self._latest_incomplete_validation_session()
+        if candidate is None:
+            self._log_recovery_decision("", 0, 0, True, trigger, "no_incomplete_session")
+            return None
+        target = int((payload or {}).get("target_validation_trades") or (payload or {}).get("target_closed_trades") or self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
+        session_id = str(candidate.get("session_id") or "")
+        if not session_id:
+            self._log_recovery_decision("", 0, 0, True, trigger, "missing_session_id")
+            return None
+        if str(self.session.get("session_id") or "") == session_id and self._has_current_user_session():
+            if activate:
+                self.session["status"] = "RUNNING"
+                self.session["paused_reason"] = ""
+                self.session["reason_stopped"] = ""
+                self.config["auto_validation_enabled"] = True
+            self._refresh_session_metrics()
+            self._log_recovery_decision(session_id, int(candidate.get("closed_count") or 0), int(candidate.get("open_count") or 0), False, trigger, "current_session_already_active")
+            self._save_state()
+            return dict(candidate)
+
+        self.config = {**self.config, **self._safe_config(payload or {})}
+        self.config["auto_validation_enabled"] = activate
+        started_at = str(candidate.get("started_at") or self.session.get("started_at") or self._timestamp())
+        self.session = {
+            **self._empty_session(),
+            **self.session,
+            "session_id": session_id,
+            "started_at": started_at,
+            "session_start_time": str(candidate.get("session_start_time") or started_at),
+            "status": "RUNNING" if activate else "PAUSED_REQUIRES_USER_RESUME",
+            "target_closed_trades": target,
+            "target_validation_trades": target,
+            "session_started_by": "user_click",
+            "round_label": str((payload or {}).get("round_label") or self.session.get("round_label") or "RESUMED_VALIDATION"),
+            "session_note": str((payload or {}).get("session_note") or self.session.get("session_note") or "Resumed incomplete validation session from trade journal."),
+            "client_dashboard_scope": str((payload or {}).get("client_dashboard_scope") or self.session.get("client_dashboard_scope") or "CURRENT_SESSION_ONLY"),
+            "paused_reason": "" if activate else "RECOVERED_FROM_TRADE_JOURNAL_REQUIRES_START",
+            "reason_stopped": "" if activate else "RECOVERED_FROM_TRADE_JOURNAL_REQUIRES_START",
+        }
+        self._refresh_session_metrics()
+        self._log_recovery_decision(session_id, int(self.session.get("current_closed_trades") or 0), int(self.session.get("current_open_trades") or 0), False, trigger, "resumed_incomplete_session")
+        self._save_state()
+        return dict(candidate)
 
     def summary(self) -> dict[str, Any]:
         self._sync_lifecycle_services(manual=False)
@@ -307,11 +369,11 @@ class AutoValidationService:
             return self._decision("BLOCKED", ["GUARDED_SENDER_REJECTED"], signal, {"sender_result": result, "last_sender_rejection": rejection, "guarded_sender_used": bool(result.get("guarded_sender_used")), "execution_timeline": execution_timeline})
         self._increment_funnel("orders_created")
         self._increment_funnel("opened")
-        self._record_opened_trade_from_sender(signal, payload, result)
+        decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True, "execution_timeline": execution_timeline})
+        self._record_opened_trade_from_sender(signal, payload, result, decision)
         self._seen_signal_hashes.add(str(signal.get("signal_hash") or ""))
         self._sent_signal_keys.add(self._duplicate_key(signal))
         self._last_trade_time = datetime.now(timezone.utc)
-        decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True, "execution_timeline": execution_timeline})
         self._log("ORDER_SENT", decision)
         self._refresh_session_metrics()
         self._save_state()
@@ -648,11 +710,15 @@ class AutoValidationService:
                 counts[symbol] = counts.get(symbol, 0) + 1
         return counts
 
-    def _record_opened_trade_from_sender(self, signal: dict[str, Any], payload: dict[str, Any], result: dict[str, Any]) -> None:
-        if self.journal_service is None or not hasattr(self.journal_service, "record_open_position"):
-            return
+    def _record_opened_trade_from_sender(self, signal: dict[str, Any], payload: dict[str, Any], result: dict[str, Any], decision: dict[str, Any] | None = None) -> None:
         ticket = str(result.get("ticket") or result.get("mt5_ticket") or "")
         if not ticket or ticket == "0":
+            return
+        try:
+            self.reason_panel_service.persist_order_sent(signal=signal, payload=payload, result=result, decision=decision or {}, timestamp=(decision or {}).get("timestamp"))
+        except Exception:
+            pass
+        if self.journal_service is None or not hasattr(self.journal_service, "record_open_position"):
             return
         journal_payload = {
             "trade_id": f"mt5_demo_{ticket}",
@@ -1315,6 +1381,89 @@ class AutoValidationService:
                 count += 1
         return count
 
+    def _latest_incomplete_validation_session(self) -> dict[str, Any] | None:
+        if self.journal_service is None:
+            return None
+        try:
+            trades = self.journal_service.list_trades(limit=100000)
+        except Exception:
+            return None
+        target = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
+        grouped: dict[str, dict[str, Any]] = {}
+        for trade in trades:
+            session_id = str(trade.get("validation_session_id") or "").strip()
+            if not session_id:
+                continue
+            status = str(trade.get("status") or "").upper()
+            group = grouped.setdefault(
+                session_id,
+                {
+                    "session_id": session_id,
+                    "trades": [],
+                    "closed_count": 0,
+                    "open_count": 0,
+                    "latest_trade_time": "",
+                    "started_at": "",
+                    "session_start_time": "",
+                },
+            )
+            group["trades"].append(trade)
+            if status == "CLOSED":
+                group["closed_count"] += 1
+            if status in {"OPEN", "SENT", "PENDING"}:
+                group["open_count"] += 1
+            trade_time = self._trade_sort_time(trade)
+            if trade_time and trade_time > str(group.get("latest_trade_time") or ""):
+                group["latest_trade_time"] = trade_time
+            opened_at = str(trade.get("opened_at") or trade.get("created_at") or "")
+            if opened_at and (not group.get("started_at") or opened_at < str(group.get("started_at") or "")):
+                group["started_at"] = opened_at
+                group["session_start_time"] = opened_at
+        mt5_positions = self._open_positions()
+        mt5_tickets = {self._position_ticket(position) for position in mt5_positions if self._position_ticket(position)}
+        for group in grouped.values():
+            open_tickets = {
+                str(trade.get("mt5_ticket") or "")
+                for trade in group.get("trades", [])
+                if str(trade.get("mt5_ticket") or "") and str(trade.get("status") or "").upper() in {"OPEN", "SENT", "PENDING"}
+            }
+            group["open_count"] = max(int(group.get("open_count") or 0), len(open_tickets & mt5_tickets))
+            group["mt5_open_position_count"] = len(open_tickets & mt5_tickets)
+        candidates = [
+            group
+            for group in grouped.values()
+            if int(group.get("closed_count") or 0) < target or int(group.get("open_count") or 0) > 0
+        ]
+        if not candidates:
+            return None
+        current_id = str(self.session.get("session_id") or "")
+        current = next((group for group in candidates if str(group.get("session_id") or "") == current_id), None)
+        if current and (int(current.get("closed_count") or 0) > 0 or int(current.get("open_count") or 0) > 0):
+            return current
+        return sorted(candidates, key=lambda group: str(group.get("latest_trade_time") or group.get("started_at") or ""), reverse=True)[0]
+
+    def _trade_sort_time(self, trade: dict[str, Any]) -> str:
+        return str(
+            trade.get("closed_at")
+            or trade.get("opened_at")
+            or trade.get("updated_at")
+            or trade.get("created_at")
+            or ""
+        )
+
+    def _log_recovery_decision(self, session_id: str, closed_count: int, open_count: int, new_session_created: bool, trigger: str, reason: str) -> None:
+        self._log(
+            "VALIDATION_SESSION_RECOVERY",
+            {
+                "resumed_session_id": session_id,
+                "closed_trade_count": closed_count,
+                "open_position_count": open_count,
+                "new_session_created": new_session_created,
+                "trigger": trigger,
+                "reason": reason,
+            },
+        )
+
     def _cooldown_active(self) -> bool:
         if self._last_trade_time is None:
             return False
@@ -1920,6 +2069,7 @@ class AutoValidationService:
             else:
                 self.session["session_started_by"] = "persisted_resume"
                 self.config["auto_validation_enabled"] = True
+        self._resume_incomplete_validation_session(trigger="backend_startup", activate=False)
 
     def _save_state(self) -> None:
         try:

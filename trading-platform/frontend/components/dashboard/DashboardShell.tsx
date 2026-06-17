@@ -85,7 +85,6 @@ const ROUND_2_START_PAYLOAD: ApiRecord = {
   session_note: ROUND_2_NOTE,
   client_dashboard_scope: "CURRENT_SESSION_ONLY",
 };
-const EURUSD_TEST_RESULTS_KEY = "algopilot_eurusd_test_results";
 const FOREX_DISPLAY_TIME_ZONE = "Asia/Kolkata";
 const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
 const FOREX_SESSIONS = {
@@ -2195,88 +2194,34 @@ function TestEnvironmentTitleCard() {
   );
 }
 
-function emptyEurusdTestResults(): ApiRecord {
-  return {
-    symbol: "EURUSD",
-    round: 2,
-    startedAt: null,
-    completedAt: null,
-    target: TARGET_TRADES,
-    summary: {
-      closed: 0,
-      wins: 0,
-      losses: 0,
-      winRate: 0,
-      netPnL: 0,
-      profitFactor: 0,
-      maxDrawdown: 0,
-    },
-    trades: [],
-  };
+function tradeDirection(trade: ApiRecord): string {
+  return readText(trade, ["side", "type", "direction"], "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
 }
 
-function normalizeStoredTrade(trade: ApiRecord): ApiRecord | null {
-  const id = readText(trade, ["ticket", "ticket_number", "id", "position_id", "order_id"], "");
-  const symbol = readText(trade, ["symbol"], "EURUSD").toUpperCase();
-  if (symbol && symbol !== "EURUSD") return null;
-  const pnl = readNumber(trade, ["profit", "pnl", "net_pnl", "profit_loss", "realized_pnl"], 0);
-  return {
-    id: id || `${readText(trade, ["closed_at", "closeTime", "close_time"], "")}-${readNumber(trade, ["entry", "entryPrice", "openPrice"], 0)}`,
-    symbol: "EURUSD",
-    openTime: readText(trade, ["openTime", "open_time", "opened_at", "entry_time"], ""),
-    closeTime: readText(trade, ["closeTime", "close_time", "closed_at", "exit_time"], ""),
-    type: readText(trade, ["type", "side", "direction"], "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
-    lots: readNumber(trade, ["lots", "lot", "volume"], 0.01),
-    entryPrice: readNumber(trade, ["entryPrice", "openPrice", "entry", "entry_price"], 0),
-    exitPrice: readNumber(trade, ["exitPrice", "closePrice", "exit", "close_price"], 0),
-    sl: readNumber(trade, ["sl", "stop_loss"], 0),
-    tp: readNumber(trade, ["tp", "take_profit"], 0),
-    pnl,
-    result: pnl >= 0 ? "WIN" : "LOSS",
-  };
+function round2TradeCsvRow(trade: ApiRecord, index: number): string[] {
+  return [
+    friendlyText(trade, ["mt5_ticket", "ticket", "trade_id", "id"], String(index + 1)),
+    friendlyText(trade, ["symbol"], "EURUSD"),
+    tradeDirection(trade),
+    tradeResultLabel(trade),
+    money(tradePnl(trade)),
+    marketPriceText(readNumber(trade, ["entry_price", "entryPrice", "openPrice", "entry"], Number.NaN), friendlyText(trade, ["symbol"], "EURUSD") === "XAUUSD" ? 2 : 5),
+    marketPriceText(readNumber(trade, ["close_price", "exitPrice", "closePrice", "exit"], Number.NaN), friendlyText(trade, ["symbol"], "EURUSD") === "XAUUSD" ? 2 : 5),
+    exitReasonForTrade(trade),
+    formatTradeTime(readText(trade, ["openTime", "open_time", "opened_at", "entry_time"], "")),
+    formatTradeTime(readText(trade, ["closed_at", "closeTime", "close_time", "exit_time"], "")),
+  ];
 }
 
-function buildEurusdTestResults(existing: ApiRecord | null, incomingTrades: ApiRecord[], session: ApiRecord | null, target: number): ApiRecord {
-  const base = { ...emptyEurusdTestResults(), ...(existing ?? {}) };
-  const currentTrades = Array.isArray(base.trades) ? (base.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
-  const byId = new Map<string, ApiRecord>();
-  currentTrades.forEach((trade) => byId.set(readText(trade, ["id"], ""), trade));
-  incomingTrades.forEach((trade) => {
-    const normalized = normalizeStoredTrade(trade);
-    if (!normalized) return;
-    byId.set(readText(normalized, ["id"], ""), normalized);
-  });
-  const trades = Array.from(byId.values()).filter((trade) => readText(trade, ["id"], ""));
-  const wins = trades.filter((trade) => readText(trade, ["result"], "") === "WIN").length;
-  const losses = trades.filter((trade) => readText(trade, ["result"], "") === "LOSS").length;
-  const netPnL = trades.reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0);
-  const grossWin = trades.filter((trade) => readNumber(trade, ["pnl"], 0) > 0).reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0);
-  const grossLoss = Math.abs(trades.filter((trade) => readNumber(trade, ["pnl"], 0) < 0).reduce((sum, trade) => sum + readNumber(trade, ["pnl"], 0), 0));
-  return {
-    ...base,
-    target,
-    summary: {
-      closed: trades.length,
-      wins,
-      losses,
-      winRate: trades.length ? Number(((wins / trades.length) * 100).toFixed(2)) : 0,
-      netPnL: Number(netPnL.toFixed(2)),
-      profitFactor: grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : 0,
-      maxDrawdown: readNumber(session, ["max_drawdown"], readNumber(asRecord(base.summary), ["maxDrawdown"], 0)),
-    },
-    startedAt: readText(base, ["startedAt"], "") || readText(session, ["session_start_time", "started_at"], "") || (trades.length ? new Date().toISOString() : null),
-    completedAt: trades.length >= target ? readText(base, ["completedAt"], "") || new Date().toISOString() : readText(base, ["completedAt"], "") || null,
-    trades,
-  };
-}
-
-function readEurusdTestResults(): ApiRecord {
-  if (typeof window === "undefined") return emptyEurusdTestResults();
-  try {
-    return { ...emptyEurusdTestResults(), ...(JSON.parse(window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY) ?? "null") as ApiRecord | null ?? {}) };
-  } catch {
-    return emptyEurusdTestResults();
-  }
+function downloadCsv(filename: string, rows: string[][]): void {
+  const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
@@ -2383,59 +2328,41 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
 
 function Round1Results({ data, trades }: { data: DashboardData; trades: ApiRecord[] }) {
   const [expanded, setExpanded] = useState(false);
-  const [stored, setStored] = useState<ApiRecord | null>(() => {
-    if (typeof window === "undefined") return null;
-    const raw = window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as ApiRecord;
-    } catch {
-      return null;
-    }
-  });
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
   const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
-  const actualClosedTrades = actualClosedTradeCount(trades);
-  const actualWins = tradeWinCount(trades);
+  const round2Trades = trades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
+  const actualClosedTrades = actualClosedTradeCount(round2Trades);
+  const actualWins = tradeWinCount(round2Trades);
   const actualWinRate = actualClosedTrades ? (actualWins / actualClosedTrades) * 100 : 0;
-  const storedSummary = asRecord(stored?.summary);
-  const storedTrades = Array.isArray(stored?.trades) ? (stored.trades.filter((item) => asRecord(item)) as ApiRecord[]) : [];
-  const hasTrades = actualClosedTrades > 0 || storedTrades.length > 0;
-  useEffect(() => {
-    if (!trades.length) return;
-    const raw = window.localStorage.getItem(EURUSD_TEST_RESULTS_KEY);
-    let existing: ApiRecord | null = null;
-    if (raw) {
-      try {
-        existing = JSON.parse(raw) as ApiRecord;
-      } catch {
-        existing = null;
-      }
-    }
-    const next = buildEurusdTestResults(existing, trades, session, target);
-    window.localStorage.setItem(EURUSD_TEST_RESULTS_KEY, JSON.stringify(next));
-    const timeout = window.setTimeout(() => setStored(next), 0);
-    return () => window.clearTimeout(timeout);
-  }, [session, target, trades]);
+  const netPnl = round2Trades.reduce((sum, trade) => sum + tradePnl(trade), 0);
+  const hasTrades = actualClosedTrades > 0;
+  const downloadReport = () => {
+    const header = ["Ticket", "Symbol", "Direction", "Result", "P&L", "Entry Price", "Exit Price", "Exit Reason", "Open Time", "Close Time"];
+    const rows = round2Trades.map((trade, index) => round2TradeCsvRow(trade, index));
+    downloadCsv("round-2-results.csv", [header, ...rows]);
+  };
   return (
     <section className="round1-card">
       <div className="premium-test-header">
         <div>
           <p className="premium-section-eyebrow">EURUSD Test Results</p>
-          <h2 className="premium-section-title">{hasTrades ? `${actualClosedTrades} closed trades captured` : "EURUSD test results"}</h2>
-          {!hasTrades ? <p className="test-results-empty">Results are stored permanently and persist after page refresh.</p> : null}
+          <h2 className="premium-section-title">Round 2 Results</h2>
+          {!hasTrades ? <p className="test-results-empty">Round 2 trades will appear here from the trade journal.</p> : null}
         </div>
-        <button className="portal-panel-tab" disabled={!hasTrades} onClick={() => setExpanded((value) => !value)} type="button">{hasTrades ? (expanded ? "Hide Trades" : "View Trades") : "No trades yet"}</button>
+        <div className="flex flex-wrap gap-2">
+          <button className="portal-panel-tab round2-results-action" disabled={!hasTrades} onClick={() => setExpanded((value) => !value)} type="button">{hasTrades ? (expanded ? "Hide Trades" : "View Trades") : "No trades yet"}</button>
+          <button className="portal-panel-tab round2-results-action" disabled={!hasTrades} onClick={downloadReport} type="button">Download Report</button>
+        </div>
       </div>
       <div className="premium-stat-grid">
-        <ClientMetric label="Target" value={hasTrades ? String(readNumber(stored, ["target"], target)) : "-"} compact />
+        <ClientMetric label="Target" value={String(target)} compact />
         <ClientMetric label="Closed" value={hasTrades ? String(actualClosedTrades) : "-"} compact />
         <ClientMetric label="Win Rate" value={hasTrades ? `${actualWinRate.toFixed(2)}%` : "-"} compact />
-        <ClientMetric label="Net P&L" value={hasTrades ? money(readNumber(storedSummary, ["netPnL"], 0)) : "-"} compact />
+        <ClientMetric label="Net P&L" value={hasTrades ? money(netPnl) : "-"} compact />
       </div>
-      {expanded ? <EurusdTradeHistory trades={storedTrades} onClose={() => setExpanded(false)} /> : null}
+      {expanded ? <EurusdTradeHistory trades={round2Trades} onClose={() => setExpanded(false)} /> : null}
     </section>
   );
 }
@@ -2444,29 +2371,32 @@ function EurusdTradeHistory({ trades, onClose }: { trades: ApiRecord[]; onClose:
   return (
     <div className="test-trade-history">
       <div className="test-trade-history-header">
-        <h3>Trade History - EURUSD</h3>
+        <h3>Round 2 Trade Details</h3>
         <button onClick={onClose} type="button">Close x</button>
       </div>
       {trades.length ? (
         <div className="test-trade-table-wrap">
           <table className="test-trade-table">
             <thead>
-              <tr>{["#", "Type", "Open", "Close", "Lots", "Entry", "Exit", "P&L"].map((item) => <th key={item}>{item}</th>)}</tr>
+              <tr>{["Ticket", "Symbol", "Direction", "Result", "P&L", "Entry Price", "Exit Price", "Exit Reason", "Open Time", "Close Time"].map((item) => <th key={item}>{item}</th>)}</tr>
             </thead>
             <tbody>
               {trades.map((trade, index) => {
-                const type = readText(trade, ["type"], "BUY");
-                const pnl = readNumber(trade, ["pnl"], 0);
+                const pnl = tradePnl(trade);
+                const symbol = friendlyText(trade, ["symbol"], "EURUSD");
+                const digits = symbol === "XAUUSD" ? 2 : 5;
                 return (
-                  <tr key={readText(trade, ["id"], String(index))}>
-                    <td>{index + 1}</td>
-                    <td><span className={`trade-type-pill ${type === "SELL" ? "sell" : "buy"}`}>{type}</span></td>
-                    <td>{formatTradeTime(readText(trade, ["openTime"], ""))}</td>
-                    <td>{formatTradeTime(readText(trade, ["closeTime"], ""))}</td>
-                    <td>{readNumber(trade, ["lots"], 0).toFixed(2)}</td>
-                    <td>{marketPriceText(readNumber(trade, ["entryPrice"], 0))}</td>
-                    <td>{marketPriceText(readNumber(trade, ["exitPrice"], 0))}</td>
+                  <tr key={readText(trade, ["trade_id", "id", "mt5_ticket", "ticket"], String(index))}>
+                    <td>{friendlyText(trade, ["mt5_ticket", "ticket", "trade_id", "id"], "No ticket")}</td>
+                    <td>{symbol}</td>
+                    <td><span className={`trade-type-pill ${tradeDirection(trade) === "SELL" ? "sell" : "buy"}`}>{tradeDirection(trade)}</span></td>
+                    <td><span className={`result-pill ${tradeResultLabel(trade) === "LOSS" ? "loss" : "win"}`}>{tradeResultLabel(trade)}</span></td>
                     <td className={pnlClass(pnl)}>{money(pnl)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["entry_price", "entryPrice", "openPrice", "entry"], Number.NaN), digits)}</td>
+                    <td>{marketPriceText(readNumber(trade, ["close_price", "exitPrice", "closePrice", "exit"], Number.NaN), digits)}</td>
+                    <td>{exitReasonForTrade(trade)}</td>
+                    <td>{formatTradeTime(readText(trade, ["openTime", "open_time", "opened_at", "entry_time"], ""))}</td>
+                    <td>{formatTradeTime(readText(trade, ["closed_at", "closeTime", "close_time", "exit_time"], ""))}</td>
                   </tr>
                 );
               })}

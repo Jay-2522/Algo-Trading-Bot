@@ -584,6 +584,7 @@ class GuardedDemoOrderSenderService:
         ticket = str(result.get("ticket") or "0")
         retcode = str(result.get("retcode") or "")
         metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
         strategy_profile = payload.get("strategy_profile") or metadata.get("strategy_profile")
         return {
             "trade_id": f"mt5_demo_{ticket}" if ticket != "0" else f"mt5_demo_rejected_{result.get('request_id')}",
@@ -606,6 +607,16 @@ class GuardedDemoOrderSenderService:
             "signal_confidence": payload.get("signal_confidence"),
             "signal_hash": payload.get("signal_hash"),
             "setup_reason": payload.get("setup_reason"),
+            "decision_reason": round3.get("final_decision_reason") or result.get("reason") or result.get("final_comment") or result.get("comment"),
+            "final_decision_reason": round3.get("final_decision_reason"),
+            "passed_rules": round3.get("passed_rules") if isinstance(round3.get("passed_rules"), list) else [],
+            "failed_rules": round3.get("failed_rules") if isinstance(round3.get("failed_rules"), list) else [],
+            "advisory_warnings": round3.get("advisory_warnings") if isinstance(round3.get("advisory_warnings"), list) else [],
+            "confirmation_score": round3.get("confirmation_score"),
+            "confirmation_required": round3.get("confirmation_required"),
+            "confirmation_total": round3.get("confirmation_total"),
+            "confirmation_passed": round3.get("confirmation_passed") if isinstance(round3.get("confirmation_passed"), list) else [],
+            "confirmation_missing": round3.get("confirmation_missing") if isinstance(round3.get("confirmation_missing"), list) else [],
             "strategy_profile": strategy_profile,
             "strategy_metadata": payload.get("strategy_metadata"),
             "notes": "First controlled MT5 demo order executed through guarded sender.",

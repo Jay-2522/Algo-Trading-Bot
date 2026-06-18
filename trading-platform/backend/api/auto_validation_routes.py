@@ -48,8 +48,10 @@ async def get_auto_validation_status() -> dict:
 @router.post("/start")
 async def start_auto_validation(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
     result = auto_validation_service.start(payload)
-    auto_validation_runner.start()
-    return auto_validation_service.status()
+    if result.get("status") not in {"SESSION_ALREADY_STARTED", "FRESH_START_CONFIRMATION_REQUIRED"}:
+        auto_validation_runner.start()
+        return auto_validation_service.status()
+    return result
 
 
 @router.post("/pause")

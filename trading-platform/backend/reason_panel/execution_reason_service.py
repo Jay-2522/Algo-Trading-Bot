@@ -89,12 +89,26 @@ class ExecutionReasonPanelService:
         comment = self._text(result.get("comment") or result.get("final_comment") or decision.get("mt5_comment"))
         strategy_metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
         round3 = strategy_metadata.get("round3_diagnostics") if isinstance(strategy_metadata.get("round3_diagnostics"), dict) else {}
-        final_reason = self._text(round3.get("final_decision_reason"))
+        entry = result.get("entry") or result.get("entry_estimate") or payload.get("entry_price") or signal.get("entry")
+        sl = result.get("sl") or payload.get("stop_loss") or signal.get("stop_loss")
+        tp = result.get("tp") or payload.get("take_profit") or signal.get("take_profit")
+        score = self._text(round3.get("confirmation_score") or decision.get("confirmation_score") or payload.get("confirmation_score")) or "0"
+        required = self._text(round3.get("confirmation_required") or decision.get("confirmation_required") or payload.get("confirmation_required")) or "2"
+        final_reason = "\n".join(
+            [
+                f"{symbol} {side or 'TRADE'} opened.",
+                f"Ticket: {ticket}",
+                f"Entry: {self._text(entry) or 'Unavailable'}",
+                f"SL: {self._text(sl) or 'Unavailable'}",
+                f"TP: {self._text(tp) or 'Unavailable'}",
+                f"Score: {score}/{required}",
+            ]
+        )
         data_source = self._text(payload.get("data_source") or signal.get("data_source") or strategy_metadata.get("data_source"))
         return {
             "id": self._id(ticket, signal_hash),
             "groqGenerated": False,
-            "reason": final_reason or f"{symbol} was accepted and opened as a {side or 'trade'} trade because the Round 3 entry rules passed and MT5 executed the demo order successfully. Ticket: {ticket}.",
+            "reason": final_reason,
             "source": "execution",
             "status": "Accepted",
             "symbol": symbol,
@@ -108,6 +122,11 @@ class ExecutionReasonPanelService:
             "order_opened": True,
             "mt5_retcode": retcode,
             "mt5_comment": comment,
+            "entry": entry,
+            "sl": sl,
+            "tp": tp,
+            "confirmation_score": score,
+            "confirmation_required": required,
             "rule_name": self._text(round3.get("rule_name")),
             "passed_rules": round3.get("passed_rules") if isinstance(round3.get("passed_rules"), list) else [],
             "failed_rules": round3.get("failed_rules") if isinstance(round3.get("failed_rules"), list) else [],

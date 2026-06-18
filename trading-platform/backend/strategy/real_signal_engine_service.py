@@ -55,14 +55,17 @@ class RealSignalEngineService:
                     "requires": ["BUY_OR_SELL", "FVG", "ORDER_BLOCK", "SESSION_VALID", "SL_TP_VALID", "RR_1_5", "SPREAD_ACCEPTABLE_OR_STALE_WITHIN_GRACE"],
                 },
                 "DEMO_COLLECTION": {
-                    "min_confidence": self.demo_collection_confidence,
+                    "min_confidence": None,
                     "min_rr": self.demo_collection_min_rr,
-                    "bos_mandatory": True,
+                    "confirmation_score_required": 5,
+                    "strong_confirmation_required": 2,
+                    "confirmation_pool": ["TREND_ALIGNMENT", "LIQUIDITY_SWEEP", "BOS", "FVG_IMBALANCE", "PULLBACK_RETEST", "MOMENTUM_DISPLACEMENT", "ATR_VOLATILITY", "SPREAD_CLEAN", "RR_2_0", "SESSION_BONUS"],
+                    "bos_mandatory": False,
                     "liquidity_sweep_mandatory": False,
-                    "fvg_mandatory": True,
+                    "fvg_mandatory": False,
                     "order_block_mandatory": False,
-                    "session_filter": "LONDON_NY_REQUIRED",
-                    "requires": ["H4_HISTORY", "M15_HISTORY", "LONDON_NY_SESSION", "BOS", "FVG", "RR_2_0"],
+                    "session_filter": "ADVISORY_BONUS_ONLY",
+                    "requires": ["H4_HISTORY", "M15_HISTORY", "RR_2_0", "SPREAD_ACCEPTABLE", "RISK_APPROVED", "DIRECTION_BIAS_MATCH", "EDGE_SCORE_THRESHOLD"],
                     "history_required_candles": self.history_required_candles,
                 },
             },
@@ -246,7 +249,7 @@ class RealSignalEngineService:
             and session["valid"]
         )
         auto_tradeable = self._auto_validation_tradeable(direction, score, smc, trade_plan, session, spread)
-        round3_audit = self._round3_rule_audit(normalized, feed, direction, smc, session, trade_plan, score)
+        round3_audit = self._round3_rule_audit(normalized, feed, direction, smc, session, trade_plan, score, spread)
         demo_collection_tradeable = self._demo_collection_tradeable(direction, score, smc, trade_plan, session, spread, round3_audit)
         tradeable = demo_collection_tradeable if profile == "DEMO_COLLECTION" else auto_tradeable if profile == "AUTO_VALIDATION" else production_tradeable
         signal_action = direction if tradeable else "WAIT"
@@ -259,6 +262,9 @@ class RealSignalEngineService:
             missing_requirements = self._auto_validation_missing_requirements(direction, score, smc, trade_plan, session, spread)
         else:
             missing_requirements = self._missing_requirements(direction, score, smc, trade_plan, session, spread)
+        if profile == "DEMO_COLLECTION" and not tradeable:
+            hard_codes = {"SPREAD_TOO_HIGH", "SL_TP_INVALID", "RR_MISSING", "RR_LOW", "DIRECTION_BIAS_MISMATCH"}
+            risk_status = "REJECTED" if any(item.get("code") in hard_codes for item in missing_requirements) else "NO_SIGNAL"
         if signal_action == "WAIT":
             trade_plan = {}
         status_level = self._status_level(signal_action, score, missing_requirements) if profile == "PRODUCTION" else self._profile_status_level(signal_action, score, missing_requirements, profile_confidence)
@@ -368,6 +374,7 @@ class RealSignalEngineService:
         blockers: list[str] = []
         timeframes: dict[str, list[dict[str, Any]]] = {}
         validation: dict[str, Any] = {}
+        signal_history_ready = True
         candle_source: dict[str, Any] = {
             "symbol": symbol,
             "source": "UNKNOWN",
@@ -375,11 +382,17 @@ class RealSignalEngineService:
             "account_login": "",
             "server": "",
             "account_type": "",
+            "signal_history_ready": False,
+            "history_required_candles": self.history_required_candles,
+            "cache_source": "MT5_BACKFILL",
             "timeframes": {},
         }
         for timeframe in self.timeframes:
             history = self.backfill_service.fetch_history(symbol, timeframe, count=self.history_preload_candles)
             candles = history.get("candles", [])
+            loaded_count = int(history.get("returned_count") or len(candles))
+            timeframe_ready = str(history.get("status") or "").upper() == "OK" and loaded_count >= self.history_required_candles
+            signal_history_ready = signal_history_ready and timeframe_ready
             timeframes[timeframe] = candles
             validation[timeframe] = history.get("validation", {})
             if candle_source["source"] == "UNKNOWN":
@@ -391,15 +404,27 @@ class RealSignalEngineService:
             candle_source["timeframes"][timeframe] = {
                 "timeframe": timeframe,
                 "requested_count": history.get("requested_count", self.history_preload_candles),
-                "returned_count": history.get("returned_count", len(candles)),
+                "returned_count": loaded_count,
                 "last_candle_timestamp": candles[-1].get("time") if candles else None,
                 "status": history.get("status"),
                 "source": history.get("source", candle_source["source"]),
                 "broker_source": history.get("broker_source", candle_source["broker_source"]),
+                "requested_symbol": history.get("requested_symbol", symbol),
+                "resolved_symbol": history.get("resolved_symbol", symbol),
+                "mt5_last_error": history.get("mt5_last_error"),
+                "process_id": history.get("process_id"),
+                "connection_id": history.get("connection_id"),
+                "cache_hit": history.get("cache_hit") is True,
+                "cache_reason": history.get("cache_reason"),
+                "history_ready": timeframe_ready,
             }
-            if history.get("status") != "OK" or len(candles) < self.history_required_candles:
+            if not timeframe_ready:
                 blockers.append(f"{timeframe} history has insufficient real candles.")
-        return {"timeframes": timeframes, "validation": validation, "blockers": blockers, "candle_source": candle_source}
+        candle_source["signal_history_ready"] = signal_history_ready
+        candle_source["signal_m15_count"] = int(candle_source["timeframes"].get("M15", {}).get("returned_count") or 0)
+        candle_source["signal_h1_count"] = int(candle_source["timeframes"].get("H1", {}).get("returned_count") or 0)
+        candle_source["signal_h4_count"] = int(candle_source["timeframes"].get("H4", {}).get("returned_count") or 0)
+        return {"timeframes": timeframes, "validation": validation, "blockers": blockers, "candle_source": candle_source, "signal_history_ready": signal_history_ready}
 
     def _validator_diagnostics(
         self,
@@ -795,9 +820,7 @@ class RealSignalEngineService:
                 {
                     "strategy_profile": "DEMO_COLLECTION",
                     "status": "APPROVED" if signal_action in {"BUY", "SELL"} else ("REJECTED" if score["confidence"] >= threshold else "WAIT"),
-                    "confidence_result": "PASS" if score["confidence"] >= threshold else "FAIL",
-                    "confidence_threshold": threshold,
-                    "confidence_gap_to_55": max(0, threshold - int(score["confidence"])),
+                    "confirmation_score_required": 2,
                     "rr_result": "PASS" if self._number(trade_plan.get("risk_reward")) is not None and self._number(trade_plan.get("risk_reward")) >= self.demo_collection_min_rr else "FAIL",
                     "min_rr": self.demo_collection_min_rr,
                     "sl_tp_source": trade_plan.get("sl_tp_source") or "UNAVAILABLE",
@@ -805,12 +828,14 @@ class RealSignalEngineService:
                     "advisory_requirements": advisory,
                     "relaxed_blockers": advisory,
                     "demo_collection_rules": {
-                        "min_confidence": threshold,
-                        "bos_mandatory": True,
+                        "min_confidence": None,
+                        "confirmation_score_required": 2,
+                        "confirmation_pool": ["BOS", "FVG", "LIQUIDITY_SWEEP", "TREND_ALIGNMENT"],
+                        "bos_mandatory": False,
                         "liquidity_sweep_mandatory": False,
-                        "fvg_mandatory": True,
+                        "fvg_mandatory": False,
                         "order_block_mandatory": False,
-                        "session_filter": "LONDON_NY_REQUIRED",
+                        "session_filter": "ADVISORY_BONUS_ONLY",
                         "requires_directional_bias": True,
                         "requires_h4_history": True,
                         "requires_m15_history": True,
@@ -818,7 +843,7 @@ class RealSignalEngineService:
                         "requires_sl_tp_valid_or_demo_risk_fallback": True,
                         "min_rr": self.demo_collection_min_rr,
                     },
-                    "approval_note": "Round 3 DEMO_COLLECTION requires valid H4/M15 history, London/NY session, BOS, FVG, valid SL/TP, and RR >= 2.0. Liquidity sweep and trend alignment are advisory confidence boosters.",
+                    "approval_note": "Round 3 DEMO_COLLECTION requires valid history, RR >= 2.0, acceptable spread, risk approval, higher-timeframe direction bias, and enough score from SMC edge confirmations. London/NY session is advisory bonus only.",
                 }
             )
             return audit
@@ -868,7 +893,7 @@ class RealSignalEngineService:
         missing: list[dict[str, Any]] = []
         confidence_gap = max(0, self.tradeable_confidence - int(score["confidence"]))
         if confidence_gap > 0:
-            missing.append({"code": "CONFIDENCE_GAP", "label": f"Confidence needs +{confidence_gap} to reach 75.", "gap": confidence_gap})
+            missing.append({"code": "CONFIDENCE_GAP", "label": "Round 3 uses Score instead of the legacy confidence threshold.", "gap": confidence_gap})
         if direction not in {"BUY", "SELL"}:
             missing.append({"code": "TREND_ALIGNMENT_MISSING", "label": "M15/H1/H4 trend alignment is missing."})
         if not smc["bos"]:
@@ -1034,6 +1059,14 @@ class RealSignalEngineService:
             "RR": None,
             "risk_reward": None,
             "required_rr": self.demo_collection_min_rr,
+            "warmup_history_ready": bool(candle_source.get("signal_history_ready")),
+            "signal_history_ready": bool(candle_source.get("signal_history_ready")),
+            "warmup_h4_count": int(candle_source.get("signal_h4_count") or 0),
+            "signal_h4_count": int(candle_source.get("signal_h4_count") or 0),
+            "signal_m15_count": int(candle_source.get("signal_m15_count") or 0),
+            "signal_h1_count": int(candle_source.get("signal_h1_count") or 0),
+            "cache_source": candle_source.get("cache_source") or "MT5_BACKFILL",
+            "signal_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
             "bos_status": "UNAVAILABLE",
             "fvg_status": "UNAVAILABLE",
             "h4_history_status": "AVAILABLE" if h4_ok else "INSUFFICIENT",
@@ -1052,28 +1085,29 @@ class RealSignalEngineService:
         session: dict[str, Any],
         trade_plan: dict[str, Any],
         score: dict[str, Any],
+        spread: dict[str, Any],
     ) -> dict[str, Any]:
         history = self._round3_history_audit(symbol, feed)
         passed_rules = [rule for rule in history["passed_rules"]]
         failed_rules = [rule for rule in history["failed_rules"]]
         rr = self._number(trade_plan.get("risk_reward"))
+        confirmations = self._round3_confirmation_summary(direction, smc, score)
         checks = [
-            ("SESSION_LONDON_NY", "SESSION_OUTSIDE_LONDON_NY", bool(session.get("valid"))),
-            ("BOS_PRESENT", "BOS_MISSING", bool(smc.get("bos"))),
-            ("FVG_PRESENT", "FVG_MISSING", bool(smc.get("fvg"))),
             ("RR_2_0_OR_HIGHER", "RR_BELOW_2_0", rr is not None and rr >= self.demo_collection_min_rr),
+            ("SPREAD_ACCEPTABLE", "SPREAD_TOO_HIGH", bool(spread.get("acceptable"))),
+            ("RISK_APPROVED", "RISK_REJECTED", direction in {"BUY", "SELL"} and self._sl_tp_valid(direction, trade_plan)),
+            ("DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS", "DIRECTION_BIAS_MISMATCH", confirmations["direction_valid"]),
+            ("STRONG_CONFIRMATIONS_2_PLUS", "STRONG_CONFIRMATIONS_BELOW_2", confirmations["strong_count"] >= 2),
+            ("ROUND_3_SCORE_THRESHOLD", "ROUND_3_SCORE_BELOW_THRESHOLD", confirmations["score"] >= confirmations["required_score"]),
         ]
         for passed_code, failed_code, passed in checks:
             (passed_rules if passed else failed_rules).append(passed_code if passed else failed_code)
         advisory_warnings: list[str] = []
-        if not smc.get("liquidity_sweep"):
-            advisory_warnings.append("LIQUIDITY_SWEEP_MISSING")
-        if direction not in {"BUY", "SELL"} or int(score.get("factors", {}).get("trend_alignment", 0)) <= 0:
-            advisory_warnings.append("TREND_ALIGNMENT_WEAK")
+        advisory_warnings.extend(f"{code}_MISSING" for code in confirmations["missing_codes"])
         decision = "ACCEPTED" if not failed_rules else "REJECTED"
-        reason = self._round3_reason(symbol, decision, failed_rules, rr)
+        reason = self._round3_reason(symbol, decision, failed_rules, rr, confirmations, session)
         return {
-            "rule_name": "ROUND_3_STRICT_ENTRY_FILTERS",
+            "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
             "passed_rules": passed_rules,
             "failed_rules": failed_rules,
             "advisory_warnings": advisory_warnings,
@@ -1081,8 +1115,28 @@ class RealSignalEngineService:
             "RR": rr,
             "risk_reward": rr,
             "required_rr": self.demo_collection_min_rr,
+            "warmup_history_ready": bool(history.get("signal_history_ready")),
+            "signal_history_ready": bool(history.get("signal_history_ready")),
+            "warmup_h4_count": int(history.get("signal_h4_count") or 0),
+            "signal_h4_count": int(history.get("signal_h4_count") or 0),
+            "signal_m15_count": int(history.get("signal_m15_count") or 0),
+            "signal_h1_count": int(history.get("signal_h1_count") or 0),
+            "cache_source": feed.get("candle_source", {}).get("cache_source") if isinstance(feed.get("candle_source"), dict) else "MT5_BACKFILL",
+            "signal_source": "REAL_SMC_MT5_MULTI_TIMEFRAME",
+            "confirmation_score": confirmations["score"],
+            "confirmation_required": confirmations["required_score"],
+            "confirmation_total": confirmations["total"],
+            "strong_confirmation_count": confirmations["strong_count"],
+            "strong_confirmation_required": 2,
+            "confirmation_passed": confirmations["passed_labels"],
+            "confirmation_missing": confirmations["missing_labels"],
+            "advisory_session_bonus": bool(session.get("valid")),
+            "confirmation_states": confirmations["states"],
             "bos_status": "PRESENT" if smc.get("bos") else "MISSING",
             "fvg_status": "PRESENT" if smc.get("fvg") else "MISSING",
+            "liquidity_sweep_status": "PRESENT" if smc.get("liquidity_sweep") else "MISSING",
+            "trend_alignment_status": "ALIGNED" if confirmations["states"].get("TREND_ALIGNMENT") else "NOT_ALIGNED",
+            "direction_bias_status": "MATCHED" if confirmations["direction_valid"] else "MISMATCHED",
             "h4_history_status": history["h4_history_status"],
             "m15_history_status": history["m15_history_status"],
             "final_decision": decision,
@@ -1090,25 +1144,94 @@ class RealSignalEngineService:
             "rejection_reason": "" if decision == "ACCEPTED" else reason,
         }
 
-    def _round3_reason(self, symbol: str, decision: str, failed_rules: list[str], rr: float | None) -> str:
+    def _round3_confirmation_summary(self, direction: str, smc: dict[str, Any], score: dict[str, Any]) -> dict[str, Any]:
+        trend_aligned = direction in {"BUY", "SELL"} and int(score.get("factors", {}).get("trend_alignment", 0)) > 0
+        factors = score.get("factors", {}) if isinstance(score.get("factors"), dict) else {}
+        fvg = bool(smc.get("fvg") or smc.get("imbalance") or smc.get("imbalance_zone"))
+        pullback = bool(smc.get("pullback") or smc.get("retest") or smc.get("entry_zone_valid") or smc.get("near_fvg") or factors.get("entry_zone"))
+        momentum = bool(smc.get("momentum") or smc.get("displacement") or smc.get("displacement_candle") or int(factors.get("displacement", 0)) > 0)
+        atr_ok = bool(smc.get("atr_valid") or smc.get("atr_tradeable") or smc.get("volatility_tradeable") or int(factors.get("volatility", 0)) > 0)
+        spread_clean = int(factors.get("spread", 0)) > 0 or bool(smc.get("spread_clean"))
+        rr_ok = int(factors.get("rr", 0)) > 0 or bool(smc.get("rr_2_0"))
+        session_bonus = int(factors.get("session", 0)) > 0 or bool(smc.get("session_valid"))
+        states = {
+            "TREND_ALIGNMENT": trend_aligned,
+            "LIQUIDITY_SWEEP": bool(smc.get("liquidity_sweep")),
+            "BOS": bool(smc.get("bos") or smc.get("structure_confirmation")),
+            "FVG_IMBALANCE": fvg,
+            "PULLBACK_RETEST": pullback,
+            "MOMENTUM_DISPLACEMENT": momentum,
+            "ATR_VOLATILITY": atr_ok,
+            "SPREAD_CLEAN": spread_clean,
+            "RR_2_0": rr_ok,
+            "SESSION_LONDON_NY_BONUS": session_bonus,
+        }
+        labels = {
+            "TREND_ALIGNMENT": "H4/H1 trend alignment",
+            "LIQUIDITY_SWEEP": "liquidity sweep",
+            "BOS": "BOS",
+            "FVG_IMBALANCE": "FVG/imbalance",
+            "PULLBACK_RETEST": "pullback/retest",
+            "MOMENTUM_DISPLACEMENT": "momentum/displacement",
+            "ATR_VOLATILITY": "ATR volatility",
+            "SPREAD_CLEAN": "clean spread",
+            "RR_2_0": "RR >= 2.0",
+            "SESSION_LONDON_NY_BONUS": "London/NY session",
+        }
+        strong_codes = {"TREND_ALIGNMENT", "LIQUIDITY_SWEEP", "BOS", "FVG_IMBALANCE", "PULLBACK_RETEST", "MOMENTUM_DISPLACEMENT"}
+        passed_codes = [code for code, passed in states.items() if passed]
+        missing_codes = [code for code, passed in states.items() if not passed]
+        return {
+            "score": len(passed_codes),
+            "required_score": 5,
+            "total": len(states),
+            "strong_count": len([code for code in passed_codes if code in strong_codes]),
+            "direction_valid": direction in {"BUY", "SELL"} and trend_aligned,
+            "direction": direction,
+            "trend_bias": direction if trend_aligned else "UNCLEAR",
+            "states": states,
+            "passed_codes": passed_codes,
+            "missing_codes": missing_codes,
+            "passed_labels": [labels[code] for code in passed_codes],
+            "missing_labels": [labels[code] for code in missing_codes],
+        }
+
+    def _join_labels(self, labels: list[str]) -> str:
+        if not labels:
+            return ""
+        if len(labels) == 1:
+            return labels[0]
+        if len(labels) == 2:
+            return f"{labels[0]} and {labels[1]}"
+        return f"{', '.join(labels[:-1])}, and {labels[-1]}"
+
+    def _round3_reason(self, symbol: str, decision: str, failed_rules: list[str], rr: float | None, confirmations: dict[str, Any] | None = None, session: dict[str, Any] | None = None) -> str:
+        confirmations = confirmations or {"score": 0, "required_score": 5, "strong_count": 0, "passed_labels": [], "missing_labels": ["BOS", "FVG/imbalance", "liquidity sweep", "trend alignment"]}
         first_failure = failed_rules[0] if failed_rules else ""
         if decision == "ACCEPTED":
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
-            return f"{symbol} accepted because BOS, FVG, London/NY session, valid H4/M15 history, and RR {rr_text} all passed."
-        if first_failure == "BOS_MISSING":
-            return f"{symbol} rejected because BOS was missing."
-        if first_failure == "FVG_MISSING":
-            return f"{symbol} rejected because FVG was missing."
-        if first_failure == "SESSION_OUTSIDE_LONDON_NY":
-            return f"{symbol} rejected because session was outside London/NY."
+            passed = self._join_labels(list(confirmations.get("passed_labels") or [])) or "score"
+            return f"Accepted: Round 3 score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {passed}. Direction {confirmations.get('direction')}. Trend {confirmations.get('trend_bias')}. RR {rr_text}. Risk approved."
         if first_failure == "H4_HISTORY_INSUFFICIENT":
             return f"{symbol} rejected because H4 history was insufficient."
         if first_failure == "M15_HISTORY_INSUFFICIENT":
             return f"{symbol} rejected because M15 history was insufficient."
         if first_failure == "RR_BELOW_2_0":
             rr_text = f"{rr:.1f}" if rr is not None else "missing"
-            return f"{symbol} rejected because RR {rr_text} was below required 2.0."
-        return f"{symbol} is waiting for BOS and FVG confirmation before entry."
+            return f"Rejected: RR {rr_text} below required 2.0."
+        if first_failure == "SPREAD_TOO_HIGH":
+            return "Rejected: spread too high."
+        if first_failure == "RISK_REJECTED":
+            return "Rejected: risk validation failed."
+        if first_failure == "DIRECTION_BIAS_MISMATCH":
+            return f"Rejected: direction {confirmations.get('direction') or 'unclear'} does not match higher-timeframe bias."
+        if first_failure == "STRONG_CONFIRMATIONS_BELOW_2":
+            missing = self._join_labels(list(confirmations.get("missing_labels") or []))
+            return f"Waiting: strong confirmations {int(confirmations.get('strong_count') or 0)}/2. Missing {missing}." if missing else f"Waiting: strong confirmations {int(confirmations.get('strong_count') or 0)}/2."
+        if first_failure == "ROUND_3_SCORE_BELOW_THRESHOLD":
+            missing = self._join_labels(list(confirmations.get("missing_labels") or []))
+            return f"Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. Missing {missing}." if missing else f"Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}."
+        return f"Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}."
 
     def _demo_collection_tradeable(
         self,
@@ -1121,17 +1244,17 @@ class RealSignalEngineService:
         round3_audit: dict[str, Any],
     ) -> bool:
         rr = self._number(trade_plan.get("risk_reward"))
+        confirmations = self._round3_confirmation_summary(direction, smc, score)
         return (
             direction in {"BUY", "SELL"}
-            and int(score.get("confidence", 0)) >= self.demo_collection_confidence
             and not round3_audit.get("failed_rules")
-            and bool(smc.get("bos"))
-            and bool(smc.get("fvg"))
-            and bool(session.get("valid"))
             and self._sl_tp_valid(direction, trade_plan)
             and rr is not None
             and rr >= self.demo_collection_min_rr
             and bool(spread.get("acceptable"))
+            and confirmations["strong_count"] >= 2
+            and confirmations["score"] >= confirmations["required_score"]
+            and confirmations["direction_valid"]
         )
 
     def _demo_collection_missing_requirements(
@@ -1144,17 +1267,28 @@ class RealSignalEngineService:
         spread: dict[str, Any],
     ) -> list[dict[str, Any]]:
         missing: list[dict[str, Any]] = []
-        confidence_gap = max(0, self.demo_collection_confidence - int(score["confidence"]))
-        if confidence_gap > 0:
-            missing.append({"code": "CONFIDENCE_GAP", "label": f"Confidence needs +{confidence_gap} to reach 55.", "gap": confidence_gap})
         if direction not in {"BUY", "SELL"}:
             missing.append({"code": "DIRECTIONAL_BIAS_MISSING", "label": "DEMO_COLLECTION requires a BUY or SELL directional bias."})
-        if not smc.get("bos"):
-            missing.append({"code": "BOS_MISSING", "label": "Round 3 requires BOS before entry."})
-        if not smc.get("fvg"):
-            missing.append({"code": "FVG_MISSING", "label": "Round 3 requires FVG before entry."})
-        if not session.get("valid"):
-            missing.append({"code": "SESSION_INVALID", "label": "Round 3 requires London/NY session."})
+        confirmations = self._round3_confirmation_summary(direction, smc, score)
+        if confirmations["strong_count"] < 2:
+            missing.append({
+                "code": "CONFIRMATION_SCORE_LOW",
+                "label": f"Round 3 needs at least 2 strong confirmations; current strong count is {confirmations['strong_count']}/2.",
+                "confirmation_score": confirmations["score"],
+                "confirmation_required": confirmations["required_score"],
+                "strong_confirmation_count": confirmations["strong_count"],
+                "missing": confirmations["missing_labels"],
+            })
+        elif confirmations["score"] < confirmations["required_score"]:
+            missing.append({
+                "code": "CONFIRMATION_SCORE_LOW",
+                "label": f"Round 3 needs Score {confirmations['required_score']}/{confirmations['total']}; current Score is {confirmations['score']}/{confirmations['total']}.",
+                "confirmation_score": confirmations["score"],
+                "confirmation_required": confirmations["required_score"],
+                "missing": confirmations["missing_labels"],
+            })
+        if not confirmations["direction_valid"]:
+            missing.append({"code": "DIRECTION_BIAS_MISMATCH", "label": "Trade direction must match higher-timeframe bias."})
         rr = self._number(trade_plan.get("risk_reward"))
         if rr is None:
             missing.append({"code": "RR_MISSING", "label": "DEMO_COLLECTION requires RR from strategy plan or fallback demo risk model."})
@@ -1207,8 +1341,10 @@ class RealSignalEngineService:
         if signal_action in {"BUY", "SELL"}:
             return "READY_FOR_PREVIEW"
         confidence = int(score.get("confidence", 0))
-        if any(item.get("code") in {"BOS_MISSING", "FVG_MISSING", "SESSION_INVALID", "SPREAD_TOO_HIGH", "SL_TP_INVALID", "RR_MISSING", "RR_LOW"} for item in missing_requirements):
+        if any(item.get("code") in {"SPREAD_TOO_HIGH", "SL_TP_INVALID", "RR_MISSING", "RR_LOW", "DIRECTION_BIAS_MISMATCH"} for item in missing_requirements):
             return "REJECTED"
+        if any(item.get("code") == "CONFIRMATION_SCORE_LOW" for item in missing_requirements):
+            return "WAIT"
         if confidence >= threshold:
             return "WATCHLIST"
         return "WAIT"
@@ -1217,8 +1353,8 @@ class RealSignalEngineService:
         if profile == "DEMO_COLLECTION":
             hard_missing = [item for item in missing_requirements if not item.get("advisory")]
             if not hard_missing:
-                return ["Round 3 approved: BOS, FVG, London/NY session, valid H4/M15 history, SL/TP, and RR >= 2.0 passed. Liquidity sweep and trend alignment remain advisory confidence boosters."]
-            return ["Round 3 active: require BOS, FVG, London/NY session, valid H4/M15 history, valid SL/TP, and RR >= 2.0 before entry."]
+                return ["Round 3 approved: valid history, RR >= 2.0, spread, risk, direction bias, and edge score passed."]
+            return ["Round 3 active: require valid history, RR >= 2.0, spread, risk approval, direction bias, and enough edge score."]
         if profile != "AUTO_VALIDATION":
             return reasons
         if not missing_requirements:
@@ -1237,13 +1373,13 @@ class RealSignalEngineService:
             return "All preview requirements are currently satisfied."
         priority = [item["code"] for item in missing_requirements[:3]]
         names = {
-            "CONFIDENCE_GAP": f"confidence to improve by {max(0, threshold - int(score['confidence']))}",
+            "CONFIDENCE_GAP": "Score to reach 2 confirmations",
             "BOS_MISSING": "BOS confirmation",
             "LIQUIDITY_SWEEP_MISSING": "liquidity sweep",
             "RR_MISSING": "valid RR",
             "RR_LOW": "higher RR",
             "SPREAD_TOO_HIGH": "spread to narrow",
-            "SESSION_INVALID": "valid London/New York session",
+            "SESSION_INVALID": "London/New York session bonus",
             "SL_TP_INVALID": "valid SL/TP placement",
             "TREND_ALIGNMENT_MISSING": "M15/H1/H4 trend alignment",
             "DIRECTIONAL_BIAS_MISSING": "directional bias",

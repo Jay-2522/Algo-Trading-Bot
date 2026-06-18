@@ -43,6 +43,7 @@ const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const REASON_STORE_PATH = path.join(process.cwd(), "..", "data", "reason_panel", "reason_messages.json");
+const VALIDATION_ROUNDS_DIR = path.join(process.cwd(), "..", "data", "validation_rounds");
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
@@ -267,9 +268,98 @@ function isStrategyRulesQuestion(question: string): boolean {
   );
 }
 
+type ValidationRoundSnapshot = Record<string, unknown> & {
+  round_number?: number;
+  session_id?: string;
+  round_label?: string;
+};
+
+function roundNumberFromQuestion(question: string): number | null {
+  const match = question.match(/\bround\s*(\d+)\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+async function readValidationRoundsIndex(): Promise<Record<string, unknown>> {
+  try {
+    const raw = await readFile(path.join(VALIDATION_ROUNDS_DIR, "rounds_index.json"), "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function readValidationRoundBySession(sessionId: string): Promise<ValidationRoundSnapshot | null> {
+  if (!sessionId) return null;
+  const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  try {
+    const raw = await readFile(path.join(VALIDATION_ROUNDS_DIR, `round_${safe}.json`), "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as ValidationRoundSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readValidationRoundByNumber(roundNumber: number): Promise<ValidationRoundSnapshot | null> {
+  const index = await readValidationRoundsIndex();
+  const rounds = Array.isArray(index.rounds) ? index.rounds : [];
+  const entry = rounds.find((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && Number(item.round_number) === roundNumber));
+  return readValidationRoundBySession(text(entry?.session_id));
+}
+
+function roundSummaryLine(round: ValidationRoundSnapshot): string {
+  const number = numberValue(round.round_number) ?? numberValue((round.session as Record<string, unknown> | undefined)?.round_number);
+  const label = number ? `Round ${number}` : cleanText(round.round_label) || "That round";
+  const closed = numberValue(round.closed_trades) ?? 0;
+  const wins = numberValue(round.wins) ?? 0;
+  const losses = numberValue(round.losses) ?? 0;
+  const winRate = numberValue(round.win_rate) ?? (closed ? (wins / closed) * 100 : 0);
+  const pnl = numberValue(round.net_pnl) ?? 0;
+  const status = cleanText(round.status) || "archived";
+  return `${label} (${status}) used session ${cleanText(round.session_id)}: ${closed} closed, ${wins} wins, ${losses} losses, win rate ${winRate.toFixed(2)}%, net P&L ${formatMoney(pnl)}.`;
+}
+
+function roundBestSetup(round: ValidationRoundSnapshot): string {
+  const analytics = round.analytics_summary && typeof round.analytics_summary === "object" ? (round.analytics_summary as Record<string, unknown>) : {};
+  const best = cleanText(analytics.best_setup_type) || cleanText((round.session as Record<string, unknown> | undefined)?.best_setup_type);
+  return best && best !== "Unavailable" ? best : "No best setup is available yet.";
+}
+
+function roundLossReason(round: ValidationRoundSnapshot): string {
+  const rejectionReasons = Array.isArray(round.rejection_reasons) ? round.rejection_reasons.map(cleanText).filter(Boolean) : [];
+  const losses = Array.isArray(round.trades)
+    ? round.trades.filter((item) => item && typeof item === "object" && cleanText((item as Record<string, unknown>).result).toUpperCase() === "LOSS")
+    : [];
+  if (rejectionReasons.length) return `Main recorded blockers: ${rejectionReasons.slice(0, 3).join("; ")}.`;
+  if (losses.length) return `It lost money because ${losses.length} closed trades were losses; review the archived trade exit reasons for exact lifecycle causes.`;
+  return "No loss diagnostics are available for that round yet.";
+}
+
+async function answerRoundArchiveQuestion(question: string): Promise<string | null> {
+  const normalized = question.toLowerCase();
+  const roundNumber = roundNumberFromQuestion(question);
+  const asksRound = roundNumber !== null || /compare round|what changed between round|show round|what happened in round|why did round|best setup in round/i.test(question);
+  if (!asksRound) return null;
+  if (normalized.includes("compare") || normalized.includes("what changed")) {
+    const matches = [...question.matchAll(/\bround\s*(\d+)\b/gi)].map((match) => Number(match[1]));
+    if (matches.length < 2) return "Tell me which two rounds to compare, for example: compare Round 3 and Round 4.";
+    const rounds = (await Promise.all(matches.slice(0, 2).map(readValidationRoundByNumber))).filter(Boolean) as ValidationRoundSnapshot[];
+    if (rounds.length < 2) return "I could not find both archived rounds yet.";
+    return `${roundSummaryLine(rounds[0])} ${roundSummaryLine(rounds[1])} Key change: ${cleanText(rounds[0].round_label)} to ${cleanText(rounds[1].round_label)} used separate session IDs and separately archived strategy configs.`;
+  }
+  if (roundNumber === null) return null;
+  const round = await readValidationRoundByNumber(roundNumber);
+  if (!round) return `Round ${roundNumber} is not archived yet.`;
+  if (normalized.includes("win rate")) return `Round ${roundNumber} win rate was ${(numberValue(round.win_rate) ?? 0).toFixed(2)}%.`;
+  if (normalized.includes("best setup")) return `Round ${roundNumber} best setup: ${roundBestSetup(round)}`;
+  if (normalized.includes("why") && (normalized.includes("lose") || normalized.includes("lost") || normalized.includes("loss"))) return `Round ${roundNumber}: ${roundLossReason(round)} ${roundSummaryLine(round)}`;
+  return roundSummaryLine(round);
+}
+
 function answerStrategyRulesQuestion(question: string): string | null {
   if (!isStrategyRulesQuestion(question)) return null;
-  return "Round 3 requires H4 history, M15 history, London/NY session, BOS present, FVG present, and RR >= 2.0. Liquidity sweep and trend alignment are advisory only.";
+  return "Round 3 uses edge-score validation: H4/M15 history ready, RR >= 2.0, risk approved, clean spread, valid SL/TP, and higher-timeframe direction bias are safety gates. London/NY is advisory only. Entry is allowed when the score meets the threshold with at least two strong confirmations from BOS, FVG, liquidity sweep, trend alignment, pullback/retest, momentum, volatility, spread, and RR.";
 }
 
 function readPositionField(record: Record<string, unknown>, keys: string[]): string {
@@ -739,6 +829,10 @@ export async function POST(request: Request) {
     const question = typeof body.question === "string" ? body.question.trim() : "";
     if (!question) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
+    }
+    const roundArchiveAnswer = await answerRoundArchiveQuestion(question);
+    if (roundArchiveAnswer) {
+      return NextResponse.json({ reply: roundArchiveAnswer });
     }
     const strategyRulesAnswer = answerStrategyRulesQuestion(question);
     if (strategyRulesAnswer) {

@@ -76,10 +76,8 @@ const ForexSessionsMap = dynamic(() => import("./ForexSessionsMap").then((mod) =
   ssr: false,
 });
 const ROUND_2_NOTE = "Round 2: EURUSD-only validation. No manual intervention. Client dashboard shows Round 2 only.";
-const ROUND_3_NOTE = "Round 3: strict validation. Requires H4/M15 history, London/NY session, BOS, FVG, and RR >= 2.0.";
+const ROUND_3_NOTE = "Round 3: edge-score validation. Requires H4/M15 history, RR >= 2.0, risk approval, clean spread, higher-timeframe bias, and enough SMC confluence. London/NY is advisory only.";
 const ROUND_3_START_PAYLOAD: ApiRecord = {
-  confirm_fresh_start: true,
-  force_new_round: true,
   session_started_by: "user_click",
   strategy_profile: "DEMO_COLLECTION",
   allowed_symbols: ["EURUSD"],
@@ -423,7 +421,13 @@ function validationRoundLabel(data: DashboardData): string {
 }
 
 function isRound3ValidationSession(data: DashboardData): boolean {
-  return validationRoundLabel(data) === "ROUND_3";
+  return /^ROUND_\d+$/i.test(validationRoundLabel(data));
+}
+
+function validationRoundTitle(data: DashboardData): string {
+  const label = validationRoundLabel(data);
+  const match = label.match(/^ROUND_(\d+)$/i);
+  return match ? `Round ${match[1]} Results` : "Round Results";
 }
 
 function tradeSessionId(trade: ApiRecord): string {
@@ -459,7 +463,9 @@ function round2NetPnl(trades: ApiRecord[]): number {
 function round3OpenPositions(data: DashboardData, positions: ApiRecord[]): ApiRecord[] {
   const sessionId = validationSessionId(data);
   if (!sessionId || !isRound3ValidationSession(data)) return [];
-  return positions.filter((position) => readText(position, ["validation_session_id", "session_id"], "") === sessionId);
+  const scopedPositions = positions.filter((position) => readText(position, ["validation_session_id", "session_id"], "") === sessionId);
+  if (scopedPositions.length > 0) return scopedPositions;
+  return validationOpenPositions(data.openPositions).filter((position) => readText(position, ["validation_session_id", "session_id"], "") === sessionId);
 }
 
 function round3DashboardData(data: DashboardData): DashboardData {
@@ -1148,18 +1154,23 @@ export function DashboardShell(_: {
     try {
       const currentAutoValidation = data.autoValidation;
       const recoverable = readText(currentAutoValidation, ["recoverable_session"], "false") === "true";
+      const currentSession = asRecord(currentAutoValidation?.session);
+      const currentMode = readText(currentSession, ["status"], "");
+      const currentSessionId = readText(currentSession, ["session_id", "id", "validation_session_id"], "");
+      const currentClosed = readNumber(currentSession, ["current_closed_trades", "current_session_closed"], 0);
+      const currentOpen = readNumber(currentSession, ["current_open_trades", "current_session_open"], 0);
       const recoveredClosed = readNumber(currentAutoValidation, ["recovered_closed_trades"], 0);
       const recoveredOpen = readNumber(currentAutoValidation, ["recovered_open_trades"], 0);
-      const recoveredSessionId = readText(currentAutoValidation, ["recovered_session_id"], "");
       const startPayload: ApiRecord = action === "start" ? { ...ROUND_3_START_PAYLOAD } : {};
-      if (action === "start" && recoverable) {
-        const confirmed = window.confirm(
-          `Recoverable AUTO validation progress exists for ${recoveredSessionId || "the previous session"} (${recoveredClosed} closed, ${recoveredOpen} open). Start Round 3 as a fresh strict-validation session and reset current client validation counters?`,
-        );
-        if (!confirmed) {
-          setToast(null);
-          return;
-        }
+      const currentSessionStarted = Boolean(currentSessionId) && !["READY_ROUND_3", "COMPLETED", "STOPPED"].includes(currentMode);
+      if (action === "start" && (recoverable || currentSessionStarted || currentOpen > 0 || !["", "IDLE", "OFF", "READY", "READY_ROUND_3", "COMPLETED", "STOPPED"].includes(currentMode))) {
+        setToast(null);
+        const closed = currentClosed || recoveredClosed;
+        const open = currentOpen || recoveredOpen;
+        const message = closed > 0 || open > 0 ? `Round 3 already has ${closed} closed and ${open} open trades. Use Resume Validation to continue it.` : "Round 3 validation is already started. Use Resume Validation to continue it.";
+        setTradeError(message);
+        showToast("error", message);
+        return;
       }
       const result =
         action === "start"
@@ -1177,7 +1188,13 @@ export function DashboardShell(_: {
         return next;
       });
       setLastSuccessfulSync(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-      showToast("success", autoValidationSuccessMessage(action));
+      if (action === "start" && readText(result, ["status"], "") === "SESSION_ALREADY_STARTED") {
+        const message = readText(result, ["message"], "Round 3 validation is already started. Use Resume Validation to continue it.");
+        setTradeError(message);
+        showToast("error", message);
+      } else {
+        showToast("success", autoValidationSuccessMessage(action));
+      }
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "AUTO validation action failed.");
       showToast("error", autoValidationErrorMessage(action));
@@ -2275,12 +2292,12 @@ function TestEnvironmentView(props: {
   workingAction: string | null;
 }) {
   const round3Data = round3DashboardData(props.data);
-  const round3Trades = round3ClosedTrades(props.data, props.closedTrades);
-  const round3Positions = round3OpenPositions(props.data, props.scopedOpenPositions);
+  const round3Trades = round3ClosedTrades(round3Data, props.closedTrades);
+  const round3Positions = round3OpenPositions(round3Data, props.scopedOpenPositions);
   return (
     <div className="portal-test-shell">
       <TestEnvironmentTitleCard />
-      <RoundResultsCard data={round3Data} detailsTitle="Round 3 Trade Details" emptyAsZero filename="round-3-results.csv" title="Round 3 Results" trades={round3Trades} />
+      <RoundResultsCard data={round3Data} detailsTitle={`${validationRoundTitle(round3Data).replace(" Results", "")} Trade Details`} emptyAsZero filename={`${validationRoundTitle(round3Data).toLowerCase().replace(/\s+/g, "-")}.csv`} title={validationRoundTitle(round3Data)} trades={round3Trades} />
       <ClientDashboardView {...props} data={round3Data} closedTrades={round3Trades} loading={false} scopedOpenPositions={round3Positions} showHero={false} />
       <TradeIntelligenceSection closedTrades={round3Trades} reasonContexts={buildReasonContexts(round3Data)} />
     </div>
@@ -2640,7 +2657,11 @@ function ClientDashboardView({
   const sessionNote = readText(session, ["session_note"], "");
   const allowedSymbols = Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD";
   const sessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
+  const controlsDisabled = workingAction !== null;
+  const recoverableSession = readText(autoStatus, ["recoverable_session"], "false") === "true";
   const hasValidationSession = Boolean(sessionId || mode || closed > 0 || open > 0);
+  const currentSessionStarted = Boolean(sessionId) && !["READY_ROUND_3", "COMPLETED", "STOPPED"].includes(mode);
+  const startDisabled = controlsDisabled || currentSessionStarted || recoverableSession || open > 0 || !["", "IDLE", "OFF", "READY", "READY_ROUND_3", "COMPLETED", "STOPPED"].includes(mode);
   const botState = clientBotState(mode, actualClosedTrades, open, target, hasValidationSession);
   const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
   const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
@@ -2648,7 +2669,6 @@ function ClientDashboardView({
   const closeReports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const recentClosed = mergeClosedTrades(closedTrades, closeReports).slice(0, 5);
   const reasonContexts = useMemo(() => buildReasonContexts(data), [data]);
-  const controlsDisabled = workingAction !== null;
 
   return (
     <div className="premium-dashboard-grid">
@@ -2709,7 +2729,7 @@ function ClientDashboardView({
           <div className="premium-sub-card">
             <ClientSectionTitle eyebrow="Controls" title="Validation actions" />
             <div className="premium-control-grid mt-5">
-              <ClientButton disabled={controlsDisabled || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-start"} onClick={() => onAutoValidationAction("start")}>Start Validation</ClientButton>
+              <ClientButton disabled={startDisabled} loading={workingAction === "auto-validation-start"} onClick={() => onAutoValidationAction("start")}>Start Validation</ClientButton>
               <ClientButton disabled={controlsDisabled || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-resume"} onClick={() => onAutoValidationAction("resume")}>Resume Validation</ClientButton>
               <ClientButton disabled={controlsDisabled || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-pause"} onClick={() => onAutoValidationAction("pause")}>Pause</ClientButton>
               <ClientButton disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-stop"} onClick={() => onAutoValidationAction("stop")}>Stop</ClientButton>
@@ -2811,7 +2831,7 @@ function ClientOpenPositionsTable({ positions, managedPositions }: { positions: 
     <div className="premium-table-wrap">
       <table className="premium-table">
         <thead>
-          <tr>{["Symbol", "Direction", "Entry Price", "Current Price", "P&L", "Stop Loss", "Take Profit", "Trade Age", "Exit Status"].map((item) => <th className="px-4 py-2" key={item}>{item}</th>)}</tr>
+          <tr>{["Ticket", "Symbol", "Direction", "Entry Price", "Current Price", "P&L", "Stop Loss", "Take Profit", "Trade Age", "Exit Status"].map((item) => <th className="px-4 py-2" key={item}>{item}</th>)}</tr>
         </thead>
         <tbody>
           {positions.map((position, index) => {
@@ -2820,6 +2840,7 @@ function ClientOpenPositionsTable({ positions, managedPositions }: { positions: 
             const pnl = readNumber(position, ["floating_pnl", "profit"], 0);
             return (
               <tr key={`${ticket || index}-${index}`}>
+                <td>{ticket || "Unavailable"}</td>
                 <td>{friendlyText(position, ["symbol"], "Waiting for Data")}</td>
                 <td>{friendlyText(position, ["side", "type"], "Waiting")}</td>
                 <td>{marketNumber(readNumber(position, ["entry_price", "price_open"], Number.NaN))}</td>
@@ -2843,19 +2864,22 @@ function ClientClosedTradesTable({ trades }: { trades: ApiRecord[] }) {
     <div className="premium-table-wrap">
       <table className="premium-table">
         <thead>
-          <tr>{["Symbol", "Direction", "Result", "P&L", "Exit Reason", "Closed Time"].map((item) => <th className="px-4 py-2" key={item}>{item}</th>)}</tr>
+          <tr>{["Ticket", "Symbol", "Direction", "Result", "P&L", "Exit Reason", "Closed Time"].map((item) => <th className="px-4 py-2" key={item}>{item}</th>)}</tr>
         </thead>
         <tbody>
           {trades.map((trade, index) => {
             const pnl = readNumber(trade, ["net_pnl", "profit_loss", "realized_pnl", "pnl"], 0);
+            const ticket = readText(trade, ["mt5_ticket", "ticket", "trade_id"], "");
+            const result = friendlyText(trade, ["result"], pnl >= 0 ? "WIN" : "LOSS");
             return (
               <tr key={`${readText(trade, ["trade_id", "mt5_ticket", "ticket"], String(index))}-${index}`}>
+                <td>{ticket || "Unavailable"}</td>
                 <td>{friendlyText(trade, ["symbol"], "Waiting")}</td>
-                <td>{friendlyText(trade, ["side"], "Waiting")}</td>
-                <td>{friendlyText(trade, ["result"], "Closed")}</td>
+                <td>{friendlyText(trade, ["side", "direction", "action"], "Waiting")}</td>
+                <td>{result}</td>
                 <td className={pnlClass(pnl)}>{money(pnl)}</td>
                 <td>{friendlyText(trade, ["exit_reason"], "Closed")}</td>
-                <td>{formatTradeTime(readText(trade, ["closed_at", "close_time"], ""))}</td>
+                <td>{formatTradeTime(readText(trade, ["closed_at", "close_time", "generated_at"], ""))}</td>
               </tr>
             );
           })}
@@ -2866,24 +2890,9 @@ function ClientClosedTradesTable({ trades }: { trades: ApiRecord[] }) {
 }
 
 function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrades: ApiRecord[]; reasonContexts: ReasonContext[] }) {
-  const [persistedReasons, setPersistedReasons] = useState<ReasonMessage[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const records = await fetchReasonMessages();
-      if (!cancelled) setPersistedReasons(normalizeReasonMessages(records));
-    };
-    void load();
-    const interval = window.setInterval(load, 10000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  const reasonMessages = persistedReasons.length ? persistedReasons : normalizeReasonMessages(reasonContexts);
   const trades = closedTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
+  const hasRound3Statistics = trades.length > 0;
+  const reasonMessages = hasRound3Statistics ? normalizeReasonMessages(reasonContexts).filter(isRound3EdgeScoreReasonMessage) : [];
   const autopsyRows = trades.slice(0, 8);
   const lossPatterns = aggregatePatterns(trades.filter((trade) => tradePnl(trade) < 0).map(lossReasonForTrade));
   const rejectionBreakdown = aggregatePatterns(reasonMessages.filter((message) => message.status === "Rejected").map(rejectionReasonLabel));
@@ -2896,7 +2905,9 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
       <div className="grid gap-6">
         <div className="premium-sub-card p-5 lg:p-6">
           <ClientSectionTitle eyebrow="Research Dashboard" title="TRADE INTELLIGENCE" />
-          {autopsyRows.length ? (
+          {!hasRound3Statistics ? (
+            <EmptyState text="No Round 3 statistics available yet." />
+          ) : autopsyRows.length ? (
             <div className="premium-table-wrap mt-4">
               <table className="premium-table text-xs">
                 <thead>
@@ -2922,7 +2933,7 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
             <EmptyState text="—" />
           )}
 
-          <div className="mt-5 grid gap-5 xl:grid-cols-2">
+          {hasRound3Statistics ? <div className="mt-5 grid gap-5 xl:grid-cols-2">
             <div>
               <p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-300">Loss Pattern Analysis</p>
               <PatternBars patterns={lossPatterns} emptyText="—" />
@@ -2931,14 +2942,18 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
               <p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-300">Validation Rejection Breakdown</p>
               <PatternBars patterns={rejectionBreakdown} emptyText="—" />
             </div>
-          </div>
+          </div> : null}
 
-          <FeatureImpactTable rows={featureImpactRows} />
+          {hasRound3Statistics ? <FeatureImpactTable rows={featureImpactRows} /> : null}
         </div>
 
         <div className="premium-sub-card p-5 lg:p-6">
           <ClientSectionTitle eyebrow="Research Dashboard" title="STRATEGY CONCLUSIONS" />
-          <StrategyConclusionTable rows={conclusionRows} winningDnaRows={winningDnaRows} />
+          {hasRound3Statistics ? <StrategyConclusionTable rows={conclusionRows} winningDnaRows={winningDnaRows} /> : (
+            <div className="mt-4">
+              <EmptyState text="No Round 3 statistics available yet." />
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -3236,7 +3251,30 @@ function lossReasonForTrade(trade: ApiRecord): string {
 }
 
 function rejectionReasonLabel(message: ReasonMessage): string {
-  return cleanAnalysisText(message.rejection_reason || message.reason) || "Validation checks did not pass";
+  const text = cleanAnalysisText(message.rejection_reason || message.reason);
+  if (isLegacyStrategyDiagnostic(text)) return "";
+  return text || "Validation checks did not pass";
+}
+
+function isRound3EdgeScoreReasonMessage(message: ReasonMessage): boolean {
+  const combined = [
+    message.reason,
+    message.rejection_reason,
+    message.decision_reason,
+    message.validation_status,
+    String(message.confirmation_score ?? ""),
+    String(message.confirmation_required ?? ""),
+  ].join(" ");
+  if (isLegacyStrategyDiagnostic(combined)) return false;
+  return /score|confirmation|RR|risk|spread|history|edge|ROUND_3|BOS|FVG|liquidity|trend/i.test(combined);
+}
+
+function isLegacyStrategyDiagnostic(value: string): boolean {
+  const text = value.toLowerCase();
+  const mentionsLegacyConfidenceGate = text.includes("confidence") && (text.includes("75") || text.includes("threshold") || text.includes("needs"));
+  const mentionsHardSessionGate = text.includes("outside") && (text.includes("london") || text.includes("new york") || text.includes("ny"));
+  const mentionsOrderBlockGate = text.includes("order block") && text.includes("not confirmed");
+  return mentionsLegacyConfidenceGate || mentionsHardSessionGate || mentionsOrderBlockGate;
 }
 
 function aggregatePatterns(labels: string[]): IntelligencePattern[] {
@@ -3312,8 +3350,8 @@ function buildFeatureImpactRows(trades: ApiRecord[]): FeatureImpactRow[] {
     featureImpactRow(trades, "FVG", "Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing", "FVG absence is manageable.", "Require FVG confirmation."),
     featureImpactRow(trades, "Trend Alignment", "Aligned", (trade) => trendStateForTrade(trade) === "aligned", "Trend alignment helps.", "Trend alignment alone is not enough."),
     featureImpactRow(trades, "Trend Alignment", "Not Aligned", (trade) => trendStateForTrade(trade) === "not_aligned", "Misalignment is manageable.", "Avoid trend-misaligned entries."),
-    featureImpactRow(trades, "Session", "London/NY", (trade) => sessionStateForTrade(trade) === "london_ny", "London/NY has cleaner flow.", "London/NY needs cleaner filters."),
-    featureImpactRow(trades, "Session", "Outside London/NY", (trade) => sessionStateForTrade(trade) === "outside", "Outside session is manageable.", "Avoid outside-session entries."),
+    featureImpactRow(trades, "Session Bonus", "Active", (trade) => sessionStateForTrade(trade) === "london_ny", "Major-session bonus helps.", "Session bonus is not enough."),
+    featureImpactRow(trades, "Session Bonus", "Inactive", (trade) => sessionStateForTrade(trade) === "outside", "Off-session trades can still work.", "Require stronger confirmations."),
   ];
 }
 
@@ -3368,14 +3406,14 @@ function buildWinningDnaSummaryRows(trades: ApiRecord[]): WinningDnaSummaryRow[]
     ),
     winningDnaSummaryRow(
       trades,
-      "Trend + London/NY",
+      "Trend + Session Bonus",
       (trade) => trendStateForTrade(trade) === "aligned" && sessionStateForTrade(trade) === "london_ny",
-      "Works better inside major sessions.",
-      "Session helps, but confirmation is thin.",
+      "Trend improves with session bonus.",
+      "Session bonus needs stronger confirmation.",
     ),
     winningDnaSummaryRow(
       trades,
-      "BOS + FVG + London/NY",
+      "BOS + FVG + Session Bonus",
       (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "fvg_result", "fvg") === "present" && sessionStateForTrade(trade) === "london_ny",
       "Highest-quality confluence.",
       "Not enough clean winners yet.",
@@ -3455,7 +3493,7 @@ function strongestSetupObservation(trades: ApiRecord[], fallback?: FeatureImpact
   const best = candidates.sort((left, right) => Number.parseFloat(right.winRate) - Number.parseFloat(left.winRate))[0];
   if (best) return `Prioritize ${best.label}.`;
   if (fallback?.feature === "FVG" && fallback.state === "Present") return "Prioritize FVG + trend alignment.";
-  if (fallback?.feature === "Session" && fallback.state === "London/NY") return "Prioritize trend inside London/NY.";
+  if (fallback?.feature === "Session Bonus" && fallback.state === "Active") return "Prioritize trend with session bonus.";
   return fallback ? `Prioritize ${fallback.feature} ${fallback.state}.` : "—";
 }
 
@@ -3465,7 +3503,7 @@ function weakestSetupObservation(row?: FeatureImpactRow): string {
   if (row.feature === "BOS" && row.state === "Missing") return "Missing BOS confirmation is underperforming.";
   if (row.feature === "FVG" && row.state === "Missing") return "Missing FVG confirmation is underperforming.";
   if (row.feature === "Liquidity Sweep" && row.state === "Missing") return "Missing liquidity sweep is underperforming.";
-  if (row.feature === "Session" && row.state.includes("Outside")) return "Outside-session entries are underperforming.";
+  if (row.feature === "Session Bonus" && row.state.includes("Inactive")) return "Weak-score off-session trades are underperforming.";
   return `${row.feature} ${row.state} is underperforming.`;
 }
 
@@ -3475,7 +3513,7 @@ function lossContributorObservation(pattern?: IntelligencePattern): string {
   if (text.includes("bos")) return "Missing BOS confirmation drives most losses.";
   if (text.includes("liquidity") || text.includes("sweep")) return "Weak liquidity confirmation drives losses.";
   if (text.includes("fvg")) return "Missing FVG confirmation drives losses.";
-  if (text.includes("session")) return "Session weakness drives losses.";
+  if (text.includes("session")) return "Weak score without session bonus drives losses.";
   if (text.includes("time") || text.includes("stale")) return "Stale exits are costing continuation.";
   return `${pattern.label} drives most losses.`;
 }
@@ -3495,7 +3533,7 @@ function recommendedImprovementObservation(topLoss?: IntelligencePattern, topRej
   const lossText = topLoss?.label.toLowerCase() ?? "";
   if (lossText.includes("bos") || lossText.includes("fvg")) return "Require BOS + FVG before entry.";
   if (lossText.includes("liquidity") || lossText.includes("sweep")) return "Require liquidity sweep plus BOS.";
-  if (lossText.includes("session")) return "Restrict entries to London/NY.";
+  if (lossText.includes("session")) return "Require stronger confirmations without session bonus.";
   if (topRejection) return "Fix validation history before relaxing filters.";
   return "Require BOS + FVG before entry.";
 }
@@ -3505,24 +3543,24 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
   return [
     conclusionFromDna(
       "WINNING",
-      "BOS + FVG + London/NY",
+      "BOS + FVG + Session Bonus",
       strategyDnaRow(
         trades,
-        "BOS + FVG + London/NY",
+        "BOS + FVG + Session Bonus",
         (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "fvg_result", "fvg") === "present" && sessionStateForTrade(trade) === "london_ny",
-        "Best when structure, FVG, and session align.",
+        "Best when structure, FVG, and session bonus align.",
         "Promising setup, but edge is not proven yet.",
       ),
     ),
     conclusionFromDna(
       "WINNING",
-      "Trend + Session Alignment",
+      "Trend + Session Bonus",
       strategyDnaRow(
         trades,
-        "Trend + Session Alignment",
+        "Trend + Session Bonus",
         (trade) => trendStateForTrade(trade) === "aligned" && sessionStateForTrade(trade) === "london_ny",
-        "Trend plus session improves selectivity.",
-        "Trend and session need stronger confirmation.",
+        "Trend plus session bonus improves selectivity.",
+        "Trend and session bonus need stronger confirmation.",
       ),
     ),
     conclusionFromDna(
@@ -3564,8 +3602,8 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
     ),
     conclusionFromDna(
       "LOSS",
-      "Outside London/NY",
-      strategyDnaRow(trades, "Outside London/NY", (trade) => sessionStateForTrade(trade) === "outside", "Outside session is stable so far.", "Avoid outside-session trades."),
+      "No Session Bonus",
+      strategyDnaRow(trades, "No Session Bonus", (trade) => sessionStateForTrade(trade) === "outside", "Off-session score is stable so far.", "Require stronger confirmations."),
     ),
     conclusionFromDna(
       "LOSS",
@@ -3579,10 +3617,10 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
     rejectionConclusionRow("Risk rejection", findPattern(rejections, "Risk rejection", ["risk validation", "risk rejection"])),
     aiConclusionRow("Require BOS", "Require BOS before entry."),
     aiConclusionRow("Require FVG", "Require FVG before entry."),
-    aiConclusionRow("Session filter", "Trade only London/NY sessions."),
+    aiConclusionRow("Session filter", "Use London/NY as a score bonus, not a hard block."),
     aiConclusionRow("RR filter", "Require RR >= 2.0."),
     aiConclusionRow("History filter", "Reject weak history data before signal approval."),
-    aiConclusionRow("Advisory confidence", "Treat liquidity sweep and trend alignment as advisory confidence boosters."),
+    aiConclusionRow("Advisory confirmations", "Use liquidity sweep and trend alignment as score boosters."),
   ];
 }
 
@@ -3691,7 +3729,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Closed" | "Error";
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
@@ -3707,6 +3745,11 @@ type ReasonMessage = {
   history_ready?: boolean | null;
   groqGenerated?: boolean;
   source?: "groq" | "rule" | "execution";
+  ticket?: string;
+  decision_reason?: string;
+  confirmation_score?: number | null;
+  confirmation_required?: number | null;
+  confirmation_total?: number | null;
 };
 type ReasonContext = ApiRecord & { status: ReasonStatus; symbol: string; timestamp: string };
 
@@ -3781,6 +3824,7 @@ function validatorDiagnosticsFromRecord(record: ApiRecord, fallbackStatus: Reaso
     candles_required: firstReasonNumber(record, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]),
     data_source: firstReasonText(record, ["data_source", "dataSource", "source", "feed_source", "feedSource"]),
     rejection_reason: firstReasonText(record, ["rejection_reason", "rejectionReason", "final_rejection_reason", "finalRejectionReason"]) || fallbackReason,
+    decision_reason: firstReasonText(record, ["decision_reason", "decisionReason"]),
     timeframe: firstReasonText(record, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase(),
     validation_status: firstReasonText(record, ["validation_status", "validationStatus", "execution_status", "executionStatus", "status_level", "risk_status"]) || fallbackStatus,
     final_decision_reason: firstReasonText(record, ["final_decision_reason", "finalDecisionReason"]),
@@ -3789,6 +3833,11 @@ function validatorDiagnosticsFromRecord(record: ApiRecord, fallbackStatus: Reaso
     advisory_warnings: Array.isArray(record.advisory_warnings) ? record.advisory_warnings : [],
     RR: firstReasonNumber(record, ["RR", "risk_reward", "riskReward", "rr"]),
     required_rr: firstReasonNumber(record, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]),
+    confirmation_score: firstReasonNumber(record, ["confirmation_score", "confirmationScore"]),
+    confirmation_required: firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]),
+    confirmation_total: firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]),
+    confirmation_passed: Array.isArray(record.confirmation_passed) ? record.confirmation_passed : [],
+    confirmation_missing: Array.isArray(record.confirmation_missing) ? record.confirmation_missing : [],
     bos_status: firstReasonText(record, ["bos_status", "bosStatus"]),
     fvg_status: firstReasonText(record, ["fvg_status", "fvgStatus"]),
     h4_history_status: firstReasonText(record, ["h4_history_status", "h4HistoryStatus"]),
@@ -3797,16 +3846,191 @@ function validatorDiagnosticsFromRecord(record: ApiRecord, fallbackStatus: Reaso
   };
 }
 
+function reasonArrayText(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
+}
+
+function hasDecisionTicket(record: ApiRecord): boolean {
+  const ticket = readText(record, ["ticket", "mt5_ticket", "mt5Ticket", "order_ticket", "orderTicket"], "");
+  return Boolean(ticket && ticket !== "0");
+}
+
+function hasActualOrderExecution(record: ApiRecord): boolean {
+  if (!hasDecisionTicket(record)) return false;
+  const source = readText(record, ["source"], "").toLowerCase();
+  const status = readText(record, ["status", "execution_status", "executionStatus", "validation_status", "validationStatus"], "").toUpperCase();
+  return record.order_opened === true || record.mt5_order_sent === true || source === "execution" || status.includes("ORDER_SENT") || status.includes("DEMO_ORDER_SENT");
+}
+
+function hasHardDecisionFailure(record: ApiRecord): boolean {
+  const combined = [
+    readText(record, ["reason", "setupReason", "whatNeedsToHappenNext", "rejection_reason", "final_decision_reason"], ""),
+    readText(record, ["status", "execution_status", "executionStatus", "validation_status", "validationStatus", "risk_status", "riskStatus"], ""),
+    ...reasonArrayText(record.blockers),
+    ...reasonArrayText(record.failed_rules),
+  ].join(" ").toUpperCase();
+  return /RR[^A-Z0-9]*(?:BELOW|LOW|<)|RISK_REWARD[^A-Z0-9]*(?:BELOW|LOW)|SPREAD[^A-Z0-9]*(?:TOO_HIGH|TOO HIGH|HIGH|UNAVAILABLE)|RISK[^A-Z0-9]*(?:REJECT|DENIED|FAILED)|SL_TP|HISTORY[^A-Z0-9]*(?:INSUFFICIENT|UNAVAILABLE|MISSING)|INSUFFICIENT[^A-Z0-9]*(?:H4|M15|HISTORY)|DIRECTION[^A-Z0-9]*(?:MISMATCH|OPPOSITE|UNCLEAR)|GUARDED_SENDER_REJECTED|LIVE_ACCOUNT|DEMO_ACCOUNT|MT5_DISCONNECTED|HIGH_IMPACT_NEWS_BLACKOUT/.test(combined);
+}
+
+function hasWaitingDecisionState(record: ApiRecord): boolean {
+  const combined = [
+    readText(record, ["reason", "setupReason", "whatNeedsToHappenNext", "rejection_reason", "final_decision_reason"], ""),
+    readText(record, ["status", "execution_status", "executionStatus", "validation_status", "validationStatus", "risk_status", "riskStatus"], ""),
+    ...reasonArrayText(record.blockers),
+    ...reasonArrayText(record.failed_rules),
+  ].join(" ").toUpperCase();
+  return /CONFIRMATION_SCORE|CONFIDENCE|MISSING[^A-Z0-9]*(?:BOS|FVG|LIQUIDITY|TREND)|(?:BOS|FVG|LIQUIDITY|TREND)[^A-Z0-9]*(?:MISSING|WAITING|PENDING)|NO_READY_APPROVED_SIGNAL|SESSION[^A-Z0-9]*(?:OPENING|PENDING)/.test(combined);
+}
+
+function decisionStatusFromRecord(record: ApiRecord): ReasonStatus {
+  const statusText = readText(record, ["status", "execution_status", "executionStatus", "status_level", "risk_status", "validation_status"], "").toUpperCase();
+  const reportType = readText(record, ["report_type", "event_type", "event"], "").toUpperCase();
+  if (statusText.includes("CLOSED") || reportType.includes("VALIDATION_TRADE_CLOSED") || reportType.includes("ORDER_CLOSED_CONFIRMED")) return "Closed";
+  if (hasActualOrderExecution(record)) return "Accepted";
+  if (statusText.includes("ERROR") || statusText.includes("FAIL") || statusText.includes("DISCONNECT")) return "Error";
+  if (hasHardDecisionFailure(record)) return "Rejected";
+  if (hasWaitingDecisionState(record)) return "Waiting";
+  if (statusText.includes("BLOCK") || statusText.includes("REJECT") || statusText.includes("DENIED")) return "Rejected";
+  return "Waiting";
+}
+
+function decisionLabel(value: string): string {
+  const normalized = value.replace(/_/g, " ").toLowerCase();
+  if (normalized.includes("bos")) return "BOS";
+  if (normalized.includes("fvg")) return "FVG";
+  if (normalized.includes("liquidity")) return "Liquidity sweep";
+  if (normalized.includes("trend")) return "Trend alignment";
+  if (normalized.includes("h4")) return "H4 history";
+  if (normalized.includes("m15")) return "M15 history";
+  if (normalized.includes("session")) return "London/NY session bonus";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function uniqueDecisionLabels(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.map(decisionLabel).filter((value) => {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function decisionBool(record: ApiRecord, keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") return value;
+    const textValue = String(value ?? "").trim().toUpperCase();
+    if (["TRUE", "YES", "PRESENT", "AVAILABLE", "ALIGNED", "PASSED"].includes(textValue)) return true;
+    if (["FALSE", "NO", "MISSING", "INSUFFICIENT", "NOT_ALIGNED", "FAILED"].includes(textValue)) return false;
+  }
+  return null;
+}
+
+function confirmationLabels(record: ApiRecord, kind: "present" | "missing"): string[] {
+  const explicit = Array.isArray(record[kind === "present" ? "confirmation_passed" : "confirmation_missing"]) ? (record[kind === "present" ? "confirmation_passed" : "confirmation_missing"] as unknown[]).map(String) : [];
+  if (explicit.length) return uniqueDecisionLabels(explicit);
+  const states = [
+    ["BOS", decisionBool(record, ["bosConfirmed", "bos_status"])],
+    ["FVG", decisionBool(record, ["fvgConfirmed", "fvg_status"])],
+    ["Liquidity sweep", decisionBool(record, ["liquiditySweep", "liquidity_sweep_status"])],
+    ["Trend alignment", decisionBool(record, ["trendAlignment", "trend_alignment_status"])],
+  ] as const;
+  return states.filter(([, state]) => state === (kind === "present")).map(([label]) => label);
+}
+
+function canonicalRound3DecisionReason(record: ApiRecord, status: ReasonStatus): string | null {
+  const symbol = readText(record, ["symbol"], "EURUSD").toUpperCase();
+  const score = firstReasonNumber(record, ["confirmation_score", "confirmationScore"]);
+  const required = firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]) ?? 2;
+  const total = firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]) ?? 4;
+  const rr = firstReasonNumber(record, ["RR", "risk_reward", "riskReward", "rr"]);
+  const requiredRr = firstReasonNumber(record, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]) ?? 2;
+  const ticket = readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "");
+  const failedRules = Array.isArray(record.failed_rules) ? record.failed_rules.map(String) : [];
+  const blockers = cleanBlockers(record.blocked_reasons ?? record.blockers ?? record.failed_rules ?? record.missing_requirements);
+  const allBlockers = [...failedRules, ...blockers];
+  const h4 = decisionBool(record, ["h4HistoryValid", "h4_history_status"]);
+  const m15 = decisionBool(record, ["m15HistoryValid", "m15_history_status"]);
+  const session = decisionBool(record, ["sessionValid"]) ?? (failedRules.some((item) => /SESSION_LONDON_NY/i.test(item)) ? true : null);
+  if (status === "Rejected" && rr !== null && rr < requiredRr) return `RR ${rr} below required ${requiredRr}`;
+  if (status === "Rejected" && allBlockers.some((item) => /SPREAD/i.test(item))) return "Spread too high";
+  const present = uniqueDecisionLabels([h4 === true ? "H4 history" : "", m15 === true ? "M15 history" : "", session === true ? "London/NY session bonus" : "", ...confirmationLabels(record, "present")].filter(Boolean));
+  const missing = score !== null && score >= required ? [] : uniqueDecisionLabels([h4 === false ? "H4 history" : "", m15 === false ? "M15 history" : "", ...confirmationLabels(record, "missing")].filter(Boolean));
+  if (status === "Accepted") {
+    const lines = [`${symbol} trade opened successfully.`, `Score ${score ?? present.length}/${total}`];
+    for (const item of present.filter((label) => !/history|session/i.test(label))) lines.push(`${item} ✓`);
+    if (rr !== null) lines.push(`RR ${rr}`);
+    if (ticket) lines.push(`Ticket ${ticket}`);
+    return lines.join("\n");
+  }
+  if (score !== null || present.length || missing.length) {
+    const lines = [`Score ${score ?? present.length}/${required}`];
+    if (present.length) {
+      lines.push("Present:");
+      present.forEach((item) => lines.push(`- ${item} ✓`));
+    }
+    if (missing.length) {
+      lines.push("Missing:");
+      missing.forEach((item) => lines.push(`- ${item} ✗`));
+    }
+    return lines.join("\n");
+  }
+  return null;
+}
+
+function decisionReasonFromRecord(record: ApiRecord, status: ReasonStatus, fallback: string): string {
+  const rawReason = readText(record, ["setup_reason", "reason", "what_needs_to_happen_next"], fallback);
+  const decisionReason = readText(record, ["decision_reason", "decisionReason"], "");
+  const finalReason = readText(record, ["final_decision_reason", "finalDecisionReason"], "");
+  const canonical = canonicalRound3DecisionReason(record, status);
+  if (canonical) return canonical;
+  if (decisionReason && !isLegacyStrategyDiagnostic(decisionReason) && !/required round 3|rule failed/i.test(decisionReason)) return decisionReason;
+  if (status !== "Accepted" && /^accepted:/i.test(finalReason)) {
+    return `${readText(record, ["symbol"], "EURUSD").toUpperCase()} waiting: setup passed; waiting for MT5 order execution.`;
+  }
+  const score = firstReasonNumber(record, ["confirmation_score", "confirmationScore"]);
+  const required = firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]) ?? 2;
+  const total = firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]) ?? 4;
+  const rr = firstReasonNumber(record, ["RR", "risk_reward", "riskReward", "rr"]);
+  const requiredRr = firstReasonNumber(record, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]) ?? 2;
+  const missing = Array.isArray(record.confirmation_missing) ? record.confirmation_missing.map(String).filter(Boolean) : [];
+  const failedRules = Array.isArray(record.failed_rules) ? record.failed_rules.map(String) : [];
+  const blockers = cleanBlockers(record.blocked_reasons ?? record.blockers ?? record.failed_rules ?? record.missing_requirements);
+  const allBlockers = [...failedRules, ...blockers];
+  if (status === "Accepted" && hasDecisionTicket(record)) {
+    return `${readText(record, ["symbol"], "EURUSD").toUpperCase()} trade opened successfully. Ticket: ${readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "")}. Score ${score ?? 0}/${total}. RR ${rr ?? requiredRr}. Risk approved.`;
+  }
+  if (allBlockers.some((item) => /SPREAD/i.test(item))) return "Rejected: spread too high.";
+  if (allBlockers.some((item) => /RR|RISK_REWARD/i.test(item)) && rr !== null) return `Rejected: RR ${rr} below required ${requiredRr}.`;
+  if (allBlockers.some((item) => /CONFIRMATION_SCORE/i.test(item)) || (score !== null && score < required)) {
+    const missingText = missing.length ? ` Missing ${missing.join(", ")}.` : "";
+    return `${status === "Rejected" ? "Rejected" : "Waiting"}: Score ${score ?? 0}/${required}.${missingText}`;
+  }
+  if (status === "Waiting" && /^accepted\b/i.test(rawReason)) return fallback;
+  if (status === "Waiting" && /halted/i.test(rawReason) && /BOS|FVG|liquidity|trend|confirmation|confidence/i.test(rawReason)) {
+    return rawReason.replace(/\bTrade was halted due to\b/i, `${readText(record, ["symbol"], "EURUSD").toUpperCase()} waiting:`).replace(/\bTrade halted due to\b/i, `${readText(record, ["symbol"], "EURUSD").toUpperCase()} waiting:`);
+  }
+  return rawReason;
+}
+
 function buildReasonContexts(data: DashboardData): ReasonContext[] {
   const messages: ReasonContext[] = [];
   const niftyConnected = Boolean(data.niftyTick && numeric(data.niftyTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN));
+  const autoStatus = asRecord(data.autoValidation);
+  const historyWarmup = asRecord(autoStatus?.history_warmup ?? asRecord(autoStatus?.last_execution_decision)?.history_warmup);
+  const currentHistoryReady = historyWarmup?.history_ready === true || autoStatus?.history_ready === true;
   for (const signal of data.clientSignals) {
-    const statusText = readText(signal, ["execution_status", "status_level", "risk_status"], "Waiting").toUpperCase();
-    const status: ReasonStatus = statusText.includes("APPROVED") || statusText.includes("READY") ? "Accepted" : statusText.includes("BLOCK") || statusText.includes("REJECT") || statusText.includes("DENIED") ? "Rejected" : "Waiting";
+    const status = decisionStatusFromRecord(signal);
     const symbol = readText(signal, ["symbol"], "EURUSD").toUpperCase();
     if (symbol === "NIFTY50" && !niftyConnected) continue;
-    const reason = readText(signal, ["setup_reason", "reason", "what_needs_to_happen_next"], status === "Accepted" ? "Strategy and risk checks confirmed this setup." : "Waiting for strategy, market, and risk checks to confirm.");
+    const reason = decisionReasonFromRecord(signal, status, "Waiting for strategy, market, and risk checks to confirm.");
+    if (currentHistoryReady && /insufficient historical data|history.*insufficient|insufficient real candles/i.test(reason)) continue;
     const timestamp = readText(signal, ["timestamp", "created_at", "updated_at"], "1970-01-01T00:00:00.000Z");
+    const signalCandleSource = asRecord(signal.candle_source) ?? {};
+    const signalTimeframes = asRecord(signalCandleSource.timeframes) ?? {};
+    const signalH4Count = firstReasonNumber(signalCandleSource, ["signal_h4_count", "signalH4Count"]) ?? firstReasonNumber(asRecord(signalTimeframes.H4) ?? {}, ["returned_count", "returnedCount"]) ?? 0;
+    const signalM15Count = firstReasonNumber(signalCandleSource, ["signal_m15_count", "signalM15Count"]) ?? firstReasonNumber(asRecord(signalTimeframes.M15) ?? {}, ["returned_count", "returnedCount"]) ?? 0;
     messages.push({
       symbol,
       status,
@@ -3820,20 +4044,23 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
       bosConfirmed: signal.bos_confirmed ?? signal.bosConfirmed ?? asRecord(signal.strategy_components)?.bos,
       fvgConfirmed: signal.fvg_confirmed ?? signal.fvgConfirmed ?? asRecord(signal.strategy_components)?.fvg,
       sessionValid: signal.session_valid ?? signal.sessionValid ?? asRecord(signal.strategy_components)?.session_valid,
-      h4HistoryValid: readText(signal, ["h4_history_status"], "").toUpperCase() === "AVAILABLE",
-      m15HistoryValid: readText(signal, ["m15_history_status"], "").toUpperCase() === "AVAILABLE",
+      confirmation_score: numeric(signal, ["confirmation_score", "confirmationScore"], Number.NaN),
+      confirmation_required: numeric(signal, ["confirmation_required", "confirmationRequired"], 2),
+      confirmation_total: numeric(signal, ["confirmation_total", "confirmationTotal"], 4),
+      confirmation_passed: Array.isArray(signal.confirmation_passed) ? signal.confirmation_passed : [],
+      confirmation_missing: Array.isArray(signal.confirmation_missing) ? signal.confirmation_missing : [],
+      h4HistoryValid: currentHistoryReady || signalH4Count >= 300 || readText(signal, ["h4_history_status"], "").toUpperCase() === "AVAILABLE",
+      m15HistoryValid: currentHistoryReady || signalM15Count >= 300 || readText(signal, ["m15_history_status"], "").toUpperCase() === "AVAILABLE",
       orderBlockConfirmed: signal.order_block_confirmed ?? signal.orderBlockConfirmed,
       signalHash: readText(signal, ["signal_hash", "hash"], ""),
-      blockers: cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements),
+      blockers: cleanBlockers(signal.blocked_reasons ?? signal.failed_rules ?? signal.missing_requirements),
       setupReason: reason,
       niftyConnected,
       ...validatorDiagnosticsFromRecord(signal, status, reason),
     });
-    const blockers = cleanBlockers(signal.blocked_reasons ?? signal.missing_requirements);
+    const blockers = cleanBlockers(signal.blocked_reasons ?? signal.failed_rules ?? signal.missing_requirements);
     if (blockers.length && status === "Rejected") messages[messages.length - 1].blockers = blockers;
   }
-  const autoStatus = asRecord(data.autoValidation);
-  const historyWarmup = asRecord(autoStatus?.history_warmup ?? asRecord(autoStatus?.last_execution_decision)?.history_warmup);
   const historyDiagnostics = Array.isArray(historyWarmup?.diagnostics) ? (historyWarmup.diagnostics.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const pendingHistory = historyDiagnostics.find((item) => item.history_ready !== true);
   if (pendingHistory) {
@@ -3867,27 +4094,42 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
     const pnl = readNumber(report, ["net_pnl", "profit_loss", "pnl"], 0);
     const symbol = friendlyText(report, ["symbol"], "EURUSD").toUpperCase();
     if (symbol === "NIFTY50" && !niftyConnected) return;
+    const ticket = readText(report, ["mt5_ticket", "ticket"], "");
+    const side = friendlyText(report, ["side", "direction"], "TRADE").toUpperCase();
+    const result = friendlyText(report, ["result"], pnl >= 0 ? "WIN" : "LOSS").toUpperCase();
+    const exitReason = friendlyText(report, ["exit_reason", "reason", "close_reason"], "MT5 history confirmed close");
+    const closedAt = readText(report, ["closed_at", "generated_at", "timestamp"], "1970-01-01T00:00:00.000Z");
+    const closeReason = `${symbol} ${side} closed. Ticket: ${ticket || "Unavailable"}. Result: ${result}. P&L: ${money(pnl)}. Exit: ${exitReason}. Closed: ${formatTradeTime(closedAt)}.`;
+    const status: ReasonStatus = ticket ? "Closed" : "Waiting";
     messages.push({
-      ticket: readText(report, ["mt5_ticket", "ticket"], String(index)),
-      reason: friendlyText(report, ["exit_reason", "reason", "close_reason"], pnl >= 0 ? "Trade closed with accepted validation outcome." : "Trade closed after validation/risk management."),
-      status: pnl >= 0 ? "Accepted" : "Rejected",
+      id: `reason-${symbol}-closed-${ticket || readText(report, ["trade_id"], String(index))}`,
+      ticket: ticket || String(index),
+      reason: closeReason,
+      status,
       symbol,
-      timestamp: readText(report, ["closed_at", "generated_at", "timestamp"], "1970-01-01T00:00:00.000Z"),
+      timestamp: closedAt,
       pnl,
       niftyConnected,
-      ...validatorDiagnosticsFromRecord(report, pnl >= 0 ? "Accepted" : "Rejected", friendlyText(report, ["exit_reason", "reason", "close_reason"], "")),
+      ...validatorDiagnosticsFromRecord(report, status, exitReason),
     });
   });
   return messages;
 }
 
 function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
-  return records
+  const normalized = records
     .map((record): ReasonMessage => {
       const sourceText = readText(record, ["source"], "");
       const source: ReasonMessage["source"] = sourceText === "groq" ? "groq" : sourceText === "execution" ? "execution" : "rule";
+      const status = decisionStatusFromRecord({ ...record, source });
+      const reason = decisionReasonFromRecord(record, status, readText(record, ["reason"], ""));
+      const symbol = readText(record, ["symbol"], "EURUSD").toUpperCase();
+      const timestamp = readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z");
+      const ticket = readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "");
+      const rawId = readText(record, ["id"], "");
+      const id = rawId || (ticket ? `reason-${symbol}-${status}-ticket-${ticket}` : `reason-${symbol}-${status}-${timestamp}-${reason.slice(0, 48)}`);
       return {
-        id: readText(record, ["id"], ""),
+        id,
         candles_loaded: (() => {
           const value = numeric(record, ["candles_loaded"], Number.NaN);
           return Number.isFinite(value) ? value : null;
@@ -3897,11 +4139,16 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
           return Number.isFinite(value) ? value : null;
         })(),
         data_source: readText(record, ["data_source"], ""),
-        reason: readText(record, ["reason"], ""),
+        reason,
         rejection_reason: readText(record, ["rejection_reason"], ""),
-        status: (["Accepted", "Rejected", "Waiting", "Error"].includes(readText(record, ["status"], "")) ? readText(record, ["status"], "") : "Waiting") as ReasonStatus,
-        symbol: readText(record, ["symbol"], "EURUSD"),
-        timestamp: readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z"),
+        decision_reason: readText(record, ["decision_reason"], ""),
+        status,
+        symbol,
+        timestamp,
+        ticket,
+        confirmation_score: firstReasonNumber(record, ["confirmation_score", "confirmationScore"]),
+        confirmation_required: firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]),
+        confirmation_total: firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]),
         timeframe: readText(record, ["timeframe"], ""),
         validation_status: readText(record, ["validation_status"], ""),
         history_ready: record.history_ready === true ? true : record.history_ready === false ? false : null,
@@ -3910,6 +4157,29 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
       };
     })
     .filter((message) => message.id && message.reason);
+  const seen = new Set<string>();
+  return normalized
+    .filter((message) => {
+      const key = message.id || `${message.symbol}|${message.status}|${message.reason}|${message.timestamp}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => {
+      const timestampDelta = new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime();
+      if (Number.isFinite(timestampDelta) && timestampDelta !== 0) return timestampDelta;
+      return left.id.localeCompare(right.id);
+    });
+}
+
+function reasonMessagesSignature(messages: ReasonMessage[]): string {
+  return messages
+    .map((message) => [message.id, message.symbol, message.status, message.timestamp, message.reason, message.ticket || "", message.validation_status || ""].join("\u001f"))
+    .join("\u001e");
+}
+
+function setReasonMessagesIfChanged(setter: React.Dispatch<React.SetStateAction<ReasonMessage[]>>, next: ReasonMessage[]): void {
+  setter((current) => (reasonMessagesSignature(current) === reasonMessagesSignature(next) ? current : next));
 }
 
 function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: ReasonContext[]; refreshToken?: number }) {
@@ -3918,10 +4188,10 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
     let cancelled = false;
     const load = async () => {
       const records = await fetchReasonMessages();
-      if (!cancelled) setStoredMessages(normalizeReasonMessages(records));
+      if (!cancelled) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
     };
     void load();
-    const interval = window.setInterval(load, 4000);
+    const interval = window.setInterval(load, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -3932,16 +4202,16 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
     if (!contexts.length) return;
     let cancelled = false;
     void syncReasonMessages(contexts).then((records) => {
-      if (!cancelled && records.length) setStoredMessages(normalizeReasonMessages(records));
+      if (!cancelled && records.length) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
     });
     return () => {
       cancelled = true;
     };
-  }, [contextKey, contexts]);
+  }, [contextKey]);
   const currentHistoryWaiting = contexts.some((context) => context.history_ready === false || readText(context, ["validation_status"], "").toUpperCase() === "WAITING_FOR_MT5_HISTORY_SYNC");
   const visibleMessages = currentHistoryWaiting
     ? storedMessages
-    : storedMessages.filter((message) => !/history sync/i.test(message.reason) && message.validation_status !== "WAITING_FOR_MT5_HISTORY_SYNC");
+    : storedMessages.filter((message) => !/history sync|insufficient historical data|history.*insufficient|insufficient real candles/i.test(message.reason) && message.validation_status !== "WAITING_FOR_MT5_HISTORY_SYNC");
   return (
     <div className="premium-panel">
       <div className="flex items-start justify-between gap-3">
@@ -4163,19 +4433,18 @@ function AutoValidationPanel({
   const winRate = actualClosedTrades ? (wins / actualClosedTrades) * 100 : 0;
   const netPnl = readNumber(session, ["net_pnl"], 0);
   const reasonMessages = buildReasonContexts({ ...emptyData, autoValidation: status });
+  const currentOpenTrades = readNumber(session, ["current_open_trades"], 0);
+  const currentSessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
+  const currentSessionStarted = Boolean(currentSessionId) && !["READY_ROUND_3", "COMPLETED", "STOPPED"].includes(mode);
+  const startDisabled = workingAction !== null || currentSessionStarted || recoverableSession || currentOpenTrades > 0 || !["", "IDLE", "OFF", "READY", "READY_ROUND_3", "COMPLETED", "STOPPED"].includes(mode);
   return (
     <section className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <SectionTitle eyebrow="AUTO Demo Validation" title={`${TARGET_TRADES}-Trade Bot Test: ${mode === "IDLE" ? "OFF" : mode}`} />
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction(recoverableSession ? "resume" : "start")} type="button">
-            {recoverableSession ? "Resume Validation" : `Start ${TARGET_TRADES}-Trade Validation`}
+          <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={startDisabled} onClick={() => onAction("start")} type="button">
+            Start {TARGET_TRADES}-Trade Validation
           </button>
-          {recoverableSession ? (
-            <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("start")} type="button">
-              Start Fresh
-            </button>
-          ) : null}
           <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("pause")} type="button">
             Pause
           </button>

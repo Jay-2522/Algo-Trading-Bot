@@ -1593,6 +1593,7 @@ select.calc-field {
   font-family: var(--font-body), sans-serif;
   font-size: 13px;
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .reason-message time {
@@ -1625,6 +1626,11 @@ select.calc-field {
 .reason-status.waiting {
   background: rgba(37, 94, 220, 0.14);
   color: var(--accent-primary);
+}
+
+.reason-status.closed {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
 }
 
 .test-results-empty {

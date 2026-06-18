@@ -476,7 +476,7 @@ class VantageXAUUSDDemoValidationService:
             elif current_direction not in {"BUY", "SELL"}:
                 blockers.append("SIGNAL_NO_LONGER_HAS_DIRECTION")
             if strategy_profile == "DEMO_COLLECTION":
-                if not self._demo_collection_payload_still_executable(payload, side):
+                if not self._demo_collection_payload_still_executable(payload, side, current_signal):
                     blockers.append("DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE")
             else:
                 if current_signal.get("execution_status") != "READY_FOR_PREVIEW":
@@ -491,10 +491,8 @@ class VantageXAUUSDDemoValidationService:
                 if self._float_or_none(current_signal.get("confidence")) is not None and self._float_or_none(current_signal.get("confidence")) < 65:
                     blockers.append("CONFIDENCE_BELOW_AUTO_VALIDATION_MINIMUM")
             if strategy_profile == "DEMO_COLLECTION":
-                if self._float_or_none(current_signal.get("risk_reward")) is not None and self._float_or_none(current_signal.get("risk_reward")) < 1.2:
+                if self._float_or_none(current_signal.get("risk_reward")) is not None and self._float_or_none(current_signal.get("risk_reward")) < 2.0:
                     blockers.append("RR_BELOW_DEMO_COLLECTION_MINIMUM")
-                if self._float_or_none(current_signal.get("confidence")) is not None and self._float_or_none(current_signal.get("confidence")) < 55:
-                    blockers.append("CONFIDENCE_BELOW_DEMO_COLLECTION_MINIMUM")
 
         return {
             "status": "PASSED" if not blockers else "BLOCKED",
@@ -514,7 +512,7 @@ class VantageXAUUSDDemoValidationService:
             else None,
         }
 
-    def _demo_collection_payload_still_executable(self, payload: dict[str, Any], side: str) -> bool:
+    def _demo_collection_payload_still_executable(self, payload: dict[str, Any], side: str, current_signal: dict[str, Any] | None = None) -> bool:
         entry = self._float_or_none(payload.get("entry_price") or payload.get("entry"))
         if entry is None:
             symbol = str(payload.get("symbol") or self.symbol).strip().upper()
@@ -523,12 +521,35 @@ class VantageXAUUSDDemoValidationService:
         stop_loss = self._float_or_none(payload.get("stop_loss") or payload.get("sl"))
         take_profit = self._float_or_none(payload.get("take_profit") or payload.get("tp"))
         rr = self._float_or_none(payload.get("risk_reward_ratio") or payload.get("risk_reward") or payload.get("rr"))
-        confidence = self._float_or_none(payload.get("signal_confidence") or payload.get("confidence"))
+        score = self._demo_collection_confirmation_score(payload, current_signal)
         if side == "BUY" and not (entry and stop_loss and take_profit and stop_loss < entry < take_profit):
             return False
         if side == "SELL" and not (entry and stop_loss and take_profit and take_profit < entry < stop_loss):
             return False
-        return bool(rr is not None and rr >= 1.2 and confidence is not None and confidence >= 55)
+        return bool(rr is not None and rr >= 2.0 and score >= 2)
+
+    def _demo_collection_confirmation_score(self, payload: dict[str, Any], current_signal: dict[str, Any] | None = None) -> int:
+        metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        explicit = self._float_or_none(round3.get("confirmation_score") or payload.get("confirmation_score"))
+        if explicit is not None:
+            return int(explicit)
+        if isinstance(current_signal, dict):
+            current_round3 = current_signal.get("round3_diagnostics") if isinstance(current_signal.get("round3_diagnostics"), dict) else {}
+            explicit = self._float_or_none(current_round3.get("confirmation_score") or current_signal.get("confirmation_score"))
+            if explicit is not None:
+                return int(explicit)
+            components = current_signal.get("strategy_components") if isinstance(current_signal.get("strategy_components"), dict) else {}
+            trend = current_signal.get("market_structure_state") if isinstance(current_signal.get("market_structure_state"), dict) else {}
+            return sum(
+                [
+                    1 if components.get("bos") else 0,
+                    1 if components.get("fvg") else 0,
+                    1 if components.get("liquidity_sweep") else 0,
+                    1 if str(trend.get("trend_bias") or "").upper() in {"BUY", "SELL"} else 0,
+                ]
+            )
+        return 0
 
     def _rejection_diagnostics(self, payload: dict[str, Any], blockers: list[str], readiness: dict[str, Any], reason: str) -> dict[str, Any]:
         account = readiness.get("account") if isinstance(readiness.get("account"), dict) else {}

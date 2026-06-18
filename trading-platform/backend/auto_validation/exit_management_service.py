@@ -193,12 +193,11 @@ class AutoValidationExitManagementService:
         if not symbol or side not in {"BUY", "SELL"} or entry <= 0 or current <= 0 or volume <= 0:
             return {**base, "action": "HOLD", "exit_reason": "INSUFFICIENT_POSITION_DATA"}
 
-        if signal_side in {"BUY", "SELL"} and signal_side != side:
+        structure_invalidated = signal_side in {"BUY", "SELL"} and signal_side != side and signal_no_longer_valid
+        if structure_invalidated and age_minutes >= max(10.0, soft_adverse_minutes / 2):
             return {**base, "action": "CLOSE", "exit_reason": "SIGNAL_REVERSAL_EXIT", "close_volume": volume}
-        if age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and (confidence_dropped or signal_no_longer_valid):
+        if age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and structure_invalidated and r_multiple <= -0.35:
             return {**base, "action": "CLOSE", "exit_reason": "SOFT_ADVERSE_EXIT", "close_volume": volume}
-        if confidence_dropped:
-            return {**base, "action": "CLOSE", "exit_reason": "CONFIDENCE_DROP_EXIT", "close_volume": volume}
         if age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
             return {**base, "action": "CLOSE", "exit_reason": "TIME_STALE_EXIT", "close_volume": volume}
 

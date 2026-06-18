@@ -31,27 +31,40 @@ type ReasonMessage = {
   timeframe?: string;
   validation_status?: string;
   final_decision_reason?: string;
+  decision_reason?: string;
   passed_rules?: string[];
   failed_rules?: string[];
   advisory_warnings?: string[];
   RR?: number | null;
   required_rr?: number | null;
+  confirmation_score?: number | null;
+  confirmation_required?: number | null;
+  confirmation_total?: number | null;
+  confirmation_passed?: string[];
+  confirmation_missing?: string[];
   bos_status?: string;
   fvg_status?: string;
   h4_history_status?: string;
   m15_history_status?: string;
+  liquidity_sweep_status?: string;
+  trend_alignment_status?: string;
   history_ready?: boolean | null;
   requested_symbol?: string;
   resolved_symbol?: string;
   mt5_last_error?: string;
   process_id?: string;
   connection_id?: string;
+  validation_session_id?: string;
+  round_id?: string;
+  round_number?: number | null;
 };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const STORE_PATH = path.join(process.cwd(), "..", "data", "reason_panel", "reason_messages.json");
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+const MAX_STORED_REASONS = 1000;
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 const NOISY_PATTERNS = [
   /indian market integration pending/i,
@@ -125,16 +138,122 @@ function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function firstKnownBoolean(record: ApiRecord | ReasonMessage, keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = booleanValue((record as ApiRecord)[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function includesText(values: unknown, pattern: RegExp): boolean {
+  return arrayText(values).some((value) => pattern.test(value));
+}
+
+function round3Label(value: string): string {
+  const normalized = value.replace(/_/g, " ").trim().toLowerCase();
+  if (normalized.includes("bos")) return "BOS";
+  if (normalized.includes("fvg")) return "FVG";
+  if (normalized.includes("liquidity")) return "Liquidity sweep";
+  if (normalized.includes("trend")) return "Trend alignment";
+  if (normalized.includes("h4")) return "H4 history";
+  if (normalized.includes("m15")) return "M15 history";
+  if (normalized.includes("session")) return "London/NY session";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function uniqueLabels(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.map(round3Label).filter((value) => {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function round3ConfirmationLabels(record: ApiRecord | ReasonMessage, kind: "present" | "missing"): string[] {
+  const explicit = uniqueLabels(arrayText((record as ApiRecord)[kind === "present" ? "confirmation_passed" : "confirmation_missing"]));
+  if (explicit.length) return explicit;
+  const states = [
+    ["BOS", firstKnownBoolean(record, ["bosConfirmed"]) ?? (text((record as ApiRecord).bos_status).toUpperCase() === "PRESENT" ? true : text((record as ApiRecord).bos_status).toUpperCase() === "MISSING" ? false : null)],
+    ["FVG", firstKnownBoolean(record, ["fvgConfirmed"]) ?? (text((record as ApiRecord).fvg_status).toUpperCase() === "PRESENT" ? true : text((record as ApiRecord).fvg_status).toUpperCase() === "MISSING" ? false : null)],
+    ["Liquidity sweep", firstKnownBoolean(record, ["liquiditySweep"]) ?? (text((record as ApiRecord).liquidity_sweep_status).toUpperCase() === "PRESENT" ? true : text((record as ApiRecord).liquidity_sweep_status).toUpperCase() === "MISSING" ? false : null)],
+    ["Trend alignment", firstKnownBoolean(record, ["trendAlignment"]) ?? (text((record as ApiRecord).trend_alignment_status).toUpperCase() === "ALIGNED" ? true : text((record as ApiRecord).trend_alignment_status).toUpperCase() === "NOT_ALIGNED" ? false : null)],
+  ] as const;
+  return states.filter(([, state]) => state === (kind === "present")).map(([label]) => label);
+}
+
+function round3DecisionBlock(record: ApiRecord | ReasonMessage, status: ReasonStatus): string | null {
+  const symbol = text((record as ApiRecord).symbol).toUpperCase() || "This setup";
+  const score = firstNumber(record as ApiRecord, ["confirmation_score", "confirmationScore"]);
+  const required = firstNumber(record as ApiRecord, ["confirmation_required", "confirmationRequired"]) ?? 2;
+  const total = firstNumber(record as ApiRecord, ["confirmation_total", "confirmationTotal"]) ?? 4;
+  const rr = firstNumber(record as ApiRecord, ["RR", "risk_reward", "riskReward", "rr"]);
+  const requiredRr = firstNumber(record as ApiRecord, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]) ?? 2;
+  const ticket = firstText(record as ApiRecord, ["ticket", "mt5_ticket", "mt5Ticket"]);
+  const failedRules = arrayText((record as ApiRecord).failed_rules);
+  const blockers = [...arrayText((record as ApiRecord).blockers), ...failedRules];
+  const h4 = firstKnownBoolean(record, ["h4HistoryValid"]) ?? (text((record as ApiRecord).h4_history_status).toUpperCase() === "AVAILABLE" ? true : text((record as ApiRecord).h4_history_status).toUpperCase() === "INSUFFICIENT" ? false : null);
+  const m15 = firstKnownBoolean(record, ["m15HistoryValid"]) ?? (text((record as ApiRecord).m15_history_status).toUpperCase() === "AVAILABLE" ? true : text((record as ApiRecord).m15_history_status).toUpperCase() === "INSUFFICIENT" ? false : null);
+  const session = firstKnownBoolean(record, ["sessionValid"]) ?? (includesText((record as ApiRecord).passed_rules, /SESSION_LONDON_NY/i) ? true : includesText(failedRules, /SESSION_OUTSIDE/i) ? false : null);
+
+  if (status === "Rejected" && rr !== null && rr < requiredRr) return `RR ${formatNumber(rr)} below required ${formatNumber(requiredRr)}`;
+  if (status === "Rejected" && blockers.some((item) => /SPREAD/i.test(item))) return "Spread too high";
+  if (status === "Rejected" && session === false) return "Outside London/NY session";
+
+  const present = [
+    h4 === true ? "H4 history" : "",
+    m15 === true ? "M15 history" : "",
+    session === true ? "London/NY session" : "",
+    ...round3ConfirmationLabels(record, "present"),
+  ].filter(Boolean);
+  const missing = score !== null && score >= required ? [] : [
+    h4 === false ? "H4 history" : "",
+    m15 === false ? "M15 history" : "",
+    session === false ? "London/NY session" : "",
+    ...round3ConfirmationLabels(record, "missing"),
+  ].filter(Boolean);
+
+  if (status === "Accepted") {
+    const lines = [`${symbol} trade opened successfully.`, `Score ${formatNumber(score ?? present.length)}/${formatNumber(total)}`];
+    for (const item of uniqueLabels(present).filter((item) => !/history|session/i.test(item))) lines.push(`${item} ✓`);
+    if (rr !== null) lines.push(`RR ${formatNumber(rr)}`);
+    if (ticket) lines.push(`Ticket ${ticket}`);
+    return lines.join("\n");
+  }
+
+  if (score !== null || present.length || missing.length) {
+    const lines = [`Score ${formatNumber(score ?? present.length)}/${formatNumber(required)}`];
+    if (present.length) {
+      lines.push("Present:");
+      for (const item of uniqueLabels(present)) lines.push(`- ${item} ✓`);
+    }
+    if (missing.length) {
+      lines.push("Missing:");
+      for (const item of uniqueLabels(missing)) lines.push(`- ${item} ✗`);
+    }
+    return lines.join("\n");
+  }
+  return null;
+}
+
 function stableId(context: ApiRecord): string {
+  const existingId = text(context.id);
+  if (existingId) return existingId;
+  const symbol = text(context.symbol).toUpperCase();
+  const status = normalizedDecisionStatus(context);
+  const timestamp = text(context.timestamp);
+  const ticket = firstText(context, ["ticket", "mt5_ticket", "mt5Ticket", "order_ticket", "orderTicket"]);
+  if (ticket) return ["reason", symbol, status, "ticket", ticket].filter(Boolean).join("-");
+  const signalHash = text(context.signalHash || context.signal_hash);
+  if (signalHash) return ["reason", symbol, status, "signal", signalHash, timestamp].filter(Boolean).join("-");
   const raw = JSON.stringify({
-    symbol: text(context.symbol).toUpperCase(),
-    status: normalizeStatus(context.status),
-    timestamp: text(context.timestamp),
-    reason: text(context.reason || context.setupReason),
-    signalHash: text(context.signalHash),
+    symbol,
+    status,
+    timestamp,
+    reason: text(context.reason || context.setupReason || context.whatNeedsToHappenNext),
     timeframe: text(context.timeframe),
-    candlesLoaded: text(context.candles_loaded),
-    rejectionReason: text(context.rejection_reason),
   });
   let hash = 0;
   for (let index = 0; index < raw.length; index += 1) {
@@ -151,6 +270,62 @@ function normalizeStatus(value: unknown): ReasonStatus {
   return "Waiting";
 }
 
+function arrayText(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(text).filter(Boolean) : [];
+}
+
+function hasExecutionTicket(record: ApiRecord | ReasonMessage): boolean {
+  const ticket = firstText(record as ApiRecord, ["ticket", "mt5_ticket", "mt5Ticket", "order_ticket", "orderTicket"]);
+  return Boolean(ticket && ticket !== "0");
+}
+
+function isExecutionAccepted(record: ApiRecord | ReasonMessage): boolean {
+  if (!hasExecutionTicket(record)) return false;
+  const source = text((record as ReasonMessage).source).toLowerCase();
+  const status = firstText(record as ApiRecord, ["status", "execution_status", "executionStatus", "validation_status", "validationStatus"]).toUpperCase();
+  return (
+    (record as ReasonMessage).order_opened === true ||
+    (record as ApiRecord).mt5_order_sent === true ||
+    source === "execution" ||
+    status.includes("ORDER_SENT") ||
+    status.includes("DEMO_ORDER_SENT")
+  );
+}
+
+function hasHardRejection(record: ApiRecord | ReasonMessage): boolean {
+  const combined = [
+    firstText(record as ApiRecord, ["reason", "setupReason", "whatNeedsToHappenNext", "rejection_reason", "final_decision_reason"]),
+    firstText(record as ApiRecord, ["status", "execution_status", "executionStatus", "validation_status", "validationStatus", "risk_status", "riskStatus"]),
+    ...arrayText((record as ApiRecord).blockers),
+    ...arrayText((record as ApiRecord).failed_rules),
+  ]
+    .join(" ")
+    .toUpperCase();
+  return /RR[^A-Z0-9]*(?:BELOW|LOW|<)|RISK_REWARD[^A-Z0-9]*(?:BELOW|LOW)|SPREAD[^A-Z0-9]*(?:TOO_HIGH|TOO HIGH|HIGH|UNAVAILABLE)|RISK[^A-Z0-9]*(?:REJECT|DENIED|FAILED)|SL_TP|HISTORY[^A-Z0-9]*(?:INSUFFICIENT|UNAVAILABLE|MISSING)|INSUFFICIENT[^A-Z0-9]*(?:H4|M15|HISTORY)|OUTSIDE[^A-Z0-9]*(?:LONDON|NY|NEW YORK|SESSION)|SESSION_OUTSIDE|GUARDED_SENDER_REJECTED|LIVE_ACCOUNT|DEMO_ACCOUNT|MT5_DISCONNECTED/.test(combined);
+}
+
+function hasWaitingIncomplete(record: ApiRecord | ReasonMessage): boolean {
+  const combined = [
+    firstText(record as ApiRecord, ["reason", "setupReason", "whatNeedsToHappenNext", "rejection_reason", "final_decision_reason"]),
+    firstText(record as ApiRecord, ["status", "execution_status", "executionStatus", "validation_status", "validationStatus", "risk_status", "riskStatus"]),
+    ...arrayText((record as ApiRecord).blockers),
+    ...arrayText((record as ApiRecord).failed_rules),
+  ]
+    .join(" ")
+    .toUpperCase();
+  return /CONFIRMATION_SCORE|CONFIDENCE|MISSING[^A-Z0-9]*(?:BOS|FVG|LIQUIDITY|TREND)|(?:BOS|FVG|LIQUIDITY|TREND)[^A-Z0-9]*(?:MISSING|WAITING|PENDING)|NO_READY_APPROVED_SIGNAL|SESSION[^A-Z0-9]*(?:OPENING|PENDING)/.test(combined);
+}
+
+function normalizedDecisionStatus(record: ApiRecord | ReasonMessage): ReasonStatus {
+  const rawStatus = normalizeStatus((record as ReasonMessage).status);
+  if (isExecutionAccepted(record)) return "Accepted";
+  if (rawStatus === "Error") return "Error";
+  if (hasHardRejection(record)) return "Rejected";
+  if (hasWaitingIncomplete(record)) return "Waiting";
+  if (rawStatus === "Rejected") return "Rejected";
+  return "Waiting";
+}
+
 function isMeaningfulContext(context: ApiRecord): boolean {
   const symbol = text(context.symbol).toUpperCase();
   if (!["EURUSD", "XAUUSD", "NIFTY50"].includes(symbol)) return false;
@@ -160,12 +335,24 @@ function isMeaningfulContext(context: ApiRecord): boolean {
   return Boolean(symbol && (reason || text(context.status) || text(context.signalHash) || text(context.ticket)));
 }
 
-function validatorDiagnostics(context: ApiRecord): Pick<ReasonMessage, "candles_loaded" | "candles_required" | "data_source" | "rejection_reason" | "timeframe" | "validation_status" | "history_ready" | "requested_symbol" | "resolved_symbol" | "mt5_last_error" | "process_id" | "connection_id"> {
+function validatorDiagnostics(context: ApiRecord): Pick<ReasonMessage, "advisory_warnings" | "candles_loaded" | "candles_required" | "confirmation_missing" | "confirmation_passed" | "confirmation_required" | "confirmation_score" | "confirmation_total" | "data_source" | "decision_reason" | "failed_rules" | "final_decision_reason" | "passed_rules" | "rejection_reason" | "required_rr" | "RR" | "timeframe" | "validation_status" | "history_ready" | "requested_symbol" | "resolved_symbol" | "mt5_last_error" | "process_id" | "connection_id"> {
   return {
     candles_loaded: firstNumber(context, ["candles_loaded", "candlesLoaded", "loaded_candles", "loadedCandles", "bars_loaded", "barsLoaded", "history_bars", "candle_count"]),
     candles_required: firstNumber(context, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]),
     data_source: firstText(context, ["data_source", "dataSource", "source", "feed_source", "feedSource"]),
     rejection_reason: firstText(context, ["rejection_reason", "rejectionReason", "final_rejection_reason", "finalRejectionReason", "reason", "setupReason", "whatNeedsToHappenNext"]),
+    decision_reason: firstText(context, ["decision_reason", "decisionReason"]),
+    final_decision_reason: firstText(context, ["final_decision_reason", "finalDecisionReason"]),
+    passed_rules: arrayText(context.passed_rules),
+    failed_rules: arrayText(context.failed_rules),
+    advisory_warnings: arrayText(context.advisory_warnings),
+    RR: firstNumber(context, ["RR", "risk_reward", "riskReward", "rr"]),
+    required_rr: firstNumber(context, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]),
+    confirmation_score: firstNumber(context, ["confirmation_score", "confirmationScore"]),
+    confirmation_required: firstNumber(context, ["confirmation_required", "confirmationRequired"]),
+    confirmation_total: firstNumber(context, ["confirmation_total", "confirmationTotal"]),
+    confirmation_passed: arrayText(context.confirmation_passed),
+    confirmation_missing: arrayText(context.confirmation_missing),
     timeframe: firstText(context, ["timeframe", "tf", "validation_timeframe", "validationTimeframe", "failed_timeframe", "failedTimeframe"]).toUpperCase(),
     validation_status: firstText(context, ["validation_status", "validationStatus", "status", "execution_status", "executionStatus", "status_level", "risk_status"]),
     history_ready: booleanValue(context.history_ready ?? context.historyReady),
@@ -188,7 +375,7 @@ async function readStore(): Promise<ReasonMessage[]> {
           return Boolean(text(record.id) && text(record.reason) && text(record.symbol));
         }) as ReasonMessage[])
       : [];
-    return messages.map(sanitizeReasonMessage);
+    return dedupeMeaningfully(sortNewestFirst(messages.map(sanitizeReasonMessage).filter((message) => !isLegacyReasonMessage(message))));
   } catch {
     return [];
   }
@@ -196,7 +383,26 @@ async function readStore(): Promise<ReasonMessage[]> {
 
 async function writeStore(messages: ReasonMessage[]): Promise<void> {
   await mkdir(path.dirname(STORE_PATH), { recursive: true });
-  await writeFile(STORE_PATH, JSON.stringify(sortNewestFirst(messages.map(sanitizeReasonMessage)).slice(0, 50), null, 2), "utf-8");
+  await writeFile(STORE_PATH, JSON.stringify(dedupeMeaningfully(sortNewestFirst(messages.map(sanitizeReasonMessage).filter((message) => !isLegacyReasonMessage(message)))).slice(0, MAX_STORED_REASONS), null, 2), "utf-8");
+}
+
+async function activeRoundScope(): Promise<{ sessionId: string; roundId: string; roundNumber: number | null }> {
+  try {
+    const url = new URL("/auto-validation/status", API_BASE_URL);
+    url.searchParams.set("_ts", String(Date.now()));
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return { sessionId: "", roundId: "", roundNumber: null };
+    const payload = (await response.json()) as ApiRecord;
+    const session = payload.session && typeof payload.session === "object" && !Array.isArray(payload.session) ? (payload.session as ApiRecord) : {};
+    const sessionId = text(payload.active_session_id || session.session_id || session.validation_session_id);
+    return {
+      sessionId,
+      roundId: sessionId,
+      roundNumber: numberValue(session.round_number),
+    };
+  } catch {
+    return { sessionId: "", roundId: "", roundNumber: null };
+  }
 }
 
 function timestampValue(value: string): number {
@@ -205,35 +411,78 @@ function timestampValue(value: string): number {
 }
 
 function sortNewestFirst(messages: ReasonMessage[]): ReasonMessage[] {
-  return [...messages].sort((left, right) => timestampValue(text(right.timestamp)) - timestampValue(text(left.timestamp)));
+  return [...messages].sort((left, right) => {
+    const timestampDelta = timestampValue(text(right.timestamp)) - timestampValue(text(left.timestamp));
+    if (timestampDelta !== 0) return timestampDelta;
+    return text(left.id).localeCompare(text(right.id));
+  });
 }
 
 function acceptedExecutionFallback(message: ReasonMessage): string {
   const symbol = text(message.symbol).toUpperCase() || "This signal";
   const side = cleanDisplayText(message.side).toUpperCase();
   const ticket = cleanDisplayText(message.ticket);
+  const score = message.confirmation_score ?? null;
+  const total = message.confirmation_total ?? 4;
+  const rr = message.RR ?? message.required_rr ?? null;
+  if (ticket && score !== null) return `${symbol} trade opened successfully. Ticket: ${ticket}. Score ${formatNumber(score)}/${formatNumber(total)}. RR ${rr !== null ? formatNumber(rr) : "2.0"}. Risk approved.`;
   const sideText = side && !["TRADE", "POSITION"].includes(side) ? ` as a ${side} trade` : "";
   return `${symbol} was accepted and opened${sideText} because guarded demo validation passed, risk status was approved, and MT5 executed the order successfully.${ticket ? ` Ticket: ${ticket}.` : ""}`;
 }
 
 function rejectedFallback(message: ReasonMessage): string {
   const symbol = text(message.symbol).toUpperCase() || "This signal";
+  const decisionReason = cleanDisplayText(message.decision_reason);
+  if (decisionReason && !isLegacyStrategyDiagnostic(decisionReason) && !/required round 3|rule failed/i.test(decisionReason)) return decisionReason;
   const finalReason = cleanDisplayText(message.final_decision_reason);
   if (finalReason) return finalReason;
+  const failed = Array.isArray(message.failed_rules) ? message.failed_rules : [];
+  if (failed.includes("RR_BELOW_2_0")) return `Rejected: RR ${formatNumber(message.RR ?? 0)} below required ${formatNumber(message.required_rr ?? 2)}.`;
+  if (failed.some((item) => /SPREAD/i.test(item))) return "Rejected: spread too high.";
+  if (failed.includes("CONFIRMATION_SCORE_BELOW_2")) {
+    const missing = Array.isArray(message.confirmation_missing) && message.confirmation_missing.length ? ` Missing ${message.confirmation_missing.join(", ")}.` : "";
+    return `Rejected: Score ${formatNumber(message.confirmation_score ?? 0)}/${formatNumber(message.confirmation_required ?? 2)}.${missing}`;
+  }
   const diagnostic = cleanDisplayText(message.rejection_reason);
   if (diagnostic) return `${symbol} was rejected because ${diagnostic.replace(/\.$/, "")}.`;
-  return `${symbol} rejected because a required Round 3 entry rule failed.`;
+  return `${symbol} rejected: no qualified Round 3 signal was ready.`;
 }
 
 function waitingFallback(message: ReasonMessage): string {
   const symbol = text(message.symbol).toUpperCase() || "This signal";
-  return `${symbol} is waiting for BOS and FVG confirmation before entry.`;
+  const canonical = round3DecisionBlock(message, "Waiting");
+  return canonical || `${symbol} waiting:\nScore 0/2\nMissing:\n- BOS ✗\n- FVG ✗\n- Liquidity sweep ✗\n- Trend alignment ✗`;
+}
+
+function isLegacyStrategyDiagnostic(value: string): boolean {
+  const diagnostic = value.toLowerCase();
+  const legacyConfidenceGate = diagnostic.includes("confidence") && (diagnostic.includes("75") || diagnostic.includes("threshold") || diagnostic.includes("needs"));
+  const hardSessionGate = diagnostic.includes("outside") && (diagnostic.includes("london") || diagnostic.includes("new york") || diagnostic.includes("ny"));
+  const hardOrderBlockGate = diagnostic.includes("order block") && diagnostic.includes("not confirmed");
+  return legacyConfidenceGate || hardSessionGate || hardOrderBlockGate;
+}
+
+function isLegacyReasonMessage(message: ReasonMessage): boolean {
+  return isLegacyStrategyDiagnostic([message.reason, message.rejection_reason, message.decision_reason, message.final_decision_reason].map(text).join(" "));
 }
 
 function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
-  const status = normalizeStatus(message.status);
+  const status = normalizedDecisionStatus(message);
   let reason = cleanDisplayText(message.reason);
   const rejectionReason = cleanDisplayText(message.rejection_reason);
+  const canonicalRound3Reason = round3DecisionBlock(message, status);
+  if (canonicalRound3Reason && (isLegacyStrategyDiagnostic(reason) || /required round 3|rule failed|confirmation score 0\/2/i.test(reason) || status !== "Error")) {
+    reason = canonicalRound3Reason;
+  } else if (isLegacyStrategyDiagnostic(reason) || /required round 3|rule failed|confirmation score 0\/2/i.test(reason)) {
+    reason = "";
+  }
+  if (status === "Waiting" && /^accepted\b/i.test(reason)) {
+    reason = "";
+  }
+  if (status === "Waiting" && /halted/i.test(reason) && /BOS|FVG|liquidity|trend|confirmation|confidence/i.test(reason)) {
+    const symbol = text(message.symbol).toUpperCase() || "This setup";
+    reason = reason.replace(/\bTrade was halted due to\b/i, `${symbol} waiting:`).replace(/\bTrade halted due to\b/i, `${symbol} waiting:`);
+  }
   if (!reason) {
     if (status === "Accepted") reason = acceptedExecutionFallback(message);
     else if (status === "Rejected") reason = rejectedFallback({ ...message, rejection_reason: rejectionReason });
@@ -247,7 +496,18 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
     mt5_retcode: cleanDisplayText(message.mt5_retcode),
     reason,
     rejection_reason: rejectionReason,
+    decision_reason: cleanDisplayText(message.decision_reason),
     final_decision_reason: cleanDisplayText(message.final_decision_reason),
+    passed_rules: Array.isArray(message.passed_rules) ? message.passed_rules.map(cleanDisplayText).filter(Boolean) : [],
+    failed_rules: Array.isArray(message.failed_rules) ? message.failed_rules.map(cleanDisplayText).filter(Boolean) : [],
+    advisory_warnings: Array.isArray(message.advisory_warnings) ? message.advisory_warnings.map(cleanDisplayText).filter(Boolean) : [],
+    RR: message.RR ?? null,
+    required_rr: message.required_rr ?? null,
+    confirmation_score: message.confirmation_score ?? null,
+    confirmation_required: message.confirmation_required ?? null,
+    confirmation_total: message.confirmation_total ?? null,
+    confirmation_passed: Array.isArray(message.confirmation_passed) ? message.confirmation_passed.map(cleanDisplayText).filter(Boolean) : [],
+    confirmation_missing: Array.isArray(message.confirmation_missing) ? message.confirmation_missing.map(cleanDisplayText).filter(Boolean) : [],
     side: cleanDisplayText(message.side).toUpperCase(),
     signal_hash: cleanDisplayText(message.signal_hash),
     source: message.source,
@@ -263,6 +523,9 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
     mt5_last_error: cleanDisplayText(message.mt5_last_error),
     process_id: cleanDisplayText(message.process_id),
     connection_id: cleanDisplayText(message.connection_id),
+    validation_session_id: cleanDisplayText(message.validation_session_id),
+    round_id: cleanDisplayText(message.round_id),
+    round_number: numberValue(message.round_number),
   };
 }
 
@@ -271,11 +534,12 @@ function normalizeReasonForDedupe(value: string): string {
 }
 
 function meaningfulReasonKey(message: ReasonMessage): string {
+  const sessionId = text(message.validation_session_id || message.round_id) || "NO_SESSION";
   const ticket = text(message.ticket);
   const signalHash = text(message.signal_hash);
-  if (ticket) return [text(message.symbol).toUpperCase(), message.status, "ticket", ticket].join("|");
-  if (text(message.source) === "execution" && signalHash) return [text(message.symbol).toUpperCase(), message.status, "signal", signalHash].join("|");
-  return [text(message.symbol).toUpperCase(), message.status, normalizeReasonForDedupe(text(message.reason))].join("|");
+  if (ticket) return [sessionId, text(message.symbol).toUpperCase(), message.status, "ticket", ticket].join("|");
+  if (text(message.source) === "execution" && signalHash) return [sessionId, text(message.symbol).toUpperCase(), message.status, "signal", signalHash].join("|");
+  return [sessionId, text(message.symbol).toUpperCase(), message.status, normalizeReasonForDedupe(text(message.reason))].join("|");
 }
 
 function dedupeMeaningfully(messages: ReasonMessage[]): ReasonMessage[] {
@@ -296,18 +560,19 @@ function containsBlocker(blockers: string[], patterns: RegExp[]): boolean {
 }
 
 function joinReasons(parts: string[]): string {
-  if (parts.length <= 1) return parts[0] ?? "the Round 3 entry rules passed";
+  if (parts.length <= 1) return parts[0] ?? "risk approved";
   if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
   return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 }
 
 function ruleBasedReason(context: ApiRecord): string {
   const symbol = text(context.symbol).toUpperCase() || "This setup";
-  const status = normalizeStatus(context.status);
+  const status = normalizedDecisionStatus(context);
   const finalDecisionReason = cleanDisplayText(context.final_decision_reason);
-  if (finalDecisionReason) return finalDecisionReason;
+  const decisionReason = cleanDisplayText(context.decision_reason);
   const riskReward = numberValue(context.riskReward);
   const requiredRR = numberValue(context.requiredRR) ?? 2.0;
+  const confirmationScore = firstNumber(context, ["confirmation_score", "confirmationScore"]);
   const bosConfirmed = booleanValue(context.bosConfirmed);
   const fvgConfirmed = booleanValue(context.fvgConfirmed);
   const liquiditySweep = booleanValue(context.liquiditySweep);
@@ -323,26 +588,39 @@ function ruleBasedReason(context: ApiRecord): string {
   const candlesRequired = firstNumber(context, ["candles_required", "candlesRequired", "required_candles", "requiredCandles", "minimum_candles", "minimumCandles", "min_bars", "minBars"]);
   const orderBlockConfirmed = booleanValue(context.orderBlockConfirmed);
   const blockers = Array.isArray(context.blockers) ? context.blockers.map(text).filter(Boolean) : [];
+  const failedRules = arrayText(context.failed_rules);
+  const missingConfirmations = arrayText(context.confirmation_missing);
   const suppliedReason = text(context.reason || context.setupReason || context.whatNeedsToHappenNext);
   const cleanSuppliedReason = cleanDisplayText(suppliedReason);
 
+  if (decisionReason) return decisionReason;
   if (historyReady === false && historyTimeframe && candlesLoaded !== null && candlesRequired !== null) {
     return `Waiting for MT5 ${historyTimeframe} history sync: ${requestedSymbol} resolved as ${resolvedSymbol}, loaded ${formatNumber(candlesLoaded)} / required ${formatNumber(candlesRequired)} candles.`;
   }
+  const canonicalRound3Reason = round3DecisionBlock(context, status);
+  if (canonicalRound3Reason) return canonicalRound3Reason;
+  if (finalDecisionReason && !(status !== "Accepted" && /^accepted:/i.test(finalDecisionReason))) return finalDecisionReason;
+  if (finalDecisionReason && status !== "Accepted" && /^accepted:/i.test(finalDecisionReason)) {
+    return `${symbol} waiting: setup passed; waiting for MT5 order execution.`;
+  }
+  if (containsBlocker([...blockers, ...failedRules], [/spread/i])) {
+    return "Rejected: spread too high.";
+  }
+  if (containsBlocker([...blockers, ...failedRules], [/SL_TP_REQUIRED/i, /risk/i])) {
+    return "Rejected: risk validation failed.";
+  }
   if (riskReward !== null && riskReward < requiredRR) {
-    return `${symbol} rejected because RR ${formatNumber(riskReward)} was below required ${formatNumber(requiredRR)}.`;
+    return `Rejected: RR ${formatNumber(riskReward)} below required ${formatNumber(requiredRR)}.`;
   }
-  if (containsBlocker(blockers, [/risk.?reward/i, /\brr\b/i]) && riskReward !== null) {
-    return `${symbol} rejected because RR ${formatNumber(riskReward)} was below required ${formatNumber(requiredRR)}.`;
+  if (containsBlocker([...blockers, ...failedRules], [/risk.?reward/i, /\brr\b/i]) && riskReward !== null) {
+    return `Rejected: RR ${formatNumber(riskReward)} below required ${formatNumber(requiredRR)}.`;
   }
-  if (bosConfirmed === false || containsBlocker(blockers, [/\bbos\b/i, /break of structure/i])) {
-    return status === "Rejected" ? `${symbol} rejected because BOS was missing.` : `${symbol} is waiting for BOS and FVG confirmation before entry.`;
+  if (sessionValid === false || containsBlocker([...blockers, ...failedRules], [/session/i, /london/i, /new york/i])) {
+    return "Rejected: outside London/NY session.";
   }
-  if (fvgConfirmed === false || containsBlocker(blockers, [/\bfvg\b/i, /fair value gap/i])) {
-    return status === "Rejected" ? `${symbol} rejected because FVG was missing.` : `${symbol} is waiting for BOS and FVG confirmation before entry.`;
-  }
-  if (sessionValid === false || containsBlocker(blockers, [/session/i, /london/i, /new york/i])) {
-    return `${symbol} rejected because session was outside London/NY.`;
+  if ((confirmationScore !== null && confirmationScore < 2) || containsBlocker([...blockers, ...failedRules], [/confirmation.*score/i, /CONFIRMATION_SCORE_BELOW_2/i])) {
+    const missing = missingConfirmations.length ? ` Missing ${missingConfirmations.join(", ")}.` : " Missing one more from BOS, FVG, liquidity sweep, or trend alignment.";
+    return `${status === "Rejected" ? "Rejected" : "Waiting"}: Score ${formatNumber(confirmationScore ?? 0)}/2.${missing}`;
   }
   if (h4HistoryValid === false || containsBlocker(blockers, [/h4.*history/i])) {
     return `${symbol} rejected because H4 history was insufficient.`;
@@ -350,10 +628,10 @@ function ruleBasedReason(context: ApiRecord): string {
   if (m15HistoryValid === false || containsBlocker(blockers, [/m15.*history/i])) {
     return `${symbol} rejected because M15 history was insufficient.`;
   }
-  if (liquiditySweep === false || trendAlignment === false) {
-    // Round 3 treats these as advisory confidence boosters only.
-    return cleanSuppliedReason || `${symbol} is waiting for BOS and FVG confirmation before entry.`;
-  }
+  void bosConfirmed;
+  void fvgConfirmed;
+  void liquiditySweep;
+  void trendAlignment;
   if (orderBlockConfirmed === false || containsBlocker(blockers, [/order block/i, /\bob\b/i])) {
     return `${symbol} is waiting because order block confirmation is still missing.`;
   }
@@ -361,6 +639,10 @@ function ruleBasedReason(context: ApiRecord): string {
     return `${symbol} was ${status === "Rejected" ? "rejected" : "held"} because ${blockers.slice(0, 2).join(" and ")}.`;
   }
   if (status === "Accepted") {
+    const ticket = firstText(context, ["ticket", "mt5_ticket", "mt5Ticket"]);
+    if (ticket && confirmationScore !== null) {
+      return `${symbol} trade opened successfully. Ticket: ${ticket}. Score ${formatNumber(confirmationScore)}/${formatNumber(firstNumber(context, ["confirmation_total", "confirmationTotal"]) ?? 4)}. RR ${riskReward !== null ? formatNumber(riskReward) : "2.0"}. Risk approved.`;
+    }
     if (isBadText(suppliedReason) && text(context.ticket)) {
       return acceptedExecutionFallback({
         id: "",
@@ -377,22 +659,27 @@ function ruleBasedReason(context: ApiRecord): string {
       trendAlignment === true ? "trend alignment passed" : "",
       liquiditySweep === true ? "liquidity sweep confirmed" : "",
       bosConfirmed === true ? "BOS confirmation appeared" : "",
-      orderBlockConfirmed === true ? "order block confirmation passed" : "",
       fvgConfirmed === true ? "FVG passed" : "",
-      sessionValid === true ? "London/NY session passed" : "",
+      sessionValid === true ? "major-session bonus passed" : "",
       h4HistoryValid === true && m15HistoryValid === true ? "valid H4/M15 history passed" : "",
       riskReward !== null && riskReward >= requiredRR ? `RR ${formatNumber(riskReward)} passed` : "",
     ].filter(Boolean);
     if (passedChecks.length > 0) return `${symbol} was accepted because ${joinReasons(passedChecks)}.`;
-    return cleanSuppliedReason ? `${symbol} was accepted because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} accepted because the Round 3 entry rules passed.`;
+    return cleanSuppliedReason ? `${symbol} was accepted because ${cleanSuppliedReason.replace(/\.$/, "")}.` : acceptedExecutionFallback({ id: "", groqGenerated: false, reason: "", status, symbol, timestamp: "", ticket: firstText(context, ["ticket", "mt5_ticket", "mt5Ticket"]), confirmation_score: confirmationScore, confirmation_total: firstNumber(context, ["confirmation_total", "confirmationTotal"]), RR: riskReward });
   }
   if (status === "Rejected") {
-    return cleanSuppliedReason ? `${symbol} was rejected because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} rejected because a required Round 3 entry rule failed.`;
+    return cleanSuppliedReason ? `${symbol} was rejected because ${cleanSuppliedReason.replace(/\.$/, "")}.` : rejectedFallback({ id: "", groqGenerated: false, reason: "", status, symbol, timestamp: "", failed_rules: failedRules, confirmation_missing: missingConfirmations, confirmation_score: confirmationScore, confirmation_required: 2, RR: riskReward, required_rr: requiredRR });
   }
   if (status === "Error") {
     return cleanSuppliedReason ? `${symbol} needs attention because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} needs attention because validation could not complete cleanly.`;
   }
-  return cleanSuppliedReason ? `${symbol} is waiting because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} is waiting for BOS and FVG confirmation before entry.`;
+  if (cleanSuppliedReason && (isLegacyStrategyDiagnostic(cleanSuppliedReason) || /required round 3|rule failed/i.test(cleanSuppliedReason))) {
+    return `${symbol} waiting:\nScore 0/2\nMissing:\n- BOS ✗\n- FVG ✗\n- Liquidity sweep ✗\n- Trend alignment ✗`;
+  }
+  if (cleanSuppliedReason && /halted/i.test(cleanSuppliedReason) && /BOS|FVG|liquidity|trend|confirmation|confidence/i.test(cleanSuppliedReason)) {
+    return `${symbol} waiting: ${cleanSuppliedReason.replace(/trade (was )?halted due to/i, "").replace(/\.$/, "").trim() || "confirmation is incomplete"}.`;
+  }
+  return cleanSuppliedReason ? `${symbol} is waiting because ${cleanSuppliedReason.replace(/\.$/, "")}.` : `${symbol} waiting:\nScore 0/2\nMissing:\n- BOS ✗\n- FVG ✗\n- Liquidity sweep ✗\n- Trend alignment ✗`;
 }
 
 function groqRewriteIsTraceable(rewrite: string, sourceReason: string): boolean {
@@ -467,17 +754,19 @@ async function generateReason(sourceReason: string): Promise<string | null> {
 }
 
 export async function GET() {
+  const scope = await activeRoundScope();
   const messages = sortNewestFirst(await readStore());
-  return NextResponse.json({ messages: messages.slice(0, 50) });
+  const scoped = scope.sessionId ? messages.filter((message) => text(message.validation_session_id || message.round_id) === scope.sessionId) : [];
+  return NextResponse.json({ active_session_id: scope.sessionId, messages: scoped.slice(0, 50) });
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ApiRecord;
     const contexts = Array.isArray(body.contexts) ? (body.contexts.filter((item) => item && typeof item === "object") as ApiRecord[]) : [];
+    const scope = await activeRoundScope();
     const existing = await readStore();
     const existingIds = new Set(existing.map((message) => message.id));
-    const existingReasonKeys = new Set(existing.map(meaningfulReasonKey));
     const newMessages: ReasonMessage[] = [];
     for (const context of contexts.filter(isMeaningfulContext).slice(0, 6)) {
       const id = stableId(context);
@@ -492,19 +781,26 @@ export async function POST(request: Request) {
         groqGenerated: Boolean(groqReason),
         reason,
         source: groqReason ? "groq" : "rule",
-        status: normalizeStatus(context.status),
+        status: normalizedDecisionStatus(context),
         symbol: text(context.symbol).toUpperCase(),
         timestamp: text(context.timestamp) || new Date().toISOString(),
+        validation_session_id: text(context.validation_session_id || context.session_id || context.auto_validation_session_id) || scope.sessionId,
+        round_id: text(context.round_id) || scope.roundId || scope.sessionId,
+        round_number: numberValue(context.round_number) ?? scope.roundNumber,
       };
       const reasonKey = meaningfulReasonKey(message);
-      if (existingReasonKeys.has(reasonKey) || newMessages.some((item) => meaningfulReasonKey(item) === reasonKey)) continue;
+      const duplicateNewIndex = newMessages.findIndex((item) => meaningfulReasonKey(item) === reasonKey);
+      if (duplicateNewIndex >= 0) {
+        newMessages.splice(duplicateNewIndex, 1);
+      }
       newMessages.push(message);
       existingIds.add(id);
-      existingReasonKeys.add(reasonKey);
     }
-    const next = sortNewestFirst(dedupeMeaningfully([...newMessages, ...existing])).slice(0, 50);
+    const replacementKeys = new Set(newMessages.map(meaningfulReasonKey));
+    const next = sortNewestFirst(dedupeMeaningfully([...newMessages, ...existing.filter((message) => !replacementKeys.has(meaningfulReasonKey(message)))])).slice(0, MAX_STORED_REASONS);
     await writeStore(next);
-    return NextResponse.json({ messages: next });
+    const scoped = scope.sessionId ? next.filter((message) => text(message.validation_session_id || message.round_id) === scope.sessionId) : next;
+    return NextResponse.json({ active_session_id: scope.sessionId, messages: scoped.slice(0, 50) });
   } catch {
     return NextResponse.json({ error: BUSY_MESSAGE }, { status: 503 });
   }

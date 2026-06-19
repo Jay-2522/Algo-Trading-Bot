@@ -489,6 +489,15 @@ function round3DashboardData(data: DashboardData): DashboardData {
     net_pnl: 0,
     max_drawdown: 0,
     profit_factor: 0,
+    current_strategy_level: 0,
+    last_trade_activity_time: "",
+    adaptive_level_activation_time: "",
+    adaptive_strategy_levels: {
+      "0": { level: 0, name: "Original Round 3", status: "Active", open: 0, closed: 0, reached: true },
+      "1": { level: 1, name: "Slightly Relaxed", status: "Not Reached", open: 0, closed: 0, reached: false },
+      "2": { level: 2, name: "Momentum Assisted", status: "Not Reached", open: 0, closed: 0, reached: false },
+      "3": { level: 3, name: "Fast Opportunity", status: "Not Reached", open: 0, closed: 0, reached: false },
+    },
   };
   return {
     ...data,
@@ -2300,6 +2309,7 @@ function TestEnvironmentView(props: {
       <RoundResultsCard data={round3Data} detailsTitle={`${validationRoundTitle(round3Data).replace(" Results", "")} Trade Details`} emptyAsZero filename={`${validationRoundTitle(round3Data).toLowerCase().replace(/\s+/g, "-")}.csv`} title={validationRoundTitle(round3Data)} trades={round3Trades} />
       <ClientDashboardView {...props} data={round3Data} closedTrades={round3Trades} loading={false} scopedOpenPositions={round3Positions} showHero={false} />
       <TradeIntelligenceSection closedTrades={round3Trades} reasonContexts={buildReasonContexts(round3Data)} />
+      <AdaptiveStrategyEvolutionCard data={round3Data} />
     </div>
   );
 }
@@ -2958,6 +2968,63 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
       </div>
     </section>
   );
+}
+
+function AdaptiveStrategyEvolutionCard({ data }: { data: DashboardData }) {
+  const session = validationSession(data);
+  const currentLevel = readNumber(session, ["current_strategy_level"], 0);
+  const levelsRecord = asRecord(session?.adaptive_strategy_levels) ?? {};
+  const definitions = [
+    { level: 0, name: "Original Round 3" },
+    { level: 1, name: "Slightly Relaxed" },
+    { level: 2, name: "Momentum Assisted" },
+    { level: 3, name: "Fast Opportunity" },
+  ];
+  const rows = definitions.map((definition) => {
+    const record = asRecord(levelsRecord[String(definition.level)]);
+    const open = readNumber(record, ["open"], 0);
+    const closed = readNumber(record, ["closed"], 0);
+    const reached = Boolean(record?.reached) || definition.level <= currentLevel;
+    const worked = open + closed > 0;
+    const status =
+      definition.level === currentLevel
+        ? "Active"
+        : worked
+          ? "Worked"
+          : reached
+            ? "Not Worked"
+            : "Not Reached";
+    return { ...definition, open, closed, status };
+  });
+  return (
+    <section className="premium-sub-card p-5 lg:p-6">
+      <ClientSectionTitle eyebrow="Round 3" title="Adaptive Strategy Evolution" />
+      <div className="premium-table-wrap mt-4">
+        <table className="premium-table text-xs">
+          <thead>
+            <tr>{["Level", "Status", "Open", "Closed"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr className={row.level === currentLevel ? "bg-blue-400/[0.08]" : ""} key={row.level}>
+                <td className="px-3 py-2 font-bold text-white">Level {row.level} - {row.name}</td>
+                <td className={`px-3 py-2 font-bold ${adaptiveLevelStatusClass(row.status)}`}>{row.status}</td>
+                <td className="px-3 py-2">{row.open}</td>
+                <td className="px-3 py-2">{row.closed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function adaptiveLevelStatusClass(status: string): string {
+  if (status === "Active") return "text-blue-200";
+  if (status === "Worked") return "text-emerald-200";
+  if (status === "Not Worked") return "text-amber-200";
+  return "text-slate-500";
 }
 
 function PatternBars({ emptyText, patterns }: { emptyText: string; patterns: IntelligencePattern[] }) {

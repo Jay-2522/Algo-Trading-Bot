@@ -1210,11 +1210,20 @@ class AutoValidationService:
             "market_data_status": tick_status.get("status", self.mt5_health_state.get("status")),
             "ready_for_execution": ready and not blockers,
             "score": confirmation_score,
+            "required_score": round3.get("confirmation_required", 2),
             "confirmation_score": confirmation_score,
             "confirmation_required": round3.get("confirmation_required", 2),
             "confirmation_total": round3.get("confirmation_total", 4),
             "confirmation_passed": round3.get("confirmation_passed", []),
             "confirmation_missing": round3.get("confirmation_missing", []),
+            "conditions": {
+                "htf_bias": round3.get("trend_alignment_status"),
+                "momentum": bool((round3.get("confirmation_states") or {}).get("MOMENTUM_DISPLACEMENT")) if isinstance(round3.get("confirmation_states"), dict) else False,
+                "bos": str(round3.get("bos_status") or "").upper() == "PRESENT",
+                "liquidity_sweep": str(round3.get("liquidity_sweep_status") or "").upper() == "PRESENT",
+                "fvg": str(round3.get("fvg_status") or "").upper() == "PRESENT",
+                "session_bonus": bool(round3.get("advisory_session_bonus")),
+            },
             "what_needs_to_happen_next": signal.get("what_needs_to_happen_next"),
             "missing_requirements": signal.get("missing_requirements") if isinstance(signal.get("missing_requirements"), list) else [],
         }
@@ -1322,12 +1331,28 @@ class AutoValidationService:
                 "symbol": item.get("symbol"),
                 "direction_candidate": item.get("direction_candidate"),
                 "score": item.get("confirmation_score") or item.get("score"),
+                "required_score": item.get("required_score") or item.get("confirmation_required"),
+                "conditions": item.get("conditions") if isinstance(item.get("conditions"), dict) else {},
                 "hard_gates_passed": bool(item.get("hard_gates_passed")),
                 "failed_hard_gates": sender_blockers if ready_item and decision_status == "BLOCKED" and sender_blockers else item.get("failed_hard_gates") if isinstance(item.get("failed_hard_gates"), list) else [],
                 "execution_decision": execution_decision,
                 "why_order_not_sent": why_not_sent,
             }
+            conditions = trace["conditions"] if isinstance(trace.get("conditions"), dict) else {}
+            trace.update(
+                {
+                    "htf_bias": conditions.get("htf_bias"),
+                    "momentum": conditions.get("momentum"),
+                    "bos": conditions.get("bos"),
+                    "liquidity_sweep": conditions.get("liquidity_sweep"),
+                    "fvg": conditions.get("fvg"),
+                    "session_bonus": conditions.get("session_bonus"),
+                    "decision": execution_decision,
+                    "reason": why_not_sent,
+                }
+            )
             traces.append(trace)
+            self._persist_scan_trace(trace)
         if not traces and decision:
             traces.append(
                 {
@@ -1346,6 +1371,20 @@ class AutoValidationService:
         if self._decision_traces:
             self.session["latest_decision_trace"] = self._decision_traces[-1]
             self.session["decision_traces"] = self._decision_traces[-200:]
+
+    def _persist_scan_trace(self, trace: dict[str, Any]) -> None:
+        try:
+            timestamp = str(trace.get("timestamp") or self._timestamp())
+            symbol = str(trace.get("symbol") or "").upper()
+            trace = {
+                **trace,
+                "event_id": f"scan-result-{symbol.lower()}-{timestamp}",
+                "active_session_id": self.session.get("session_id"),
+                "decision": trace.get("execution_decision"),
+            }
+            self.reason_panel_service.persist_scan_result(trace, session_id=str(self.session.get("session_id") or ""))
+        except Exception:
+            pass
 
     def _profile_blockers(self, signal: dict[str, Any], profile: str) -> list[str]:
         blockers: list[str] = []
@@ -1550,7 +1589,7 @@ class AutoValidationService:
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
             passed = self._join_labels(list(confirmations.get("passed_labels") or [])) or "score"
             if level == 3:
-                return f"Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was {int(confirmations.get('score') or 0)}, RR was {rr_text}."
+                return f"Accepted using Adaptive Level 3 because HTF bias, momentum, and BOS or liquidity sweep passed. Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. RR {rr_text}."
             return f"{prefix}Accepted: Round 3 score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {passed}. Direction {confirmations.get('direction')}. Trend {confirmations.get('trend_bias')}. RR {rr_text}. Risk approved."
         if first_failure == "H4_HISTORY_INSUFFICIENT":
             return f"{symbol} rejected because H4 history was insufficient."
@@ -1571,6 +1610,8 @@ class AutoValidationService:
             return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. Missing {missing_text}."
         if first_failure == "MOMENTUM_ASSISTED_CONFIRMATION_MISSING":
             return f"{prefix}Waiting: Level 2 needs trend, momentum, and one extra confirmation."
+        if first_failure == "ADAPTIVE_LEVEL_3_MOMENTUM_STRUCTURE_MISSING":
+            return f"{prefix}Waiting: Level 3 needs HTF bias, momentum, and either BOS or liquidity sweep."
         return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}."
 
     def _execution_decision_reason(self, status: str, blockers: list[str], signal: dict[str, Any] | None = None) -> str:
@@ -1582,7 +1623,7 @@ class AutoValidationService:
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
             level = self._current_adaptive_strategy_level()
             if level == 3:
-                return f"Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was {int(confirmations.get('score') or 0)}, RR was {rr_text}."
+                return f"SELL executed because bearish HTF trend and momentum aligned. Adaptive Level 3 accepted score {int(confirmations.get('score') or 0)}." if str((signal or {}).get("signal") or "").upper() == "SELL" else f"BUY executed because bullish HTF trend and momentum aligned. Adaptive Level 3 accepted score {int(confirmations.get('score') or 0)}."
             return f"Trade accepted using Adaptive Level {level}. Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. RR {rr_text}. Risk approved."
         if blocker in {"RR_BELOW_2_0", "RISK_REWARD_BELOW_MINIMUM", "RR_BELOW_MINIMUM"}:
             rr_text = f"{rr:.1f}" if rr is not None else "missing"
@@ -2727,10 +2768,11 @@ class AutoValidationService:
             },
             3: {
                 "name": "Fast Opportunity",
-                "required_score": 3,
-                "strong_required": 1,
+                "required_score": 5,
+                "strong_required": 2,
+                "requires_momentum_and_bos_or_sweep": True,
                 "passed_rule": "FAST_OPPORTUNITY_REQUIREMENT_MET",
-                "failed_rule": "ADAPTIVE_LEVEL_3_SCORE_BELOW_3",
+                "failed_rule": "ADAPTIVE_LEVEL_3_MOMENTUM_STRUCTURE_MISSING",
             },
         }
 
@@ -2803,6 +2845,8 @@ class AutoValidationService:
         if level_config.get("requires_momentum_plus_extra"):
             extras = {"BOS", "FVG_IMBALANCE", "LIQUIDITY_SWEEP", "PULLBACK_RETEST"}
             return bool(states.get("TREND_ALIGNMENT")) and bool(states.get("MOMENTUM_DISPLACEMENT")) and any(bool(states.get(code)) for code in extras)
+        if level_config.get("requires_momentum_and_bos_or_sweep"):
+            return bool(states.get("TREND_ALIGNMENT")) and bool(states.get("MOMENTUM_DISPLACEMENT")) and (bool(states.get("BOS")) or bool(states.get("LIQUIDITY_SWEEP")))
         return True
 
     def _maybe_advance_adaptive_strategy_level(self) -> None:

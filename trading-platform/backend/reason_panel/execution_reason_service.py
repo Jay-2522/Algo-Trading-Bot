@@ -152,22 +152,20 @@ class ExecutionReasonPanelService:
         pnl = trade.get("net_pnl") if trade.get("net_pnl") is not None else trade.get("total_pnl") if trade.get("total_pnl") is not None else trade.get("profit_loss") if trade.get("profit_loss") is not None else trade.get("pnl")
         result = self._text(trade.get("result")).upper() or ("WIN" if self._number(pnl) > 0 else "LOSS" if self._number(pnl) < 0 else "BREAKEVEN")
         status = "CLOSED_WIN" if result == "WIN" else "CLOSED_LOSS" if result == "LOSS" else "CLOSED"
+        duration = self._text(trade.get("duration_minutes"))
+        exit_reason = self._text(trade.get("exit_reason")) or "MT5 history confirmed close"
+        if status == "CLOSED_LOSS":
+            reason = f"{side or 'Trade'} failed{f' after {duration} minutes' if duration else ''}. Price reached {exit_reason.lower()} with P&L {self._text(pnl) or '0'}."
+        elif status == "CLOSED_WIN":
+            reason = f"{side or 'Trade'} reached target{f' after {duration} minutes' if duration else ''}. Momentum carried price to take profit with P&L {self._text(pnl) or '0'}."
+        else:
+            reason = f"{side or 'Trade'} closed{f' after {duration} minutes' if duration else ''}. Exit reason: {exit_reason}. P&L {self._text(pnl) or '0'}."
         message_id = f"execution-{status.lower()}-{ticket}"
         message = {
             "id": message_id,
             "event_id": message_id,
             "groqGenerated": False,
-            "reason": "\n".join(
-                [
-                    status,
-                    f"Symbol: {symbol}",
-                    f"Direction: {side or 'TRADE'}",
-                    f"Ticket: {ticket}",
-                    f"P&L: {self._text(pnl) or '0'}",
-                    f"Exit reason: {self._text(trade.get('exit_reason')) or 'MT5 history confirmed close'}",
-                    f"Closed time: {self._text(trade.get('closed_at') or trade.get('close_time')) or 'Unavailable'}",
-                ]
-            ),
+            "reason": reason,
             "source": "execution",
             "status": status,
             "symbol": symbol,
@@ -182,6 +180,44 @@ class ExecutionReasonPanelService:
             "final_decision_reason": status,
             "timestamp": timestamp or self._text(trade.get("closed_at") or trade.get("close_time") or trade.get("generated_at")) or self._timestamp(),
             "data_source": "MT5_HISTORY_CLOSE_SYNC",
+        }
+        self._upsert(message)
+        return message
+
+    def persist_scan_result(self, scan: dict[str, Any], *, session_id: str = "") -> dict[str, Any] | None:
+        symbol = self._text(scan.get("symbol")).upper()
+        if not symbol:
+            return None
+        timestamp = self._text(scan.get("timestamp")) or self._timestamp()
+        event_id = self._text(scan.get("event_id")) or f"scan-result-{symbol.lower()}-{timestamp}"
+        reason = self._text(scan.get("reason")) or self._scan_reason(scan)
+        message = {
+            "id": event_id,
+            "event_id": event_id,
+            "groqGenerated": False,
+            "reason": reason,
+            "source": "execution",
+            "status": "SCAN_RESULT",
+            "symbol": symbol,
+            "side": self._text(scan.get("direction") or scan.get("direction_candidate")).upper(),
+            "ticket": "",
+            "strategy_profile": "DEMO_COLLECTION",
+            "decision": self._text(scan.get("decision") or scan.get("execution_decision")),
+            "order_opened": False,
+            "adaptive_level": scan.get("adaptive_level"),
+            "confirmation_score": scan.get("score"),
+            "confirmation_required": scan.get("required_score"),
+            "htf_bias": scan.get("htf_bias"),
+            "momentum": scan.get("momentum"),
+            "bos": scan.get("bos"),
+            "liquidity_sweep": scan.get("liquidity_sweep"),
+            "fvg": scan.get("fvg"),
+            "session_bonus": scan.get("session_bonus"),
+            "conditions": scan.get("conditions") if isinstance(scan.get("conditions"), dict) else {},
+            "validation_session_id": session_id,
+            "final_decision_reason": reason,
+            "timestamp": timestamp,
+            "data_source": "ROUND_SCAN_TRACE",
         }
         self._upsert(message)
         return message
@@ -209,16 +245,21 @@ class ExecutionReasonPanelService:
         tp = result.get("tp") or payload.get("take_profit") or signal.get("take_profit")
         score = self._text(round3.get("confirmation_score") or decision.get("confirmation_score") or payload.get("confirmation_score")) or "0"
         required = self._text(round3.get("confirmation_required") or decision.get("confirmation_required") or payload.get("confirmation_required")) or "2"
-        final_reason = "\n".join(
-            [
-                f"{symbol} {side or 'TRADE'} opened.",
-                f"Ticket: {ticket}",
-                f"Entry: {self._text(entry) or 'Unavailable'}",
-                f"SL: {self._text(sl) or 'Unavailable'}",
-                f"TP: {self._text(tp) or 'Unavailable'}",
-                f"Score: {score}/{required}",
-            ]
-        )
+        direction = "bearish" if side == "SELL" else "bullish" if side == "BUY" else "directional"
+        level = self._text(round3.get("adaptive_level") or round3.get("current_strategy_level")) or "0"
+        passed = {self._text(item).upper() for item in round3.get("confirmation_passed", [])} if isinstance(round3.get("confirmation_passed"), list) else set()
+        drivers = []
+        if "H4/H1 TREND ALIGNMENT" in passed or self._text(round3.get("trend_alignment_status")).upper() == "ALIGNED":
+            drivers.append(f"{direction} HTF trend")
+        if any("MOMENTUM" in item for item in passed):
+            drivers.append("momentum")
+        if any("BOS" in item for item in passed):
+            drivers.append("BOS")
+        if any("LIQUIDITY" in item for item in passed):
+            drivers.append("liquidity sweep")
+        if not drivers:
+            drivers.append(f"{direction} setup conditions")
+        final_reason = f"{side or 'Trade'} executed because {self._join_text(drivers)} aligned. Adaptive Level {level} accepted score {score}."
         data_source = self._text(payload.get("data_source") or signal.get("data_source") or strategy_metadata.get("data_source"))
         return {
             "id": self._id(ticket, signal_hash),
@@ -308,3 +349,29 @@ class ExecutionReasonPanelService:
             return float(value)
         except (TypeError, ValueError):
             return 0.0
+
+    def _join_text(self, values: list[str]) -> str:
+        values = [value for value in values if value]
+        if len(values) <= 1:
+            return values[0] if values else "setup conditions"
+        if len(values) == 2:
+            return f"{values[0]} and {values[1]}"
+        return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+    def _scan_reason(self, scan: dict[str, Any]) -> str:
+        symbol = self._text(scan.get("symbol")).upper() or "Signal"
+        direction = self._text(scan.get("direction") or scan.get("direction_candidate")).upper()
+        bias = "bearish" if direction == "SELL" else "bullish" if direction == "BUY" else "unclear"
+        score = self._text(scan.get("score") or 0)
+        required = self._text(scan.get("required_score") or 0)
+        conditions = scan.get("conditions") if isinstance(scan.get("conditions"), dict) else {}
+        missing = []
+        if conditions.get("bos") is False:
+            missing.append("BOS missing")
+        if conditions.get("liquidity_sweep") is False:
+            missing.append("liquidity sweep absent")
+        if conditions.get("momentum") is False:
+            missing.append("momentum absent")
+        decision = self._text(scan.get("decision") or scan.get("execution_decision")).replace("_", " ").lower() or "evaluated"
+        suffix = f" {self._join_text(missing)}." if missing else " Confirmations aligned."
+        return f"{symbol} {bias} bias detected. Score {score}/{required}.{suffix} Trade {decision}."

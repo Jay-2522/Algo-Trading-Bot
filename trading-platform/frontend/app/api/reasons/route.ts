@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
 type ApiRecord = Record<string, unknown>;
 type ReasonMessage = {
   candles_loaded?: number | null;
@@ -201,7 +201,7 @@ function round3DecisionBlock(record: ApiRecord | ReasonMessage, status: ReasonSt
 
   if (status === "Rejected" && rr !== null && rr < requiredRr) return `RR ${formatNumber(rr)} below required ${formatNumber(requiredRr)}`;
   if (status === "Rejected" && blockers.some((item) => /SPREAD/i.test(item))) return "Spread too high";
-  if (status === "Rejected" && session === false) return "Outside London/NY session";
+  if (status === "Rejected" && session === false) return "No session bonus";
 
   const present = [
     h4 === true ? "H4 history" : "",
@@ -265,6 +265,7 @@ function stableId(context: ApiRecord): string {
 
 function normalizeStatus(value: unknown): ReasonStatus {
   const status = text(value).toUpperCase();
+  if (status.includes("SCAN_RESULT")) return "SCAN_RESULT";
   if (status.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
   if (status.includes("CLOSED_WIN")) return "CLOSED_WIN";
   if (status.includes("CLOSED_LOSS")) return "CLOSED_LOSS";
@@ -326,6 +327,7 @@ function normalizedDecisionStatus(record: ApiRecord | ReasonMessage): ReasonStat
   const combined = [record.reason, (record as ReasonMessage).final_decision_reason, (record as ReasonMessage).decision_reason].map(text).join(" ");
   if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combined)) return "CLOSED_LOSS";
   if (/CLOSED_WIN|Result:\s*WIN/i.test(combined)) return "CLOSED_WIN";
+  if (rawStatus === "SCAN_RESULT") return "SCAN_RESULT";
   if (rawStatus === "OPEN_CONFIRMED") return "OPEN_CONFIRMED";
   if (rawStatus === "CLOSED_LOSS" || rawStatus === "CLOSED_WIN" || rawStatus === "CLOSED") return rawStatus;
   if (isExecutionAccepted(record)) return "Accepted";

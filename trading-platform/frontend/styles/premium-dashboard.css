@@ -1563,15 +1563,15 @@ select.calc-field {
 
 .reason-message-list {
   display: grid;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .reason-message {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
-  padding: 12px;
+  padding: 9px 10px;
 }
 
 .reason-message > div {
@@ -1588,17 +1588,17 @@ select.calc-field {
 }
 
 .reason-message p {
-  margin-top: 8px;
+  margin-top: 5px;
   color: var(--text-secondary);
   font-family: var(--font-body), sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.35;
   white-space: pre-line;
 }
 
 .reason-message time {
   display: block;
-  margin-top: 8px;
+  margin-top: 5px;
   color: var(--text-muted);
   font-family: var(--font-data), monospace;
   font-size: 11px;
@@ -1628,7 +1628,11 @@ select.calc-field {
   color: var(--accent-primary);
 }
 
-.reason-status.closed {
+.reason-status.closed,
+.reason-status.closed_loss,
+.reason-status.closed_win,
+.reason-status.open_confirmed,
+.reason-status.scan_result {
   background: rgba(148, 163, 184, 0.14);
   color: var(--text-secondary);
 }

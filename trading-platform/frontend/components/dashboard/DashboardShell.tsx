@@ -537,6 +537,17 @@ function formatTradeTime(value: unknown): string {
   return `${datePart}\n${timePart} UTC`;
 }
 
+function relativeSyncAge(value: unknown): string {
+  if (!value) return "Waiting for first sync";
+  const timestamp = new Date(String(value)).getTime();
+  if (!Number.isFinite(timestamp)) return "Waiting for first sync";
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return `Last sync ${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Last sync ${minutes}m ago`;
+  return `Last sync ${Math.floor(minutes / 60)}h ago`;
+}
+
 function sessionOpen(session: "Sydney" | "Tokyo" | "London" | "New York", now = new Date()): boolean {
   const hour = now.getUTCHours();
   if (session === "Sydney") return hour >= 21 || hour < 6;
@@ -1473,7 +1484,8 @@ function ClientPortalOverview({
   const mode = readText(session, ["status"], "");
   const botState = clientBotState(mode, closed, open, target, Boolean(readText(session, ["session_id", "id", "validation_session_id"], "") || mode || closed || open));
   const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
-  const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
+  const mt5HealthFailures = readNumber(mt5Health, ["consecutive_failed_health_checks"], 0);
+  const mt5Connected = mt5HealthStatus === "MT5_CONNECTED" || mt5HealthFailures < 3;
   const validationSymbol = Array.isArray(config?.allowed_symbols) ? String(config.allowed_symbols[0] ?? "EURUSD") : "EURUSD";
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
   const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
@@ -2676,8 +2688,10 @@ function ClientDashboardView({
   const startDisabled = controlsDisabled || currentSessionStarted || recoverableSession || open > 0 || !["", "IDLE", "OFF", "READY", "READY_ROUND_3", "COMPLETED", "STOPPED"].includes(mode);
   const botState = clientBotState(mode, actualClosedTrades, open, target, hasValidationSession);
   const mt5HealthStatus = readText(mt5Health, ["status"], "").toUpperCase();
-  const mt5Connected = mt5HealthStatus === "MT5_CONNECTED";
-  const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus);
+  const mt5HealthFailures = readNumber(mt5Health, ["consecutive_failed_health_checks"], 0);
+  const mt5Connected = mt5HealthStatus === "MT5_CONNECTED" || mt5HealthFailures < 3;
+  const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus) && mt5HealthFailures >= 3;
+  const mt5LastTickAge = relativeSyncAge(readText(mt5Health, ["last_tick_time"], ""));
   const closeReports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const recentClosed = mergeClosedTrades(closedTrades, closeReports).slice(0, 5);
   const reasonContexts = useMemo(() => buildReasonContexts(data), [data]);
@@ -2700,7 +2714,7 @@ function ClientDashboardView({
 
       <section className="premium-status-grid">
         <StatusStripItem label="Backend Status" value={backendConnected ? "Connected" : "Reconnecting"} tone={backendConnected ? "healthy" : "warning"} />
-        <StatusStripItem label="MT5 Status" value={mt5Connected ? "Connected" : mt5ActuallyDisconnected ? "Disconnected" : "Checking"} tone={mt5Connected ? "healthy" : mt5ActuallyDisconnected ? "danger" : "warning"} />
+        <StatusStripItem label="MT5 Status" value={mt5Connected ? `Connected - ${mt5LastTickAge}` : mt5ActuallyDisconnected ? "Disconnected" : "Checking"} tone={mt5Connected ? "healthy" : mt5ActuallyDisconnected ? "danger" : "warning"} />
         <StatusStripItem label="Validation Status" value={botState.statusText} tone={botState.tone} />
         <StatusStripItem label="Last Successful Sync" value={lastSuccessfulSync ?? "Waiting for first sync"} tone={lastSuccessfulSync ? "healthy" : "warning"} />
       </section>
@@ -2906,7 +2920,7 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
   const hasRound3Statistics = trades.length > 0;
   const reasonMessages = hasRound3Statistics ? normalizeReasonMessages(reasonContexts).filter(isRound3EdgeScoreReasonMessage) : [];
   const autopsyRows = trades.slice(0, 8);
-  const lossPatterns = aggregatePatterns(trades.filter((trade) => tradePnl(trade) < 0).map(lossReasonForTrade));
+  const lossPatterns = aggregatePatterns(trades.filter((trade) => tradePnl(trade) < 0).flatMap(lossFeatureLabelsForTrade));
   const rejectionBreakdown = aggregatePatterns(reasonMessages.filter((message) => message.status === "Rejected").map(rejectionReasonLabel));
   const featureImpactRows = buildFeatureImpactRows(trades);
   const conclusionRows = buildStrategyConclusionRows(trades, lossPatterns, rejectionBreakdown, featureImpactRows);
@@ -3319,6 +3333,16 @@ function lossReasonForTrade(trade: ApiRecord): string {
   return requirementLabels(approval)[0] || exitReasonForTrade(trade);
 }
 
+function lossFeatureLabelsForTrade(trade: ApiRecord): string[] {
+  const labels: string[] = [];
+  if (passFailState(trade, "bos_result", "bos") === "missing") labels.push("BOS missing");
+  if (passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing") labels.push("Liquidity sweep missing");
+  if (passFailState(trade, "fvg_result", "fvg") === "missing") labels.push("FVG missing");
+  if (trendStateForTrade(trade) === "not_aligned") labels.push("Trend not aligned");
+  if (sessionStateForTrade(trade) === "outside") labels.push("No session bonus");
+  return labels.length ? labels : [lossReasonForTrade(trade)];
+}
+
 function rejectionReasonLabel(message: ReasonMessage): string {
   const text = cleanAnalysisText(message.rejection_reason || message.reason);
   if (isLegacyStrategyDiagnostic(text)) return "";
@@ -3367,6 +3391,12 @@ function passFailState(trade: ApiRecord, approvalKey: string, componentKey: stri
   const componentText = cleanAnalysisText(readText(components, [componentKey], "")).toLowerCase();
   if (["present", "confirmed", "pass", "true"].includes(componentText)) return "present";
   if (["missing", "fail", "false"].includes(componentText)) return "missing";
+  const setupText = cleanAnalysisText(readText(trade, ["setup_type", "entry_setup", "entry_reason"], "")).toLowerCase();
+  if (setupText) {
+    if (componentKey === "bos") return setupText.includes("bos") || setupText.includes("structure") ? "present" : "missing";
+    if (componentKey === "fvg") return setupText.includes("fvg") || setupText.includes("imbalance") ? "present" : "missing";
+    if (componentKey === "liquidity_sweep") return setupText.includes("liquidity") || setupText.includes("sweep") ? "present" : "missing";
+  }
   return "unknown";
 }
 
@@ -3396,8 +3426,6 @@ function featureImpactRow(
   feature: string,
   state: string,
   predicate: (trade: ApiRecord) => boolean,
-  positiveInsight: string,
-  negativeInsight: string,
 ): FeatureImpactRow {
   const matchingTrades = trades.filter(predicate);
   const wins = matchingTrades.filter((trade) => tradePnl(trade) >= 0).length;
@@ -3405,26 +3433,27 @@ function featureImpactRow(
   const netPnl = matchingTrades.reduce((sum, trade) => sum + tradePnl(trade), 0);
   const winRate = matchingTrades.length ? (wins / matchingTrades.length) * 100 : 0;
   const hasData = matchingTrades.length > 0;
-  const insight = hasData ? (winRate >= 50 && netPnl >= 0 ? positiveInsight : negativeInsight) : "—";
+  const lossRate = matchingTrades.length ? (losses / matchingTrades.length) * 100 : 0;
+  const insight = hasData ? `${losses} of ${matchingTrades.length} lost (${lossRate.toFixed(0)}%).` : "—";
   return { feature, hasData, insight, losses, netPnl, state, trades: matchingTrades.length, winRate, wins };
 }
 
 function buildFeatureImpactRows(trades: ApiRecord[]): FeatureImpactRow[] {
   return [
-    featureImpactRow(trades, "BOS", "Present", (trade) => passFailState(trade, "bos_result", "bos") === "present", "BOS confirmation helps.", "BOS alone is insufficient."),
-    featureImpactRow(trades, "BOS", "Missing", (trade) => passFailState(trade, "bos_result", "bos") === "missing", "BOS absence is manageable.", "Require BOS confirmation."),
-    featureImpactRow(trades, "Liquidity Sweep", "Present", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "present", "Sweep confirms better entries.", "Sweep needs cleaner timing."),
-    featureImpactRow(trades, "Liquidity Sweep", "Missing", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing", "Sweep absence is manageable.", "Require liquidity sweep."),
-    featureImpactRow(trades, "FVG", "Present", (trade) => passFailState(trade, "fvg_result", "fvg") === "present", "FVG supports continuation.", "FVG needs tighter timing."),
-    featureImpactRow(trades, "FVG", "Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing", "FVG absence is manageable.", "Require FVG confirmation."),
-    featureImpactRow(trades, "Trend Alignment", "Aligned", (trade) => trendStateForTrade(trade) === "aligned", "Trend alignment helps.", "Trend alignment alone is not enough."),
-    featureImpactRow(trades, "Trend Alignment", "Not Aligned", (trade) => trendStateForTrade(trade) === "not_aligned", "Misalignment is manageable.", "Avoid trend-misaligned entries."),
-    featureImpactRow(trades, "Session Bonus", "Active", (trade) => sessionStateForTrade(trade) === "london_ny", "Major-session bonus helps.", "Session bonus is not enough."),
-    featureImpactRow(trades, "Session Bonus", "Inactive", (trade) => sessionStateForTrade(trade) === "outside", "Off-session trades can still work.", "Require stronger confirmations."),
+    featureImpactRow(trades, "BOS", "Present", (trade) => passFailState(trade, "bos_result", "bos") === "present"),
+    featureImpactRow(trades, "BOS", "Missing", (trade) => passFailState(trade, "bos_result", "bos") === "missing"),
+    featureImpactRow(trades, "Liquidity Sweep", "Present", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "present"),
+    featureImpactRow(trades, "Liquidity Sweep", "Missing", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing"),
+    featureImpactRow(trades, "FVG", "Present", (trade) => passFailState(trade, "fvg_result", "fvg") === "present"),
+    featureImpactRow(trades, "FVG", "Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing"),
+    featureImpactRow(trades, "Trend Alignment", "Aligned", (trade) => trendStateForTrade(trade) === "aligned"),
+    featureImpactRow(trades, "Trend Alignment", "Not Aligned", (trade) => trendStateForTrade(trade) === "not_aligned"),
+    featureImpactRow(trades, "Session Bonus", "Active", (trade) => sessionStateForTrade(trade) === "london_ny"),
+    featureImpactRow(trades, "Session Bonus", "Inactive", (trade) => sessionStateForTrade(trade) === "outside"),
   ];
 }
 
-function strategyDnaRow(trades: ApiRecord[], label: string, predicate: (trade: ApiRecord) => boolean, strongInsight: string, weakInsight: string): StrategyDnaRow | null {
+function strategyDnaRow(trades: ApiRecord[], label: string, predicate: (trade: ApiRecord) => boolean): StrategyDnaRow | null {
   const matchingTrades = trades.filter(predicate);
   if (!matchingTrades.length) return null;
   const wins = matchingTrades.filter((trade) => tradePnl(trade) >= 0).length;
@@ -3432,7 +3461,7 @@ function strategyDnaRow(trades: ApiRecord[], label: string, predicate: (trade: A
   const netPnl = matchingTrades.reduce((sum, trade) => sum + tradePnl(trade), 0);
   const winRate = (wins / matchingTrades.length) * 100;
   return {
-    insight: winRate >= 50 && netPnl >= 0 ? strongInsight : weakInsight,
+    insight: `${label} won ${wins} of ${matchingTrades.length} (${winRate.toFixed(0)}%).`,
     label,
     losses,
     netPnl,
@@ -3447,9 +3476,9 @@ function riskRewardForTrade(trade: ApiRecord): number {
   return readNumber(approval, ["risk_reward", "risk_reward_ratio", "rr"], readNumber(components, ["risk_reward", "risk_reward_ratio", "rr"], Number.NaN));
 }
 
-function winningDnaSummaryRow(trades: ApiRecord[], label: string, predicate: (trade: ApiRecord) => boolean, strongObservation: string, weakObservation: string): WinningDnaSummaryRow {
+function winningDnaSummaryRow(trades: ApiRecord[], label: string, predicate: (trade: ApiRecord) => boolean): WinningDnaSummaryRow {
   const matchingTrades = trades.filter(predicate);
-  if (!matchingTrades.length) return { averageRr: "—", label, observation: "Not enough samples.", trades: "—", winRate: "—", wins: "—" };
+  if (!matchingTrades.length) return { averageRr: "—", label, observation: "—", trades: "—", winRate: "—", wins: "—" };
   const wins = matchingTrades.filter((trade) => tradePnl(trade) >= 0).length;
   const winRate = (wins / matchingTrades.length) * 100;
   const rrValues = matchingTrades.map(riskRewardForTrade).filter((value) => Number.isFinite(value));
@@ -3457,7 +3486,7 @@ function winningDnaSummaryRow(trades: ApiRecord[], label: string, predicate: (tr
   return {
     averageRr: Number.isFinite(averageRr) ? averageRr.toFixed(1) : "—",
     label,
-    observation: winRate >= 30 ? strongObservation : weakObservation,
+    observation: `${wins} of ${matchingTrades.length} won (${winRate.toFixed(1)}%).`,
     trades: String(matchingTrades.length),
     winRate: `${winRate.toFixed(1)}%`,
     wins: String(wins),
@@ -3470,22 +3499,16 @@ function buildWinningDnaSummaryRows(trades: ApiRecord[]): WinningDnaSummaryRow[]
       trades,
       "FVG + Trend Alignment",
       (trade) => passFailState(trade, "fvg_result", "fvg") === "present" && trendStateForTrade(trade) === "aligned",
-      "Best-performing combination so far.",
-      "Useful, but entry timing needs work.",
     ),
     winningDnaSummaryRow(
       trades,
       "Trend + Session Bonus",
       (trade) => trendStateForTrade(trade) === "aligned" && sessionStateForTrade(trade) === "london_ny",
-      "Trend improves with session bonus.",
-      "Session bonus needs stronger confirmation.",
     ),
     winningDnaSummaryRow(
       trades,
       "BOS + FVG + Session Bonus",
       (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "fvg_result", "fvg") === "present" && sessionStateForTrade(trade) === "london_ny",
-      "Highest-quality confluence.",
-      "Not enough clean winners yet.",
     ),
   ];
 }
@@ -3600,16 +3623,35 @@ function validationBlockerObservation(pattern?: IntelligencePattern): string {
 
 function recommendedImprovementObservation(topLoss?: IntelligencePattern, topRejection?: IntelligencePattern): string {
   const lossText = topLoss?.label.toLowerCase() ?? "";
-  if (lossText.includes("bos") || lossText.includes("fvg")) return "Require BOS + FVG before entry.";
-  if (lossText.includes("liquidity") || lossText.includes("sweep")) return "Require liquidity sweep plus BOS.";
-  if (lossText.includes("session")) return "Require stronger confirmations without session bonus.";
-  if (topRejection) return "Fix validation history before relaxing filters.";
-  return "Require BOS + FVG before entry.";
+  if (lossText.includes("bos") || lossText.includes("fvg")) return `${topLoss?.label} is the largest observed loss pattern.`;
+  if (lossText.includes("liquidity") || lossText.includes("sweep")) return `${topLoss?.label} is the largest observed loss pattern.`;
+  if (lossText.includes("session")) return `${topLoss?.label} is the largest observed loss pattern.`;
+  if (topRejection) return `${topRejection.label} is the largest observed rejection pattern.`;
+  return "Collect more current-round outcomes before changing filters.";
+}
+
+function featureObservation(row?: FeatureImpactRow): string {
+  if (!row || !row.hasData) return "—";
+  const lossRate = row.trades ? (row.losses / row.trades) * 100 : 0;
+  return `${row.feature} ${row.state.toLowerCase()} lost ${row.losses} of ${row.trades} (${lossRate.toFixed(0)}%).`;
+}
+
+function patternObservation(pattern: IntelligencePattern | undefined, denominator: number, fallback: string): string {
+  if (!pattern || denominator <= 0) return "—";
+  return `${pattern.label} caused ${pattern.count} of ${denominator} ${fallback} (${pattern.percentage.toFixed(0)}%).`;
 }
 
 function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligencePattern[], rejections: IntelligencePattern[], _featureRows: FeatureImpactRow[]): StrategyConclusionRow[] {
+  const lossCount = trades.filter((trade) => tradePnl(trade) < 0).length;
   const topRejection = rejections[0];
-  return [
+  const bestFeature = _featureRows
+    .filter((row) => row.hasData)
+    .sort((left, right) => right.winRate - left.winRate || right.netPnl - left.netPnl || right.trades - left.trades)[0];
+  const weakestFeature = _featureRows
+    .filter((row) => row.hasData)
+    .sort((left, right) => (right.losses / Math.max(right.trades, 1)) - (left.losses / Math.max(left.trades, 1)) || left.netPnl - right.netPnl)[0];
+  const topLoss = _losses[0];
+  const baseRows = [
     conclusionFromDna(
       "WINNING",
       "BOS + FVG + Session Bonus",
@@ -3617,8 +3659,6 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
         trades,
         "BOS + FVG + Session Bonus",
         (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "fvg_result", "fvg") === "present" && sessionStateForTrade(trade) === "london_ny",
-        "Best when structure, FVG, and session bonus align.",
-        "Promising setup, but edge is not proven yet.",
       ),
     ),
     conclusionFromDna(
@@ -3628,8 +3668,6 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
         trades,
         "Trend + Session Bonus",
         (trade) => trendStateForTrade(trade) === "aligned" && sessionStateForTrade(trade) === "london_ny",
-        "Trend plus session bonus improves selectivity.",
-        "Trend and session bonus need stronger confirmation.",
       ),
     ),
     conclusionFromDna(
@@ -3639,8 +3677,6 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
         trades,
         "FVG + Trend Alignment",
         (trade) => passFailState(trade, "fvg_result", "fvg") === "present" && trendStateForTrade(trade) === "aligned",
-        "FVG is useful with aligned trend.",
-        "FVG is useful, but entries need tighter timing.",
       ),
     ),
     conclusionFromDna(
@@ -3650,46 +3686,46 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
         trades,
         "Liquidity Sweep + BOS",
         (trade) => passFailState(trade, "bos_result", "bos") === "present" && passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "present",
-        "Sweep plus BOS confirms cleaner entries.",
-        "Sweep plus BOS needs stricter execution.",
       ),
     ),
     conclusionFromDna(
       "LOSS",
       "BOS Missing",
-      strategyDnaRow(trades, "BOS Missing", (trade) => passFailState(trade, "bos_result", "bos") === "missing", "BOS missing is not hurting yet.", "Require BOS before entry."),
+      strategyDnaRow(trades, "BOS Missing", (trade) => passFailState(trade, "bos_result", "bos") === "missing"),
     ),
     conclusionFromDna(
       "LOSS",
       "Liquidity Sweep Missing",
-      strategyDnaRow(trades, "Liquidity Sweep Missing", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing", "Missing sweep is not hurting yet.", "Add sweep confirmation."),
+      strategyDnaRow(trades, "Liquidity Sweep Missing", (trade) => passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing"),
     ),
     conclusionFromDna(
       "LOSS",
       "FVG Missing",
-      strategyDnaRow(trades, "FVG Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing", "Missing FVG is not hurting yet.", "Filter entries without FVG."),
+      strategyDnaRow(trades, "FVG Missing", (trade) => passFailState(trade, "fvg_result", "fvg") === "missing"),
     ),
     conclusionFromDna(
       "LOSS",
       "No Session Bonus",
-      strategyDnaRow(trades, "No Session Bonus", (trade) => sessionStateForTrade(trade) === "outside", "Off-session score is stable so far.", "Require stronger confirmations."),
+      strategyDnaRow(trades, "No Session Bonus", (trade) => sessionStateForTrade(trade) === "outside"),
     ),
     conclusionFromDna(
       "LOSS",
       "Time Stale Exit",
-      strategyDnaRow(trades, "Time Stale Exit", (trade) => exitReasonForTrade(trade).toLowerCase().includes("stale") || exitReasonForTrade(trade).toLowerCase().includes("time"), "Time exits are controlled so far.", "Review stale-exit timing."),
+      strategyDnaRow(trades, "Time Stale Exit", (trade) => exitReasonForTrade(trade).toLowerCase().includes("stale") || exitReasonForTrade(trade).toLowerCase().includes("time")),
     ),
     rejectionConclusionRow("H4 history insufficient", findPattern(rejections, "H4 history insufficient", ["H4 history", "H4 insufficient"])),
     rejectionConclusionRow("M15 history insufficient", findPattern(rejections, "M15 history insufficient", ["M15 history", "M15 insufficient"])),
     rejectionConclusionRow("H1 history insufficient", findPattern(rejections, "H1 history insufficient", ["H1 history", "H1 insufficient"])),
     rejectionConclusionRow("Stop Loss rejection", findPattern(rejections, "Stop Loss rejection", ["stop loss", "sl validation"])),
     rejectionConclusionRow("Risk rejection", findPattern(rejections, "Risk rejection", ["risk validation", "risk rejection"])),
-    aiConclusionRow("Require BOS", "Require BOS before entry."),
-    aiConclusionRow("Require FVG", "Require FVG before entry."),
-    aiConclusionRow("Session filter", "Use London/NY as a score bonus, not a hard block."),
-    aiConclusionRow("RR filter", "Require RR >= 2.0."),
-    aiConclusionRow("History filter", "Reject weak history data before signal approval."),
-    aiConclusionRow("Advisory confirmations", "Use liquidity sweep and trend alignment as score boosters."),
+  ];
+  return [
+    ...baseRows,
+    aiConclusionRow("Best observed condition", featureObservation(bestFeature), bestFeature),
+    aiConclusionRow("Weakest observed condition", featureObservation(weakestFeature), weakestFeature),
+    aiConclusionRow("Largest loss pattern", patternObservation(topLoss, lossCount, "losses")),
+    aiConclusionRow("Main validation blocker", patternObservation(topRejection, rejections.reduce((sum, item) => sum + item.count, 0), "rejections")),
+    aiConclusionRow("Current sample", `${trades.length} closed trades analyzed in active round.`),
   ];
 }
 
@@ -3798,7 +3834,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
@@ -3956,6 +3992,7 @@ function decisionStatusFromRecord(record: ApiRecord): ReasonStatus {
   const statusText = readText(record, ["status", "execution_status", "executionStatus", "status_level", "risk_status", "validation_status"], "").toUpperCase();
   const reportType = readText(record, ["report_type", "event_type", "event"], "").toUpperCase();
   const combinedText = [readText(record, ["reason"], ""), readText(record, ["final_decision_reason"], ""), readText(record, ["decision_reason"], "")].join(" ");
+  if (statusText.includes("SCAN_RESULT") || reportType.includes("SCAN_RESULT")) return "SCAN_RESULT";
   if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combinedText)) return "CLOSED_LOSS";
   if (/CLOSED_WIN|Result:\s*WIN/i.test(combinedText)) return "CLOSED_WIN";
   if (statusText.includes("OPEN_CONFIRMED") || reportType.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
@@ -4317,11 +4354,11 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
           <p className="premium-section-eyebrow">Reason</p>
           <p className="premium-metric-value text-white">Bot Decisions</p>
         </div>
-        <p className="premium-metric-label">Latest 50 messages</p>
+        <p className="premium-metric-label">Latest 3 messages</p>
       </div>
       {visibleMessages.length > 0 ? (
         <div className="reason-message-list">
-          {visibleMessages.slice(0, 8).map((message) => (
+          {visibleMessages.slice(0, 3).map((message) => (
             <article className="reason-message" key={message.event_id || message.id}>
               <div>
                 <span className={`reason-status ${message.status.toLowerCase()}`}>{message.status}</span>

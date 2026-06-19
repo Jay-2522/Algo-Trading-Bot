@@ -4,13 +4,14 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "Error";
 type ApiRecord = Record<string, unknown>;
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
   data_source?: string;
   id: string;
+  event_id?: string;
   groqGenerated: boolean;
   reason: string;
   rejection_reason?: string;
@@ -264,6 +265,8 @@ function stableId(context: ApiRecord): string {
 
 function normalizeStatus(value: unknown): ReasonStatus {
   const status = text(value).toUpperCase();
+  if (status.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
+  if (status.includes("CLOSED")) return "CLOSED";
   if (status.includes("APPROVED") || status.includes("ACCEPT") || status.includes("READY") || status.includes("WIN")) return "Accepted";
   if (status.includes("REJECT") || status.includes("BLOCK") || status.includes("DENIED") || status.includes("LOSS")) return "Rejected";
   if (status.includes("ERROR") || status.includes("FAIL") || status.includes("DISCONNECT")) return "Error";
@@ -318,6 +321,7 @@ function hasWaitingIncomplete(record: ApiRecord | ReasonMessage): boolean {
 
 function normalizedDecisionStatus(record: ApiRecord | ReasonMessage): ReasonStatus {
   const rawStatus = normalizeStatus((record as ReasonMessage).status);
+  if (rawStatus === "OPEN_CONFIRMED") return "OPEN_CONFIRMED";
   if (isExecutionAccepted(record)) return "Accepted";
   if (rawStatus === "Error") return "Error";
   if (hasHardRejection(record)) return "Rejected";
@@ -414,7 +418,7 @@ function sortNewestFirst(messages: ReasonMessage[]): ReasonMessage[] {
   return [...messages].sort((left, right) => {
     const timestampDelta = timestampValue(text(right.timestamp)) - timestampValue(text(left.timestamp));
     if (timestampDelta !== 0) return timestampDelta;
-    return text(left.id).localeCompare(text(right.id));
+    return text(right.event_id || right.id).localeCompare(text(left.event_id || left.id));
   });
 }
 
@@ -428,6 +432,25 @@ function acceptedExecutionFallback(message: ReasonMessage): string {
   if (ticket && score !== null) return `${symbol} trade opened successfully. Ticket: ${ticket}. Score ${formatNumber(score)}/${formatNumber(total)}. RR ${rr !== null ? formatNumber(rr) : "2.0"}. Risk approved.`;
   const sideText = side && !["TRADE", "POSITION"].includes(side) ? ` as a ${side} trade` : "";
   return `${symbol} was accepted and opened${sideText} because guarded demo validation passed, risk status was approved, and MT5 executed the order successfully.${ticket ? ` Ticket: ${ticket}.` : ""}`;
+}
+
+function openConfirmedFallback(message: ReasonMessage): string {
+  const symbol = text(message.symbol).toUpperCase() || "EURUSD";
+  const side = cleanDisplayText(message.side).toUpperCase() || "TRADE";
+  const ticket = cleanDisplayText(message.ticket);
+  const adaptiveLevel = cleanDisplayText((message as ApiRecord).adaptive_level) || "0";
+  return [
+    "OPEN_CONFIRMED",
+    `Symbol: ${symbol}`,
+    `Direction: ${side}`,
+    `Ticket: ${ticket || "Unavailable"}`,
+    `Entry: ${cleanDisplayText((message as ApiRecord).entry) || "Unavailable"}`,
+    `Current price: ${cleanDisplayText((message as ApiRecord).current_price) || "Unavailable"}`,
+    `SL: ${cleanDisplayText((message as ApiRecord).sl) || "Unavailable"}`,
+    `TP: ${cleanDisplayText((message as ApiRecord).tp) || "Unavailable"}`,
+    `Floating P&L: ${cleanDisplayText((message as ApiRecord).floating_pnl) || "0"}`,
+    `Adaptive level: ${adaptiveLevel}`,
+  ].join("\n");
 }
 
 function rejectedFallback(message: ReasonMessage): string {
@@ -463,7 +486,23 @@ function isLegacyStrategyDiagnostic(value: string): boolean {
 }
 
 function isLegacyReasonMessage(message: ReasonMessage): boolean {
-  return isLegacyStrategyDiagnostic([message.reason, message.rejection_reason, message.decision_reason, message.final_decision_reason].map(text).join(" "));
+  const combined = [
+    message.reason,
+    message.rejection_reason,
+    message.decision_reason,
+    message.final_decision_reason,
+    message.validation_status,
+    ...(Array.isArray(message.failed_rules) ? message.failed_rules : []),
+  ]
+    .map(text)
+    .join(" ");
+  return (
+    isLegacyStrategyDiagnostic(combined) ||
+    /outside\s+(?:london|new york|ny)|outside\s+.*session/i.test(combined) ||
+    /confidence\s*(?:threshold|needs|below|62|75)|threshold\s*75/i.test(combined) ||
+    /\bwatchlist\b/i.test(combined) ||
+    /old round 3 rule failed|required round 3 rule failed|rule failed/i.test(combined)
+  );
 }
 
 function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
@@ -471,6 +510,9 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
   let reason = cleanDisplayText(message.reason);
   const rejectionReason = cleanDisplayText(message.rejection_reason);
   const canonicalRound3Reason = round3DecisionBlock(message, status);
+  if (status === "OPEN_CONFIRMED") {
+    reason = /^OPEN_CONFIRMED\b/i.test(reason) ? reason : openConfirmedFallback(message);
+  }
   if (canonicalRound3Reason && (isLegacyStrategyDiagnostic(reason) || /required round 3|rule failed|confirmation score 0\/2/i.test(reason) || status !== "Error")) {
     reason = canonicalRound3Reason;
   } else if (isLegacyStrategyDiagnostic(reason) || /required round 3|rule failed|confirmation score 0\/2/i.test(reason)) {
@@ -491,6 +533,8 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
   }
   return {
     ...message,
+    event_id: cleanDisplayText(message.event_id) || cleanDisplayText(message.id),
+    id: cleanDisplayText(message.id),
     data_source: cleanDisplayText(message.data_source),
     mt5_comment: cleanDisplayText(message.mt5_comment),
     mt5_retcode: cleanDisplayText(message.mt5_retcode),
@@ -756,7 +800,7 @@ async function generateReason(sourceReason: string): Promise<string | null> {
 export async function GET() {
   const scope = await activeRoundScope();
   const messages = sortNewestFirst(await readStore());
-  const scoped = scope.sessionId ? messages.filter((message) => text(message.validation_session_id || message.round_id) === scope.sessionId) : [];
+  const scoped = scope.sessionId ? messages.filter((message) => text(message.validation_session_id || message.round_id) === scope.sessionId && !isLegacyReasonMessage(message)) : [];
   return NextResponse.json({ active_session_id: scope.sessionId, messages: scoped.slice(0, 50) });
 }
 
@@ -778,6 +822,7 @@ export async function POST(request: Request) {
       const message: ReasonMessage = {
         ...diagnostics,
         id,
+        event_id: id,
         groqGenerated: Boolean(groqReason),
         reason,
         source: groqReason ? "groq" : "rule",
@@ -799,7 +844,7 @@ export async function POST(request: Request) {
     const replacementKeys = new Set(newMessages.map(meaningfulReasonKey));
     const next = sortNewestFirst(dedupeMeaningfully([...newMessages, ...existing.filter((message) => !replacementKeys.has(meaningfulReasonKey(message)))])).slice(0, MAX_STORED_REASONS);
     await writeStore(next);
-    const scoped = scope.sessionId ? next.filter((message) => text(message.validation_session_id || message.round_id) === scope.sessionId) : next;
+    const scoped = scope.sessionId ? next.filter((message) => text(message.validation_session_id || message.round_id) === scope.sessionId && !isLegacyReasonMessage(message)) : next.filter((message) => !isLegacyReasonMessage(message));
     return NextResponse.json({ active_session_id: scope.sessionId, messages: scoped.slice(0, 50) });
   } catch {
     return NextResponse.json({ error: BUSY_MESSAGE }, { status: 503 });

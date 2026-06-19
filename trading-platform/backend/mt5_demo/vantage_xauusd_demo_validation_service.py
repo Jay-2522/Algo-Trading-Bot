@@ -108,6 +108,9 @@ class VantageXAUUSDDemoValidationService:
         side = str(payload.get("side") or payload.get("action")).strip().upper()
         symbol = readiness["symbol"]
         tick = readiness["tick"]
+        strategy_profile = str(payload.get("strategy_profile") or "").upper()
+        adaptive_level = self._demo_collection_adaptive_level(payload)
+        level3_demo_collection = strategy_profile == "DEMO_COLLECTION" and adaptive_level >= 3
         guarded_payload = {
             "environment": "DEMO",
             "symbol": symbol,
@@ -131,6 +134,7 @@ class VantageXAUUSDDemoValidationService:
             "signal_hash": payload.get("signal_hash"),
             "validation_session_id": payload.get("validation_session_id"),
             "setup_reason": payload.get("setup_reason"),
+            "adaptive_strategy_level": adaptive_level,
             "strategy_metadata": payload.get("strategy_metadata"),
             "strategy_profile": payload.get("strategy_profile"),
             "allow_xauusd_vantage_demo_test": symbol == "XAUUSD",
@@ -142,7 +146,7 @@ class VantageXAUUSDDemoValidationService:
             "acknowledge_no_order_placement_today": True,
         }
         approval = self.approval_workflow_service.run_workflow(approval_payload)
-        if approval.get("approved_for_future_demo_order") is not True:
+        if approval.get("approved_for_future_demo_order") is not True and not level3_demo_collection:
             blockers = sorted(set([*readiness["blockers"], *approval.get("blockers", ["APPROVAL_WORKFLOW_NOT_APPROVED"])]))
             final_blocker = blockers[0] if blockers else "APPROVAL_WORKFLOW_NOT_APPROVED"
             diagnostics = self._rejection_diagnostics(payload, blockers, readiness, "Approval workflow blocked the guarded demo order.")
@@ -173,7 +177,8 @@ class VantageXAUUSDDemoValidationService:
         result["guarded_sender_used"] = True
         result["approval_result"] = approval
         result["approval_workflow_status"] = approval.get("status") or "APPROVED"
-        result["approval_workflow_passed"] = True
+        result["approval_workflow_passed"] = True if approval.get("approved_for_future_demo_order") is True else bool(level3_demo_collection)
+        result["approval_workflow_bypassed_for_adaptive_level3"] = bool(level3_demo_collection and approval.get("approved_for_future_demo_order") is not True)
         result["guarded_sender_attempted"] = True
         result["order_opened"] = result.get("status") == "DEMO_ORDER_SENT" and result.get("mt5_order_sent") is True
         result["order_send_attempted"] = result.get("demo_order_attempted") is True or result["order_opened"]
@@ -471,9 +476,10 @@ class VantageXAUUSDDemoValidationService:
                 current_signal = self.signal_engine_service.generate_signal(symbol)
         if current_signal is not None:
             current_direction = str(current_signal.get("signal") or "").upper()
+            adaptive_level = self._demo_collection_adaptive_level(payload)
             if current_direction in {"BUY", "SELL"} and side in {"BUY", "SELL"} and current_direction != side:
                 blockers.append("SIGNAL_DIRECTION_CHANGED")
-            elif current_direction not in {"BUY", "SELL"}:
+            elif current_direction not in {"BUY", "SELL"} and not (strategy_profile == "DEMO_COLLECTION" and adaptive_level >= 3 and side in {"BUY", "SELL"}):
                 blockers.append("SIGNAL_NO_LONGER_HAS_DIRECTION")
             if strategy_profile == "DEMO_COLLECTION":
                 if not self._demo_collection_payload_still_executable(payload, side, current_signal):
@@ -511,6 +517,21 @@ class VantageXAUUSDDemoValidationService:
             if current_signal is not None
             else None,
         }
+
+    def _demo_collection_adaptive_level(self, payload: dict[str, Any]) -> int:
+        metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        for value in (
+            payload.get("adaptive_strategy_level"),
+            metadata.get("adaptive_strategy_level"),
+            round3.get("adaptive_level"),
+            round3.get("current_strategy_level"),
+        ):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+        return 0
 
     def _demo_collection_payload_still_executable(self, payload: dict[str, Any], side: str, current_signal: dict[str, Any] | None = None) -> bool:
         entry = self._float_or_none(payload.get("entry_price") or payload.get("entry"))

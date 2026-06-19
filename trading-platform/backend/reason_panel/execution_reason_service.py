@@ -50,6 +50,7 @@ class ExecutionReasonPanelService:
             return None
         message = {
             "id": self._id(ticket, signal_hash),
+            "event_id": self._id(ticket, signal_hash),
             "groqGenerated": False,
             "reason": f"{symbol} was accepted and opened as a {side or 'trade'} trade because the guarded demo validation passed, risk status was approved, and MT5 executed the order successfully. Ticket: {ticket}.",
             "source": "execution",
@@ -67,6 +68,71 @@ class ExecutionReasonPanelService:
             "mt5_comment": self._text(position.get("mt5_comment") or position.get("comment") or "Request executed"),
             "timestamp": timestamp or self._timestamp(),
             "data_source": data_source,
+        }
+        self._upsert(message)
+        return message
+
+    def persist_open_confirmed(
+        self,
+        position: dict[str, Any],
+        *,
+        adaptive_level: int | str | None = None,
+        session_id: str = "",
+        timestamp: str = "",
+    ) -> dict[str, Any] | None:
+        ticket = self._text(position.get("ticket") or position.get("mt5_ticket"))
+        symbol = self._text(position.get("symbol")).upper()
+        side = self._text(position.get("side") or position.get("type") or position.get("action")).upper()
+        if not ticket or not symbol:
+            return None
+        message_id = f"execution-open-confirmed-{ticket}"
+        for existing in self._read():
+            if self._text(existing.get("id")) == message_id:
+                existing_reason = self._text(existing.get("reason"))
+                if self._text(existing.get("status")).upper() == "OPEN_CONFIRMED" and existing_reason.upper().startswith("OPEN_CONFIRMED") and "\n" in existing_reason:
+                    return existing
+                break
+        entry = position.get("entry_price") or position.get("price_open")
+        current_price = position.get("current_price") or position.get("price_current")
+        sl = position.get("stop_loss") or position.get("sl")
+        tp = position.get("take_profit") or position.get("tp")
+        floating_pnl = position.get("floating_pnl") if position.get("floating_pnl") is not None else position.get("profit")
+        message = {
+            "id": message_id,
+            "event_id": message_id,
+            "groqGenerated": False,
+            "reason": "\n".join(
+                [
+                    "OPEN_CONFIRMED",
+                    f"Symbol: {symbol}",
+                    f"Direction: {side or 'TRADE'}",
+                    f"Ticket: {ticket}",
+                    f"Entry: {self._text(entry) or 'Unavailable'}",
+                    f"Current price: {self._text(current_price) or 'Unavailable'}",
+                    f"SL: {self._text(sl) or 'Unavailable'}",
+                    f"TP: {self._text(tp) or 'Unavailable'}",
+                    f"Floating P&L: {self._text(floating_pnl) or '0'}",
+                    f"Adaptive level: {self._text(adaptive_level) or '0'}",
+                ]
+            ),
+            "source": "execution",
+            "status": "OPEN_CONFIRMED",
+            "symbol": symbol,
+            "side": side,
+            "ticket": ticket,
+            "strategy_profile": "DEMO_COLLECTION",
+            "decision": "OPEN_CONFIRMED",
+            "order_opened": True,
+            "entry": entry,
+            "current_price": current_price,
+            "sl": sl,
+            "tp": tp,
+            "floating_pnl": floating_pnl,
+            "adaptive_level": adaptive_level,
+            "validation_session_id": session_id,
+            "final_decision_reason": "OPEN_CONFIRMED",
+            "timestamp": timestamp or self._timestamp(),
+            "data_source": "MT5_LIVE_POSITION_SYNC",
         }
         self._upsert(message)
         return message
@@ -107,6 +173,7 @@ class ExecutionReasonPanelService:
         data_source = self._text(payload.get("data_source") or signal.get("data_source") or strategy_metadata.get("data_source"))
         return {
             "id": self._id(ticket, signal_hash),
+            "event_id": self._id(ticket, signal_hash),
             "groqGenerated": False,
             "reason": final_reason,
             "source": "execution",
@@ -147,11 +214,12 @@ class ExecutionReasonPanelService:
         ticket = self._text(message.get("ticket"))
         signal_hash = self._text(message.get("signal_hash"))
         message_id = self._text(message.get("id"))
+        status = self._text(message.get("status"))
         filtered = []
         for item in messages:
             if message_id and self._text(item.get("id")) == message_id:
                 continue
-            if ticket and self._text(item.get("ticket")) == ticket:
+            if ticket and self._text(item.get("ticket")) == ticket and status and self._text(item.get("status")) == status:
                 continue
             if signal_hash and self._text(item.get("signal_hash")) == signal_hash and self._text(item.get("source")) == "execution":
                 continue

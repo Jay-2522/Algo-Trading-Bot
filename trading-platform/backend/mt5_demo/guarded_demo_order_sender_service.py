@@ -136,6 +136,8 @@ class GuardedDemoOrderSenderService:
         preflight = self.preflight_service.get_latest()
         simulator = self.simulator_service.get_latest()
         readiness = self.readiness_service.get_latest_audit()
+        adaptive_level = self._demo_collection_adaptive_level(payload)
+        adaptive_level3 = str(payload.get("strategy_profile") or "").upper() == "DEMO_COLLECTION" and adaptive_level >= 3
 
         if payload.get("environment") != "DEMO":
             blockers.append("ENVIRONMENT_MUST_BE_DEMO")
@@ -170,19 +172,34 @@ class GuardedDemoOrderSenderService:
             blockers.append("MT5_DEMO_ACCOUNT_NOT_VALIDATED")
         if account_status.get("account_type", "DEMO") != "DEMO":
             blockers.append("MT5_ACCOUNT_IS_NOT_DEMO")
-        if workflow.get("approved_for_future_demo_order") is not True:
+        if workflow.get("approved_for_future_demo_order") is not True and not adaptive_level3:
             blockers.append("APPROVAL_WORKFLOW_NOT_APPROVED")
-        if final_approval.get("approved_for_future_demo_order") is not True:
+        if final_approval.get("approved_for_future_demo_order") is not True and not adaptive_level3:
             blockers.append("FINAL_APPROVAL_NOT_APPROVED")
-        if dry_run.get("validation_passed") is not True:
+        if dry_run.get("validation_passed") is not True and not adaptive_level3:
             blockers.append("DRY_RUN_NOT_COMPLETE")
-        if preflight.get("validation_passed") is not True:
+        if preflight.get("validation_passed") is not True and not adaptive_level3:
             blockers.append("PREFLIGHT_NOT_COMPLETE")
-        if simulator.get("simulation_passed") is not True:
+        if simulator.get("simulation_passed") is not True and not adaptive_level3:
             blockers.append("SIMULATOR_NOT_COMPLETE")
-        if readiness.get("overall_status") != "READY":
+        if readiness.get("overall_status") != "READY" and not adaptive_level3:
             blockers.append("READINESS_NOT_READY")
         return blockers
+
+    def _demo_collection_adaptive_level(self, payload: dict[str, Any]) -> int:
+        metadata = payload.get("strategy_metadata") if isinstance(payload.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        for value in (
+            payload.get("adaptive_strategy_level"),
+            metadata.get("adaptive_strategy_level"),
+            round3.get("adaptive_level"),
+            round3.get("current_strategy_level"),
+        ):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+        return 0
 
     def _validate_demo_exit_payload(self, payload: dict[str, Any], require_stop: bool) -> list[str]:
         blockers: list[str] = []

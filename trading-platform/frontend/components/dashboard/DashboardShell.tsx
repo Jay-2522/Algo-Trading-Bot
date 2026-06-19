@@ -836,6 +836,8 @@ export function DashboardShell(_: {
           writeCachedDashboardData(next);
           return next;
         });
+        void refreshOpenPositions();
+        setReasonRefreshToken((value) => value + 1);
       }
       if (result.errors.length > 0) {
         setErrors(result.errors);
@@ -847,7 +849,7 @@ export function DashboardShell(_: {
     } finally {
       autoValidationRequestInFlight.current = false;
     }
-  }, []);
+  }, [refreshOpenPositions]);
 
   useEffect(() => {
     void refresh();
@@ -855,7 +857,7 @@ export function DashboardShell(_: {
 
   useEffect(() => {
     void refreshOpenPositions();
-    const interval = window.setInterval(() => void refreshOpenPositions(), 5000);
+    const interval = window.setInterval(() => void refreshOpenPositions(), 3000);
     return () => window.clearInterval(interval);
   }, [refreshOpenPositions]);
 
@@ -3796,12 +3798,13 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "Closed" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "Error";
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
   data_source?: string;
   id: string;
+  event_id?: string;
   reason: string;
   rejection_reason?: string;
   status: ReasonStatus;
@@ -3952,7 +3955,8 @@ function hasWaitingDecisionState(record: ApiRecord): boolean {
 function decisionStatusFromRecord(record: ApiRecord): ReasonStatus {
   const statusText = readText(record, ["status", "execution_status", "executionStatus", "status_level", "risk_status", "validation_status"], "").toUpperCase();
   const reportType = readText(record, ["report_type", "event_type", "event"], "").toUpperCase();
-  if (statusText.includes("CLOSED") || reportType.includes("VALIDATION_TRADE_CLOSED") || reportType.includes("ORDER_CLOSED_CONFIRMED")) return "Closed";
+  if (statusText.includes("OPEN_CONFIRMED") || reportType.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
+  if (statusText.includes("CLOSED") || reportType.includes("VALIDATION_TRADE_CLOSED") || reportType.includes("ORDER_CLOSED_CONFIRMED")) return "CLOSED";
   if (hasActualOrderExecution(record)) return "Accepted";
   if (statusText.includes("ERROR") || statusText.includes("FAIL") || statusText.includes("DISCONNECT")) return "Error";
   if (hasHardDecisionFailure(record)) return "Rejected";
@@ -4048,6 +4052,7 @@ function canonicalRound3DecisionReason(record: ApiRecord, status: ReasonStatus):
 
 function decisionReasonFromRecord(record: ApiRecord, status: ReasonStatus, fallback: string): string {
   const rawReason = readText(record, ["setup_reason", "reason", "what_needs_to_happen_next"], fallback);
+  if (status === "OPEN_CONFIRMED") return rawReason || "OPEN_CONFIRMED";
   const decisionReason = readText(record, ["decision_reason", "decisionReason"], "");
   const finalReason = readText(record, ["final_decision_reason", "finalDecisionReason"], "");
   const canonical = canonicalRound3DecisionReason(record, status);
@@ -4167,7 +4172,7 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
     const exitReason = friendlyText(report, ["exit_reason", "reason", "close_reason"], "MT5 history confirmed close");
     const closedAt = readText(report, ["closed_at", "generated_at", "timestamp"], "1970-01-01T00:00:00.000Z");
     const closeReason = `${symbol} ${side} closed. Ticket: ${ticket || "Unavailable"}. Result: ${result}. P&L: ${money(pnl)}. Exit: ${exitReason}. Closed: ${formatTradeTime(closedAt)}.`;
-    const status: ReasonStatus = ticket ? "Closed" : "Waiting";
+    const status: ReasonStatus = ticket ? "CLOSED" : "Waiting";
     messages.push({
       id: `reason-${symbol}-closed-${ticket || readText(report, ["trade_id"], String(index))}`,
       ticket: ticket || String(index),
@@ -4194,9 +4199,11 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
       const timestamp = readText(record, ["timestamp"], "1970-01-01T00:00:00.000Z");
       const ticket = readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "");
       const rawId = readText(record, ["id"], "");
+      const eventId = readText(record, ["event_id", "eventId"], rawId);
       const id = rawId || (ticket ? `reason-${symbol}-${status}-ticket-${ticket}` : `reason-${symbol}-${status}-${timestamp}-${reason.slice(0, 48)}`);
       return {
         id,
+        event_id: eventId || id,
         candles_loaded: (() => {
           const value = numeric(record, ["candles_loaded"], Number.NaN);
           return Number.isFinite(value) ? value : null;
@@ -4227,7 +4234,7 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
   const seen = new Set<string>();
   return normalized
     .filter((message) => {
-      const key = message.id || `${message.symbol}|${message.status}|${message.reason}|${message.timestamp}`;
+      const key = message.event_id || message.id || `${message.symbol}|${message.status}|${message.reason}|${message.timestamp}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -4235,13 +4242,13 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
     .sort((left, right) => {
       const timestampDelta = new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime();
       if (Number.isFinite(timestampDelta) && timestampDelta !== 0) return timestampDelta;
-      return left.id.localeCompare(right.id);
+      return (right.event_id || right.id).localeCompare(left.event_id || left.id);
     });
 }
 
 function reasonMessagesSignature(messages: ReasonMessage[]): string {
   return messages
-    .map((message) => [message.id, message.symbol, message.status, message.timestamp, message.reason, message.ticket || "", message.validation_status || ""].join("\u001f"))
+    .map((message) => [message.event_id || message.id, message.symbol, message.status, message.timestamp, message.reason, message.ticket || "", message.validation_status || ""].join("\u001f"))
     .join("\u001e");
 }
 
@@ -4251,14 +4258,25 @@ function setReasonMessagesIfChanged(setter: React.Dispatch<React.SetStateAction<
 
 function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: ReasonContext[]; refreshToken?: number }) {
   const [storedMessages, setStoredMessages] = useState<ReasonMessage[]>([]);
+  const fetchInFlightRef = useRef(false);
+  const syncInFlightRef = useRef(false);
+  const responseSequenceRef = useRef(0);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const records = await fetchReasonMessages();
-      if (!cancelled) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
+      const sequence = responseSequenceRef.current + 1;
+      responseSequenceRef.current = sequence;
+      try {
+        const records = await fetchReasonMessages();
+        if (!cancelled && sequence === responseSequenceRef.current) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
+      } finally {
+        fetchInFlightRef.current = false;
+      }
     };
     void load();
-    const interval = window.setInterval(load, 5000);
+    const interval = window.setInterval(load, 3000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -4268,9 +4286,17 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
   useEffect(() => {
     if (!contexts.length) return;
     let cancelled = false;
-    void syncReasonMessages(contexts).then((records) => {
-      if (!cancelled && records.length) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
-    });
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    const sequence = responseSequenceRef.current + 1;
+    responseSequenceRef.current = sequence;
+    void syncReasonMessages(contexts)
+      .then((records) => {
+        if (!cancelled && sequence === responseSequenceRef.current) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
+      })
+      .finally(() => {
+        syncInFlightRef.current = false;
+      });
     return () => {
       cancelled = true;
     };
@@ -4291,7 +4317,7 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
       {visibleMessages.length > 0 ? (
         <div className="reason-message-list">
           {visibleMessages.slice(0, 8).map((message) => (
-            <article className="reason-message" key={message.id}>
+            <article className="reason-message" key={message.event_id || message.id}>
               <div>
                 <span className={`reason-status ${message.status.toLowerCase()}`}>{message.status}</span>
                 <strong>{message.symbol}</strong>

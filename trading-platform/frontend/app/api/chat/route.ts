@@ -455,8 +455,16 @@ function isHistoryReadinessQuestion(question: string): boolean {
     normalized.includes("m15 candle") ||
     normalized.includes("candles loaded") ||
     normalized.includes("loaded 0") ||
-    (normalized.includes("history") && normalized.includes("0")) ||
-    (normalized.includes("why") && normalized.includes("no") && normalized.includes("trade") && (normalized.includes("open") || normalized.includes("opening")))
+    (normalized.includes("history") && normalized.includes("0"))
+  );
+}
+
+function isNoTradeOpenedQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("why") &&
+    (normalized.includes("no trade") || normalized.includes("zero trade") || normalized.includes("nothing")) &&
+    (normalized.includes("open") || normalized.includes("opened") || normalized.includes("opening") || normalized.includes("placed"))
   );
 }
 
@@ -523,6 +531,23 @@ async function answerHistoryReadinessQuestion(question: string): Promise<string 
     return "History is ready for Round 3 M15, H1, and H4 validation.";
   }
   return diagnostics.map(historyDiagnosticSummary).join(". ") + ".";
+}
+
+async function answerNoTradeOpenedQuestion(question: string): Promise<string | null> {
+  if (!isNoTradeOpenedQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const trace = asRecord(status?.latest_decision_trace) ?? asRecord(asRecord(status?.session)?.latest_decision_trace);
+  if (!trace) return "No decision trace has been recorded yet. Run one validation scan cycle to capture the exact blocker.";
+  const level = numberValue(trace.adaptive_level);
+  const symbol = cleanText(trace.symbol) || "latest symbol";
+  const decision = cleanText(trace.execution_decision) || "not sent";
+  const score = numberValue(trace.score);
+  const failed = Array.isArray(trace.failed_hard_gates) ? trace.failed_hard_gates.map(cleanText).filter(Boolean) : [];
+  const reason = cleanText(trace.why_order_not_sent);
+  const scoreText = score !== null ? ` Score ${score}.` : "";
+  const failedText = failed.length ? ` Failed gate: ${failed[0].replaceAll("_", " ")}.` : "";
+  const reasonText = reason ? ` Reason: ${reason}` : "";
+  return `${symbol} has not opened because the latest scan decision was ${decision} at Adaptive Level ${level ?? 0}.${scoreText}${failedText}${reasonText}`;
 }
 
 function logOpenPositionsForChat(positions: Record<string, unknown>[]): void {
@@ -837,6 +862,10 @@ export async function POST(request: Request) {
     const strategyRulesAnswer = answerStrategyRulesQuestion(question);
     if (strategyRulesAnswer) {
       return NextResponse.json({ reply: strategyRulesAnswer });
+    }
+    const noTradeOpenedAnswer = await answerNoTradeOpenedQuestion(question);
+    if (noTradeOpenedAnswer) {
+      return NextResponse.json({ reply: noTradeOpenedAnswer });
     }
     const historyReadinessAnswer = await answerHistoryReadinessQuestion(question);
     if (historyReadinessAnswer) {

@@ -101,6 +101,7 @@ class AutoValidationService:
             "history_ready": bool(self._history_warmup_diagnostics.get("history_ready")),
             "active_session_id": self.session.get("session_id", ""),
             "dashboard_session_id": self.session.get("session_id", ""),
+            "active_round_diagnostics": copy.deepcopy(self.session.get("active_round_diagnostics", {})),
             "recovered_session_id": "",
             "startup_session_diagnostics": copy.deepcopy(self._startup_session_diagnostics),
             "last_hash_change_audit": copy.deepcopy(self._last_hash_change_audit),
@@ -1791,6 +1792,7 @@ class AutoValidationService:
         }
 
     def _refresh_session_metrics(self) -> None:
+        reconciliation = self._reconcile_active_close_reports_into_journal()
         mt5_open_positions = self._reconcile_open_mt5_positions()
         target_trades = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
         if not self._has_current_user_session():
@@ -1883,6 +1885,17 @@ class AutoValidationService:
                 "best_setup_type": setup_performance["best_setup_type"],
                 "worst_setup_type": setup_performance["worst_setup_type"],
                 "equity_curve": self._equity_curve(closed),
+                "active_round_diagnostics": {
+                    "active_session_id": self.session.get("session_id", ""),
+                    "open_trade_count": open_trade_count,
+                    "closed_trade_count": len(closed),
+                    "latest_closed_tickets": [str(trade.get("mt5_ticket") or trade.get("ticket") or "") for trade in closed[-5:]],
+                    "latest_open_tickets": sorted(mt5_open_ticket_keys or open_ticket_keys),
+                    "event_count": len(self.events),
+                    "counter_source": "active_session_trade_journal_plus_mt5_open_positions",
+                    "reconciliation_action": reconciliation.get("action", "none"),
+                    "reconciled_closed_tickets": reconciliation.get("tickets", []),
+                },
             }
         )
         if self.session["status"] == "RUNNING" and self.session["current_closed_trades"] >= target_trades:
@@ -1893,6 +1906,69 @@ class AutoValidationService:
             self._log("TARGET_COMPLETED")
             self.round_archive_service.complete_round(self.session, self.config, closed, self.events)
             self._save_state()
+
+    def _reconcile_active_close_reports_into_journal(self) -> dict[str, Any]:
+        session_id = str(self.session.get("session_id") or "")
+        if not session_id or self.journal_service is None or not hasattr(self.journal_service, "record_trade_closed"):
+            return {"action": "skipped", "tickets": []}
+        reports = [
+            report
+            for report in self._validation_close_reports
+            if str(report.get("validation_session_id") or "") == session_id and str(report.get("ticket") or report.get("mt5_ticket") or "")
+        ]
+        if not reports:
+            return {"action": "none", "tickets": []}
+        existing = {str(trade.get("mt5_ticket") or trade.get("ticket") or ""): trade for trade in self.trades() if str(trade.get("mt5_ticket") or trade.get("ticket") or "")}
+        reconciled: list[str] = []
+        for report in reports:
+            ticket = str(report.get("ticket") or report.get("mt5_ticket") or "")
+            current = existing.get(ticket)
+            if current is not None and str(current.get("status") or "").upper() == "CLOSED":
+                self._persist_closed_confirmed_reason(current)
+                continue
+            payload = {
+                **(current or {}),
+                "trade_id": str((current or {}).get("trade_id") or report.get("trade_id") or f"mt5_demo_{ticket}"),
+                "source": "MT5_DEMO",
+                "environment": "DEMO",
+                "symbol": report.get("symbol"),
+                "side": report.get("side"),
+                "entry_price": report.get("entry"),
+                "close_price": report.get("exit"),
+                "profit_loss": report.get("pnl"),
+                "realized_pnl": report.get("pnl"),
+                "total_pnl": report.get("pnl"),
+                "net_pnl": report.get("pnl"),
+                "result": report.get("result"),
+                "exit_reason": report.get("exit_reason"),
+                "opened_at": report.get("opened_at"),
+                "closed_at": report.get("closed_at"),
+                "close_time": report.get("closed_at"),
+                "risk_reward_ratio": report.get("rr"),
+                "signal_confidence": report.get("confidence"),
+                "mt5_ticket": ticket,
+                "validation_session_id": session_id,
+                "strategy_profile": report.get("strategy_profile") or self.config.get("strategy_profile"),
+                "notes": "Reconciled from MT5-confirmed validation close report.",
+            }
+            try:
+                updated = self.journal_service.record_trade_closed(payload)
+                self._persist_closed_confirmed_reason(updated)
+                existing[ticket] = updated
+                reconciled.append(ticket)
+            except Exception:
+                continue
+        return {"action": "reconciled_close_reports_to_journal" if reconciled else "already_reconciled", "tickets": reconciled}
+
+    def _persist_closed_confirmed_reason(self, trade: dict[str, Any]) -> None:
+        try:
+            self.reason_panel_service.persist_closed_confirmed(
+                trade,
+                session_id=str(self.session.get("session_id") or ""),
+                timestamp=str(trade.get("closed_at") or trade.get("close_time") or self._timestamp()),
+            )
+        except Exception:
+            pass
 
     def _sync_lifecycle_services(self, manual: bool = False) -> dict[str, Any]:
         result = self._empty_lifecycle_sync_diagnostics()
@@ -3423,6 +3499,7 @@ class AutoValidationService:
             self._validation_close_reports = self._validation_close_reports[-30:]
             reports.append(report)
             self._record_adaptive_trade_activity("CLOSED", report)
+            self._persist_closed_confirmed_reason({**trade, **report, "mt5_ticket": report.get("ticket")})
             self._log("VALIDATION_TRADE_CLOSED_REPORT", report)
             self._log("ORDER_CLOSED_CONFIRMED", report)
         return reports

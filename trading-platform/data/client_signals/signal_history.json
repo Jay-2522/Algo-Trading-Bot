@@ -2,12 +2,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:09.577745+00:00",
+    "timestamp": "2026-06-19T07:27:16.676557+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "9efd1785861c560a",
+    "signal_hash": "5005846fb887a4e8",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -25,7 +25,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:09.696289+00:00",
+    "timestamp": "2026-06-19T07:27:16.756977+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -44,7 +44,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:13.385587+00:00",
+    "timestamp": "2026-06-19T07:27:21.132389+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -67,12 +67,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:13.813489+00:00",
+    "timestamp": "2026-06-19T07:27:21.413529+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "519fcee6012178b4",
+    "signal_hash": "cf24fc29b6b466e6",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -90,7 +90,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:13.854012+00:00",
+    "timestamp": "2026-06-19T07:27:21.427748+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -109,7 +109,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:17.070328+00:00",
+    "timestamp": "2026-06-19T07:27:23.180335+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -132,12 +132,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:17.387922+00:00",
+    "timestamp": "2026-06-19T07:27:23.466854+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "ed9e20592a5ca04b",
+    "signal_hash": "b9518545ee690702",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -155,7 +155,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:17.412835+00:00",
+    "timestamp": "2026-06-19T07:27:23.494858+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -174,7 +174,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:21.317700+00:00",
+    "timestamp": "2026-06-19T07:27:25.310763+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -197,12 +197,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:21.728736+00:00",
+    "timestamp": "2026-06-19T07:27:25.732375+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "15df8dcda7862967",
+    "signal_hash": "41bd8dace3b6277b",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -220,7 +220,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:21.754745+00:00",
+    "timestamp": "2026-06-19T07:27:25.896465+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -239,7 +239,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:25.178685+00:00",
+    "timestamp": "2026-06-19T07:27:29.179011+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -262,12 +262,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:25.636476+00:00",
+    "timestamp": "2026-06-19T07:27:29.528043+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "c3b8b38bc83d9f49",
+    "signal_hash": "c659fe271c10dbde",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -285,7 +285,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:25.676766+00:00",
+    "timestamp": "2026-06-19T07:27:29.557462+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -304,7 +304,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:29.109464+00:00",
+    "timestamp": "2026-06-19T07:27:32.975886+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -327,12 +327,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:29.414009+00:00",
+    "timestamp": "2026-06-19T07:27:33.266722+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "b27bd1d9bbc9cdd0",
+    "signal_hash": "8382e1b0956100e1",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -350,7 +350,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:29.440162+00:00",
+    "timestamp": "2026-06-19T07:27:33.283740+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -369,7 +369,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:32.304065+00:00",
+    "timestamp": "2026-06-19T07:27:34.303764+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -392,12 +392,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:32.718131+00:00",
+    "timestamp": "2026-06-19T07:27:34.699226+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "e6ceeff160a56f63",
+    "signal_hash": "4c230672a2c14e62",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -415,7 +415,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:32.755761+00:00",
+    "timestamp": "2026-06-19T07:27:34.715126+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -434,7 +434,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:36.193070+00:00",
+    "timestamp": "2026-06-19T07:27:38.122145+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -457,12 +457,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:36.544996+00:00",
+    "timestamp": "2026-06-19T07:27:38.455953+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "310f5fef19720c71",
+    "signal_hash": "f5188c399ba56426",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -480,7 +480,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:36.655878+00:00",
+    "timestamp": "2026-06-19T07:27:38.473469+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -499,7 +499,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:41.108188+00:00",
+    "timestamp": "2026-06-19T07:27:49.143873+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -522,12 +522,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:41.437578+00:00",
+    "timestamp": "2026-06-19T07:27:49.457888+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "60b48dd85078768a",
+    "signal_hash": "4de88653089d940d",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -545,7 +545,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:41.473130+00:00",
+    "timestamp": "2026-06-19T07:27:49.469078+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -564,72 +564,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:44.094154+00:00",
-    "confidence": 68,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
-    "risk_reward": null,
-    "signal_hash": "b580b4b121b8a73f",
-    "setup_type": "fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": false,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London",
-      "spread_quality": 1.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
-    "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:44.423086+00:00",
-    "confidence": 74,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 74; tradeable threshold is 75. Break of structure not confirmed. Spread is not acceptable for preview readiness.",
-    "risk_reward": null,
-    "signal_hash": "541ad8dd7d17416a",
-    "setup_type": "liquidity_sweep+fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": true,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London",
-      "spread_quality": 0.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
-    "symbol": "NIFTY50",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:44.439070+00:00",
-    "confidence": null,
-    "execution_status": "BLOCKED",
-    "setup_reason": "Indian market integration pending.",
-    "risk_reward": null,
-    "signal_hash": null,
-    "setup_type": "WAIT",
-    "strategy_components": {
-      "liquidity_sweep": null,
-      "bos": null,
-      "choch": null,
-      "fvg": null,
-      "order_block": null,
-      "session_valid": null
-    }
-  },
-  {
-    "symbol": "EURUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:47.164905+00:00",
+    "timestamp": "2026-06-19T07:27:52.375783+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -652,12 +587,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:47.541890+00:00",
+    "timestamp": "2026-06-19T07:27:52.682806+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "3c203261c260a8c4",
+    "signal_hash": "3b3212cb00f690ee",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -675,7 +610,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:47.630133+00:00",
+    "timestamp": "2026-06-19T07:27:52.702270+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -694,7 +629,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:51.090483+00:00",
+    "timestamp": "2026-06-19T07:27:54.307736+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -717,12 +652,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:51.387226+00:00",
+    "timestamp": "2026-06-19T07:27:54.623964+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "a3b3a02e4a74ff16",
+    "signal_hash": "190d07367deb316d",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -740,7 +675,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:51.413858+00:00",
+    "timestamp": "2026-06-19T07:27:54.649145+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -759,72 +694,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:54.113390+00:00",
-    "confidence": 68,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
-    "risk_reward": null,
-    "signal_hash": "b580b4b121b8a73f",
-    "setup_type": "fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": false,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London",
-      "spread_quality": 1.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
-    "symbol": "XAUUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:54.435665+00:00",
-    "confidence": 74,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WATCHLIST with confidence 74; tradeable threshold is 75. Break of structure not confirmed. Spread is not acceptable for preview readiness.",
-    "risk_reward": null,
-    "signal_hash": "541ad8dd7d17416a",
-    "setup_type": "liquidity_sweep+fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": true,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London",
-      "spread_quality": 0.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
-    "symbol": "NIFTY50",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:54.502376+00:00",
-    "confidence": null,
-    "execution_status": "BLOCKED",
-    "setup_reason": "Indian market integration pending.",
-    "risk_reward": null,
-    "signal_hash": null,
-    "setup_type": "WAIT",
-    "strategy_components": {
-      "liquidity_sweep": null,
-      "bos": null,
-      "choch": null,
-      "fvg": null,
-      "order_block": null,
-      "session_valid": null
-    }
-  },
-  {
-    "symbol": "EURUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:57.110441+00:00",
+    "timestamp": "2026-06-19T07:27:58.103955+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -847,12 +717,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:20:57.501779+00:00",
+    "timestamp": "2026-06-19T07:27:58.374594+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "5030d54ff4b64091",
+    "signal_hash": "4b58b6c1fa648b7b",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -870,7 +740,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:20:57.615715+00:00",
+    "timestamp": "2026-06-19T07:27:58.402080+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -889,7 +759,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:02.312345+00:00",
+    "timestamp": "2026-06-19T07:28:02.356322+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -912,12 +782,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:02.600469+00:00",
+    "timestamp": "2026-06-19T07:28:02.633513+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "69658de01467f765",
+    "signal_hash": "4d531ac0c6a0879c",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -935,7 +805,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:02.695184+00:00",
+    "timestamp": "2026-06-19T07:28:02.657577+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -954,7 +824,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:03.573677+00:00",
+    "timestamp": "2026-06-19T07:28:07.100954+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -977,12 +847,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:04.018338+00:00",
+    "timestamp": "2026-06-19T07:28:07.390599+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "1a33eeaec7f11998",
+    "signal_hash": "9da2d8dc1e3365e8",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1000,7 +870,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:04.045291+00:00",
+    "timestamp": "2026-06-19T07:28:07.402605+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1019,7 +889,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:08.145626+00:00",
+    "timestamp": "2026-06-19T07:28:10.302607+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1042,12 +912,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:08.497600+00:00",
+    "timestamp": "2026-06-19T07:28:10.581428+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "1084c3e1b804cabc",
+    "signal_hash": "0978049355a9288c",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1065,7 +935,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:08.519000+00:00",
+    "timestamp": "2026-06-19T07:28:10.605519+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1084,7 +954,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:12.090880+00:00",
+    "timestamp": "2026-06-19T07:28:15.086295+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1107,12 +977,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:12.439192+00:00",
+    "timestamp": "2026-06-19T07:28:15.397207+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "0fc06db3a0da82b5",
+    "signal_hash": "eb79859d04743a14",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1130,7 +1000,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:12.562079+00:00",
+    "timestamp": "2026-06-19T07:28:15.420402+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1149,7 +1019,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:16.193241+00:00",
+    "timestamp": "2026-06-19T07:28:18.264392+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1172,12 +1042,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:16.508745+00:00",
+    "timestamp": "2026-06-19T07:28:18.587739+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "40a1c603002bd21a",
+    "signal_hash": "f0a0f2215a675d6d",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1195,7 +1065,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:16.528747+00:00",
+    "timestamp": "2026-06-19T07:28:18.619798+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1214,7 +1084,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:20.082925+00:00",
+    "timestamp": "2026-06-19T07:28:22.306218+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1237,12 +1107,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:20.374764+00:00",
+    "timestamp": "2026-06-19T07:28:22.608794+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "59b1d1f3b587be0f",
+    "signal_hash": "4656899ecbaaae4f",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1260,7 +1130,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:20.394977+00:00",
+    "timestamp": "2026-06-19T07:28:22.627480+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1279,7 +1149,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:24.179168+00:00",
+    "timestamp": "2026-06-19T07:28:27.154771+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1302,12 +1172,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:24.526682+00:00",
+    "timestamp": "2026-06-19T07:28:27.507020+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "9af24e841afe2f09",
+    "signal_hash": "757b694e40d7dfb6",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1325,7 +1195,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:24.555663+00:00",
+    "timestamp": "2026-06-19T07:28:27.531929+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1344,7 +1214,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:27.156909+00:00",
+    "timestamp": "2026-06-19T07:28:33.084928+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1367,12 +1237,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:27.561913+00:00",
+    "timestamp": "2026-06-19T07:28:33.416761+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "d59f25baa6b57402",
+    "signal_hash": "2b4044e5f4efdabc",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1390,7 +1260,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:27.602100+00:00",
+    "timestamp": "2026-06-19T07:28:33.440758+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1409,7 +1279,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:31.125695+00:00",
+    "timestamp": "2026-06-19T07:28:34.388897+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1432,12 +1302,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:31.424679+00:00",
+    "timestamp": "2026-06-19T07:28:34.671017+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "25f0706f94ad037c",
+    "signal_hash": "2a65546c0f498c4a",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1455,7 +1325,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:31.444681+00:00",
+    "timestamp": "2026-06-19T07:28:34.687008+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1474,7 +1344,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:34.187737+00:00",
+    "timestamp": "2026-06-19T07:28:38.097129+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1497,12 +1367,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:34.485662+00:00",
+    "timestamp": "2026-06-19T07:28:38.395488+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "1447adf85625b1a7",
+    "signal_hash": "7be9e38d1c479018",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1520,7 +1390,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:34.514714+00:00",
+    "timestamp": "2026-06-19T07:28:38.428407+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1539,7 +1409,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:38.190614+00:00",
+    "timestamp": "2026-06-19T07:28:42.374800+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1562,12 +1432,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:38.505997+00:00",
+    "timestamp": "2026-06-19T07:28:42.668564+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "17d312d3637212fa",
+    "signal_hash": "2bb47df8ad076df4",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1585,7 +1455,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:38.572906+00:00",
+    "timestamp": "2026-06-19T07:28:42.698228+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1604,7 +1474,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:41.113308+00:00",
+    "timestamp": "2026-06-19T07:28:44.524311+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1627,12 +1497,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:41.445647+00:00",
+    "timestamp": "2026-06-19T07:28:44.807038+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "302b06f75670501f",
+    "signal_hash": "2a6ad73ce6c52601",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1650,7 +1520,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:41.476380+00:00",
+    "timestamp": "2026-06-19T07:28:44.820091+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1669,72 +1539,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:44.115266+00:00",
-    "confidence": null,
-    "execution_status": "WAITING",
-    "setup_reason": "Setup quality is WAIT with confidence 58; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed. Spread is not acceptable for preview readiness.",
-    "risk_reward": null,
-    "signal_hash": "4cc610d42c730c61",
-    "setup_type": "fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": false,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London",
-      "spread_quality": 0.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
-    "symbol": "XAUUSD",
-    "signal": "SELL",
-    "timestamp": "2026-06-19T07:21:44.446022+00:00",
-    "confidence": 84,
-    "execution_status": "READY_FOR_PREVIEW",
-    "setup_reason": "Break of structure not confirmed.",
-    "risk_reward": 2.0,
-    "signal_hash": "96a7b725833caee4",
-    "setup_type": "liquidity_sweep+fvg+order_block",
-    "strategy_components": {
-      "liquidity_sweep": true,
-      "bos": false,
-      "choch": false,
-      "fvg": true,
-      "order_block": true,
-      "session_valid": true,
-      "bias": "SELL",
-      "session": "London",
-      "spread_quality": 1.0,
-      "volatility_quality": 1.0
-    }
-  },
-  {
-    "symbol": "NIFTY50",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:21:44.457726+00:00",
-    "confidence": null,
-    "execution_status": "BLOCKED",
-    "setup_reason": "Indian market integration pending.",
-    "risk_reward": null,
-    "signal_hash": null,
-    "setup_type": "WAIT",
-    "strategy_components": {
-      "liquidity_sweep": null,
-      "bos": null,
-      "choch": null,
-      "fvg": null,
-      "order_block": null,
-      "session_valid": null
-    }
-  },
-  {
-    "symbol": "EURUSD",
-    "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:01.958168+00:00",
+    "timestamp": "2026-06-19T07:28:47.760702+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1757,12 +1562,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:02.271971+00:00",
+    "timestamp": "2026-06-19T07:28:48.083711+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "55a292673d95dc6d",
+    "signal_hash": "e8b496d673faffe5",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1780,7 +1585,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:02.302670+00:00",
+    "timestamp": "2026-06-19T07:28:48.113005+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1799,7 +1604,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:03.451549+00:00",
+    "timestamp": "2026-06-19T07:28:51.624671+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1822,12 +1627,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:03.745462+00:00",
+    "timestamp": "2026-06-19T07:28:51.919878+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "d8b556b93d79e5d8",
+    "signal_hash": "1849040554cbdfe6",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1845,7 +1650,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:03.768478+00:00",
+    "timestamp": "2026-06-19T07:28:51.950863+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1864,7 +1669,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:05.313461+00:00",
+    "timestamp": "2026-06-19T07:28:53.208193+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1887,12 +1692,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:05.630452+00:00",
+    "timestamp": "2026-06-19T07:28:53.498743+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "1c3e322fe2232cb0",
+    "signal_hash": "e8b496d673faffe5",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1910,7 +1715,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:05.681838+00:00",
+    "timestamp": "2026-06-19T07:28:53.528980+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1929,7 +1734,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:09.090805+00:00",
+    "timestamp": "2026-06-19T07:28:55.344989+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -1952,12 +1757,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:09.545715+00:00",
+    "timestamp": "2026-06-19T07:28:55.636480+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "4423aef7a4bdd3cd",
+    "signal_hash": "63b4cce11b44cf1c",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -1975,7 +1780,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:09.643258+00:00",
+    "timestamp": "2026-06-19T07:28:55.653463+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -1994,7 +1799,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:14.298753+00:00",
+    "timestamp": "2026-06-19T07:28:57.846958+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -2017,12 +1822,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:14.643139+00:00",
+    "timestamp": "2026-06-19T07:28:58.232284+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "910f9e611dd1c9b3",
+    "signal_hash": "5e904466350df096",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -2040,7 +1845,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:14.665128+00:00",
+    "timestamp": "2026-06-19T07:28:58.246967+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -2059,7 +1864,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:18.189605+00:00",
+    "timestamp": "2026-06-19T07:29:02.988018+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -2082,12 +1887,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:18.594507+00:00",
+    "timestamp": "2026-06-19T07:29:03.298980+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "5d1bf2cda169201f",
+    "signal_hash": "bc601e8eb00f806d",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -2105,7 +1910,7 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:18.623369+00:00",
+    "timestamp": "2026-06-19T07:29:03.325946+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",
@@ -2124,7 +1929,7 @@
   {
     "symbol": "EURUSD",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:22.284889+00:00",
+    "timestamp": "2026-06-19T07:29:04.422620+00:00",
     "confidence": 68,
     "execution_status": "WAITING",
     "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
@@ -2147,12 +1952,12 @@
   {
     "symbol": "XAUUSD",
     "signal": "SELL",
-    "timestamp": "2026-06-19T07:22:22.573793+00:00",
+    "timestamp": "2026-06-19T07:29:04.722801+00:00",
     "confidence": 84,
     "execution_status": "READY_FOR_PREVIEW",
     "setup_reason": "Break of structure not confirmed.",
     "risk_reward": 2.0,
-    "signal_hash": "ec7853b26f5a3f3c",
+    "signal_hash": "c9d8a7cb90b526e5",
     "setup_type": "liquidity_sweep+fvg+order_block",
     "strategy_components": {
       "liquidity_sweep": true,
@@ -2170,7 +1975,202 @@
   {
     "symbol": "NIFTY50",
     "signal": "WAIT",
-    "timestamp": "2026-06-19T07:22:22.658410+00:00",
+    "timestamp": "2026-06-19T07:29:04.745739+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-19T07:29:07.777294+00:00",
+    "confidence": 68,
+    "execution_status": "WAITING",
+    "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
+    "risk_reward": null,
+    "signal_hash": "b580b4b121b8a73f",
+    "setup_type": "fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "SELL",
+    "timestamp": "2026-06-19T07:29:08.101619+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Break of structure not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "8a3392d790453919",
+    "setup_type": "liquidity_sweep+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": true,
+      "bos": false,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-19T07:29:08.128146+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-19T07:29:12.163145+00:00",
+    "confidence": 68,
+    "execution_status": "WAITING",
+    "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
+    "risk_reward": null,
+    "signal_hash": "b580b4b121b8a73f",
+    "setup_type": "fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "SELL",
+    "timestamp": "2026-06-19T07:29:12.491488+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Break of structure not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "168d764f5b7e247c",
+    "setup_type": "liquidity_sweep+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": true,
+      "bos": false,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-19T07:29:12.516485+00:00",
+    "confidence": null,
+    "execution_status": "BLOCKED",
+    "setup_reason": "Indian market integration pending.",
+    "risk_reward": null,
+    "signal_hash": null,
+    "setup_type": "WAIT",
+    "strategy_components": {
+      "liquidity_sweep": null,
+      "bos": null,
+      "choch": null,
+      "fvg": null,
+      "order_block": null,
+      "session_valid": null
+    }
+  },
+  {
+    "symbol": "EURUSD",
+    "signal": "WAIT",
+    "timestamp": "2026-06-19T07:29:13.985319+00:00",
+    "confidence": 68,
+    "execution_status": "WAITING",
+    "setup_reason": "Setup quality is WATCHLIST with confidence 68; tradeable threshold is 75. Liquidity sweep not confirmed. Break of structure not confirmed.",
+    "risk_reward": null,
+    "signal_hash": "b580b4b121b8a73f",
+    "setup_type": "fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": false,
+      "bos": false,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
+  },
+  {
+    "symbol": "XAUUSD",
+    "signal": "SELL",
+    "timestamp": "2026-06-19T07:29:14.254955+00:00",
+    "confidence": 84,
+    "execution_status": "READY_FOR_PREVIEW",
+    "setup_reason": "Break of structure not confirmed.",
+    "risk_reward": 2.0,
+    "signal_hash": "ff5d0637b7f8634d",
+    "setup_type": "liquidity_sweep+fvg+order_block",
+    "strategy_components": {
+      "liquidity_sweep": true,
+      "bos": false,
+      "choch": false,
+      "fvg": true,
+      "order_block": true,
+      "session_valid": true,
+      "bias": "SELL",
+      "session": "London",
+      "spread_quality": 1.0,
+      "volatility_quality": 1.0
+    }
+  },
+  {
+    "symbol": "NIFTY50",
+    "signal": "WAIT",
+    "timestamp": "2026-06-19T07:29:14.281478+00:00",
     "confidence": null,
     "execution_status": "BLOCKED",
     "setup_reason": "Indian market integration pending.",

@@ -3798,7 +3798,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
@@ -3955,7 +3955,12 @@ function hasWaitingDecisionState(record: ApiRecord): boolean {
 function decisionStatusFromRecord(record: ApiRecord): ReasonStatus {
   const statusText = readText(record, ["status", "execution_status", "executionStatus", "status_level", "risk_status", "validation_status"], "").toUpperCase();
   const reportType = readText(record, ["report_type", "event_type", "event"], "").toUpperCase();
+  const combinedText = [readText(record, ["reason"], ""), readText(record, ["final_decision_reason"], ""), readText(record, ["decision_reason"], "")].join(" ");
+  if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combinedText)) return "CLOSED_LOSS";
+  if (/CLOSED_WIN|Result:\s*WIN/i.test(combinedText)) return "CLOSED_WIN";
   if (statusText.includes("OPEN_CONFIRMED") || reportType.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
+  if (statusText.includes("CLOSED_WIN") || reportType.includes("CLOSED_WIN")) return "CLOSED_WIN";
+  if (statusText.includes("CLOSED_LOSS") || reportType.includes("CLOSED_LOSS")) return "CLOSED_LOSS";
   if (statusText.includes("CLOSED") || reportType.includes("VALIDATION_TRADE_CLOSED") || reportType.includes("ORDER_CLOSED_CONFIRMED")) return "CLOSED";
   if (hasActualOrderExecution(record)) return "Accepted";
   if (statusText.includes("ERROR") || statusText.includes("FAIL") || statusText.includes("DISCONNECT")) return "Error";

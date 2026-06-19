@@ -137,6 +137,55 @@ class ExecutionReasonPanelService:
         self._upsert(message)
         return message
 
+    def persist_closed_confirmed(
+        self,
+        trade: dict[str, Any],
+        *,
+        session_id: str = "",
+        timestamp: str = "",
+    ) -> dict[str, Any] | None:
+        ticket = self._text(trade.get("mt5_ticket") or trade.get("ticket"))
+        symbol = self._text(trade.get("symbol")).upper()
+        side = self._text(trade.get("side") or trade.get("direction") or trade.get("action")).upper()
+        if not ticket or not symbol:
+            return None
+        pnl = trade.get("net_pnl") if trade.get("net_pnl") is not None else trade.get("total_pnl") if trade.get("total_pnl") is not None else trade.get("profit_loss") if trade.get("profit_loss") is not None else trade.get("pnl")
+        result = self._text(trade.get("result")).upper() or ("WIN" if self._number(pnl) > 0 else "LOSS" if self._number(pnl) < 0 else "BREAKEVEN")
+        status = "CLOSED_WIN" if result == "WIN" else "CLOSED_LOSS" if result == "LOSS" else "CLOSED"
+        message_id = f"execution-{status.lower()}-{ticket}"
+        message = {
+            "id": message_id,
+            "event_id": message_id,
+            "groqGenerated": False,
+            "reason": "\n".join(
+                [
+                    status,
+                    f"Symbol: {symbol}",
+                    f"Direction: {side or 'TRADE'}",
+                    f"Ticket: {ticket}",
+                    f"P&L: {self._text(pnl) or '0'}",
+                    f"Exit reason: {self._text(trade.get('exit_reason')) or 'MT5 history confirmed close'}",
+                    f"Closed time: {self._text(trade.get('closed_at') or trade.get('close_time')) or 'Unavailable'}",
+                ]
+            ),
+            "source": "execution",
+            "status": status,
+            "symbol": symbol,
+            "side": side,
+            "ticket": ticket,
+            "strategy_profile": self._text(trade.get("strategy_profile")) or "DEMO_COLLECTION",
+            "decision": status,
+            "order_closed": True,
+            "pnl": pnl,
+            "exit_reason": self._text(trade.get("exit_reason")),
+            "validation_session_id": session_id or self._text(trade.get("validation_session_id")),
+            "final_decision_reason": status,
+            "timestamp": timestamp or self._text(trade.get("closed_at") or trade.get("close_time") or trade.get("generated_at")) or self._timestamp(),
+            "data_source": "MT5_HISTORY_CLOSE_SYNC",
+        }
+        self._upsert(message)
+        return message
+
     def _accepted_message(
         self,
         *,
@@ -253,3 +302,9 @@ class ExecutionReasonPanelService:
 
     def _text(self, value: Any) -> str:
         return "" if value is None else str(value).strip()
+
+    def _number(self, value: Any) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0

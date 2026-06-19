@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
 type ApiRecord = Record<string, unknown>;
 type ReasonMessage = {
   candles_loaded?: number | null;
@@ -266,6 +266,8 @@ function stableId(context: ApiRecord): string {
 function normalizeStatus(value: unknown): ReasonStatus {
   const status = text(value).toUpperCase();
   if (status.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
+  if (status.includes("CLOSED_WIN")) return "CLOSED_WIN";
+  if (status.includes("CLOSED_LOSS")) return "CLOSED_LOSS";
   if (status.includes("CLOSED")) return "CLOSED";
   if (status.includes("APPROVED") || status.includes("ACCEPT") || status.includes("READY") || status.includes("WIN")) return "Accepted";
   if (status.includes("REJECT") || status.includes("BLOCK") || status.includes("DENIED") || status.includes("LOSS")) return "Rejected";
@@ -321,7 +323,11 @@ function hasWaitingIncomplete(record: ApiRecord | ReasonMessage): boolean {
 
 function normalizedDecisionStatus(record: ApiRecord | ReasonMessage): ReasonStatus {
   const rawStatus = normalizeStatus((record as ReasonMessage).status);
+  const combined = [record.reason, (record as ReasonMessage).final_decision_reason, (record as ReasonMessage).decision_reason].map(text).join(" ");
+  if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combined)) return "CLOSED_LOSS";
+  if (/CLOSED_WIN|Result:\s*WIN/i.test(combined)) return "CLOSED_WIN";
   if (rawStatus === "OPEN_CONFIRMED") return "OPEN_CONFIRMED";
+  if (rawStatus === "CLOSED_LOSS" || rawStatus === "CLOSED_WIN" || rawStatus === "CLOSED") return rawStatus;
   if (isExecutionAccepted(record)) return "Accepted";
   if (rawStatus === "Error") return "Error";
   if (hasHardRejection(record)) return "Rejected";
@@ -453,6 +459,23 @@ function openConfirmedFallback(message: ReasonMessage): string {
   ].join("\n");
 }
 
+function closedConfirmedFallback(message: ReasonMessage): string {
+  const symbol = text(message.symbol).toUpperCase() || "EURUSD";
+  const side = cleanDisplayText(message.side).toUpperCase() || "TRADE";
+  const ticket = cleanDisplayText(message.ticket) || cleanDisplayText(message.reason).match(/Ticket:\s*([0-9]+)/i)?.[1] || "Unavailable";
+  const status = normalizedDecisionStatus(message);
+  const pnl = cleanDisplayText((message as ApiRecord).pnl) || cleanDisplayText((message as ApiRecord).net_pnl) || cleanDisplayText((message as ApiRecord).profit_loss) || cleanDisplayText(message.reason).match(/P&L:\s*([^.\n]+)/i)?.[1] || "0";
+  const exitReason = cleanDisplayText((message as ApiRecord).exit_reason) || cleanDisplayText(message.reason).match(/Exit:\s*([^.\n]+)/i)?.[1] || "MT5 history confirmed close";
+  return [
+    status,
+    `Symbol: ${symbol}`,
+    `Direction: ${side}`,
+    `Ticket: ${ticket}`,
+    `P&L: ${pnl}`,
+    `Exit reason: ${exitReason}`,
+  ].join("\n");
+}
+
 function rejectedFallback(message: ReasonMessage): string {
   const symbol = text(message.symbol).toUpperCase() || "This signal";
   const decisionReason = cleanDisplayText(message.decision_reason);
@@ -510,8 +533,12 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
   let reason = cleanDisplayText(message.reason);
   const rejectionReason = cleanDisplayText(message.rejection_reason);
   const canonicalRound3Reason = round3DecisionBlock(message, status);
+  const extractedTicket = cleanDisplayText(message.ticket) || (reason.match(/Ticket:\s*([0-9]+)/i)?.[1] ?? "");
   if (status === "OPEN_CONFIRMED") {
     reason = /^OPEN_CONFIRMED\b/i.test(reason) ? reason : openConfirmedFallback(message);
+  }
+  if ((status === "CLOSED_LOSS" || status === "CLOSED_WIN" || status === "CLOSED") && (/waiting/i.test(reason) || !/^CLOSED/i.test(reason))) {
+    reason = closedConfirmedFallback({ ...message, ticket: extractedTicket });
   }
   if (canonicalRound3Reason && (isLegacyStrategyDiagnostic(reason) || /required round 3|rule failed|confirmation score 0\/2/i.test(reason) || status !== "Error")) {
     reason = canonicalRound3Reason;
@@ -558,7 +585,7 @@ function sanitizeReasonMessage(message: ReasonMessage): ReasonMessage {
     status,
     strategy_profile: cleanDisplayText(message.strategy_profile),
     symbol: text(message.symbol).toUpperCase(),
-    ticket: cleanDisplayText(message.ticket),
+    ticket: extractedTicket,
     timeframe: cleanDisplayText(message.timeframe).toUpperCase(),
     validation_status: cleanDisplayText(message.validation_status),
     history_ready: booleanValue(message.history_ready),

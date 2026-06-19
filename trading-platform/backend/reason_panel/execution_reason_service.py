@@ -222,6 +222,42 @@ class ExecutionReasonPanelService:
         self._upsert(message)
         return message
 
+    def persist_risk_halt(self, diagnostics: dict[str, Any], *, session_id: str = "") -> dict[str, Any]:
+        reason = self._text(diagnostics.get("reason")) or "RISK_HALT"
+        status = self._text(diagnostics.get("status")) or "RISK_HALTED"
+        message_text = self._text(diagnostics.get("message")) or f"Risk halted: {reason.replace('_', ' ').lower()}."
+        event_id = f"risk-halt-{session_id or 'active'}-{reason.lower()}"
+        if status == "RISK_CLEARED":
+            event_id = f"risk-halt-cleared-{session_id or 'active'}-{reason.lower()}"
+        message = {
+            "id": event_id,
+            "event_id": event_id,
+            "groqGenerated": False,
+            "reason": message_text,
+            "source": "execution",
+            "status": status,
+            "symbol": self._text(diagnostics.get("symbol")).upper() or "ROUND_3",
+            "side": "",
+            "ticket": "",
+            "strategy_profile": "DEMO_COLLECTION",
+            "decision": status,
+            "order_opened": False,
+            "validation_session_id": session_id,
+            "active_session_id": session_id,
+            "risk_halt_reason": reason,
+            "risk_halt_active": diagnostics.get("active"),
+            "risk_halt_stale": diagnostics.get("stale"),
+            "net_pnl": diagnostics.get("net_pnl"),
+            "max_daily_loss_amount": diagnostics.get("max_daily_loss_amount"),
+            "max_drawdown": diagnostics.get("max_drawdown"),
+            "max_total_drawdown_amount": diagnostics.get("max_total_drawdown_amount"),
+            "mt5_health_status": diagnostics.get("mt5_health_status"),
+            "timestamp": self._text(diagnostics.get("timestamp")) or self._timestamp(),
+            "data_source": "ROUND_RISK_HALT",
+        }
+        self._upsert(message)
+        return message
+
     def _accepted_message(
         self,
         *,

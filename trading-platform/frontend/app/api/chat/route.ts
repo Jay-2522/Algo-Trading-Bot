@@ -268,6 +268,36 @@ function isStrategyRulesQuestion(question: string): boolean {
   );
 }
 
+function isValidationHaltedQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return normalized.includes("validation") && (normalized.includes("halted") || normalized.includes("halt") || normalized.includes("stopped by risk") || normalized.includes("risk halt"));
+}
+
+async function answerValidationHaltedQuestion(question: string): Promise<string | null> {
+  if (!isValidationHaltedQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const session = asRecord(status?.session);
+  const riskHalt = asRecord(status?.risk_halt) ?? asRecord(session?.risk_halt_diagnostics);
+  if (!session) return "Validation status is not available right now.";
+  const mode = cleanText(session.status) || cleanText(status?.mode) || "unknown";
+  const reason = cleanText(riskHalt?.reason) || cleanText(session.reason_stopped);
+  const message = cleanText(riskHalt?.message);
+  const closed = numberValue(session.current_closed_trades) ?? numberValue(session.current_session_closed) ?? 0;
+  const wins = numberValue(session.wins) ?? 0;
+  const losses = numberValue(session.losses) ?? 0;
+  const netPnl = numberValue(session.net_pnl) ?? 0;
+  const drawdown = numberValue(session.max_drawdown) ?? 0;
+  const dailyLimit = numberValue(riskHalt?.max_daily_loss_amount);
+  const drawdownLimit = numberValue(riskHalt?.max_total_drawdown_amount);
+  if (mode === "HALTED_RISK") {
+    return `${message || `Validation is risk halted because ${reason || "a risk protection triggered"}.`} Current active round: ${closed} closed, ${wins} wins, ${losses} losses, net P&L ${formatMoney(netPnl)}, max drawdown ${formatMoney(drawdown)}.${dailyLimit !== null ? ` Daily loss limit: ${formatMoney(dailyLimit)}.` : ""}${drawdownLimit !== null ? ` Drawdown limit: ${formatMoney(drawdownLimit)}.` : ""}`;
+  }
+  if (cleanText(riskHalt?.status) === "RISK_CLEARED") {
+    return `${message || "A stale risk halt was cleared safely."} Validation is paused, not running. Current active round remains ${closed} closed, ${wins} wins, ${losses} losses, net P&L ${formatMoney(netPnl)}.`;
+  }
+  return `Validation is not currently risk halted. Status is ${mode}. Current active round: ${closed} closed, ${wins} wins, ${losses} losses, net P&L ${formatMoney(netPnl)}.`;
+}
+
 type ValidationRoundSnapshot = Record<string, unknown> & {
   round_number?: number;
   session_id?: string;
@@ -862,6 +892,10 @@ export async function POST(request: Request) {
     const strategyRulesAnswer = answerStrategyRulesQuestion(question);
     if (strategyRulesAnswer) {
       return NextResponse.json({ reply: strategyRulesAnswer });
+    }
+    const validationHaltedAnswer = await answerValidationHaltedQuestion(question);
+    if (validationHaltedAnswer) {
+      return NextResponse.json({ reply: validationHaltedAnswer });
     }
     const noTradeOpenedAnswer = await answerNoTradeOpenedQuestion(question);
     if (noTradeOpenedAnswer) {

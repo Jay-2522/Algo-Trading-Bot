@@ -1,12 +1,38 @@
 {
   "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
   "analytics_summary": {
-    "decision_count": 5,
+    "decision_count": 6,
     "loss_count": 5,
     "rejection_count": 0,
     "trade_count": 5
   },
   "bot_decisions": [
+    {
+      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "data_source": "ROUND_RISK_HALT",
+      "decision": "RISK_CLEARED",
+      "event_id": "risk-halt-cleared-auto-validation-f6678d41-2820-4620-bb5b-98b66d699501-mt5_disconnect_timeout",
+      "groqGenerated": false,
+      "id": "risk-halt-cleared-auto-validation-f6678d41-2820-4620-bb5b-98b66d699501-mt5_disconnect_timeout",
+      "max_daily_loss_amount": 100.0,
+      "max_drawdown": 4.62,
+      "max_total_drawdown_amount": 150.0,
+      "mt5_health_status": "MT5_CONNECTED",
+      "net_pnl": -4.62,
+      "order_opened": false,
+      "reason": "Risk halt cleared: MT5 disconnect timeout was stale because MT5 is connected again. Resume manually when ready.",
+      "risk_halt_active": false,
+      "risk_halt_reason": "MT5_DISCONNECT_TIMEOUT",
+      "risk_halt_stale": true,
+      "side": "",
+      "source": "execution",
+      "status": "RISK_CLEARED",
+      "strategy_profile": "DEMO_COLLECTION",
+      "symbol": "ROUND_3",
+      "ticket": "",
+      "timestamp": "2026-06-19T12:44:58.276862+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
+    },
     {
       "data_source": "MT5_HISTORY_CLOSE_SYNC",
       "decision": "CLOSED_LOSS",
@@ -111,493 +137,6 @@
   "closed_trades": 5,
   "ended_at": null,
   "events": [
-    {
-      "details": {
-        "EURUSD": {
-          "adaptive_level": 3,
-          "blockers": [],
-          "blocking_reason": "QUALIFIED",
-          "confidence": null,
-          "confirmation_missing": [
-            "liquidity sweep",
-            "BOS",
-            "FVG/imbalance",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility"
-          ],
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "confirmation_required": 3,
-          "confirmation_score": 4.0,
-          "confirmation_total": 10,
-          "direction_candidate": "SELL",
-          "execution_decision": "READY_FOR_ORDER",
-          "execution_status": "READY_FOR_PREVIEW",
-          "failed_hard_gates": [],
-          "hard_gates_passed": true,
-          "market_data_status": "MT5_CONNECTED",
-          "missing_requirements": [
-            {
-              "code": "CONFIRMATION_SCORE_LOW",
-              "confirmation_required": 5,
-              "confirmation_score": 1,
-              "label": "Round 3 needs at least 2 strong confirmations; current strong count is 1/2.",
-              "missing": [
-                "liquidity sweep",
-                "BOS",
-                "FVG/imbalance",
-                "pullback/retest",
-                "momentum/displacement",
-                "ATR volatility",
-                "clean spread",
-                "RR >= 2.0",
-                "London/NY session"
-              ],
-              "strong_confirmation_count": 1
-            },
-            {
-              "code": "SPREAD_TOO_HIGH",
-              "label": "DEMO_COLLECTION requires a live acceptable tick/spread.",
-              "max_spread": 0.0003,
-              "spread": 0.00013
-            }
-          ],
-          "ready_for_execution": true,
-          "risk_status": "APPROVED",
-          "score": 4.0,
-          "signal": "SELL",
-          "signal_hash": "a0be9c0da53785eb",
-          "status": "READY_FOR_PREVIEW",
-          "strategy_profile": "DEMO_COLLECTION",
-          "symbol": "EURUSD",
-          "what_needs_to_happen_next": "Rejected: spread too high.",
-          "why_order_not_sent": ""
-        },
-        "RR": 2.0,
-        "XAUUSD": null,
-        "adaptive_activation_time": "2026-06-19T02:04:47.325560+00:00",
-        "adaptive_level": 3,
-        "adaptive_level_name": "Fast Opportunity",
-        "advisory_session_bonus": true,
-        "advisory_warnings": [
-          "LIQUIDITY_SWEEP_MISSING",
-          "BOS_MISSING",
-          "FVG_IMBALANCE_MISSING",
-          "PULLBACK_RETEST_MISSING",
-          "MOMENTUM_DISPLACEMENT_MISSING",
-          "ATR_VOLATILITY_MISSING"
-        ],
-        "best_candidate_symbol": "EURUSD",
-        "blockers": [
-          "GUARDED_SENDER_REJECTED"
-        ],
-        "bos_status": "MISSING",
-        "broker_execution_enabled": false,
-        "confirmation_missing": [
-          "liquidity sweep",
-          "BOS",
-          "FVG/imbalance",
-          "pullback/retest",
-          "momentum/displacement",
-          "ATR volatility"
-        ],
-        "confirmation_passed": [
-          "H4/H1 trend alignment",
-          "clean spread",
-          "RR >= 2.0",
-          "London/NY session"
-        ],
-        "confirmation_required": 3,
-        "confirmation_score": 4,
-        "confirmation_states": {
-          "ATR_VOLATILITY": false,
-          "BOS": false,
-          "FVG_IMBALANCE": false,
-          "LIQUIDITY_SWEEP": false,
-          "MOMENTUM_DISPLACEMENT": false,
-          "PULLBACK_RETEST": false,
-          "RR_2_0": true,
-          "SESSION_LONDON_NY_BONUS": true,
-          "SPREAD_CLEAN": true,
-          "TREND_ALIGNMENT": true
-        },
-        "confirmation_total": 10,
-        "current_strategy_level": 3,
-        "decision_reason": "Rejected: guarded sender rejected.",
-        "direction_bias_status": "MATCHED",
-        "direction_candidate": "SELL",
-        "execution_timeline": {
-          "approval_status": "BLOCKED",
-          "blockers": [
-            "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE"
-          ],
-          "comment": null,
-          "cooldown_status": "READY",
-          "duplicate_status": "PASSED",
-          "entry_price": 1.14623,
-          "final_rejection_reason": "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE",
-          "hash_status": "HASH_CHANGED",
-          "order_build_status": "NOT_ATTEMPTED",
-          "order_send_status": "NOT_ATTEMPTED",
-          "retcode": null,
-          "revalidation_result": "BLOCKED",
-          "sender_decision": "BLOCKED",
-          "signal_id": "a0be9c0da53785eb",
-          "spread_status": "SPREAD_OK",
-          "strategy_profile": "DEMO_COLLECTION",
-          "symbol": "EURUSD",
-          "tick_status": "OK",
-          "timestamp": "2026-06-19T10:59:46.954172+00:00"
-        },
-        "failed_rules": [],
-        "final_decision": "ACCEPTED",
-        "final_decision_reason": "Rejected: guarded sender rejected.",
-        "fvg_status": "MISSING",
-        "guarded_sender_used": false,
-        "h4_history_status": "AVAILABLE",
-        "history_required_candles": 300,
-        "last_checked_symbol": "EURUSD",
-        "last_hash_change_audit": {
-          "changed": true,
-          "changed_fields": [
-            {
-              "current": null,
-              "field": "entry",
-              "original": 1.14624
-            },
-            {
-              "current": null,
-              "field": "stop_loss",
-              "original": 1.14716
-            },
-            {
-              "current": null,
-              "field": "take_profit",
-              "original": 1.14441
-            },
-            {
-              "current": 58,
-              "field": "confidence",
-              "original": null
-            },
-            {
-              "current": "WAIT",
-              "field": "signal_direction",
-              "original": "SELL"
-            },
-            {
-              "current": "WAIT",
-              "field": "status_level",
-              "original": "READY_FOR_PREVIEW"
-            },
-            {
-              "current": "WAITING",
-              "field": "execution_status",
-              "original": "READY_FOR_PREVIEW"
-            },
-            {
-              "current": "NO_SIGNAL",
-              "field": "risk_status",
-              "original": "APPROVED"
-            }
-          ],
-          "current_hash": "4cc610d42c730c61",
-          "event": "SIGNAL_HASH_CHANGED",
-          "informational_only": false,
-          "material_reasons": [
-            "SETUP_BECAME_WAIT_OR_REJECTED",
-            "STOP_LOSS_CHANGED"
-          ],
-          "minor_change": false,
-          "original_hash": "a0be9c0da53785eb",
-          "original_signal_timestamp": "2026-06-19T10:59:41.118072+00:00",
-          "revalidation_timestamp": "2026-06-19T10:59:44.467379+00:00",
-          "root_cause": "Material signal revalidation change (SETUP_BECAME_WAIT_OR_REJECTED, STOP_LOSS_CHANGED): entry, stop_loss, take_profit, confidence, signal_direction, status_level, execution_status, risk_status changed."
-        },
-        "last_sender_rejection": {
-          "account": "25543844",
-          "broker": "VANTAGE_DEMO",
-          "confidence": 0,
-          "entry": 1.14623,
-          "failed_guard": "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE",
-          "lot": 0.01,
-          "rejection_code": "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE",
-          "rejection_reason": "Vantage demo validation blocked the order.",
-          "rr": 2.0,
-          "sender_status": "BLOCKED",
-          "server": "VantageMarkets-Demo",
-          "side": "SELL",
-          "sl": 1.14716,
-          "strategy_profile": "DEMO_COLLECTION",
-          "symbol": "EURUSD",
-          "timestamp": "2026-06-19T10:59:47.876787+00:00",
-          "tp": 1.14441
-        },
-        "last_trade_activity_time": "2026-06-19T11:41:29+00:00",
-        "liquidity_sweep_status": "MISSING",
-        "live_execution_enabled": false,
-        "m15_history_status": "AVAILABLE",
-        "mt5_health": {
-          "account_login": "25543844",
-          "account_login_present": true,
-          "consecutive_failed_health_checks": 0,
-          "last_successful_tick_symbol": "EURUSD",
-          "last_tick_time": "2026-06-19T13:59:39+00:00",
-          "server": "VantageMarkets-Demo",
-          "server_present": true,
-          "status": "MT5_CONNECTED",
-          "symbol_statuses": {
-            "EURUSD": {
-              "status": "MT5_CONNECTED",
-              "tick": {
-                "ask": 1.1463700000000001,
-                "bid": 1.14624,
-                "broker_execution_enabled": false,
-                "consecutive_failed_tick_reads": 0,
-                "execution_allowed": false,
-                "freshness": "READY",
-                "live_execution_enabled": false,
-                "market_status": "MARKET_READY",
-                "mt5_last_error": [
-                  1,
-                  "Success"
-                ],
-                "quote_source": "MT5_SYMBOL_INFO_TICK",
-                "simulation_only": true,
-                "source": "VANTAGE_DEMO",
-                "spread": 0.00013,
-                "stale": false,
-                "status": "OK",
-                "symbol": "EURUSD",
-                "symbol_availability": "SYMBOL_AVAILABLE",
-                "symbol_select_error": [
-                  1,
-                  "Success"
-                ],
-                "symbol_select_result": true,
-                "terminal_memory_warning": false,
-                "tick_recovery_status": "TICK_AVAILABLE_DIRECT",
-                "timestamp": "2026-06-19T13:59:39+00:00"
-              }
-            }
-          },
-          "terminal_running": true,
-          "timestamp": "2026-06-19T10:59:39.301371+00:00"
-        },
-        "mt5_order_sent": false,
-        "no_qualified_reason": "EURUSD: QUALIFIED",
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS",
-          "ROUND_3_SCORE_THRESHOLD",
-          "FAST_OPPORTUNITY_REQUIREMENT_MET"
-        ],
-        "per_symbol_results": {
-          "EURUSD": {
-            "adaptive_level": 3,
-            "blockers": [],
-            "blocking_reason": "QUALIFIED",
-            "confidence": null,
-            "confirmation_missing": [
-              "liquidity sweep",
-              "BOS",
-              "FVG/imbalance",
-              "pullback/retest",
-              "momentum/displacement",
-              "ATR volatility"
-            ],
-            "confirmation_passed": [
-              "H4/H1 trend alignment",
-              "clean spread",
-              "RR >= 2.0",
-              "London/NY session"
-            ],
-            "confirmation_required": 3,
-            "confirmation_score": 4.0,
-            "confirmation_total": 10,
-            "direction_candidate": "SELL",
-            "execution_decision": "READY_FOR_ORDER",
-            "execution_status": "READY_FOR_PREVIEW",
-            "failed_hard_gates": [],
-            "hard_gates_passed": true,
-            "market_data_status": "MT5_CONNECTED",
-            "missing_requirements": [
-              {
-                "code": "CONFIRMATION_SCORE_LOW",
-                "confirmation_required": 5,
-                "confirmation_score": 1,
-                "label": "Round 3 needs at least 2 strong confirmations; current strong count is 1/2.",
-                "missing": [
-                  "liquidity sweep",
-                  "BOS",
-                  "FVG/imbalance",
-                  "pullback/retest",
-                  "momentum/displacement",
-                  "ATR volatility",
-                  "clean spread",
-                  "RR >= 2.0",
-                  "London/NY session"
-                ],
-                "strong_confirmation_count": 1
-              },
-              {
-                "code": "SPREAD_TOO_HIGH",
-                "label": "DEMO_COLLECTION requires a live acceptable tick/spread.",
-                "max_spread": 0.0003,
-                "spread": 0.00013
-              }
-            ],
-            "ready_for_execution": true,
-            "risk_status": "APPROVED",
-            "score": 4.0,
-            "signal": "SELL",
-            "signal_hash": "a0be9c0da53785eb",
-            "status": "READY_FOR_PREVIEW",
-            "strategy_profile": "DEMO_COLLECTION",
-            "symbol": "EURUSD",
-            "what_needs_to_happen_next": "Rejected: spread too high.",
-            "why_order_not_sent": ""
-          }
-        },
-        "rejection_reason": "Rejected: guarded sender rejected.",
-        "required_rr": 2.0,
-        "risk_reward": 2.0,
-        "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
-        "sender_result": {
-          "account": "25543844",
-          "account_login": "25543844",
-          "account_type": "DEMO",
-          "approval_status": "BLOCKED",
-          "approval_workflow_passed": false,
-          "approval_workflow_status": "NOT_RUN",
-          "blocked_reasons": [
-            "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE"
-          ],
-          "blockers": [
-            "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE"
-          ],
-          "broker": "VANTAGE_DEMO",
-          "broker_detected": "VANTAGE_DEMO",
-          "broker_execution_enabled": false,
-          "broker_source": "VANTAGE_DEMO",
-          "confidence": 0.0,
-          "duplicate_check": {
-            "active_journal_symbol_positions_count": 0,
-            "active_journal_total_positions_count": 0,
-            "cooldown_active": false,
-            "duplicate_key": "DEMO_COLLECTION|EURUSD|SELL|auto-validation-f6678d41-2820-4620-bb5b-98b66d699501|a0be9c0da53785eb",
-            "duplicate_source": "none",
-            "final_duplicate_decision": false,
-            "historical_unowned_positions_count": 0,
-            "limit_count_source": "max_raw_mt5_current_session_active_journal",
-            "matching_journal_records": 0,
-            "max_open_trades_per_symbol": 3,
-            "max_open_trades_total": 5,
-            "open_positions_count": 0,
-            "pending_orders_count": 0,
-            "raw_allowed_open_positions_count": 0,
-            "raw_open_positions_count": 0,
-            "raw_total_open_positions_count": 0,
-            "same_side_open_positions_count": 0,
-            "side": "SELL",
-            "signal_hash": "a0be9c0da53785eb",
-            "strategy_profile": "DEMO_COLLECTION",
-            "symbol": "EURUSD",
-            "symbol_limit_count": 0,
-            "symbol_limit_reached": false,
-            "timestamp": "2026-06-19T10:59:46.638545+00:00",
-            "total_limit_count": 0,
-            "total_limit_reached": false,
-            "total_open_positions_count": 0
-          },
-          "duplicate_protection_status": "PASSED",
-          "entry": 1.14623,
-          "entry_estimate": 1.14623,
-          "execution_allowed": false,
-          "failed_guard": "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE",
-          "final_blocker": "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE",
-          "guarded_sender_attempted": false,
-          "guarded_sender_used": false,
-          "live_execution_enabled": false,
-          "lot": 0.01,
-          "mt5_order_sent": false,
-          "order_opened": false,
-          "order_send_attempted": false,
-          "readiness_decision": "BLOCKED",
-          "rejection_code": "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE",
-          "rejection_reason": "Vantage demo validation blocked the order.",
-          "rr": 2.0,
-          "server": "VantageMarkets-Demo",
-          "setup_reason": "Rejected: spread too high.",
-          "side": "SELL",
-          "signal_confidence": 0.0,
-          "signal_hash": "a0be9c0da53785eb",
-          "signal_revalidation": {
-            "age_seconds": 5.52,
-            "blockers": [
-              "DEMO_COLLECTION_PAYLOAD_NO_LONGER_EXECUTABLE"
-            ],
-            "current_signal": {
-              "execution_status": "WAITING",
-              "requested_side": "SELL",
-              "risk_status": "NO_SIGNAL",
-              "signal": "WAIT",
-              "signal_hash": "4cc610d42c730c61",
-              "strategy_profile": "DEMO_COLLECTION",
-              "timestamp": "2026-06-19T10:59:46.954172+00:00"
-            },
-            "max_age_seconds": 30,
-            "status": "BLOCKED"
-          },
-          "simulation_only": true,
-          "sl": 1.14716,
-          "source": "VANTAGE_DEMO",
-          "spread": 0.00013,
-          "status": "BLOCKED",
-          "stop_loss": 1.14716,
-          "strategy_profile": "DEMO_COLLECTION",
-          "symbol": "EURUSD",
-          "take_profit": 1.14441,
-          "tick_recovery_status": "TICK_AVAILABLE_DIRECT",
-          "tick_status": "OK",
-          "timestamp": "2026-06-19T10:59:46.954172+00:00",
-          "tp": 1.14441,
-          "would_send": false
-        },
-        "session": "London",
-        "signal_h1_count": 300,
-        "signal_h4_count": 300,
-        "signal_hash": "a0be9c0da53785eb",
-        "signal_history_ready": true,
-        "signal_m15_count": 300,
-        "status": "BLOCKED",
-        "strategy_profile": "DEMO_COLLECTION",
-        "strong_confirmation_count": 1,
-        "strong_confirmation_required": 1,
-        "symbol": "EURUSD",
-        "timestamp": "2026-06-19T10:59:48.859615+00:00",
-        "trend_alignment_status": "ALIGNED",
-        "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-        "warmup_h1_count": 300,
-        "warmup_h4_count": 300,
-        "warmup_history_ready": true,
-        "warmup_m15_count": 300,
-        "watched_symbols": [
-          "EURUSD"
-        ],
-        "xauusd_confidence_timeline": []
-      },
-      "event": "NO_QUALIFIED_SIGNAL",
-      "timestamp": "2026-06-19T10:59:49.876663+00:00"
-    },
     {
       "details": {
         "signal_hash": "4cc610d42c730c61",
@@ -69769,6 +69308,32 @@
       },
       "event": "RISK_HALT_TRIGGERED",
       "timestamp": "2026-06-19T11:33:54.294014+00:00"
+    },
+    {
+      "details": {
+        "active": false,
+        "clearable": true,
+        "closed_trades": 5,
+        "daily_loss_limit_reached": false,
+        "drawdown_limit_reached": false,
+        "last_mt5_disconnect_at": "2026-06-18T22:58:47.373927+00:00",
+        "losses": 5,
+        "max_daily_loss_amount": 100.0,
+        "max_drawdown": 4.62,
+        "max_total_drawdown_amount": 150.0,
+        "message": "Risk halt cleared: MT5 disconnect timeout was stale because MT5 is connected again. Resume manually when ready.",
+        "mt5_disconnect_recovered_at": "2026-06-19T11:30:41.476778+00:00",
+        "mt5_disconnect_timeout_seconds": 600,
+        "mt5_health_status": "MT5_CONNECTED",
+        "net_pnl": -4.62,
+        "reason": "MT5_DISCONNECT_TIMEOUT",
+        "stale": true,
+        "status": "RISK_CLEARED",
+        "timestamp": "2026-06-19T12:44:58.276862+00:00",
+        "wins": 0
+      },
+      "event": "STALE_RISK_HALT_CLEARED",
+      "timestamp": "2026-06-19T12:44:58.276862+00:00"
     }
   ],
   "losses": 5,
@@ -69784,7 +69349,7 @@
       "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
       "closed_trade_count": 5,
       "counter_source": "active_session_trade_journal_plus_mt5_open_positions",
-      "event_count": 581,
+      "event_count": 500,
       "latest_closed_tickets": [
         "1462695961",
         "1462119261",
@@ -72954,12 +72519,36 @@
     "order_send_attempted": 6,
     "order_send_failed": 0,
     "orders_created": 6,
-    "paused_reason": "MT5_DISCONNECTED",
+    "paused_reason": "STALE_RISK_HALT_CLEARED",
     "profit_factor": 0.0,
     "progress_percentage": 16.67,
     "reason_stopped": "MT5_DISCONNECT_TIMEOUT",
     "remaining_closed_trades": 25,
     "remaining_trades_to_target": 25,
+    "risk_halt_cleared_at": "2026-06-19T12:44:58.276862+00:00",
+    "risk_halt_diagnostics": {
+      "active": false,
+      "clearable": true,
+      "closed_trades": 5,
+      "daily_loss_limit_reached": false,
+      "drawdown_limit_reached": false,
+      "last_mt5_disconnect_at": "2026-06-18T22:58:47.373927+00:00",
+      "losses": 5,
+      "max_daily_loss_amount": 100.0,
+      "max_drawdown": 4.62,
+      "max_total_drawdown_amount": 150.0,
+      "message": "Risk halt cleared: MT5 disconnect timeout was stale because MT5 is connected again. Resume manually when ready.",
+      "mt5_disconnect_recovered_at": "2026-06-19T11:30:41.476778+00:00",
+      "mt5_disconnect_timeout_seconds": 600,
+      "mt5_health_status": "MT5_CONNECTED",
+      "net_pnl": -4.62,
+      "reason": "MT5_DISCONNECT_TIMEOUT",
+      "stale": true,
+      "status": "RISK_CLEARED",
+      "timestamp": "2026-06-19T12:44:58.276862+00:00",
+      "wins": 0
+    },
+    "risk_halt_original_reason": "MT5_DISCONNECT_TIMEOUT",
     "round_label": "ROUND_3",
     "round_number": 3,
     "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
@@ -72973,7 +72562,7 @@
     "signals_wait": 2399,
     "signals_watchlist": 0,
     "started_at": "2026-06-18T21:46:44.271865+00:00",
-    "status": "HALTED_RISK",
+    "status": "PAUSED_REQUIRES_USER_RESUME",
     "stopped_at": "2026-06-19T11:33:54.294014+00:00",
     "target_closed_trades": 30,
     "target_validation_trades": 30,

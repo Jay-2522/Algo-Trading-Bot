@@ -2667,6 +2667,7 @@ function ClientDashboardView({
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
   const mt5Health = asRecord(autoStatus?.mt5_health);
+  const riskHalt = asRecord(autoStatus?.risk_halt) ?? asRecord(session?.risk_halt_diagnostics);
   const exitManagement = asRecord(autoStatus?.exit_management);
   const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
   const actualClosedTrades = actualClosedTradeCount(closedTrades);
@@ -2681,6 +2682,8 @@ function ClientDashboardView({
   const sessionNote = readText(session, ["session_note"], "");
   const allowedSymbols = Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD";
   const sessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
+  const riskHaltMessage = readText(riskHalt, ["message"], "");
+  const riskHaltActive = readText(riskHalt, ["status"], "").toUpperCase() === "RISK_HALTED" || mode === "HALTED_RISK";
   const controlsDisabled = workingAction !== null;
   const recoverableSession = readText(autoStatus, ["recoverable_session"], "false") === "true";
   const hasValidationSession = Boolean(sessionId || mode || closed > 0 || open > 0);
@@ -2754,6 +2757,11 @@ function ClientDashboardView({
           </div>
           <div className="premium-sub-card">
             <ClientSectionTitle eyebrow="Controls" title="Validation actions" />
+            {riskHaltMessage ? (
+              <p className={`premium-risk-halt-message ${riskHaltActive ? "active" : "cleared"}`}>
+                {riskHaltActive ? `Risk halted: ${riskHaltMessage.replace(/^Risk halted:\s*/i, "")}` : riskHaltMessage}
+              </p>
+            ) : null}
             <div className="premium-control-grid mt-5">
               <ClientButton disabled={startDisabled} loading={workingAction === "auto-validation-start"} onClick={() => onAutoValidationAction("start")}>Start Validation</ClientButton>
               <ClientButton disabled={controlsDisabled || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-resume"} onClick={() => onAutoValidationAction("resume")}>Resume Validation</ClientButton>
@@ -3774,6 +3782,7 @@ function clientBotState(mode: string, closed: number, open: number, target: numb
   if (closed >= target && target > 0) return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
   if (mode === "WAITING_FOR_MT5_HISTORY_SYNC") return { label: "Waiting", statusText: "Waiting for MT5 history sync", tone: "warning" };
   if (mode === "RUNNING") return { label: "Running", statusText: open > 0 ? "Waiting for Open Trades to Close" : "Validation in Progress", tone: "healthy" };
+  if (mode === "HALTED_RISK") return { label: "Risk Halted", statusText: "Risk Halted", tone: "danger" };
   if (["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED", "WAITING_FOR_MT5_RECONNECT"].includes(mode)) return { label: "Paused", statusText: "Validation Paused", tone: "warning" };
   if (mode === "COMPLETED") return { label: "Completed", statusText: "Validation Completed", tone: "healthy" };
   if (hasValidationSession) return { label: "Stopped", statusText: "Validation Progress Available", tone: "warning" };
@@ -3834,7 +3843,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "RISK_HALTED" | "RISK_CLEARED" | "Error";
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
@@ -3992,6 +4001,8 @@ function decisionStatusFromRecord(record: ApiRecord): ReasonStatus {
   const statusText = readText(record, ["status", "execution_status", "executionStatus", "status_level", "risk_status", "validation_status"], "").toUpperCase();
   const reportType = readText(record, ["report_type", "event_type", "event"], "").toUpperCase();
   const combinedText = [readText(record, ["reason"], ""), readText(record, ["final_decision_reason"], ""), readText(record, ["decision_reason"], "")].join(" ");
+  if (statusText.includes("RISK_HALTED") || reportType.includes("RISK_HALTED")) return "RISK_HALTED";
+  if (statusText.includes("RISK_CLEARED") || reportType.includes("RISK_CLEARED")) return "RISK_CLEARED";
   if (statusText.includes("SCAN_RESULT") || reportType.includes("SCAN_RESULT")) return "SCAN_RESULT";
   if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combinedText)) return "CLOSED_LOSS";
   if (/CLOSED_WIN|Result:\s*WIN/i.test(combinedText)) return "CLOSED_WIN";

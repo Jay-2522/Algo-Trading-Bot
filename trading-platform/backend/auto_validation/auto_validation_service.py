@@ -81,6 +81,7 @@ class AutoValidationService:
         self._sync_lifecycle_services(manual=False)
         self._maybe_advance_adaptive_strategy_level()
         self._refresh_session_metrics()
+        self._maybe_clear_stale_risk_halt()
         self._clear_disallowed_watched_signal()
         recovery = self._recovery_status()
         return {
@@ -99,6 +100,7 @@ class AutoValidationService:
             "mt5_health": copy.deepcopy(self.mt5_health_state),
             "history_warmup": copy.deepcopy(self._history_warmup_diagnostics),
             "history_ready": bool(self._history_warmup_diagnostics.get("history_ready")),
+            "risk_halt": copy.deepcopy(self.session.get("risk_halt_diagnostics", self._risk_halt_diagnostics())),
             "active_session_id": self.session.get("session_id", ""),
             "dashboard_session_id": self.session.get("session_id", ""),
             "active_round_diagnostics": copy.deepcopy(self.session.get("active_round_diagnostics", {})),
@@ -231,6 +233,11 @@ class AutoValidationService:
         return self.status()
 
     def resume(self) -> dict[str, Any]:
+        if self.session["status"] == "HALTED_RISK":
+            self.session["risk_halt_diagnostics"] = self._risk_halt_diagnostics()
+            self._persist_risk_halt_event()
+            self._save_state()
+            return self.status()
         if self.session["status"] in {"PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             self.session["status"] = "RUNNING"
             self.config["auto_validation_enabled"] = True
@@ -1636,6 +1643,9 @@ class AutoValidationService:
             return "Rejected: risk validation failed."
         if blocker in {"H4_HISTORY_INSUFFICIENT", "M15_HISTORY_INSUFFICIENT", "HISTORY_UNAVAILABLE"}:
             return f"Rejected: {blocker.replace('_', ' ').title()}."
+        if status == "HALTED_RISK":
+            diagnostics = self.session.get("risk_halt_diagnostics") if isinstance(self.session.get("risk_halt_diagnostics"), dict) else self._risk_halt_diagnostics()
+            return str(diagnostics.get("message") or self._risk_halt_message(diagnostics))
         if blocker in {"CONFIRMATION_SCORE_BELOW_2", "CONFIRMATION_SCORE_LOW", "NO_READY_APPROVED_SIGNAL", "STRONG_CONFIRMATIONS_BELOW_2", "ROUND_3_SCORE_BELOW_THRESHOLD", "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING", "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING", "MOMENTUM_ASSISTED_CONFIRMATION_MISSING"}:
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "one more confirmation"
@@ -2119,6 +2129,84 @@ class AutoValidationService:
             return "MAX_DRAWDOWN_REACHED"
         return None
 
+    def _risk_halt_message(self, diagnostics: dict[str, Any]) -> str:
+        reason = str(diagnostics.get("reason") or "")
+        if reason == "MAX_DAILY_LOSS_REACHED":
+            return f"Risk halted: net P&L {diagnostics.get('net_pnl')} reached the daily loss limit {diagnostics.get('max_daily_loss_amount')}."
+        if reason == "MAX_DRAWDOWN_REACHED":
+            return f"Risk halted: max drawdown {diagnostics.get('max_drawdown')} reached the drawdown limit {diagnostics.get('max_total_drawdown_amount')}."
+        if reason == "MT5_DISCONNECT_TIMEOUT":
+            if diagnostics.get("stale"):
+                return "Risk halt cleared: MT5 disconnect timeout was stale because MT5 is connected again. Resume manually when ready."
+            return f"Risk halted: MT5 was disconnected longer than {diagnostics.get('mt5_disconnect_timeout_seconds')} seconds."
+        if reason == "EMERGENCY_STOP":
+            return "Risk halted: emergency stop was triggered."
+        return f"Risk halted: {reason.replace('_', ' ').lower() or 'risk protection active'}."
+
+    def _risk_halt_diagnostics(self, *, status_override: str | None = None, stale_override: bool | None = None) -> dict[str, Any]:
+        reason = str(self.session.get("reason_stopped") or "")
+        mt5_status = str(self.mt5_health_state.get("status") or "")
+        net_pnl = round(float(self.session.get("net_pnl") or 0.0), 2)
+        max_drawdown = round(float(self.session.get("max_drawdown") or 0.0), 2)
+        daily_limit = abs(float(self.config.get("max_daily_loss_amount") or 0.0))
+        drawdown_limit = abs(float(self.config.get("max_total_drawdown_amount") or 0.0))
+        stale = reason == "MT5_DISCONNECT_TIMEOUT" and mt5_status == "MT5_CONNECTED"
+        if stale_override is not None:
+            stale = stale_override
+        active = self.session.get("status") == "HALTED_RISK"
+        diagnostics = {
+            "active": active,
+            "status": status_override or ("RISK_HALTED" if active else "RISK_CLEARED" if stale else "INACTIVE"),
+            "reason": reason,
+            "stale": stale,
+            "clearable": stale and reason == "MT5_DISCONNECT_TIMEOUT",
+            "net_pnl": net_pnl,
+            "max_daily_loss_amount": daily_limit,
+            "daily_loss_limit_reached": net_pnl <= -daily_limit if daily_limit else False,
+            "max_drawdown": max_drawdown,
+            "max_total_drawdown_amount": drawdown_limit,
+            "drawdown_limit_reached": max_drawdown >= drawdown_limit if drawdown_limit else False,
+            "mt5_health_status": mt5_status,
+            "mt5_disconnect_timeout_seconds": int(float(self.config.get("mt5_disconnect_timeout_seconds") or 0)),
+            "last_mt5_disconnect_at": self.session.get("last_mt5_disconnect_at") or "",
+            "mt5_disconnect_recovered_at": self.session.get("mt5_disconnect_recovered_at") or "",
+            "closed_trades": int(self.session.get("current_closed_trades") or 0),
+            "wins": int(self.session.get("wins") or 0),
+            "losses": int(self.session.get("losses") or 0),
+            "timestamp": self._timestamp(),
+        }
+        diagnostics["message"] = self._risk_halt_message(diagnostics)
+        return diagnostics
+
+    def _persist_risk_halt_event(self, diagnostics: dict[str, Any] | None = None) -> None:
+        try:
+            self.reason_panel_service.persist_risk_halt(
+                diagnostics or self._risk_halt_diagnostics(),
+                session_id=str(self.session.get("session_id") or ""),
+            )
+        except Exception:
+            pass
+
+    def _maybe_clear_stale_risk_halt(self) -> None:
+        if self.session.get("status") != "HALTED_RISK":
+            return
+        diagnostics = self._risk_halt_diagnostics()
+        if diagnostics.get("clearable") is not True:
+            self.session["risk_halt_diagnostics"] = diagnostics
+            self._persist_risk_halt_event(diagnostics)
+            return
+        cleared = {**diagnostics, "active": False, "status": "RISK_CLEARED", "stale": True, "timestamp": self._timestamp()}
+        cleared["message"] = self._risk_halt_message(cleared)
+        self.session["status"] = "PAUSED_REQUIRES_USER_RESUME"
+        self.session["paused_reason"] = "STALE_RISK_HALT_CLEARED"
+        self.session["risk_halt_cleared_at"] = cleared["timestamp"]
+        self.session["risk_halt_original_reason"] = diagnostics.get("reason")
+        self.session["risk_halt_diagnostics"] = cleared
+        self.config["auto_validation_enabled"] = False
+        self._log("STALE_RISK_HALT_CLEARED", cleared)
+        self._persist_risk_halt_event(cleared)
+        self._save_state()
+
     def _pause_for_mt5_disconnect(self, mt5_health: dict[str, Any]) -> dict[str, Any]:
         if not self.session.get("last_mt5_disconnect_at"):
             self.session["last_mt5_disconnect_at"] = self._timestamp()
@@ -2144,8 +2232,11 @@ class AutoValidationService:
         self.session["status"] = "COMPLETED" if reason == "TARGET_COMPLETED" else "HALTED_RISK"
         self.session["stopped_at"] = self._timestamp()
         self.session["reason_stopped"] = reason
+        self.session["risk_halt_diagnostics"] = self._risk_halt_diagnostics()
         self.config["auto_validation_enabled"] = False
         self._log("RISK_HALT_TRIGGERED" if reason != "TARGET_COMPLETED" else "TARGET_COMPLETED", {"reason": reason})
+        if reason != "TARGET_COMPLETED":
+            self._persist_risk_halt_event(self.session["risk_halt_diagnostics"])
         self._save_state()
         return self._decision("HALTED_RISK" if reason != "TARGET_COMPLETED" else "COMPLETED", [reason])
 

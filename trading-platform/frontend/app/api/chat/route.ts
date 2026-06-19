@@ -22,6 +22,12 @@ type ReasonDiagnostic = {
 };
 
 type ReasonRecord = ReasonDiagnostic & {
+  adaptive_level?: number | null;
+  confirmation_missing?: string[];
+  confirmation_passed?: string[];
+  confirmation_required?: number | null;
+  confirmation_score?: number | null;
+  confirmation_total?: number | null;
   decision?: string;
   execution_status?: string;
   id?: string;
@@ -121,7 +127,13 @@ function normalizeReasonRecord(record: Record<string, unknown>): ReasonRecord {
   const diagnostic = normalizeReasonDiagnostic(record);
   return {
     ...diagnostic,
+    adaptive_level: numberValue(readField(record, ["adaptive_level", "adaptiveLevel", "symbol_adaptive_level", "symbolAdaptiveLevel"])),
     decision: cleanText(readField(record, ["decision"])),
+    confirmation_missing: Array.isArray(record.confirmation_missing) ? record.confirmation_missing.map(cleanText).filter(Boolean) : [],
+    confirmation_passed: Array.isArray(record.confirmation_passed) ? record.confirmation_passed.map(cleanText).filter(Boolean) : [],
+    confirmation_required: numberValue(readField(record, ["confirmation_required", "confirmationRequired"])),
+    confirmation_score: numberValue(readField(record, ["confirmation_score", "confirmationScore"])),
+    confirmation_total: numberValue(readField(record, ["confirmation_total", "confirmationTotal"])),
     execution_status: cleanText(readField(record, ["execution_status", "executionStatus"])),
     id: text(readField(record, ["id"])),
     mt5_comment: cleanText(readField(record, ["mt5_comment", "mt5Comment"])),
@@ -496,6 +508,152 @@ function isNoTradeOpenedQuestion(question: string): boolean {
     (normalized.includes("no trade") || normalized.includes("zero trade") || normalized.includes("nothing")) &&
     (normalized.includes("open") || normalized.includes("opened") || normalized.includes("opening") || normalized.includes("placed"))
   );
+}
+
+function isSymbolNoTradeQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  const symbol = questionSymbol(question);
+  return Boolean(symbol && normalized.includes("why") && (normalized.includes("not trade") || normalized.includes("no trade") || normalized.includes("hasn't traded") || normalized.includes("did not trade")));
+}
+
+function isCloserToQualifyingQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return normalized.includes("which symbol") && (normalized.includes("closer") || normalized.includes("qualifying") || normalized.includes("qualify") || normalized.includes("trading"));
+}
+
+function isAdaptiveLevelQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("adaptive level") ||
+    normalized.includes("strategy level") ||
+    normalized.includes("level change") ||
+    normalized.includes("stay strict") ||
+    normalized.includes("stayed strict") ||
+    normalized.includes("performing better")
+  );
+}
+
+function adaptiveSymbolState(session: Record<string, unknown>, symbol: string): Record<string, unknown> | null {
+  const state = asRecord(session.symbol_adaptive_state);
+  return asRecord(state?.[symbol]);
+}
+
+function adaptiveLevelLine(symbol: string, state: Record<string, unknown> | null): string {
+  if (!state) return `${symbol}: adaptive state is not available yet.`;
+  const level = numberValue(state.current_level) ?? 0;
+  const open = numberValue(state.open) ?? 0;
+  const closed = numberValue(state.closed) ?? 0;
+  const wins = numberValue(state.wins) ?? 0;
+  const losses = numberValue(state.losses) ?? 0;
+  const pnl = numberValue(state.net_pnl) ?? 0;
+  const last = cleanText(state.last_activity_time);
+  return `${symbol}: Level ${level}, open ${open}, closed ${closed}, wins ${wins}, losses ${losses}, net P&L ${formatMoney(pnl)}${last ? `, last activity ${last}` : ""}.`;
+}
+
+function latestAdaptiveHistory(state: Record<string, unknown> | null): Record<string, unknown> | null {
+  const history = Array.isArray(state?.history) ? state.history.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : [];
+  return history.sort((left, right) => Date.parse(cleanText(right.timestamp)) - Date.parse(cleanText(left.timestamp)))[0] ?? null;
+}
+
+async function answerAdaptiveLevelQuestion(question: string): Promise<string | null> {
+  if (!isAdaptiveLevelQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const session = asRecord(status?.session);
+  if (!session) return "Adaptive strategy state is not available right now.";
+  const symbol = questionSymbol(question);
+  const eurusd = adaptiveSymbolState(session, "EURUSD");
+  const xauusd = adaptiveSymbolState(session, "XAUUSD");
+  const normalized = question.toLowerCase();
+  if (normalized.includes("performing better")) {
+    const pairs = [
+      { symbol: "EURUSD", state: eurusd },
+      { symbol: "XAUUSD", state: xauusd },
+    ].filter((item) => item.state);
+    if (!pairs.length) return "No symbol performance data is available yet.";
+    const ranked = pairs.sort((left, right) => (numberValue(right.state?.net_pnl) ?? 0) - (numberValue(left.state?.net_pnl) ?? 0));
+    return `${ranked[0].symbol} is performing better by active-round net P&L. ${ranked.map((item) => adaptiveLevelLine(item.symbol, item.state)).join(" ")}`;
+  }
+  if (normalized.includes("closer")) {
+    return answerSymbolScanQuestion(question);
+  }
+  if (symbol) {
+    const state = adaptiveSymbolState(session, symbol);
+    if (normalized.includes("why") && (normalized.includes("change") || normalized.includes("changed"))) {
+      const latest = latestAdaptiveHistory(state);
+      if (!latest) return `${symbol} has no adaptive level-change history in the current round yet. ${adaptiveLevelLine(symbol, state)}`;
+      return `${symbol} changed from Level ${numberValue(latest.from_level) ?? "?"} to Level ${numberValue(latest.to_level) ?? "?"} because ${cleanText(latest.reason) || "its per-symbol inactivity rule triggered"}.`;
+    }
+    if (normalized.includes("stay strict") || normalized.includes("stayed strict")) {
+      const level = numberValue(state?.current_level) ?? 0;
+      if (level === 0) return `${symbol} stayed strict because its own inactivity timer has not lowered the threshold yet. ${adaptiveLevelLine(symbol, state)}`;
+      return `${symbol} is not strict right now; it is using Level ${level}. ${adaptiveLevelLine(symbol, state)}`;
+    }
+    return adaptiveLevelLine(symbol, state);
+  }
+  return `${adaptiveLevelLine("EURUSD", eurusd)} ${adaptiveLevelLine("XAUUSD", xauusd)}`;
+}
+
+function scanBlockerLabel(value: string): string {
+  const normalized = value.replace(/[_-]/g, " ").trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized.includes("htf") || normalized.includes("h1/h4") || normalized.includes("h4/h1") || normalized.includes("higher timeframe") || normalized.includes("trend alignment")) return "HTF alignment";
+  if (normalized.includes("momentum") || normalized.includes("pullback") || normalized.includes("retest")) return "momentum/pullback";
+  if (normalized.includes("structure") || normalized.includes("bos") || normalized.includes("liquidity") || normalized.includes("fvg")) return "structure confirmation";
+  if (normalized.includes("spread")) return "clean spread";
+  if (normalized.includes("rr") || normalized.includes("risk reward")) return "RR >= 2.0";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function uniqueScanLabels(values: string[]): string[] {
+  const seen = new Set<string>();
+  const labels = values.map(scanBlockerLabel).filter((value) => {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const rank: Record<string, number> = { "HTF alignment": 0, "momentum/pullback": 1, "structure confirmation": 2 };
+  return labels.sort((left, right) => (rank[left] ?? 99) - (rank[right] ?? 99));
+}
+
+function joinList(values: string[]): string {
+  if (values.length <= 1) return values[0] ?? "";
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
+}
+
+function latestScanRecord(records: ReasonRecord[], symbol?: string | null): ReasonRecord | null {
+  return records.find((record) => {
+    if (cleanText(record.status).toUpperCase() !== "SCAN_RESULT") return false;
+    return symbol ? record.symbol === symbol : true;
+  }) ?? null;
+}
+
+function scanRecordSummary(record: ReasonRecord): string {
+  const score = record.confirmation_score ?? 0;
+  const required = record.confirmation_required ?? 5;
+  const levelText = record.adaptive_level !== null && record.adaptive_level !== undefined ? ` Level ${record.adaptive_level}` : "";
+  const missing = uniqueScanLabels([...(record.confirmation_missing ?? []), record.reason ?? "", record.rejection_reason ?? ""]).filter((label) => !/clean spread|RR/i.test(label));
+  const blocked = missing.length ? `blocked by missing ${joinList(missing)}` : cleanText(record.reason) || "blocked by current balanced gates";
+  return `${record.symbol}${levelText} latest scan: score ${score}/${required}, ${blocked}.`;
+}
+
+async function answerSymbolScanQuestion(question: string): Promise<string | null> {
+  if (!isSymbolNoTradeQuestion(question) && !isCloserToQualifyingQuestion(question)) return null;
+  const records = await readReasonRecords();
+  if (isCloserToQualifyingQuestion(question)) {
+    const scans = ["EURUSD", "XAUUSD"].map((symbol) => latestScanRecord(records, symbol)).filter(Boolean) as ReasonRecord[];
+    if (!scans.length) return "No EURUSD/XAUUSD scan records are available yet.";
+    const ranked = scans.sort((left, right) => (right.confirmation_score ?? 0) - (left.confirmation_score ?? 0));
+    const best = ranked[0];
+    const summaries = ranked.map(scanRecordSummary).join(" ");
+    return `${best.symbol} is closer to qualifying based on the latest scan score. ${summaries}`;
+  }
+  const symbol = questionSymbol(question);
+  if (!symbol || !["EURUSD", "XAUUSD"].includes(symbol)) return null;
+  const scan = latestScanRecord(records, symbol);
+  if (!scan) return `${symbol} has no scan record yet in the active Bot Decisions store.`;
+  return scanRecordSummary(scan);
 }
 
 function historyWarmupFromStatus(status: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -897,9 +1055,17 @@ export async function POST(request: Request) {
     if (validationHaltedAnswer) {
       return NextResponse.json({ reply: validationHaltedAnswer });
     }
+    const adaptiveLevelAnswer = await answerAdaptiveLevelQuestion(question);
+    if (adaptiveLevelAnswer) {
+      return NextResponse.json({ reply: adaptiveLevelAnswer });
+    }
     const noTradeOpenedAnswer = await answerNoTradeOpenedQuestion(question);
     if (noTradeOpenedAnswer) {
       return NextResponse.json({ reply: noTradeOpenedAnswer });
+    }
+    const symbolScanAnswer = await answerSymbolScanQuestion(question);
+    if (symbolScanAnswer) {
+      return NextResponse.json({ reply: symbolScanAnswer });
     }
     const historyReadinessAnswer = await answerHistoryReadinessQuestion(question);
     if (historyReadinessAnswer) {

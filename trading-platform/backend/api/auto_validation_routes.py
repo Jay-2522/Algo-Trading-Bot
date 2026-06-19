@@ -92,6 +92,11 @@ async def get_auto_validation_summary() -> dict:
     return auto_validation_service.summary()
 
 
+@router.get("/read-only-scan")
+async def run_auto_validation_read_only_scan() -> dict:
+    return auto_validation_service.read_only_scan()
+
+
 @router.post("/sync-lifecycle")
 async def sync_auto_validation_lifecycle() -> dict:
     return auto_validation_service.sync_lifecycle()

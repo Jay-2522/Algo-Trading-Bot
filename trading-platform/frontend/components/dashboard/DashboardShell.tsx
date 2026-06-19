@@ -65,6 +65,7 @@ type ToastState = { id: number; tone: "loading" | "success" | "error"; message: 
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
 const TARGET_TRADES = 30;
+const RISK_NOTICE_VISIBLE_MS = 8000;
 const ARCHIVED_ROUND_2_SESSION_IDS = new Set(["auto-validation-6dbfe380-22b1-44ea-9fc2-f4b7c25c3de9"]);
 const ARCHIVED_ROUND_2_NET_PNL = -4.74;
 const DASHBOARD_CACHE_KEY = "client-dashboard-last-successful-snapshot-v2";
@@ -80,7 +81,7 @@ const ROUND_3_NOTE = "Round 3: edge-score validation. Requires H4/M15 history, R
 const ROUND_3_START_PAYLOAD: ApiRecord = {
   session_started_by: "user_click",
   strategy_profile: "DEMO_COLLECTION",
-  allowed_symbols: ["EURUSD"],
+  allowed_symbols: ["EURUSD", "XAUUSD"],
   target_validation_trades: TARGET_TRADES,
   target_closed_trades: TARGET_TRADES,
   round_label: "ROUND_3",
@@ -510,7 +511,7 @@ function round3DashboardData(data: DashboardData): DashboardData {
       validation_close_reports: [],
       config: {
         ...(config ?? {}),
-        allowed_symbols: ["EURUSD"],
+        allowed_symbols: ["EURUSD", "XAUUSD"],
         min_rr: 2.0,
         strategy_profile: "DEMO_COLLECTION",
         target_closed_trades: TARGET_TRADES,
@@ -546,6 +547,28 @@ function relativeSyncAge(value: unknown): string {
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `Last sync ${minutes}m ago`;
   return `Last sync ${Math.floor(minutes / 60)}h ago`;
+}
+
+function recordAgeMs(value: unknown): number {
+  const timestamp = new Date(String(value || "")).getTime();
+  return Number.isFinite(timestamp) ? Date.now() - timestamp : Number.POSITIVE_INFINITY;
+}
+
+function isRiskNoticeStatus(status: string): boolean {
+  return status === "RISK_HALTED" || status === "RISK_CLEARED";
+}
+
+function isVisibleRiskNotice(status: string, timestamp: unknown, active = false): boolean {
+  if (!isRiskNoticeStatus(status)) return true;
+  if (active && status === "RISK_HALTED") return true;
+  return recordAgeMs(timestamp) <= RISK_NOTICE_VISIBLE_MS;
+}
+
+function formatSyncClock(value: unknown): string {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function sessionOpen(session: "Sydney" | "Tokyo" | "London" | "New York", now = new Date()): boolean {
@@ -2683,7 +2706,10 @@ function ClientDashboardView({
   const allowedSymbols = Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD";
   const sessionId = readText(session, ["session_id", "id", "validation_session_id"], "");
   const riskHaltMessage = readText(riskHalt, ["message"], "");
-  const riskHaltActive = readText(riskHalt, ["status"], "").toUpperCase() === "RISK_HALTED" || mode === "HALTED_RISK";
+  const riskHaltStatus = readText(riskHalt, ["status"], "").toUpperCase();
+  const riskHaltTimestamp = readText(riskHalt, ["timestamp"], "");
+  const riskHaltActive = riskHaltStatus === "RISK_HALTED" || mode === "HALTED_RISK";
+  const showRiskHaltNotice = Boolean(riskHaltMessage && isVisibleRiskNotice(riskHaltStatus, riskHaltTimestamp, riskHaltActive));
   const controlsDisabled = workingAction !== null;
   const recoverableSession = readText(autoStatus, ["recoverable_session"], "false") === "true";
   const hasValidationSession = Boolean(sessionId || mode || closed > 0 || open > 0);
@@ -2694,7 +2720,12 @@ function ClientDashboardView({
   const mt5HealthFailures = readNumber(mt5Health, ["consecutive_failed_health_checks"], 0);
   const mt5Connected = mt5HealthStatus === "MT5_CONNECTED" || mt5HealthFailures < 3;
   const mt5ActuallyDisconnected = ["MT5_DISCONNECTED", "DISCONNECTED", "CONNECTION_FAILED", "WAITING_FOR_MT5_RECONNECT"].includes(mt5HealthStatus) && mt5HealthFailures >= 3;
-  const mt5LastTickAge = relativeSyncAge(readText(mt5Health, ["last_tick_time"], ""));
+  const mt5LastSyncValue =
+    readText(mt5Health, ["last_tick_time"], "") ||
+    readText(mt5Health, ["timestamp"], "") ||
+    readText(autoStatus, ["lifecycle_sync", "timestamp"], "") ||
+    readText(session, ["mt5_disconnect_recovered_at", "risk_halt_cleared_at"], "");
+  const mt5LastSyncClock = formatSyncClock(mt5LastSyncValue);
   const closeReports = Array.isArray(autoStatus?.validation_close_reports) ? (autoStatus.validation_close_reports.filter((item) => asRecord(item)) as ApiRecord[]) : [];
   const recentClosed = mergeClosedTrades(closedTrades, closeReports).slice(0, 5);
   const reasonContexts = useMemo(() => buildReasonContexts(data), [data]);
@@ -2717,7 +2748,7 @@ function ClientDashboardView({
 
       <section className="premium-status-grid">
         <StatusStripItem label="Backend Status" value={backendConnected ? "Connected" : "Reconnecting"} tone={backendConnected ? "healthy" : "warning"} />
-        <StatusStripItem label="MT5 Status" value={mt5Connected ? `Connected - ${mt5LastTickAge}` : mt5ActuallyDisconnected ? "Disconnected" : "Checking"} tone={mt5Connected ? "healthy" : mt5ActuallyDisconnected ? "danger" : "warning"} />
+        <StatusStripItem label="MT5 Status" value={mt5Connected ? `Connected • Last sync ${mt5LastSyncClock || "recorded"}` : mt5ActuallyDisconnected ? "Disconnected" : "Checking"} tone={mt5Connected ? "healthy" : mt5ActuallyDisconnected ? "danger" : "warning"} />
         <StatusStripItem label="Validation Status" value={botState.statusText} tone={botState.tone} />
         <StatusStripItem label="Last Successful Sync" value={lastSuccessfulSync ?? "Waiting for first sync"} tone={lastSuccessfulSync ? "healthy" : "warning"} />
       </section>
@@ -2757,7 +2788,7 @@ function ClientDashboardView({
           </div>
           <div className="premium-sub-card">
             <ClientSectionTitle eyebrow="Controls" title="Validation actions" />
-            {riskHaltMessage ? (
+            {showRiskHaltNotice ? (
               <p className={`premium-risk-halt-message ${riskHaltActive ? "active" : "cleared"}`}>
                 {riskHaltActive ? `Risk halted: ${riskHaltMessage.replace(/^Risk halted:\s*/i, "")}` : riskHaltMessage}
               </p>
@@ -2996,49 +3027,63 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
 
 function AdaptiveStrategyEvolutionCard({ data }: { data: DashboardData }) {
   const session = validationSession(data);
-  const currentLevel = readNumber(session, ["current_strategy_level"], 0);
-  const levelsRecord = asRecord(session?.adaptive_strategy_levels) ?? {};
+  const symbolState = asRecord(session?.symbol_adaptive_state) ?? {};
+  const legacyCurrentLevel = readNumber(session, ["current_strategy_level"], 0);
+  const legacyLevelsRecord = asRecord(session?.adaptive_strategy_levels) ?? {};
   const definitions = [
     { level: 0, name: "Original Round 3" },
     { level: 1, name: "Slightly Relaxed" },
     { level: 2, name: "Momentum Assisted" },
     { level: 3, name: "Fast Opportunity" },
   ];
-  const rows = definitions.map((definition) => {
-    const record = asRecord(levelsRecord[String(definition.level)]);
-    const open = readNumber(record, ["open"], 0);
-    const closed = readNumber(record, ["closed"], 0);
-    const reached = Boolean(record?.reached) || definition.level <= currentLevel;
-    const worked = open + closed > 0;
-    const status =
-      definition.level === currentLevel
-        ? "Active"
-        : worked
-          ? "Worked"
-          : reached
-            ? "Not Worked"
-            : "Not Reached";
-    return { ...definition, open, closed, status };
-  });
+  const symbols = Object.keys(symbolState).length ? Object.keys(symbolState).sort() : ["EURUSD"];
+  const rowsForSymbol = (symbol: string) => {
+    const state = asRecord(symbolState[symbol]);
+    const currentLevel = readNumber(state, ["current_level"], legacyCurrentLevel);
+    const levelsRecord = asRecord(state?.levels) ?? legacyLevelsRecord;
+    return definitions.map((definition) => {
+      const record = asRecord(levelsRecord[String(definition.level)]);
+      const open = readNumber(record, ["open"], 0);
+      const closed = readNumber(record, ["closed"], 0);
+      const reached = Boolean(record?.reached) || definition.level <= currentLevel;
+      const worked = open + closed > 0;
+      const status =
+        definition.level === currentLevel
+          ? "Active"
+          : worked
+            ? "Worked"
+            : reached
+              ? "Not Worked"
+              : "Not Reached";
+      return { ...definition, open, closed, status, currentLevel };
+    });
+  };
   return (
     <section className="premium-sub-card p-5 lg:p-6">
       <ClientSectionTitle eyebrow="Round 3" title="Adaptive Strategy Evolution" />
-      <div className="premium-table-wrap mt-4">
-        <table className="premium-table text-xs">
-          <thead>
-            <tr>{["Level", "Status", "Open", "Closed"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr className={row.level === currentLevel ? "bg-blue-400/[0.08]" : ""} key={row.level}>
-                <td className="px-3 py-2 font-bold text-white">Level {row.level} - {row.name}</td>
-                <td className={`px-3 py-2 font-bold ${adaptiveLevelStatusClass(row.status)}`}>{row.status}</td>
-                <td className="px-3 py-2">{row.open}</td>
-                <td className="px-3 py-2">{row.closed}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mt-4 grid gap-5 xl:grid-cols-2">
+        {symbols.map((symbol) => (
+          <div key={symbol}>
+            <p className="mb-2 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-300">{symbol}</p>
+            <div className="premium-table-wrap">
+              <table className="premium-table text-xs">
+                <thead>
+                  <tr>{["Level", "Status", "Open", "Closed"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {rowsForSymbol(symbol).map((row) => (
+                    <tr className={row.level === row.currentLevel ? "bg-blue-400/[0.08]" : ""} key={`${symbol}-${row.level}`}>
+                      <td className="px-3 py-2 font-bold text-white">Level {row.level} - {row.name}</td>
+                      <td className={`px-3 py-2 font-bold ${adaptiveLevelStatusClass(row.status)}`}>{row.status}</td>
+                      <td className="px-3 py-2">{row.open}</td>
+                      <td className="px-3 py-2">{row.closed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -3649,6 +3694,20 @@ function patternObservation(pattern: IntelligencePattern | undefined, denominato
   return `${pattern.label} caused ${pattern.count} of ${denominator} ${fallback} (${pattern.percentage.toFixed(0)}%).`;
 }
 
+function symbolPerformanceObservation(trades: ApiRecord[]): string {
+  const groups = ["EURUSD", "XAUUSD"].map((symbol) => {
+    const scoped = trades.filter((trade) => readText(trade, ["symbol"], "").toUpperCase() === symbol);
+    const wins = scoped.filter((trade) => tradePnl(trade) > 0).length;
+    const pnl = scoped.reduce((sum, trade) => sum + tradePnl(trade), 0);
+    const winRate = scoped.length ? (wins / scoped.length) * 100 : 0;
+    return { symbol, trades: scoped.length, winRate, pnl };
+  });
+  const active = groups.filter((item) => item.trades > 0);
+  if (!active.length) return "No symbol performance yet.";
+  const best = active.sort((left, right) => right.pnl - left.pnl || right.winRate - left.winRate || right.trades - left.trades)[0];
+  return `${best.symbol} performs better so far: ${best.trades} trades, ${best.winRate.toFixed(0)}% win rate, ${money(best.pnl)} net.`;
+}
+
 function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligencePattern[], rejections: IntelligencePattern[], _featureRows: FeatureImpactRow[]): StrategyConclusionRow[] {
   const lossCount = trades.filter((trade) => tradePnl(trade) < 0).length;
   const topRejection = rejections[0];
@@ -3733,6 +3792,7 @@ function buildStrategyConclusionRows(trades: ApiRecord[], _losses: IntelligenceP
     aiConclusionRow("Weakest observed condition", featureObservation(weakestFeature), weakestFeature),
     aiConclusionRow("Largest loss pattern", patternObservation(topLoss, lossCount, "losses")),
     aiConclusionRow("Main validation blocker", patternObservation(topRejection, rejections.reduce((sum, item) => sum + item.count, 0), "rejections")),
+    aiConclusionRow("Best symbol", symbolPerformanceObservation(trades)),
     aiConclusionRow("Current sample", `${trades.length} closed trades analyzed in active round.`),
   ];
 }
@@ -3843,7 +3903,7 @@ function Metric({ label, value, valueClass = "text-white", compact = false }: { 
   );
 }
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "RISK_HALTED" | "RISK_CLEARED" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "POSITION_MONITOR" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "RISK_HALTED" | "RISK_CLEARED" | "Error";
 type ReasonMessage = {
   candles_loaded?: number | null;
   candles_required?: number | null;
@@ -3862,6 +3922,8 @@ type ReasonMessage = {
   source?: "groq" | "rule" | "execution";
   ticket?: string;
   decision_reason?: string;
+  confirmation_missing?: string[];
+  confirmation_passed?: string[];
   confirmation_score?: number | null;
   confirmation_required?: number | null;
   confirmation_total?: number | null;
@@ -4004,6 +4066,7 @@ function decisionStatusFromRecord(record: ApiRecord): ReasonStatus {
   if (statusText.includes("RISK_HALTED") || reportType.includes("RISK_HALTED")) return "RISK_HALTED";
   if (statusText.includes("RISK_CLEARED") || reportType.includes("RISK_CLEARED")) return "RISK_CLEARED";
   if (statusText.includes("SCAN_RESULT") || reportType.includes("SCAN_RESULT")) return "SCAN_RESULT";
+  if (statusText.includes("POSITION_MONITOR") || reportType.includes("POSITION_MONITOR")) return "POSITION_MONITOR";
   if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combinedText)) return "CLOSED_LOSS";
   if (/CLOSED_WIN|Result:\s*WIN/i.test(combinedText)) return "CLOSED_WIN";
   if (statusText.includes("OPEN_CONFIRMED") || reportType.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
@@ -4276,6 +4339,8 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
         confirmation_score: firstReasonNumber(record, ["confirmation_score", "confirmationScore"]),
         confirmation_required: firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]),
         confirmation_total: firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]),
+        confirmation_passed: Array.isArray(record.confirmation_passed) ? record.confirmation_passed.map(String) : [],
+        confirmation_missing: Array.isArray(record.confirmation_missing) ? record.confirmation_missing.map(String) : [],
         timeframe: readText(record, ["timeframe"], ""),
         validation_status: readText(record, ["validation_status"], ""),
         history_ready: record.history_ready === true ? true : record.history_ready === false ? false : null,
@@ -4297,6 +4362,70 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
       if (Number.isFinite(timestampDelta) && timestampDelta !== 0) return timestampDelta;
       return (right.event_id || right.id).localeCompare(left.event_id || left.id);
     });
+}
+
+function reasonMessagePriority(message: ReasonMessage): number {
+  const status = message.status.toUpperCase();
+  if (["SCAN_RESULT", "Accepted", "OPEN_CONFIRMED", "POSITION_MONITOR", "CLOSED_WIN", "CLOSED_LOSS", "CLOSED"].map((item) => item.toUpperCase()).includes(status)) return 0;
+  if (isRiskNoticeStatus(status)) return 2;
+  return 1;
+}
+
+function filterVisibleBotMessages(messages: ReasonMessage[]): ReasonMessage[] {
+  return messages
+    .filter((message) => isVisibleRiskNotice(message.status.toUpperCase(), message.timestamp, message.status === "RISK_HALTED"))
+    .sort((left, right) => {
+      const priorityDelta = reasonMessagePriority(left) - reasonMessagePriority(right);
+      if (priorityDelta !== 0) return priorityDelta;
+      const timestampDelta = new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime();
+      if (Number.isFinite(timestampDelta) && timestampDelta !== 0) return timestampDelta;
+      return (right.event_id || right.id).localeCompare(left.event_id || left.id);
+    });
+}
+
+function scanBlockerLabel(value: string): string {
+  const normalized = value.replace(/[_-]/g, " ").trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized.includes("htf") || normalized.includes("h1/h4") || normalized.includes("h4/h1") || normalized.includes("higher timeframe")) return "HTF alignment";
+  if (normalized.includes("momentum") || normalized.includes("pullback") || normalized.includes("retest")) return "momentum/pullback";
+  if (normalized.includes("structure") || normalized.includes("bos") || normalized.includes("liquidity") || normalized.includes("fvg")) return "structure confirmation";
+  if (normalized.includes("spread")) return "clean spread";
+  if (normalized.includes("rr") || normalized.includes("risk reward")) return "RR >= 2.0";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function joinHumanList(values: string[]): string {
+  const clean = values.filter(Boolean);
+  if (clean.length <= 1) return clean[0] ?? "";
+  if (clean.length === 2) return `${clean[0]} and ${clean[1]}`;
+  return `${clean.slice(0, -1).join(", ")}, and ${clean[clean.length - 1]}`;
+}
+
+function uniqueScanLabels(values: string[]): string[] {
+  const seen = new Set<string>();
+  const ordered = values.filter((value) => {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const rank: Record<string, number> = {
+    "HTF alignment": 0,
+    "momentum/pullback": 1,
+    "structure confirmation": 2,
+  };
+  return ordered.sort((left, right) => (rank[left] ?? 99) - (rank[right] ?? 99));
+}
+
+function latestScanSummary(message: ReasonMessage): string {
+  const score = Number.isFinite(message.confirmation_score ?? Number.NaN) ? Number(message.confirmation_score) : null;
+  const required = Number.isFinite(message.confirmation_required ?? Number.NaN) ? Number(message.confirmation_required) : null;
+  const missingLabels = uniqueScanLabels((message.confirmation_missing ?? []).map(scanBlockerLabel));
+  const groupedMissing = uniqueScanLabels(missingLabels.map(scanBlockerLabel)).filter((label) => !/clean spread|rr/i.test(label));
+  const reasonLabels = groupedMissing.length ? groupedMissing : uniqueScanLabels((message.reason.match(/missing ([^.]+)/i)?.[1] ?? "").split(/,| and /).map(scanBlockerLabel));
+  const blockedBy = reasonLabels.length ? `blocked by missing ${joinHumanList(reasonLabels)}` : "blocked by current balanced gates";
+  const scoreText = score !== null && required !== null ? `score ${score}/${required}` : "score pending";
+  return `Latest scan: ${scoreText} — ${blockedBy}.`;
 }
 
 function reasonMessagesSignature(messages: ReasonMessage[]): string {
@@ -4355,9 +4484,12 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
     };
   }, [contextKey]);
   const currentHistoryWaiting = contexts.some((context) => context.history_ready === false || readText(context, ["validation_status"], "").toUpperCase() === "WAITING_FOR_MT5_HISTORY_SYNC");
-  const visibleMessages = currentHistoryWaiting
-    ? storedMessages
-    : storedMessages.filter((message) => !/history sync|insufficient historical data|history.*insufficient|insufficient real candles/i.test(message.reason) && message.validation_status !== "WAITING_FOR_MT5_HISTORY_SYNC");
+  const visibleMessages = filterVisibleBotMessages(
+    currentHistoryWaiting
+      ? storedMessages
+      : storedMessages.filter((message) => !/history sync|insufficient historical data|history.*insufficient|insufficient real candles/i.test(message.reason) && message.validation_status !== "WAITING_FOR_MT5_HISTORY_SYNC"),
+  );
+  const latestScan = storedMessages.filter((message) => message.status === "SCAN_RESULT").sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())[0] ?? null;
   return (
     <div className="premium-panel">
       <div className="flex items-start justify-between gap-3">
@@ -4367,6 +4499,7 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
         </div>
         <p className="premium-metric-label">Latest 3 messages</p>
       </div>
+      {latestScan ? <p className="mt-3 rounded-lg border border-sky-300/10 bg-sky-400/[0.06] px-3 py-2 text-xs font-bold text-slate-300">{latestScanSummary(latestScan)}</p> : null}
       {visibleMessages.length > 0 ? (
         <div className="reason-message-list">
           {visibleMessages.slice(0, 3).map((message) => (

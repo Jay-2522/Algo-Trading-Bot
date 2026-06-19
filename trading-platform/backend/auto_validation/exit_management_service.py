@@ -193,17 +193,22 @@ class AutoValidationExitManagementService:
         if not symbol or side not in {"BUY", "SELL"} or entry <= 0 or current <= 0 or volume <= 0:
             return {**base, "action": "HOLD", "exit_reason": "INSUFFICIENT_POSITION_DATA"}
 
+        balanced_round3 = (
+            str(config.get("strategy_profile") or "").upper() == "DEMO_COLLECTION"
+            or str(config.get("round3_strategy_model") or "").upper() == "BALANCED_EDGE_SCORE"
+        )
         structure_invalidated = signal_side in {"BUY", "SELL"} and signal_side != side and signal_no_longer_valid
-        if structure_invalidated and age_minutes >= max(10.0, soft_adverse_minutes / 2):
+        strong_opposite_signal = structure_invalidated and signal_confidence >= max(70.0, entry_confidence + 10.0)
+        if structure_invalidated and (strong_opposite_signal if balanced_round3 else True) and age_minutes >= max(10.0, soft_adverse_minutes / 2):
             return {**base, "action": "CLOSE", "exit_reason": "SIGNAL_REVERSAL_EXIT", "close_volume": volume}
-        if age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and structure_invalidated and r_multiple <= -0.35:
+        if not balanced_round3 and age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and structure_invalidated and r_multiple <= -0.35:
             return {**base, "action": "CLOSE", "exit_reason": "SOFT_ADVERSE_EXIT", "close_volume": volume}
-        if age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
+        if not balanced_round3 and age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
             return {**base, "action": "CLOSE", "exit_reason": "TIME_STALE_EXIT", "close_volume": volume}
 
         if risk <= 0:
             return {**base, "exit_reason": "HOLD_WAITING_FOR_VALID_RISK"}
-        if age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
+        if not balanced_round3 and age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
             return {**base, "action": "CLOSE", "exit_reason": "NO_PROGRESS_EXIT", "close_volume": volume}
         break_even_r = float(symbol_settings.get("break_even_trigger_r", config.get("break_even_trigger_r", 1.0)) if symbol_settings else config.get("break_even_trigger_r", 1.0))
         trailing_r = float(symbol_settings.get("trailing_stop_trigger_r", config.get("trailing_stop_trigger_r", 1.5)) if symbol_settings else config.get("trailing_stop_trigger_r", 1.5))

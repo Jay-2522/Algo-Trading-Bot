@@ -75,11 +75,13 @@ class AutoValidationService:
         self._current_signal_watched: dict[str, Any] | None = None
         self._decision_traces: list[dict[str, Any]] = []
         self._load_state()
+        self._apply_balanced_round3_config()
         self._sync_round_archive()
 
     def status(self) -> dict[str, Any]:
+        self._apply_balanced_round3_config()
         self._sync_lifecycle_services(manual=False)
-        self._maybe_advance_adaptive_strategy_level()
+        self._maybe_advance_all_adaptive_strategy_levels()
         self._refresh_session_metrics()
         self._maybe_clear_stale_risk_halt()
         self._clear_disallowed_watched_signal()
@@ -122,6 +124,46 @@ class AutoValidationService:
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
             "execution_allowed": False,
+            "timestamp": self._timestamp(),
+        }
+
+    def read_only_scan(self) -> dict[str, Any]:
+        """Evaluate the current allowed symbols without sending orders or resuming validation."""
+        self._apply_balanced_round3_config()
+        mt5_health = self._mt5_health_check()
+        self._history_warmup_diagnostics = self._warmup_history_before_validation()
+        self.session["history_ready"] = bool(self._history_warmup_diagnostics.get("history_ready"))
+        self.session["history_status"] = str(self._history_warmup_diagnostics.get("status") or "NOT_STARTED")
+        signals = [self._normalize_demo_collection_signal(signal) for signal in self._allowed_signals(self._load_signals())]
+        checked = [self._checked_symbol_result(signal) for signal in signals]
+        best = self._best_candidate(checked)
+        qualifies = bool(best and best.get("ready_for_execution"))
+        reason = "Current market qualifies for Balanced Round 3, but no order was sent because this was a read-only scan." if qualifies else self._no_qualified_signal_reason(checked)
+        decision = self._decision(
+            "READ_ONLY_SCAN",
+            [] if qualifies else ["NO_READY_APPROVED_SIGNAL"],
+            extra={
+                **self._scan_context(checked, best),
+                "decision_reason": reason,
+                "final_decision_reason": reason,
+                "read_only": True,
+            },
+        )
+        self._record_decision_traces(checked, decision)
+        self._log("READ_ONLY_SCAN", {"market_qualifies": qualifies, "reason": reason, "best_candidate": best})
+        self._save_state()
+        return {
+            "status": "READ_ONLY_SCAN_COMPLETE",
+            "market_qualifies": qualifies,
+            "active_session_id": self.session.get("session_id"),
+            "adaptive_level": self._current_adaptive_strategy_level(),
+            "symbol_adaptive_state": copy.deepcopy(self.session.get("symbol_adaptive_state", {})),
+            "strategy_model": self.config.get("round3_strategy_model"),
+            "mt5_health": copy.deepcopy(mt5_health),
+            "history_warmup": copy.deepcopy(self._history_warmup_diagnostics),
+            "best_candidate": copy.deepcopy(best),
+            "checked_symbols": copy.deepcopy(checked),
+            "reason": reason,
             "timestamp": self._timestamp(),
         }
 
@@ -517,7 +559,10 @@ class AutoValidationService:
             blockers.append("SYMBOL_NOT_ALLOWED")
         if float(config["lot_size"]) > 0.01:
             blockers.append("LOT_SIZE_EXCEEDS_0_01")
-        if signal.get("execution_status") != "READY_FOR_PREVIEW" or signal.get("risk_status") != "APPROVED":
+        if active_profile == "DEMO_COLLECTION":
+            if signal.get("risk_status") != "APPROVED":
+                blockers.append("RISK_REJECTED")
+        elif signal.get("execution_status") != "READY_FOR_PREVIEW" or signal.get("risk_status") != "APPROVED":
             blockers.append("SIGNAL_NOT_READY_APPROVED")
         if active_profile in {"AUTO_VALIDATION", "DEMO_COLLECTION"}:
             if str(signal.get("strategy_profile") or "").upper() != active_profile:
@@ -558,7 +603,7 @@ class AutoValidationService:
                 self._log("HASH_CHANGE_MINOR", hash_audit)
             elif not hash_audit.get("informational_only"):
                 self._last_hash_change_audit = hash_audit
-                if not (active_profile == "DEMO_COLLECTION" and self._current_adaptive_strategy_level() >= 3):
+                if active_profile != "DEMO_COLLECTION":
                     blockers.append("SIGNAL_HASH_CHANGED")
                 self._log("SIGNAL_HASH_CHANGED", hash_audit)
         return sorted(set(blockers))
@@ -566,8 +611,10 @@ class AutoValidationService:
     def _guarded_payload(self, signal: dict[str, Any]) -> dict[str, Any]:
         source = signal.get("candle_source") if isinstance(signal.get("candle_source"), dict) else {}
         strategy_profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
+        symbol = str(signal.get("symbol") or "").upper()
+        adaptive_level = self._current_adaptive_strategy_level(symbol) if strategy_profile == "DEMO_COLLECTION" else None
         return {
-            "symbol": str(signal.get("symbol") or "").upper(),
+            "symbol": symbol,
             "side": str(signal.get("signal") or "").upper(),
             "action": str(signal.get("signal") or "").upper(),
             "lot": 0.01,
@@ -576,7 +623,7 @@ class AutoValidationService:
             "take_profit": self._number(signal.get("take_profit"), 0),
             "risk_reward_ratio": self._number(signal.get("risk_reward"), 0),
             "signal_confidence": self._number(signal.get("confidence"), 0),
-            "adaptive_strategy_level": self._current_adaptive_strategy_level() if strategy_profile == "DEMO_COLLECTION" else None,
+            "adaptive_strategy_level": adaptive_level,
             "signal_hash": signal.get("signal_hash"),
             "signal_timestamp": signal.get("timestamp"),
             "setup_reason": signal.get("setup_reason") or signal.get("reason"),
@@ -588,7 +635,7 @@ class AutoValidationService:
                 "quality_score": signal.get("quality_score") or {},
                 "approval_audit": signal.get("approval_audit") or {},
                 "round3_diagnostics": signal.get("round3_diagnostics") or self._round3_signal_diagnostics(signal) if strategy_profile == "DEMO_COLLECTION" else {},
-                "adaptive_strategy_level": self._current_adaptive_strategy_level() if strategy_profile == "DEMO_COLLECTION" else None,
+                "adaptive_strategy_level": adaptive_level,
                 "candle_source": signal.get("candle_source") or {},
                 "sl_tp_source": signal.get("sl_tp_source"),
                 "demo_risk_model": signal.get("demo_risk_model"),
@@ -834,7 +881,8 @@ class AutoValidationService:
         ticket = str(result.get("ticket") or result.get("mt5_ticket") or "")
         if not ticket or ticket == "0":
             return
-        level = self._current_adaptive_strategy_level()
+        symbol = str(payload.get("symbol") or signal.get("symbol") or "").upper()
+        level = self._current_adaptive_strategy_level(symbol)
         entry = result.get("entry") or result.get("entry_estimate") or payload.get("entry_price") or signal.get("entry")
         sl = result.get("sl") or payload.get("stop_loss") or signal.get("stop_loss")
         tp = result.get("tp") or payload.get("take_profit") or signal.get("take_profit")
@@ -846,7 +894,7 @@ class AutoValidationService:
             "ORDER_OPEN_CONFIRMED",
             {
                 "ticket": ticket,
-                "symbol": payload.get("symbol") or signal.get("symbol"),
+                "symbol": symbol,
                 "side": payload.get("action") or payload.get("side") or signal.get("signal"),
                 "entry": entry,
                 "sl": sl,
@@ -857,14 +905,14 @@ class AutoValidationService:
                 "validation_session_id": self.session.get("session_id"),
             },
         )
-        self._record_adaptive_trade_activity("OPENED", {"ticket": ticket, "symbol": payload.get("symbol") or signal.get("symbol"), "opened_at": self._timestamp()})
+        self._record_adaptive_trade_activity("OPENED", {"ticket": ticket, "symbol": symbol, "opened_at": self._timestamp()})
         if self.journal_service is None or not hasattr(self.journal_service, "record_open_position"):
             return
         journal_payload = {
             "trade_id": f"mt5_demo_{ticket}",
             "source": "MT5_DEMO",
             "environment": "DEMO",
-            "symbol": payload.get("symbol") or signal.get("symbol"),
+            "symbol": symbol,
             "side": payload.get("action") or payload.get("side") or signal.get("signal"),
             "lot": payload.get("lot"),
             "entry_price": entry,
@@ -932,9 +980,10 @@ class AutoValidationService:
 
     def _persist_open_confirmed_reason(self, position: dict[str, Any]) -> None:
         try:
+            symbol = str(position.get("symbol") or "").upper()
             self.reason_panel_service.persist_open_confirmed(
                 self._normalized_open_position(position),
-                adaptive_level=self._current_adaptive_strategy_level(),
+                adaptive_level=self._current_adaptive_strategy_level(symbol),
                 session_id=str(self.session.get("session_id") or ""),
                 timestamp=self._timestamp(),
             )
@@ -1212,7 +1261,7 @@ class AutoValidationService:
             "failed_hard_gates": failed_hard_gates,
             "execution_decision": execution_decision,
             "why_order_not_sent": "" if execution_decision == "READY_FOR_ORDER" else self._why_order_not_sent(blockers, round3),
-            "adaptive_level": round3.get("adaptive_level", self._current_adaptive_strategy_level()),
+            "adaptive_level": round3.get("adaptive_level", self._current_adaptive_strategy_level(symbol)),
             "strategy_profile": signal.get("strategy_profile") or self.config.get("strategy_profile"),
             "market_data_status": tick_status.get("status", self.mt5_health_state.get("status")),
             "ready_for_execution": ready and not blockers,
@@ -1226,9 +1275,11 @@ class AutoValidationService:
             "conditions": {
                 "htf_bias": round3.get("trend_alignment_status"),
                 "momentum": bool((round3.get("confirmation_states") or {}).get("MOMENTUM_DISPLACEMENT")) if isinstance(round3.get("confirmation_states"), dict) else False,
+                "pullback_retest": bool((round3.get("confirmation_states") or {}).get("PULLBACK_RETEST")) if isinstance(round3.get("confirmation_states"), dict) else False,
                 "bos": str(round3.get("bos_status") or "").upper() == "PRESENT",
                 "liquidity_sweep": str(round3.get("liquidity_sweep_status") or "").upper() == "PRESENT",
                 "fvg": str(round3.get("fvg_status") or "").upper() == "PRESENT",
+                "fvg_retest": str(round3.get("fvg_retest_status") or "").upper() == "PRESENT",
                 "session_bonus": bool(round3.get("advisory_session_bonus")),
             },
             "what_needs_to_happen_next": signal.get("what_needs_to_happen_next"),
@@ -1281,7 +1332,12 @@ class AutoValidationService:
 
     def _friendly_gate_reason(self, gate: str) -> str:
         labels = {
-            "MOMENTUM_ASSISTED_CONFIRMATION_MISSING": "Level 2 needs trend, momentum, and one extra confirmation",
+            "BALANCED_ENTRY_REQUIREMENT_MISSING": "balanced entry gates are incomplete",
+            "MOMENTUM_OR_PULLBACK_MISSING": "momentum or pullback/retest is missing",
+            "STRUCTURE_CONFIRMATION_MISSING": "BOS, liquidity sweep, or FVG retest is missing",
+            "ROUND_3_SCORE_BELOW_THRESHOLD": "score is below the balanced threshold",
+            "SCORE_5_NEEDS_CLEAN_MOMENTUM": "score 5 needs clean momentum",
+            "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP": "Level 3 needs momentum plus BOS or liquidity sweep",
             "RR_BELOW_2_0": "RR is below required 2.0",
             "SPREAD_TOO_HIGH": "spread is too high",
             "SL_TP_REQUIRED": "valid SL/TP is missing",
@@ -1289,6 +1345,7 @@ class AutoValidationService:
             "RISK_REJECTED": "risk validation failed",
             "DIRECTION_BIAS_MISMATCH": "direction does not match higher-timeframe bias",
             "H4_HISTORY_INSUFFICIENT": "H4 history is not ready",
+            "H1_HISTORY_INSUFFICIENT": "H1 history is not ready",
             "M15_HISTORY_INSUFFICIENT": "M15 history is not ready",
             "HIGH_IMPACT_NEWS_BLACKOUT": "high-impact news blackout is active",
         }
@@ -1304,7 +1361,7 @@ class AutoValidationService:
         failed = best.get("failed_hard_gates") if isinstance(best.get("failed_hard_gates"), list) else []
         if failed:
             return f"Blocked because {self._friendly_gate_reason(str(failed[0]))}."
-        return "No order was sent because no qualified Level 3 setup passed the hard gates."
+        return "No order was sent because no balanced Round 3 setup passed the hard gates."
 
     def _record_decision_traces(self, checked: list[dict[str, Any]], decision: dict[str, Any] | None = None) -> None:
         timestamp = self._timestamp()
@@ -1334,7 +1391,7 @@ class AutoValidationService:
                 why_not_sent = f"Blocked because {self._friendly_gate_reason(str(sender_reason))}."
             trace = {
                 "timestamp": timestamp,
-                "adaptive_level": int(item.get("adaptive_level") or self._current_adaptive_strategy_level()),
+                "adaptive_level": int(item.get("adaptive_level") or self._current_adaptive_strategy_level(str(item.get("symbol") or ""))),
                 "symbol": item.get("symbol"),
                 "direction_candidate": item.get("direction_candidate"),
                 "score": item.get("confirmation_score") or item.get("score"),
@@ -1350,9 +1407,11 @@ class AutoValidationService:
                 {
                     "htf_bias": conditions.get("htf_bias"),
                     "momentum": conditions.get("momentum"),
+                    "pullback_retest": conditions.get("pullback_retest"),
                     "bos": conditions.get("bos"),
                     "liquidity_sweep": conditions.get("liquidity_sweep"),
                     "fvg": conditions.get("fvg"),
+                    "fvg_retest": conditions.get("fvg_retest"),
                     "session_bonus": conditions.get("session_bonus"),
                     "decision": execution_decision,
                     "reason": why_not_sent,
@@ -1364,7 +1423,7 @@ class AutoValidationService:
             traces.append(
                 {
                     "timestamp": timestamp,
-                    "adaptive_level": self._current_adaptive_strategy_level(),
+                    "adaptive_level": self._current_adaptive_strategy_level(str(decision.get("symbol") or "")),
                     "symbol": decision.get("symbol"),
                     "direction_candidate": decision.get("signal"),
                     "score": decision.get("confirmation_score"),
@@ -1427,7 +1486,8 @@ class AutoValidationService:
         return blockers
 
     def _round3_signal_diagnostics(self, signal: dict[str, Any]) -> dict[str, Any]:
-        self._maybe_advance_adaptive_strategy_level()
+        symbol = str(signal.get("symbol") or "").upper()
+        self._maybe_advance_adaptive_strategy_level(symbol)
         components = signal.get("strategy_components") if isinstance(signal.get("strategy_components"), dict) else {}
         candle_source = signal.get("candle_source") if isinstance(signal.get("candle_source"), dict) else {}
         timeframes = candle_source.get("timeframes", {}) if isinstance(candle_source.get("timeframes"), dict) else {}
@@ -1453,35 +1513,47 @@ class AutoValidationService:
         signal_h4_count = int((timeframes.get("H4", {}) if isinstance(timeframes, dict) else {}).get("returned_count") or 0)
         signal_history_ready = bool(candle_source.get("signal_history_ready")) or (h4_ok and h1_ok and m15_ok)
         confirmations = self._round3_confirmation_summary(signal, components)
-        level = self._current_adaptive_strategy_level()
-        level_config = self._adaptive_level_config(level)
+        level = self._current_adaptive_strategy_level(symbol)
+        level_config = self._adaptive_level_config(level, symbol)
         rr = self._number(signal.get("risk_reward"), None)
         passed_rules: list[str] = []
         failed_rules: list[str] = []
         level_specific_passed = self._adaptive_level_specific_passed(confirmations, level_config)
+        states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
+        momentum_or_pullback = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("PULLBACK_RETEST"))
+        structure_confirmed = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
+        score_threshold_passed = confirmations["score"] >= confirmations["required_score"]
+        clean_score_five = confirmations["score"] > 5 or bool(states.get("MOMENTUM_DISPLACEMENT"))
+        level3_structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP"))
         checks = [
             ("H4_HISTORY_AVAILABLE", "H4_HISTORY_INSUFFICIENT", h4_ok),
+            ("H1_HISTORY_AVAILABLE", "H1_HISTORY_INSUFFICIENT", h1_ok),
             ("M15_HISTORY_AVAILABLE", "M15_HISTORY_INSUFFICIENT", m15_ok),
             ("RR_2_0_OR_HIGHER", "RR_BELOW_2_0", rr is not None and rr >= 2.0),
+            ("SPREAD_ACCEPTABLE", "SPREAD_TOO_HIGH", bool(states.get("SPREAD_CLEAN"))),
             ("DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS", "DIRECTION_BIAS_MISMATCH", confirmations["direction_valid"]),
-            ("STRONG_CONFIRMATIONS_2_PLUS", "STRONG_CONFIRMATIONS_BELOW_2", confirmations["strong_count"] >= confirmations["strong_required"]),
-            ("ROUND_3_SCORE_THRESHOLD", "ROUND_3_SCORE_BELOW_THRESHOLD", confirmations["score"] >= confirmations["required_score"]),
-            (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
+            ("MOMENTUM_OR_PULLBACK_PRESENT", "MOMENTUM_OR_PULLBACK_MISSING", momentum_or_pullback),
+            ("STRUCTURE_CONFIRMATION_PRESENT", "STRUCTURE_CONFIRMATION_MISSING", structure_confirmed),
+            ("ROUND_3_SCORE_THRESHOLD", "ROUND_3_SCORE_BELOW_THRESHOLD", score_threshold_passed),
+            ("SCORE_5_HAS_CLEAN_MOMENTUM", "SCORE_5_NEEDS_CLEAN_MOMENTUM", clean_score_five),
+            (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP" if level == 3 and not level_specific_passed else level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
         ]
         for passed_code, failed_code, passed in checks:
             (passed_rules if passed else failed_rules).append(passed_code if passed else failed_code)
         advisory_warnings: list[str] = []
         advisory_warnings.extend(f"{code}_MISSING" for code in confirmations["missing_codes"])
-        symbol = str(signal.get("symbol") or "").upper()
         decision = "ACCEPTED" if not failed_rules else "REJECTED"
         reason = self._round3_decision_reason(symbol, decision, failed_rules, rr, confirmations)
+        symbol_state = self._symbol_adaptive_state(symbol)
         return {
             "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
             "adaptive_level": level,
             "adaptive_level_name": level_config["name"],
             "current_strategy_level": level,
-            "adaptive_activation_time": self.session.get("adaptive_level_activation_time"),
-            "last_trade_activity_time": self.session.get("last_trade_activity_time"),
+            "adaptive_activation_time": symbol_state.get("activation_time"),
+            "last_trade_activity_time": symbol_state.get("last_activity_time"),
+            "symbol_adaptive_level": level,
+            "symbol_adaptive_state": copy.deepcopy(symbol_state),
             "passed_rules": passed_rules,
             "failed_rules": failed_rules,
             "advisory_warnings": advisory_warnings,
@@ -1501,19 +1573,26 @@ class AutoValidationService:
             "confirmation_score": confirmations["score"],
             "confirmation_required": confirmations["required_score"],
             "confirmation_total": confirmations["total"],
+            "confirmation_weights": confirmations["weights"],
+            "score_breakdown": confirmations["score_breakdown"],
             "strong_confirmation_count": confirmations["strong_count"],
             "strong_confirmation_required": confirmations["strong_required"],
             "confirmation_passed": confirmations["passed_labels"],
             "confirmation_missing": confirmations["missing_labels"],
+            "level3_structure_passed": level3_structure,
             "advisory_session_bonus": bool(components.get("session_valid")),
             "confirmation_states": confirmations["states"],
             "direction_candidate": confirmations.get("direction_candidate") or confirmations.get("direction"),
             "bos_status": "PRESENT" if components.get("bos") else "MISSING",
             "fvg_status": "PRESENT" if components.get("fvg") else "MISSING",
+            "fvg_retest_status": "PRESENT" if confirmations["states"].get("FVG_RETEST") else "MISSING",
+            "momentum_status": "PRESENT" if confirmations["states"].get("MOMENTUM_DISPLACEMENT") else "MISSING",
+            "pullback_retest_status": "PRESENT" if confirmations["states"].get("PULLBACK_RETEST") else "MISSING",
             "liquidity_sweep_status": "PRESENT" if components.get("liquidity_sweep") else "MISSING",
-            "trend_alignment_status": "ALIGNED" if confirmations["states"].get("TREND_ALIGNMENT") else "NOT_ALIGNED",
+            "trend_alignment_status": "ALIGNED" if confirmations["states"].get("HTF_ALIGNMENT") else "NOT_ALIGNED",
             "direction_bias_status": "MATCHED" if confirmations["direction_valid"] else "MISMATCHED",
             "h4_history_status": "AVAILABLE" if h4_ok else "INSUFFICIENT",
+            "h1_history_status": "AVAILABLE" if h1_ok else "INSUFFICIENT",
             "m15_history_status": "AVAILABLE" if m15_ok else "INSUFFICIENT",
             "final_decision": decision,
             "final_decision_reason": reason,
@@ -1521,56 +1600,73 @@ class AutoValidationService:
         }
 
     def _round3_confirmation_summary(self, signal: dict[str, Any], components: dict[str, Any]) -> dict[str, Any]:
-        level_config = self._adaptive_level_config(self._current_adaptive_strategy_level())
+        symbol = str(signal.get("symbol") or "").upper()
+        level_config = self._adaptive_level_config(symbol=symbol)
         trend = signal.get("market_structure_state") if isinstance(signal.get("market_structure_state"), dict) else {}
         direction = self._round3_direction_candidate(signal, components)
         raw_trend_bias = str(trend.get("trend_bias") or trend.get("higher_timeframe_bias") or components.get("higher_timeframe_bias") or components.get("trend_bias") or "").upper()
         trend_bias = self._normalize_bias_direction(raw_trend_bias)
-        trend_aligned = direction in {"BUY", "SELL"} and trend_bias == direction
+        h4_bias = self._normalize_bias_direction(str(components.get("h4_bias") or components.get("h4_trend_bias") or trend.get("h4_bias") or trend.get("h4_trend_bias") or trend.get("higher_timeframe_bias") or "").upper())
+        h1_bias = self._normalize_bias_direction(str(components.get("h1_bias") or components.get("h1_trend_bias") or trend.get("h1_bias") or trend.get("h1_trend_bias") or trend.get("intermediate_timeframe_bias") or "").upper())
+        htf_bias = h4_bias if h4_bias and h4_bias == h1_bias else ""
+        htf_agrees = bool(h4_bias and h1_bias and h4_bias == h1_bias)
+        trend_aligned = direction in {"BUY", "SELL"} and htf_agrees and htf_bias == direction
         fvg = bool(components.get("fvg") or components.get("imbalance") or components.get("imbalance_zone"))
         pullback = bool(components.get("pullback") or components.get("retest") or components.get("entry_zone_valid") or components.get("near_fvg") or components.get("near_retest_zone"))
+        fvg_retest = bool(components.get("fvg_retest") or components.get("fvg_retested") or components.get("fvg_entry_retest") or (fvg and pullback))
         momentum = bool(components.get("momentum") or components.get("displacement") or components.get("displacement_candle") or components.get("impulse_candle"))
-        atr_ok = bool(components.get("atr_valid") or components.get("atr_tradeable") or components.get("volatility_tradeable") or components.get("regime_tradeable"))
         spread_clean = "SPREAD_TOO_HIGH" not in self._profile_spread_blockers(signal)
         rr_ok = self._number(signal.get("risk_reward"), 0) >= float(self.config.get("min_rr", 2.0))
-        session_bonus = bool(components.get("session_valid"))
         states = {
-            "TREND_ALIGNMENT": trend_aligned,
-            "LIQUIDITY_SWEEP": bool(components.get("liquidity_sweep")),
+            "HTF_ALIGNMENT": trend_aligned,
             "BOS": bool(components.get("bos") or components.get("structure_confirmation")),
-            "FVG_IMBALANCE": fvg,
-            "PULLBACK_RETEST": pullback,
+            "LIQUIDITY_SWEEP": bool(components.get("liquidity_sweep")),
+            "FVG_RETEST": fvg_retest,
             "MOMENTUM_DISPLACEMENT": momentum,
-            "ATR_VOLATILITY": atr_ok,
+            "PULLBACK_RETEST": pullback,
             "SPREAD_CLEAN": spread_clean,
             "RR_2_0": rr_ok,
-            "SESSION_LONDON_NY_BONUS": session_bonus,
         }
         labels = {
-            "TREND_ALIGNMENT": "H4/H1 trend alignment",
-            "LIQUIDITY_SWEEP": "liquidity sweep",
+            "HTF_ALIGNMENT": "H1/H4 HTF alignment",
             "BOS": "BOS",
-            "FVG_IMBALANCE": "FVG/imbalance",
-            "PULLBACK_RETEST": "pullback/retest",
+            "LIQUIDITY_SWEEP": "liquidity sweep",
+            "FVG_RETEST": "FVG retest",
             "MOMENTUM_DISPLACEMENT": "momentum/displacement",
-            "ATR_VOLATILITY": "ATR volatility",
+            "PULLBACK_RETEST": "pullback/retest",
             "SPREAD_CLEAN": "clean spread",
             "RR_2_0": "RR >= 2.0",
-            "SESSION_LONDON_NY_BONUS": "London/NY session",
         }
-        strong_codes = {"TREND_ALIGNMENT", "LIQUIDITY_SWEEP", "BOS", "FVG_IMBALANCE", "PULLBACK_RETEST", "MOMENTUM_DISPLACEMENT"}
+        weights = {
+            "HTF_ALIGNMENT": 2,
+            "MOMENTUM_DISPLACEMENT": 2,
+            "PULLBACK_RETEST": 1,
+            "BOS": 2,
+            "LIQUIDITY_SWEEP": 1,
+            "FVG_RETEST": 1,
+            "SPREAD_CLEAN": 1,
+            "RR_2_0": 1,
+        }
+        strong_codes = {"HTF_ALIGNMENT", "BOS", "MOMENTUM_DISPLACEMENT", "PULLBACK_RETEST", "LIQUIDITY_SWEEP", "FVG_RETEST"}
         passed_codes = [code for code, passed in states.items() if passed]
         missing_codes = [code for code, passed in states.items() if not passed]
+        score_breakdown = {code: weights.get(code, 0) for code in passed_codes}
+        score = sum(score_breakdown.values())
         return {
-            "score": len(passed_codes),
+            "score": score,
             "required_score": int(level_config["required_score"]),
-            "total": len(states),
+            "preferred_score": int(level_config.get("preferred_score", 6)),
+            "total": sum(weights.values()),
+            "weights": weights,
+            "score_breakdown": score_breakdown,
             "strong_count": len([code for code in passed_codes if code in strong_codes]),
             "strong_required": int(level_config["strong_required"]),
             "direction_valid": direction in {"BUY", "SELL"} and trend_aligned,
             "direction": direction,
             "direction_candidate": direction,
-            "trend_bias": trend_bias or raw_trend_bias or direction,
+            "trend_bias": htf_bias or trend_bias or raw_trend_bias or direction,
+            "h1_bias": h1_bias,
+            "h4_bias": h4_bias,
             "states": states,
             "passed_codes": passed_codes,
             "missing_codes": missing_codes,
@@ -1588,18 +1684,18 @@ class AutoValidationService:
         return f"{', '.join(labels[:-1])}, and {labels[-1]}"
 
     def _round3_decision_reason(self, symbol: str, decision: str, failed_rules: list[str], rr: float | None, confirmations: dict[str, Any] | None = None) -> str:
-        confirmations = confirmations or {"score": 0, "required_score": 5, "strong_count": 0, "passed_labels": [], "missing_labels": ["BOS", "FVG/imbalance", "liquidity sweep", "trend alignment"]}
+        confirmations = confirmations or {"score": 0, "required_score": 5, "strong_count": 0, "passed_labels": [], "missing_labels": ["HTF alignment", "momentum/pullback", "structure confirmation"]}
         first_failure = failed_rules[0] if failed_rules else ""
-        level = self._current_adaptive_strategy_level()
-        prefix = f"Adaptive Level {level} active. "
+        level = self._current_adaptive_strategy_level(symbol)
+        prefix = f"{symbol} Adaptive Level {level} active. "
         if decision == "ACCEPTED":
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
             passed = self._join_labels(list(confirmations.get("passed_labels") or [])) or "score"
-            if level == 3:
-                return f"Accepted using Adaptive Level 3 because HTF bias, momentum, and BOS or liquidity sweep passed. Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. RR {rr_text}."
-            return f"{prefix}Accepted: Round 3 score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {passed}. Direction {confirmations.get('direction')}. Trend {confirmations.get('trend_bias')}. RR {rr_text}. Risk approved."
+            return f"{prefix}Accepted: Balanced Round 3 score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {passed}. Direction {confirmations.get('direction')}. HTF bias {confirmations.get('trend_bias')}. RR {rr_text}. Risk approved."
         if first_failure == "H4_HISTORY_INSUFFICIENT":
             return f"{symbol} rejected because H4 history was insufficient."
+        if first_failure == "H1_HISTORY_INSUFFICIENT":
+            return f"{symbol} rejected because H1 history was insufficient."
         if first_failure == "M15_HISTORY_INSUFFICIENT":
             return f"{symbol} rejected because M15 history was insufficient."
         if first_failure == "RR_BELOW_2_0":
@@ -1607,18 +1703,28 @@ class AutoValidationService:
             return f"Rejected: RR {rr_text} below required 2.0."
         if first_failure == "DIRECTION_BIAS_MISMATCH":
             return f"Rejected: direction {confirmations.get('direction') or 'unclear'} does not match higher-timeframe bias {confirmations.get('trend_bias') or 'unclear'}."
-        if first_failure == "STRONG_CONFIRMATIONS_BELOW_2":
-            missing = list(confirmations.get("missing_labels") or [])
-            missing_text = self._join_labels(missing) or "one more strong confirmation"
-            return f"{prefix}Waiting: strong confirmations {int(confirmations.get('strong_count') or 0)}/{int(confirmations.get('strong_required') or 2)}. Missing {missing_text}."
         if first_failure == "ROUND_3_SCORE_BELOW_THRESHOLD":
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "more confluence"
             return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. Missing {missing_text}."
-        if first_failure == "MOMENTUM_ASSISTED_CONFIRMATION_MISSING":
-            return f"{prefix}Waiting: Level 2 needs trend, momentum, and one extra confirmation."
-        if first_failure == "ADAPTIVE_LEVEL_3_MOMENTUM_STRUCTURE_MISSING":
-            return f"{prefix}Waiting: Level 3 needs HTF bias, momentum, and either BOS or liquidity sweep."
+        if first_failure == "MOMENTUM_OR_PULLBACK_MISSING":
+            return f"{prefix}Waiting: momentum or pullback/retest is needed next."
+        if first_failure == "STRUCTURE_CONFIRMATION_MISSING":
+            return f"{prefix}Waiting: need one structure confirmation from BOS, liquidity sweep, or FVG retest."
+        if first_failure == "SCORE_5_NEEDS_CLEAN_MOMENTUM":
+            return f"{prefix}Waiting: score 5 setups need clean momentum."
+        if first_failure == "BALANCED_ENTRY_REQUIREMENT_MISSING":
+            missing = list(confirmations.get("missing_labels") or [])
+            missing_text = self._join_labels(missing) or "balanced entry confluence"
+            return f"{prefix}Waiting: balanced entry is incomplete. Missing {missing_text}."
+        if first_failure == "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP":
+            states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
+            missing = []
+            if not states.get("MOMENTUM_DISPLACEMENT"):
+                missing.append("momentum")
+            if not (states.get("BOS") or states.get("LIQUIDITY_SWEEP")):
+                missing.append("BOS or liquidity sweep")
+            return f"{prefix}Waiting: Level 3 needs {self._join_labels(missing) or 'momentum plus BOS or liquidity sweep'}."
         return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}."
 
     def _execution_decision_reason(self, status: str, blockers: list[str], signal: dict[str, Any] | None = None) -> str:
@@ -1628,10 +1734,10 @@ class AutoValidationService:
         confirmations = self._round3_confirmation_summary(signal or {}, (signal or {}).get("strategy_components") if isinstance((signal or {}).get("strategy_components"), dict) else {}) if isinstance(signal, dict) else {"score": 0, "missing_labels": []}
         if status == "ORDER_SENT":
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
-            level = self._current_adaptive_strategy_level()
-            if level == 3:
-                return f"SELL executed because bearish HTF trend and momentum aligned. Adaptive Level 3 accepted score {int(confirmations.get('score') or 0)}." if str((signal or {}).get("signal") or "").upper() == "SELL" else f"BUY executed because bullish HTF trend and momentum aligned. Adaptive Level 3 accepted score {int(confirmations.get('score') or 0)}."
-            return f"Trade accepted using Adaptive Level {level}. Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. RR {rr_text}. Risk approved."
+            level = self._current_adaptive_strategy_level(str((signal or {}).get("symbol") or ""))
+            side = str((signal or {}).get("signal") or confirmations.get("direction") or "").upper()
+            bias = str(confirmations.get("trend_bias") or "HTF bias").lower()
+            return f"{side or 'Trade'} executed using Balanced Round 3. Adaptive Level {level} accepted score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {bias}, RR {rr_text}, spread clean, and risk approved."
         if blocker in {"RR_BELOW_2_0", "RISK_REWARD_BELOW_MINIMUM", "RR_BELOW_MINIMUM"}:
             rr_text = f"{rr:.1f}" if rr is not None else "missing"
             return f"Rejected: RR {rr_text} below required 2.0."
@@ -1641,15 +1747,15 @@ class AutoValidationService:
             return "Rejected: high-impact news blackout is active."
         if "RISK" in blocker or blocker in {"SL_TP_REQUIRED", "SL_TP_INVALID"}:
             return "Rejected: risk validation failed."
-        if blocker in {"H4_HISTORY_INSUFFICIENT", "M15_HISTORY_INSUFFICIENT", "HISTORY_UNAVAILABLE"}:
+        if blocker in {"H4_HISTORY_INSUFFICIENT", "H1_HISTORY_INSUFFICIENT", "M15_HISTORY_INSUFFICIENT", "HISTORY_UNAVAILABLE"}:
             return f"Rejected: {blocker.replace('_', ' ').title()}."
         if status == "HALTED_RISK":
             diagnostics = self.session.get("risk_halt_diagnostics") if isinstance(self.session.get("risk_halt_diagnostics"), dict) else self._risk_halt_diagnostics()
             return str(diagnostics.get("message") or self._risk_halt_message(diagnostics))
-        if blocker in {"CONFIRMATION_SCORE_BELOW_2", "CONFIRMATION_SCORE_LOW", "NO_READY_APPROVED_SIGNAL", "STRONG_CONFIRMATIONS_BELOW_2", "ROUND_3_SCORE_BELOW_THRESHOLD", "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING", "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING", "MOMENTUM_ASSISTED_CONFIRMATION_MISSING"}:
+        if blocker in {"CONFIRMATION_SCORE_BELOW_2", "CONFIRMATION_SCORE_LOW", "NO_READY_APPROVED_SIGNAL", "ROUND_3_SCORE_BELOW_THRESHOLD", "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING", "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING", "BALANCED_ENTRY_REQUIREMENT_MISSING", "MOMENTUM_OR_PULLBACK_MISSING", "STRUCTURE_CONFIRMATION_MISSING", "SCORE_5_NEEDS_CLEAN_MOMENTUM", "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP"}:
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "one more confirmation"
-            level = self._current_adaptive_strategy_level()
+            level = self._current_adaptive_strategy_level(str((signal or {}).get("symbol") or ""))
             return f"Adaptive Level {level} active. Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. Missing {missing_text}."
         if blocker:
             return f"Rejected: {blocker.replace('_', ' ').lower()}."
@@ -1659,7 +1765,8 @@ class AutoValidationService:
         raw = str(signal.get("signal") or signal.get("side") or signal.get("action") or "").upper()
         if raw in {"BUY", "SELL"}:
             return raw
-        if self._current_adaptive_strategy_level() < 3:
+        symbol = str(signal.get("symbol") or "").upper()
+        if self._current_adaptive_strategy_level(symbol) < 3:
             return raw
         trend = signal.get("market_structure_state") if isinstance(signal.get("market_structure_state"), dict) else {}
         bias = str(trend.get("trend_bias") or trend.get("higher_timeframe_bias") or components.get("higher_timeframe_bias") or components.get("trend_bias") or "").upper()
@@ -2129,6 +2236,33 @@ class AutoValidationService:
             return "MAX_DRAWDOWN_REACHED"
         return None
 
+    def _apply_balanced_round3_config(self) -> None:
+        if str(self.config.get("strategy_profile") or "").upper() != "DEMO_COLLECTION":
+            return
+        self.config["round3_strategy_model"] = "BALANCED_EDGE_SCORE"
+        self.config["allowed_symbols"] = ["EURUSD", "XAUUSD"]
+        self.config["balanced_round3_min_score"] = 5
+        self.config["balanced_round3_preferred_score"] = 6
+        self.config["adaptive_inactivity_minutes"] = 45
+        self.config["min_rr"] = max(2.0, float(self.config.get("min_rr") or 2.0))
+        self.config["break_even_trigger_r"] = 0.8
+        self.config["trailing_stop_trigger_r"] = 1.2
+        self.config["trailing_stop_distance_r"] = float(self.config.get("trailing_stop_distance_r") or 0.75)
+        self.config["exit_stale_minutes"] = max(180, int(self.config.get("exit_stale_minutes") or 180))
+        self.config["exit_soft_adverse_minutes"] = max(180, int(self.config.get("exit_soft_adverse_minutes") or 180))
+        self.config["exit_no_progress_minutes"] = max(180, int(self.config.get("exit_no_progress_minutes") or 180))
+        settings = self.config.get("per_symbol_exit_settings") if isinstance(self.config.get("per_symbol_exit_settings"), dict) else {}
+        for symbol, symbol_settings in settings.items():
+            if not isinstance(symbol_settings, dict):
+                continue
+            symbol_settings["break_even_trigger_r"] = 0.8
+            symbol_settings["trailing_stop_trigger_r"] = 1.2
+            symbol_settings["stale_exit_minutes"] = max(180, int(symbol_settings.get("stale_exit_minutes") or 180))
+            symbol_settings["soft_adverse_minutes"] = max(180, int(symbol_settings.get("soft_adverse_minutes") or 180))
+            symbol_settings["no_progress_minutes"] = max(180, int(symbol_settings.get("no_progress_minutes") or 180))
+            settings[symbol] = symbol_settings
+        self.config["per_symbol_exit_settings"] = settings
+
     def _risk_halt_message(self, diagnostics: dict[str, Any]) -> str:
         reason = str(diagnostics.get("reason") or "")
         if reason == "MAX_DAILY_LOSS_REACHED":
@@ -2374,6 +2508,8 @@ class AutoValidationService:
         return (self._last_trade_time + timedelta(minutes=float(self.config["cooldown_after_trade_minutes"]))).isoformat()
 
     def _ready(self, signal: dict[str, Any]) -> bool:
+        if str(self.config.get("strategy_profile") or "").upper() == "DEMO_COLLECTION":
+            return signal.get("risk_status") == "APPROVED" and str(signal.get("signal") or "").upper() in {"BUY", "SELL"}
         return signal.get("execution_status") == "READY_FOR_PREVIEW" and signal.get("risk_status") == "APPROVED" and str(signal.get("signal") or "").upper() in {"BUY", "SELL"}
 
     def _halt_blocker(self, blockers: list[str]) -> bool:
@@ -2836,40 +2972,46 @@ class AutoValidationService:
     def _adaptive_level_definitions(self) -> dict[int, dict[str, Any]]:
         return {
             0: {
-                "name": "Original Round 3",
-                "required_score": 5,
+                "name": "Balanced Preferred",
+                "required_score": 6,
+                "preferred_score": 6,
                 "strong_required": 2,
-                "passed_rule": "ADAPTIVE_LEVEL_0_REQUIREMENT_MET",
-                "failed_rule": "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING",
+                "requires_balanced_entry": True,
+                "passed_rule": "BALANCED_ENTRY_REQUIREMENT_MET",
+                "failed_rule": "BALANCED_ENTRY_REQUIREMENT_MISSING",
             },
             1: {
-                "name": "Slightly Relaxed",
-                "required_score": 4,
+                "name": "Balanced Active",
+                "required_score": 5,
+                "preferred_score": 6,
                 "strong_required": 2,
-                "passed_rule": "ADAPTIVE_LEVEL_1_REQUIREMENT_MET",
-                "failed_rule": "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING",
+                "requires_balanced_entry": True,
+                "passed_rule": "BALANCED_ENTRY_REQUIREMENT_MET",
+                "failed_rule": "BALANCED_ENTRY_REQUIREMENT_MISSING",
             },
             2: {
-                "name": "Momentum Assisted",
-                "required_score": 4,
+                "name": "Balanced Active",
+                "required_score": 5,
+                "preferred_score": 6,
                 "strong_required": 2,
-                "requires_momentum_plus_extra": True,
-                "passed_rule": "MOMENTUM_ASSISTED_REQUIREMENT_MET",
-                "failed_rule": "MOMENTUM_ASSISTED_CONFIRMATION_MISSING",
+                "requires_balanced_entry": True,
+                "passed_rule": "BALANCED_ENTRY_REQUIREMENT_MET",
+                "failed_rule": "BALANCED_ENTRY_REQUIREMENT_MISSING",
             },
             3: {
-                "name": "Fast Opportunity",
+                "name": "Balanced Active",
                 "required_score": 5,
+                "preferred_score": 6,
                 "strong_required": 2,
-                "requires_momentum_and_bos_or_sweep": True,
-                "passed_rule": "FAST_OPPORTUNITY_REQUIREMENT_MET",
-                "failed_rule": "ADAPTIVE_LEVEL_3_MOMENTUM_STRUCTURE_MISSING",
+                "requires_balanced_entry": True,
+                "passed_rule": "BALANCED_ENTRY_REQUIREMENT_MET",
+                "failed_rule": "BALANCED_ENTRY_REQUIREMENT_MISSING",
             },
         }
 
-    def _adaptive_level_config(self, level: int | None = None) -> dict[str, Any]:
+    def _adaptive_level_config(self, level: int | None = None, symbol: str | None = None) -> dict[str, Any]:
         definitions = self._adaptive_level_definitions()
-        safe_level = max(0, min(3, int(level if level is not None else self.session.get("current_strategy_level") or 0)))
+        safe_level = max(0, min(3, int(level if level is not None else self._current_adaptive_strategy_level(symbol))))
         return {**definitions[safe_level], "level": safe_level}
 
     def _empty_adaptive_strategy_levels(self, activation_time: str | None = None) -> dict[str, dict[str, Any]]:
@@ -2881,11 +3023,38 @@ class AutoValidationService:
                 "status": "Not Reached" if level > 0 else "Active",
                 "open": 0,
                 "closed": 0,
+                "wins": 0,
+                "losses": 0,
+                "net_pnl": 0.0,
                 "reached": level == 0,
                 "activation_time": activation_time if level == 0 else None,
                 "last_trade_activity_time": None,
             }
         return levels
+
+    def _empty_symbol_adaptive_state(self, symbol: str, level: int = 0, activation_time: str | None = None, last_activity_time: str | None = None) -> dict[str, Any]:
+        safe_level = max(0, min(3, int(level or 0)))
+        timestamp = activation_time or last_activity_time or self._timestamp()
+        levels = self._empty_adaptive_strategy_levels(timestamp)
+        for key, item in levels.items():
+            numeric = int(key)
+            item["reached"] = numeric <= safe_level
+            item["status"] = "Active" if numeric == safe_level else ("Not Worked" if numeric <= safe_level else "Not Reached")
+            item["activation_time"] = timestamp if numeric == safe_level or numeric == 0 else None
+            item["last_trade_activity_time"] = last_activity_time if numeric == safe_level else None
+        return {
+            "symbol": symbol,
+            "current_level": safe_level,
+            "activation_time": timestamp,
+            "last_activity_time": last_activity_time or timestamp,
+            "open": 0,
+            "closed": 0,
+            "wins": 0,
+            "losses": 0,
+            "net_pnl": 0.0,
+            "levels": levels,
+            "history": [],
+        }
 
     def _ensure_adaptive_strategy_state(self) -> None:
         now = self._timestamp()
@@ -2918,12 +3087,98 @@ class AutoValidationService:
             )
             levels[str(key)] = item
 
-    def _current_adaptive_strategy_level(self) -> int:
+        symbol_state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        migrated_state: dict[str, Any] = {}
+        allowed_symbols = sorted(self._allowed_symbols() or {"EURUSD", "XAUUSD"})
+        global_levels = self.session.get("adaptive_strategy_levels") if isinstance(self.session.get("adaptive_strategy_levels"), dict) else {}
+        global_history = self.session.get("adaptive_strategy_history") if isinstance(self.session.get("adaptive_strategy_history"), list) else []
+        for symbol in allowed_symbols:
+            raw_item = symbol_state.get(symbol) if isinstance(symbol_state.get(symbol), dict) else {}
+            if raw_item:
+                symbol_level = max(0, min(3, int(raw_item.get("current_level") if raw_item.get("current_level") is not None else raw_item.get("level") or 0)))
+                activation_time = str(raw_item.get("activation_time") or started)
+                last_activity = str(raw_item.get("last_activity_time") or raw_item.get("last_trade_activity_time") or activation_time)
+                item_levels = raw_item.get("levels") if isinstance(raw_item.get("levels"), dict) else self._empty_adaptive_strategy_levels(activation_time)
+                history = raw_item.get("history") if isinstance(raw_item.get("history"), list) else []
+            else:
+                inherit_global = symbol == "EURUSD" and not symbol_state
+                symbol_level = level if inherit_global else 0
+                activation_time = str(self.session.get("adaptive_level_activation_time") or started) if inherit_global else started
+                last_activity = str(self.session.get("last_trade_activity_time") or activation_time) if inherit_global else started
+                item_levels = copy.deepcopy(global_levels) if inherit_global and global_levels else self._empty_adaptive_strategy_levels(activation_time)
+                history = [entry for entry in global_history if isinstance(entry, dict) and str(entry.get("symbol") or symbol).upper() == symbol] if inherit_global else []
+            normalized_levels: dict[str, dict[str, Any]] = {}
+            for key, definition in self._adaptive_level_definitions().items():
+                existing = item_levels.get(str(key)) if isinstance(item_levels.get(str(key)), dict) else {}
+                reached = bool(existing.get("reached")) or key <= symbol_level
+                open_count = int(existing.get("open") or 0)
+                closed_count = int(existing.get("closed") or 0)
+                worked = open_count + closed_count > 0
+                normalized_levels[str(key)] = {
+                    "level": key,
+                    "name": definition["name"],
+                    "status": "Active" if key == symbol_level else ("Worked" if worked else ("Not Worked" if reached else "Not Reached")),
+                    "open": open_count,
+                    "closed": closed_count,
+                    "wins": int(existing.get("wins") or 0),
+                    "losses": int(existing.get("losses") or 0),
+                    "net_pnl": round(float(existing.get("net_pnl") or 0.0), 2),
+                    "reached": reached,
+                    "activation_time": existing.get("activation_time") or (activation_time if key == symbol_level or key == 0 else None),
+                    "last_trade_activity_time": existing.get("last_trade_activity_time") or (last_activity if key == symbol_level else None),
+                }
+            migrated_state[symbol] = {
+                "symbol": symbol,
+                "current_level": symbol_level,
+                "activation_time": activation_time,
+                "last_activity_time": last_activity,
+                "open": int(raw_item.get("open") or 0) if raw_item else 0,
+                "closed": int(raw_item.get("closed") or 0) if raw_item else 0,
+                "wins": int(raw_item.get("wins") or 0) if raw_item else 0,
+                "losses": int(raw_item.get("losses") or 0) if raw_item else 0,
+                "net_pnl": round(float(raw_item.get("net_pnl") or 0.0), 2) if raw_item else 0.0,
+                "levels": normalized_levels,
+                "history": history[-100:],
+            }
+        self.session["symbol_adaptive_state"] = migrated_state
+        self._sync_global_adaptive_mirror()
+
+    def _sync_global_adaptive_mirror(self) -> None:
+        state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        if not state:
+            return
+        levels = [int(item.get("current_level") or 0) for item in state.values() if isinstance(item, dict)]
+        mirror_level = max(levels) if levels else 0
+        self.session["current_strategy_level"] = mirror_level
+        active_symbols = [item for item in state.values() if isinstance(item, dict) and int(item.get("current_level") or 0) == mirror_level]
+        mirror = active_symbols[0] if active_symbols else next(iter(state.values()))
+        if isinstance(mirror, dict):
+            self.session["last_trade_activity_time"] = mirror.get("last_activity_time") or self.session.get("last_trade_activity_time")
+            self.session["adaptive_level_activation_time"] = mirror.get("activation_time") or self.session.get("adaptive_level_activation_time")
+
+    def _symbol_adaptive_state(self, symbol: str | None) -> dict[str, Any]:
         self._ensure_adaptive_strategy_state()
+        normalized = str(symbol or "").upper()
+        state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        if normalized and normalized in state and isinstance(state[normalized], dict):
+            return state[normalized]
+        fallback_symbol = sorted(state.keys())[0] if state else ""
+        return state.get(fallback_symbol, {}) if fallback_symbol else {}
+
+    def _current_adaptive_strategy_level(self, symbol: str | None = None) -> int:
+        self._ensure_adaptive_strategy_state()
+        if symbol:
+            state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+            item = state.get(str(symbol).upper()) if isinstance(state.get(str(symbol).upper()), dict) else {}
+            return int(item.get("current_level") or 0)
         return int(self.session.get("current_strategy_level") or 0)
 
-    def _adaptive_last_activity_at(self) -> datetime | None:
-        value = self.session.get("last_trade_activity_time") or self.session.get("session_start_time") or self.session.get("started_at")
+    def _adaptive_last_activity_at(self, symbol: str | None = None) -> datetime | None:
+        if symbol:
+            state = self._symbol_adaptive_state(symbol)
+            value = state.get("last_activity_time") or state.get("last_trade_activity_time") or self.session.get("session_start_time") or self.session.get("started_at")
+        else:
+            value = self.session.get("last_trade_activity_time") or self.session.get("session_start_time") or self.session.get("started_at")
         if not value:
             return None
         try:
@@ -2933,82 +3188,134 @@ class AutoValidationService:
 
     def _adaptive_level_specific_passed(self, confirmations: dict[str, Any], level_config: dict[str, Any]) -> bool:
         states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
-        if level_config.get("requires_momentum_plus_extra"):
-            extras = {"BOS", "FVG_IMBALANCE", "LIQUIDITY_SWEEP", "PULLBACK_RETEST"}
-            return bool(states.get("TREND_ALIGNMENT")) and bool(states.get("MOMENTUM_DISPLACEMENT")) and any(bool(states.get(code)) for code in extras)
-        if level_config.get("requires_momentum_and_bos_or_sweep"):
-            return bool(states.get("TREND_ALIGNMENT")) and bool(states.get("MOMENTUM_DISPLACEMENT")) and (bool(states.get("BOS")) or bool(states.get("LIQUIDITY_SWEEP")))
+        if int(level_config.get("level") or 0) == 3:
+            structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP"))
+            return bool(states.get("HTF_ALIGNMENT")) and bool(states.get("MOMENTUM_DISPLACEMENT")) and structure and bool(states.get("RR_2_0")) and bool(states.get("SPREAD_CLEAN"))
+        if level_config.get("requires_balanced_entry"):
+            momentum_or_pullback = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("PULLBACK_RETEST"))
+            structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
+            return bool(states.get("HTF_ALIGNMENT")) and bool(states.get("RR_2_0")) and bool(states.get("SPREAD_CLEAN")) and momentum_or_pullback and structure
         return True
 
-    def _maybe_advance_adaptive_strategy_level(self) -> None:
+    def _maybe_advance_all_adaptive_strategy_levels(self) -> None:
+        self._ensure_adaptive_strategy_state()
+        for symbol in sorted(self._allowed_symbols() or set()):
+            self._maybe_advance_adaptive_strategy_level(symbol)
+        self._sync_global_adaptive_mirror()
+
+    def _maybe_advance_adaptive_strategy_level(self, symbol: str | None = None) -> None:
         if self.session.get("status") not in {"RUNNING", "WAITING_FOR_MT5_HISTORY_SYNC", "WAITING_FOR_MT5_RECONNECT"}:
             self._ensure_adaptive_strategy_state()
             return
         self._ensure_adaptive_strategy_state()
-        level = int(self.session.get("current_strategy_level") or 0)
+        normalized_symbol = str(symbol or "EURUSD").upper()
+        state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        item = state.get(normalized_symbol) if isinstance(state.get(normalized_symbol), dict) else self._empty_symbol_adaptive_state(normalized_symbol)
+        level = int(item.get("current_level") or 0)
         if level >= 3:
             return
-        last_activity = self._adaptive_last_activity_at()
+        last_activity = self._adaptive_last_activity_at(normalized_symbol)
         if last_activity is None:
-            self.session["last_trade_activity_time"] = self._timestamp()
+            item["last_activity_time"] = self._timestamp()
+            state[normalized_symbol] = item
+            self.session["symbol_adaptive_state"] = state
             return
         now = datetime.now(timezone.utc)
-        if now < last_activity + timedelta(minutes=30):
+        inactivity_minutes = float(self.config.get("adaptive_inactivity_minutes") or 45)
+        if now < last_activity + timedelta(minutes=inactivity_minutes):
             return
         new_level = min(3, level + 1)
         timestamp = self._timestamp()
-        self.session["current_strategy_level"] = new_level
-        self.session["adaptive_level_activation_time"] = timestamp
-        self.session["last_trade_activity_time"] = timestamp
+        item["current_level"] = new_level
+        item["activation_time"] = timestamp
+        item["last_activity_time"] = timestamp
+        levels = item.get("levels") if isinstance(item.get("levels"), dict) else self._empty_adaptive_strategy_levels(timestamp)
+        level_item = levels.get(str(new_level)) if isinstance(levels.get(str(new_level)), dict) else {}
+        level_item.update({"reached": True, "status": "Active", "activation_time": timestamp, "last_trade_activity_time": timestamp})
+        levels[str(new_level)] = level_item
+        for key, existing in levels.items():
+            if key != str(new_level) and isinstance(existing, dict) and existing.get("status") == "Active":
+                existing["status"] = "Worked" if int(existing.get("open") or 0) + int(existing.get("closed") or 0) > 0 else "Not Worked"
+        item["levels"] = levels
+        state[normalized_symbol] = item
+        self.session["symbol_adaptive_state"] = state
         self._ensure_adaptive_strategy_state()
         history = self.session.get("adaptive_strategy_history") if isinstance(self.session.get("adaptive_strategy_history"), list) else []
-        history.append(
-            {
-                "event": "ADAPTIVE_LEVEL_ADVANCED",
-                "from_level": level,
-                "to_level": new_level,
-                "reason": "30 minutes without an opened or closed trade.",
-                "timestamp": timestamp,
-            }
-        )
+        entry = {
+            "event": "ADAPTIVE_LEVEL_ADVANCED",
+            "symbol": normalized_symbol,
+            "from_level": level,
+            "to_level": new_level,
+            "reason": "45 minutes without an opened or closed trade for this symbol.",
+            "timestamp": timestamp,
+        }
+        history.append(entry)
         self.session["adaptive_strategy_history"] = history[-100:]
+        symbol_history = item.get("history") if isinstance(item.get("history"), list) else []
+        symbol_history.append(entry)
+        item["history"] = symbol_history[-100:]
+        state[normalized_symbol] = item
+        self.session["symbol_adaptive_state"] = state
         self._log(
             "ADAPTIVE_LEVEL_ADVANCED",
             {
+                "symbol": normalized_symbol,
                 "from_level": level,
                 "to_level": new_level,
-                "reason": "30_MINUTES_INACTIVITY",
-                "message": f"Adaptive Level {new_level} active due to 30 minutes inactivity.",
+                "reason": "45_MINUTES_SYMBOL_INACTIVITY",
+                "message": f"{normalized_symbol} Adaptive Level {new_level} active after 45 minutes without opened or closed activity.",
             },
         )
 
     def _record_adaptive_trade_activity(self, activity: str, details: dict[str, Any] | None = None) -> None:
         self._ensure_adaptive_strategy_state()
-        level = int(self.session.get("current_strategy_level") or 0)
+        symbol = str((details or {}).get("symbol") or "EURUSD").upper()
+        state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        symbol_state = state.get(symbol) if isinstance(state.get(symbol), dict) else self._empty_symbol_adaptive_state(symbol)
+        level = int(symbol_state.get("current_level") or 0)
         timestamp = str((details or {}).get("closed_at") or (details or {}).get("opened_at") or self._timestamp())
-        self.session["last_trade_activity_time"] = timestamp
-        levels = self.session.get("adaptive_strategy_levels") if isinstance(self.session.get("adaptive_strategy_levels"), dict) else {}
+        symbol_state["last_activity_time"] = timestamp
+        levels = symbol_state.get("levels") if isinstance(symbol_state.get("levels"), dict) else {}
         item = levels.get(str(level)) if isinstance(levels.get(str(level)), dict) else {}
         if activity == "OPENED":
             item["open"] = int(item.get("open") or 0) + 1
         elif activity == "CLOSED":
             item["closed"] = int(item.get("closed") or 0) + 1
+            pnl = self._number((details or {}).get("pnl") or (details or {}).get("profit_loss"), 0)
+            item["net_pnl"] = round(float(item.get("net_pnl") or 0.0) + float(pnl or 0.0), 2)
+            result = str((details or {}).get("result") or "").upper()
+            if result == "WIN" or float(pnl or 0.0) > 0:
+                item["wins"] = int(item.get("wins") or 0) + 1
+            elif result == "LOSS" or float(pnl or 0.0) < 0:
+                item["losses"] = int(item.get("losses") or 0) + 1
         item["last_trade_activity_time"] = timestamp
         item["status"] = "Active"
         item["reached"] = True
         levels[str(level)] = item
-        self.session["adaptive_strategy_levels"] = levels
+        symbol_state["levels"] = levels
+        symbol_state["open"] = sum(int(entry.get("open") or 0) for entry in levels.values() if isinstance(entry, dict))
+        symbol_state["closed"] = sum(int(entry.get("closed") or 0) for entry in levels.values() if isinstance(entry, dict))
+        symbol_state["wins"] = sum(int(entry.get("wins") or 0) for entry in levels.values() if isinstance(entry, dict))
+        symbol_state["losses"] = sum(int(entry.get("losses") or 0) for entry in levels.values() if isinstance(entry, dict))
+        symbol_state["net_pnl"] = round(sum(float(entry.get("net_pnl") or 0.0) for entry in levels.values() if isinstance(entry, dict)), 2)
+        state[symbol] = symbol_state
+        self.session["symbol_adaptive_state"] = state
+        self._sync_global_adaptive_mirror()
         history = self.session.get("adaptive_strategy_history") if isinstance(self.session.get("adaptive_strategy_history"), list) else []
-        history.append(
-            {
-                "event": f"ADAPTIVE_TRADE_{activity}",
-                "level": level,
-                "ticket": (details or {}).get("ticket") or (details or {}).get("mt5_ticket"),
-                "symbol": (details or {}).get("symbol"),
-                "timestamp": timestamp,
-            }
-        )
+        history_entry = {
+            "event": f"ADAPTIVE_TRADE_{activity}",
+            "level": level,
+            "ticket": (details or {}).get("ticket") or (details or {}).get("mt5_ticket"),
+            "symbol": symbol,
+            "timestamp": timestamp,
+        }
+        history.append(history_entry)
         self.session["adaptive_strategy_history"] = history[-100:]
+        symbol_history = symbol_state.get("history") if isinstance(symbol_state.get("history"), list) else []
+        symbol_history.append(history_entry)
+        symbol_state["history"] = symbol_history[-100:]
+        state[symbol] = symbol_state
+        self.session["symbol_adaptive_state"] = state
 
     def _adaptive_level_for_trade(self, trade: dict[str, Any]) -> int | None:
         candidates = [
@@ -3030,31 +3337,77 @@ class AutoValidationService:
 
     def _refresh_adaptive_strategy_level_stats(self, open_trades: list[dict[str, Any]], closed_trades: list[dict[str, Any]]) -> None:
         self._ensure_adaptive_strategy_state()
-        existing = self.session.get("adaptive_strategy_levels") if isinstance(self.session.get("adaptive_strategy_levels"), dict) else {}
-        refreshed = self._empty_adaptive_strategy_levels(str(self.session.get("started_at") or self.session.get("session_start_time") or self._timestamp()))
-        current_level = int(self.session.get("current_strategy_level") or 0)
-        for key, item in refreshed.items():
-            previous = existing.get(key) if isinstance(existing.get(key), dict) else {}
-            item["reached"] = bool(previous.get("reached")) or int(key) <= current_level
-            item["activation_time"] = previous.get("activation_time") or item.get("activation_time")
-            item["last_trade_activity_time"] = previous.get("last_trade_activity_time") or (self.session.get("last_trade_activity_time") if int(key) == current_level else None)
+        state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        refreshed_state: dict[str, Any] = {}
+        started = str(self.session.get("started_at") or self.session.get("session_start_time") or self._timestamp())
+        for symbol in sorted(self._allowed_symbols() or set()):
+            previous_symbol = state.get(symbol) if isinstance(state.get(symbol), dict) else self._empty_symbol_adaptive_state(symbol, 0, started, started)
+            current_level = int(previous_symbol.get("current_level") or 0)
+            refreshed = self._empty_adaptive_strategy_levels(str(previous_symbol.get("activation_time") or started))
+            previous_levels = previous_symbol.get("levels") if isinstance(previous_symbol.get("levels"), dict) else {}
+            for key, item in refreshed.items():
+                previous = previous_levels.get(key) if isinstance(previous_levels.get(key), dict) else {}
+                item["reached"] = bool(previous.get("reached")) or int(key) <= current_level
+                item["activation_time"] = previous.get("activation_time") or item.get("activation_time")
+                item["last_trade_activity_time"] = previous.get("last_trade_activity_time") or (previous_symbol.get("last_activity_time") if int(key) == current_level else None)
+                item["wins"] = 0
+                item["losses"] = 0
+                item["net_pnl"] = 0.0
+            refreshed_state[symbol] = {
+                **previous_symbol,
+                "symbol": symbol,
+                "current_level": current_level,
+                "levels": refreshed,
+                "open": 0,
+                "closed": 0,
+                "wins": 0,
+                "losses": 0,
+                "net_pnl": 0.0,
+            }
         for trade in open_trades:
+            symbol = str(trade.get("symbol") or "").upper()
+            if symbol not in refreshed_state:
+                continue
             level = self._adaptive_level_for_trade(trade)
             if level is None:
-                continue
-            refreshed[str(level)]["open"] = int(refreshed[str(level)].get("open") or 0) + 1
-            refreshed[str(level)]["reached"] = True
+                level = int(refreshed_state[symbol].get("current_level") or 0)
+            level_item = refreshed_state[symbol]["levels"][str(level)]
+            level_item["open"] = int(level_item.get("open") or 0) + 1
+            level_item["reached"] = True
+            refreshed_state[symbol]["open"] = int(refreshed_state[symbol].get("open") or 0) + 1
         for trade in closed_trades:
+            symbol = str(trade.get("symbol") or "").upper()
+            if symbol not in refreshed_state:
+                continue
             level = self._adaptive_level_for_trade(trade)
             if level is None:
-                continue
-            refreshed[str(level)]["closed"] = int(refreshed[str(level)].get("closed") or 0) + 1
-            refreshed[str(level)]["reached"] = True
-        for key, item in refreshed.items():
-            level = int(key)
-            worked = int(item.get("open") or 0) + int(item.get("closed") or 0) > 0
-            item["status"] = "Active" if level == current_level else ("Worked" if worked else ("Not Worked" if item.get("reached") else "Not Reached"))
-        self.session["adaptive_strategy_levels"] = refreshed
+                level = int(refreshed_state[symbol].get("current_level") or 0)
+            level_item = refreshed_state[symbol]["levels"][str(level)]
+            pnl = self._trade_pnl(trade)
+            result = str(trade.get("result") or "").upper()
+            level_item["closed"] = int(level_item.get("closed") or 0) + 1
+            level_item["net_pnl"] = round(float(level_item.get("net_pnl") or 0.0) + pnl, 2)
+            if result == "WIN" or pnl > 0:
+                level_item["wins"] = int(level_item.get("wins") or 0) + 1
+                refreshed_state[symbol]["wins"] = int(refreshed_state[symbol].get("wins") or 0) + 1
+            elif result == "LOSS" or pnl < 0:
+                level_item["losses"] = int(level_item.get("losses") or 0) + 1
+                refreshed_state[symbol]["losses"] = int(refreshed_state[symbol].get("losses") or 0) + 1
+            level_item["reached"] = True
+            refreshed_state[symbol]["closed"] = int(refreshed_state[symbol].get("closed") or 0) + 1
+            refreshed_state[symbol]["net_pnl"] = round(float(refreshed_state[symbol].get("net_pnl") or 0.0) + pnl, 2)
+        for symbol, symbol_state in refreshed_state.items():
+            current_level = int(symbol_state.get("current_level") or 0)
+            levels = symbol_state.get("levels") if isinstance(symbol_state.get("levels"), dict) else {}
+            for key, item in levels.items():
+                level = int(key)
+                worked = int(item.get("open") or 0) + int(item.get("closed") or 0) > 0
+                item["status"] = "Active" if level == current_level else ("Worked" if worked else ("Not Worked" if item.get("reached") else "Not Reached"))
+        self.session["symbol_adaptive_state"] = refreshed_state
+        mirror_symbol = "EURUSD" if "EURUSD" in refreshed_state else (next(iter(refreshed_state.keys())) if refreshed_state else "")
+        if mirror_symbol:
+            self.session["adaptive_strategy_levels"] = copy.deepcopy(refreshed_state[mirror_symbol].get("levels") or {})
+        self._sync_global_adaptive_mirror()
 
     def _empty_session(self) -> dict[str, Any]:
         return {
@@ -3119,6 +3472,7 @@ class AutoValidationService:
             "adaptive_level_activation_time": None,
             "adaptive_strategy_levels": self._empty_adaptive_strategy_levels(None),
             "adaptive_strategy_history": [],
+            "symbol_adaptive_state": {},
         }
 
     def _fresh_empty_active_session(self, reason: str) -> None:
@@ -3202,17 +3556,19 @@ class AutoValidationService:
                 self.config["max_open_trades_per_symbol"] = 3
                 self.config["max_daily_demo_trades"] = 30
                 self.config["max_daily_trades"] = 30
-                self.config["break_even_trigger_r"] = float(self.config.get("break_even_trigger_r") or 1.2)
-                self.config["exit_stale_minutes"] = int(self.config.get("exit_stale_minutes") or 90)
-                self.config["exit_soft_adverse_minutes"] = int(self.config.get("exit_soft_adverse_minutes") or 60)
-                self.config["exit_no_progress_minutes"] = int(self.config.get("exit_no_progress_minutes") or 75)
+                self.config["break_even_trigger_r"] = 0.8
+                self.config["trailing_stop_trigger_r"] = 1.2
+                self.config["exit_stale_minutes"] = max(180, int(self.config.get("exit_stale_minutes") or 180))
+                self.config["exit_soft_adverse_minutes"] = max(180, int(self.config.get("exit_soft_adverse_minutes") or 180))
+                self.config["exit_no_progress_minutes"] = max(180, int(self.config.get("exit_no_progress_minutes") or 180))
                 self.config["exit_no_progress_min_r"] = float(self.config.get("exit_no_progress_min_r") or 0.3)
                 for settings in (self.config.get("per_symbol_exit_settings") or {}).values():
                     if isinstance(settings, dict):
-                        settings["break_even_trigger_r"] = float(settings.get("break_even_trigger_r") or 1.2)
-                        settings["stale_exit_minutes"] = int(settings.get("stale_exit_minutes") or 90)
-                        settings["soft_adverse_minutes"] = int(settings.get("soft_adverse_minutes") or 60)
-                        settings["no_progress_minutes"] = int(settings.get("no_progress_minutes") or 75)
+                        settings["break_even_trigger_r"] = 0.8
+                        settings["trailing_stop_trigger_r"] = 1.2
+                        settings["stale_exit_minutes"] = max(180, int(settings.get("stale_exit_minutes") or 180))
+                        settings["soft_adverse_minutes"] = max(180, int(settings.get("soft_adverse_minutes") or 180))
+                        settings["no_progress_minutes"] = max(180, int(settings.get("no_progress_minutes") or 180))
                         settings["no_progress_min_r"] = float(settings.get("no_progress_min_r") or 0.3)
             elif self.config["strategy_profile"] == "AUTO_VALIDATION":
                 self.config["min_confidence"] = 65
@@ -3365,25 +3721,25 @@ class AutoValidationService:
             "max_daily_loss_amount": 100.0,
             "max_total_drawdown_amount": 150.0,
             "exit_management_enabled": True,
-            "break_even_trigger_r": 1.2,
-            "trailing_stop_trigger_r": 1.5,
+            "break_even_trigger_r": 0.8,
+            "trailing_stop_trigger_r": 1.2,
             "trailing_stop_distance_r": 0.75,
-            "exit_stale_minutes": 90,
+            "exit_stale_minutes": 180,
             "exit_stale_min_r": 0.0,
-            "exit_soft_adverse_minutes": 60,
-            "exit_no_progress_minutes": 75,
+            "exit_soft_adverse_minutes": 180,
+            "exit_no_progress_minutes": 180,
             "exit_no_progress_min_r": 0.3,
             "exit_confidence_floor": 40,
             "exit_confidence_drop_points": 25,
             "exit_max_close_retries": 3,
             "per_symbol_exit_settings": {
                 "XAUUSD": {
-                    "break_even_trigger_r": 1.2,
-                    "trailing_stop_trigger_r": 1.5,
+                    "break_even_trigger_r": 0.8,
+                    "trailing_stop_trigger_r": 1.2,
                     "trailing_stop_distance_r": 0.75,
-                    "stale_exit_minutes": 90,
-                    "soft_adverse_minutes": 60,
-                    "no_progress_minutes": 75,
+                    "stale_exit_minutes": 180,
+                    "soft_adverse_minutes": 180,
+                    "no_progress_minutes": 180,
                     "no_progress_min_r": 0.3,
                     "confidence_floor": 40,
                     "confidence_drop_points": 25,
@@ -3391,12 +3747,12 @@ class AutoValidationService:
                     "max_tick_age_seconds": 10,
                 },
                 "EURUSD": {
-                    "break_even_trigger_r": 1.2,
-                    "trailing_stop_trigger_r": 1.5,
+                    "break_even_trigger_r": 0.8,
+                    "trailing_stop_trigger_r": 1.2,
                     "trailing_stop_distance_r": 0.75,
-                    "stale_exit_minutes": 90,
-                    "soft_adverse_minutes": 60,
-                    "no_progress_minutes": 75,
+                    "stale_exit_minutes": 180,
+                    "soft_adverse_minutes": 180,
+                    "no_progress_minutes": 180,
                     "no_progress_min_r": 0.3,
                     "confidence_floor": 40,
                     "confidence_drop_points": 25,
@@ -3404,12 +3760,12 @@ class AutoValidationService:
                     "max_tick_age_seconds": 10,
                 },
                 "NIFTY50": {
-                    "break_even_trigger_r": 1.0,
-                    "trailing_stop_trigger_r": 1.5,
+                    "break_even_trigger_r": 0.8,
+                    "trailing_stop_trigger_r": 1.2,
                     "trailing_stop_distance_r": 0.75,
-                    "stale_exit_minutes": 45,
-                    "soft_adverse_minutes": 20,
-                    "no_progress_minutes": 30,
+                    "stale_exit_minutes": 180,
+                    "soft_adverse_minutes": 180,
+                    "no_progress_minutes": 180,
                     "no_progress_min_r": 0.3,
                     "confidence_floor": 40,
                     "confidence_drop_points": 25,

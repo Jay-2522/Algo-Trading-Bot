@@ -154,8 +154,12 @@ class ExecutionReasonPanelService:
         status = "CLOSED_WIN" if result == "WIN" else "CLOSED_LOSS" if result == "LOSS" else "CLOSED"
         duration = self._text(trade.get("duration_minutes"))
         exit_reason = self._text(trade.get("exit_reason")) or "MT5 history confirmed close"
+        metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        missing = round3.get("confirmation_missing") if isinstance(round3.get("confirmation_missing"), list) else []
+        weak = self._join_text([self._text(item).lower() for item in missing[:2]]) if missing else "one or more entry conditions weakened"
         if status == "CLOSED_LOSS":
-            reason = f"{side or 'Trade'} failed{f' after {duration} minutes' if duration else ''}. Price reached {exit_reason.lower()} with P&L {self._text(pnl) or '0'}."
+            reason = f"{side or 'Trade'} failed{f' after {duration} minutes' if duration else ''}. Entry was based on score {self._text(round3.get('confirmation_score')) or 'n/a'}, but {weak}; price reached {exit_reason.lower()} with P&L {self._text(pnl) or '0'}."
         elif status == "CLOSED_WIN":
             reason = f"{side or 'Trade'} reached target{f' after {duration} minutes' if duration else ''}. Momentum carried price to take profit with P&L {self._text(pnl) or '0'}."
         else:
@@ -209,9 +213,11 @@ class ExecutionReasonPanelService:
             "confirmation_required": scan.get("required_score"),
             "htf_bias": scan.get("htf_bias"),
             "momentum": scan.get("momentum"),
+            "pullback_retest": scan.get("pullback_retest"),
             "bos": scan.get("bos"),
             "liquidity_sweep": scan.get("liquidity_sweep"),
             "fvg": scan.get("fvg"),
+            "fvg_retest": scan.get("fvg_retest"),
             "session_bonus": scan.get("session_bonus"),
             "conditions": scan.get("conditions") if isinstance(scan.get("conditions"), dict) else {},
             "validation_session_id": session_id,
@@ -280,7 +286,7 @@ class ExecutionReasonPanelService:
         sl = result.get("sl") or payload.get("stop_loss") or signal.get("stop_loss")
         tp = result.get("tp") or payload.get("take_profit") or signal.get("take_profit")
         score = self._text(round3.get("confirmation_score") or decision.get("confirmation_score") or payload.get("confirmation_score")) or "0"
-        required = self._text(round3.get("confirmation_required") or decision.get("confirmation_required") or payload.get("confirmation_required")) or "2"
+        required = self._text(round3.get("confirmation_required") or decision.get("confirmation_required") or payload.get("confirmation_required")) or "5"
         direction = "bearish" if side == "SELL" else "bullish" if side == "BUY" else "directional"
         level = self._text(round3.get("adaptive_level") or round3.get("current_strategy_level")) or "0"
         passed = {self._text(item).upper() for item in round3.get("confirmation_passed", [])} if isinstance(round3.get("confirmation_passed"), list) else set()
@@ -293,6 +299,10 @@ class ExecutionReasonPanelService:
             drivers.append("BOS")
         if any("LIQUIDITY" in item for item in passed):
             drivers.append("liquidity sweep")
+        if any("FVG" in item for item in passed):
+            drivers.append("FVG retest")
+        if any("PULLBACK" in item or "RETEST" in item for item in passed):
+            drivers.append("pullback/retest")
         if not drivers:
             drivers.append(f"{direction} setup conditions")
         final_reason = f"{side or 'Trade'} executed because {self._join_text(drivers)} aligned. Adaptive Level {level} accepted score {score}."
@@ -408,6 +418,10 @@ class ExecutionReasonPanelService:
             missing.append("liquidity sweep absent")
         if conditions.get("momentum") is False:
             missing.append("momentum absent")
+        if conditions.get("pullback_retest") is False and conditions.get("momentum") is False:
+            missing.append("pullback/retest absent")
+        if conditions.get("fvg_retest") is False and conditions.get("bos") is False and conditions.get("liquidity_sweep") is False:
+            missing.append("no structure confirmation")
         decision = self._text(scan.get("decision") or scan.get("execution_decision")).replace("_", " ").lower() or "evaluated"
         suffix = f" {self._join_text(missing)}." if missing else " Confirmations aligned."
         return f"{symbol} {bias} bias detected. Score {score}/{required}.{suffix} Trade {decision}."

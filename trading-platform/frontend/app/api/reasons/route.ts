@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "RISK_HALTED" | "RISK_CLEARED" | "Error";
+type ReasonStatus = "Accepted" | "Rejected" | "Waiting" | "SCAN_RESULT" | "OPEN_CONFIRMED" | "POSITION_MONITOR" | "CLOSED" | "CLOSED_WIN" | "CLOSED_LOSS" | "RISK_HALTED" | "RISK_CLEARED" | "Error";
 type ApiRecord = Record<string, unknown>;
 type ReasonMessage = {
   candles_loaded?: number | null;
@@ -268,6 +268,7 @@ function normalizeStatus(value: unknown): ReasonStatus {
   if (status.includes("RISK_HALTED")) return "RISK_HALTED";
   if (status.includes("RISK_CLEARED")) return "RISK_CLEARED";
   if (status.includes("SCAN_RESULT")) return "SCAN_RESULT";
+  if (status.includes("POSITION_MONITOR")) return "POSITION_MONITOR";
   if (status.includes("OPEN_CONFIRMED")) return "OPEN_CONFIRMED";
   if (status.includes("CLOSED_WIN")) return "CLOSED_WIN";
   if (status.includes("CLOSED_LOSS")) return "CLOSED_LOSS";
@@ -327,7 +328,7 @@ function hasWaitingIncomplete(record: ApiRecord | ReasonMessage): boolean {
 function normalizedDecisionStatus(record: ApiRecord | ReasonMessage): ReasonStatus {
   const rawStatus = normalizeStatus((record as ReasonMessage).status);
   const combined = [record.reason, (record as ReasonMessage).final_decision_reason, (record as ReasonMessage).decision_reason].map(text).join(" ");
-  if (rawStatus === "RISK_HALTED" || rawStatus === "RISK_CLEARED") return rawStatus;
+  if (rawStatus === "RISK_HALTED" || rawStatus === "RISK_CLEARED" || rawStatus === "POSITION_MONITOR") return rawStatus;
   if (/CLOSED_LOSS|Result:\s*LOSS|closed\./i.test(combined)) return "CLOSED_LOSS";
   if (/CLOSED_WIN|Result:\s*WIN/i.test(combined)) return "CLOSED_WIN";
   if (rawStatus === "SCAN_RESULT") return "SCAN_RESULT";

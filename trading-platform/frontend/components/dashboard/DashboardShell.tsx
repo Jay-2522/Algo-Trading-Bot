@@ -3134,6 +3134,9 @@ function AdaptiveStrategyEvolutionCard({ data }: { data: DashboardData }) {
         {symbols.map((symbol) => (
           <div key={symbol}>
             <p className="mb-2 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-300">{symbol}</p>
+            <p className="mb-3 text-xs font-semibold text-slate-400">
+              {readText(asRecord(symbolState[symbol]), ["current_level_reason", "adaptive_level_reason"], "Original Round 3 baseline.")}
+            </p>
             <div className="premium-table-wrap">
               <table className="premium-table text-xs">
                 <thead>
@@ -3181,18 +3184,39 @@ function scanBoolean(scan: ApiRecord, keys: string[]): boolean {
 }
 
 function scanChecklist(scan: ApiRecord): ScanChecklistItem[] {
+  const rawChecklist = Array.isArray(scan.checklist_items) ? scan.checklist_items : [];
+  if (rawChecklist.length) {
+    return rawChecklist
+      .map((item) => {
+        const record = asRecord(item);
+        return {
+          label: readText(record, ["label"], ""),
+          passed: record?.passed === true,
+        };
+      })
+      .filter((item) => item.label);
+  }
   const htfText = readText(scan, ["htf_alignment", "htf_bias"], "").toUpperCase();
   const htfPassed = scanBoolean(scan, ["htf_alignment", "trend_alignment"]) || (Boolean(htfText) && !["NOT_ALIGNED", "UNCLEAR", "WAIT", "NONE", "FALSE"].includes(htfText));
   const momentumPassed = scanBoolean(scan, ["momentum", "pullback_retest"]);
   const structurePassed = scanBoolean(scan, ["bos", "liquidity_sweep", "fvg", "fvg_retest", "structure_confirmation"]);
   return [
-    { label: "History ready", passed: scanBoolean(scan, ["history_ready"]) },
-    { label: "Spread clean", passed: scanBoolean(scan, ["spread_ok"]) },
-    { label: "RR >= 2", passed: scanBoolean(scan, ["rr_ok"]) },
     { label: "HTF alignment", passed: htfPassed },
     { label: "Momentum / Pullback", passed: momentumPassed },
     { label: "Structure confirmation", passed: structurePassed },
+    { label: "RR >= 2", passed: scanBoolean(scan, ["rr_ok"]) },
+    { label: "Spread clean", passed: scanBoolean(scan, ["spread_ok"]) },
   ];
+}
+
+function scanChecklistPassed(scan: ApiRecord): number {
+  const checklist = scanChecklist(scan);
+  return readNumber(scan, ["checklist_passed"], checklist.filter((item) => item.passed).length);
+}
+
+function scanChecklistTotal(scan: ApiRecord): number {
+  const checklist = scanChecklist(scan);
+  return readNumber(scan, ["checklist_total"], checklist.length || 5);
 }
 
 function scanNeeds(scan: ApiRecord): string[] {
@@ -3205,7 +3229,7 @@ function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
   const available = scanRows.filter((scan) => readText(scan, ["timestamp"], ""));
   if (!available.length) return null;
   return [...available].sort((left, right) => {
-    const scoreDelta = readNumber(right, ["score"], 0) - readNumber(left, ["score"], 0);
+    const scoreDelta = scanChecklistPassed(right) - scanChecklistPassed(left);
     if (scoreDelta !== 0) return scoreDelta;
     return readNumber(left, ["missing_count"], 99) - readNumber(right, ["missing_count"], 99);
   })[0];

@@ -272,6 +272,45 @@ class ExecutionReasonPanelService:
         self._upsert(message)
         return message
 
+    def persist_adaptive_level_change(self, change: dict[str, Any], *, session_id: str = "") -> dict[str, Any] | None:
+        symbol = self._text(change.get("symbol")).upper()
+        if not symbol:
+            return None
+        old_level = self._text(change.get("old_level") if change.get("old_level") is not None else change.get("from_level")) or "0"
+        new_level = self._text(change.get("new_level") if change.get("new_level") is not None else change.get("to_level")) or old_level
+        timestamp = self._text(change.get("timestamp")) or self._timestamp()
+        raw_reason = self._text(change.get("reason")) or "adaptive level updated"
+        friendly_reason = raw_reason.replace("_", " ").strip().rstrip(".")
+        if old_level == new_level:
+            reason = f"{symbol} stayed at Level {new_level} because {friendly_reason}."
+            event_id = f"adaptive-level-stayed-{symbol.lower()}-{new_level}-{friendly_reason.lower().replace(' ', '-')}"
+        else:
+            reason = f"{symbol} moved to Level {new_level} because {friendly_reason}."
+            event_id = f"adaptive-level-change-{symbol.lower()}-{old_level}-{new_level}-{timestamp}"
+        message = {
+            "id": event_id,
+            "event_id": event_id,
+            "groqGenerated": False,
+            "reason": reason,
+            "source": "execution",
+            "status": "ADAPTIVE_LEVEL_CHANGE",
+            "symbol": symbol,
+            "side": "",
+            "ticket": "",
+            "strategy_profile": "DEMO_COLLECTION",
+            "decision": "ADAPTIVE_LEVEL_CHANGE",
+            "order_opened": False,
+            "adaptive_level": new_level,
+            "old_adaptive_level": old_level,
+            "validation_session_id": session_id,
+            "active_session_id": session_id,
+            "final_decision_reason": reason,
+            "timestamp": timestamp,
+            "data_source": "SYMBOL_ADAPTIVE_STATE",
+        }
+        self._upsert(message)
+        return message
+
     def _accepted_message(
         self,
         *,
@@ -419,6 +458,10 @@ class ExecutionReasonPanelService:
         score = self._text(scan.get("score") or 0)
         required = self._text(scan.get("required_score") or 0)
         conditions = scan.get("conditions") if isinstance(scan.get("conditions"), dict) else {}
+        failed = {self._text(item).upper() for item in scan.get("failed_hard_gates", [])} if isinstance(scan.get("failed_hard_gates"), list) else set()
+        level = self._text(scan.get("adaptive_level")) or "0"
+        if level == "3" and ({"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"} & failed):
+            return f"{symbol} is close. It has trend bias, clean spread, and RR, but still needs one trigger such as momentum, BOS, liquidity sweep, or pullback."
         missing = []
         if conditions.get("bos") is False:
             missing.append("BOS missing")

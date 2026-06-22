@@ -192,10 +192,19 @@ class AutoValidationService:
         warmup = self._cached_history_for_symbol(requested_symbol)
         history_ms = self._elapsed_ms(history_start)
         analysis_start = time.perf_counter()
-        trace = self._latest_trace_for_symbol(requested_symbol)
+        signals = [
+            self._normalize_demo_collection_signal(signal)
+            for signal in self._allowed_signals(self._load_signals())
+            if str(signal.get("symbol") or "").upper() == requested_symbol
+        ]
+        checked_candidates = [self._checked_symbol_result(signal) for signal in signals]
+        best_checked = self._best_candidate(checked_candidates)
+        trace = None if best_checked else self._latest_trace_for_symbol(requested_symbol)
         analysis_ms = self._elapsed_ms(analysis_start)
         decision_start = time.perf_counter()
-        if trace is None:
+        if best_checked:
+            checked = best_checked
+        elif trace is None:
             checked = {
                 "symbol": requested_symbol,
                 "status": "NO_SCAN_TRACE",
@@ -216,7 +225,7 @@ class AutoValidationService:
         decision_ms = self._elapsed_ms(decision_start)
         total_ms = self._elapsed_ms(total_start)
         diagnostic = self._scan_diagnostic_from_checked(requested_symbol, checked, warmup, mt5_health, history_ms, analysis_ms, decision_ms, total_ms)
-        diagnostic["source"] = "CACHED_DECISION_TRACE"
+        diagnostic["source"] = "LIVE_READ_ONLY_SCAN" if best_checked else "CACHED_DECISION_TRACE"
         diagnostic["last_scan_timestamp"] = scan_started_at
         self._store_latest_scan_diagnostic(diagnostic)
         trace = self._scan_trace_from_diagnostic(diagnostic)
@@ -1539,8 +1548,13 @@ class AutoValidationService:
         conditions = checked.get("conditions") if isinstance(checked.get("conditions"), dict) else {}
         blockers = checked.get("failed_hard_gates") if isinstance(checked.get("failed_hard_gates"), list) else checked.get("blockers") if isinstance(checked.get("blockers"), list) else []
         missing = self._scan_missing_confirmations(checked, conditions, warmup)
-        score = int(self._number(checked.get("confirmation_score") or checked.get("score"), 0))
-        required = int(self._number(checked.get("required_score") or checked.get("confirmation_required"), self._adaptive_level_config(symbol=symbol).get("required_score") or 5))
+        engine_score = int(self._number(checked.get("confirmation_score") or checked.get("score"), 0))
+        engine_required = int(self._number(checked.get("required_score") or checked.get("confirmation_required"), self._adaptive_level_config(symbol=symbol).get("required_score") or 5))
+        checklist_items = self._scan_checklist_items(symbol, checked, conditions, warmup, blockers)
+        checklist_passed = len([item for item in checklist_items if item.get("passed") is True])
+        checklist_total = len(checklist_items)
+        score = checklist_passed
+        required = checklist_total
         decision = str(checked.get("execution_decision") or "REJECTED").upper()
         if decision == "READY_FOR_ORDER":
             decision = "QUALIFIED_READ_ONLY"
@@ -1552,13 +1566,19 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
             "active_session_id": self.session.get("session_id"),
             "adaptive_level": int(checked.get("adaptive_level") or self._current_adaptive_strategy_level(symbol)),
+            "adaptive_level_reason": self._adaptive_level_reason(symbol),
             "score": score,
             "required_score": required,
+            "engine_score": engine_score,
+            "engine_required_score": engine_required,
+            "checklist_passed": checklist_passed,
+            "checklist_total": checklist_total,
+            "checklist_items": checklist_items,
             "decision": decision,
             "reject_reason": reject_reason or "No blocker recorded.",
             "missing_confirmations": missing,
             "missing_count": len(missing),
-            "estimated_readiness": self._scan_readiness_text(score, required, missing),
+            "estimated_readiness": self._scan_readiness_text(score, required, [str(item.get("label")) for item in checklist_items if item.get("passed") is not True]),
             "htf_alignment": bool(conditions.get("htf_bias") in {"ALIGNED", True} or conditions.get("htf_bias") is True),
             "momentum": bool(conditions.get("momentum")),
             "pullback_retest": bool(conditions.get("pullback_retest")),
@@ -1578,6 +1598,53 @@ class AutoValidationService:
             "history_warmup": copy.deepcopy(warmup),
         }
 
+    def _scan_checklist_items(
+        self,
+        symbol: str,
+        checked: dict[str, Any],
+        conditions: dict[str, Any],
+        warmup: dict[str, Any],
+        blockers: list[Any],
+    ) -> list[dict[str, Any]]:
+        level = int(checked.get("adaptive_level") or self._current_adaptive_strategy_level(symbol))
+        blocker_set = {str(item or "").upper() for item in blockers}
+        htf_value = conditions.get("htf_bias")
+        htf_passed = bool(htf_value is True or str(htf_value).upper() == "ALIGNED")
+        momentum = bool(conditions.get("momentum"))
+        pullback = bool(conditions.get("pullback_retest"))
+        bos = bool(conditions.get("bos"))
+        liquidity = bool(conditions.get("liquidity_sweep"))
+        fvg = bool(conditions.get("fvg") or conditions.get("fvg_retest"))
+        rr_ok = bool((conditions.get("RR_2_0") is True) or self._number(checked.get("risk_reward"), 0) >= 2.0 or "RR_BELOW_2_0" not in blocker_set)
+        spread_ok = bool(conditions.get("spread_clean") is True or "SPREAD_TOO_HIGH" not in blocker_set)
+
+        if level == 3:
+            any_trigger = bool(momentum or pullback or bos or liquidity)
+            rows = [
+                ("HTF bias", htf_passed, "Higher-timeframe bias is clear and aligned."),
+                ("RR >= 2", rr_ok, "Risk/reward meets the minimum."),
+                ("Spread clean", spread_ok, "Spread is acceptable for execution."),
+                ("Any trigger", any_trigger, "Momentum, BOS, liquidity sweep, or pullback/retest is present."),
+            ]
+        else:
+            rows = [
+                ("HTF alignment", htf_passed, "H1/H4 direction agrees with the candidate trade."),
+                ("Momentum / Pullback", momentum or pullback, "Momentum or a valid pullback/retest is present."),
+                ("Structure confirmation", bos or liquidity or fvg, "BOS, liquidity sweep, or FVG retest is present."),
+                ("RR >= 2", rr_ok, "Risk/reward meets the minimum."),
+                ("Spread clean", spread_ok, "Spread is acceptable for execution."),
+            ]
+        return [
+            {
+                "label": label,
+                "passed": bool(passed),
+                "rule": label.upper().replace(" ", "_").replace("/", "_").replace(">=", "GE"),
+                "detail": detail,
+                "adaptive_level": level,
+            }
+            for label, passed, detail in rows
+        ]
+
     def _scan_missing_confirmations(self, checked: dict[str, Any], conditions: dict[str, Any], warmup: dict[str, Any]) -> list[str]:
         missing: list[str] = []
         if warmup.get("history_ready") is not True:
@@ -1585,6 +1652,11 @@ class AutoValidationService:
         htf = conditions.get("htf_bias")
         if not (htf is True or str(htf).upper() == "ALIGNED"):
             missing.append("HTF alignment")
+        level = int(checked.get("adaptive_level") or 0)
+        if level == 3:
+            if not (conditions.get("momentum") or conditions.get("bos") or conditions.get("liquidity_sweep") or conditions.get("pullback_retest")):
+                missing.append("momentum, BOS, liquidity sweep, or pullback/retest")
+            return self._dedupe_labels(missing)
         if not (conditions.get("momentum") or conditions.get("pullback_retest")):
             missing.append("momentum/pullback")
         if not (conditions.get("bos") or conditions.get("liquidity_sweep") or conditions.get("fvg_retest") or conditions.get("fvg")):
@@ -1594,10 +1666,13 @@ class AutoValidationService:
             label = str(item or "").strip()
             if label and label not in missing:
                 missing.append(label)
+        return self._dedupe_labels(missing)
+
+    def _dedupe_labels(self, labels: list[str]) -> list[str]:
         seen: set[str] = set()
         result: list[str] = []
-        for item in missing:
-            key = item.lower()
+        for item in labels:
+            key = str(item).lower()
             if key not in seen:
                 seen.add(key)
                 result.append(item)
@@ -1830,6 +1905,8 @@ class AutoValidationService:
             "ROUND_3_SCORE_BELOW_THRESHOLD": "score is below the balanced threshold",
             "SCORE_5_NEEDS_CLEAN_MOMENTUM": "score 5 needs clean momentum",
             "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP": "Level 3 needs momentum plus BOS or liquidity sweep",
+            "LEVEL_3_FAST_TRIGGER_MISSING": "Level 3 needs one trigger such as momentum, BOS, liquidity sweep, or pullback/retest",
+            "LEVEL_3_NEEDS_ONE_FAST_TRIGGER": "Level 3 needs one trigger such as momentum, BOS, liquidity sweep, or pullback/retest",
             "RR_BELOW_2_0": "RR is below required 2.0",
             "SPREAD_TOO_HIGH": "spread is too high",
             "SL_TP_REQUIRED": "valid SL/TP is missing",
@@ -2014,8 +2091,9 @@ class AutoValidationService:
         states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
         momentum_or_pullback = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("PULLBACK_RETEST"))
         structure_confirmed = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
+        level3_any_trigger = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("PULLBACK_RETEST"))
         score_threshold_passed = confirmations["score"] >= confirmations["required_score"]
-        clean_score_five = confirmations["score"] > 5 or bool(states.get("MOMENTUM_DISPLACEMENT"))
+        clean_score_five = level == 3 or confirmations["score"] > 5 or bool(states.get("MOMENTUM_DISPLACEMENT"))
         level3_structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP"))
         checks = [
             ("H4_HISTORY_AVAILABLE", "H4_HISTORY_INSUFFICIENT", h4_ok),
@@ -2024,11 +2102,11 @@ class AutoValidationService:
             ("RR_2_0_OR_HIGHER", "RR_BELOW_2_0", rr is not None and rr >= 2.0),
             ("SPREAD_ACCEPTABLE", "SPREAD_TOO_HIGH", bool(states.get("SPREAD_CLEAN"))),
             ("DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS", "DIRECTION_BIAS_MISMATCH", confirmations["direction_valid"]),
-            ("MOMENTUM_OR_PULLBACK_PRESENT", "MOMENTUM_OR_PULLBACK_MISSING", momentum_or_pullback),
-            ("STRUCTURE_CONFIRMATION_PRESENT", "STRUCTURE_CONFIRMATION_MISSING", structure_confirmed),
+            ("LEVEL_3_FAST_TRIGGER_PRESENT" if level == 3 else "MOMENTUM_OR_PULLBACK_PRESENT", "LEVEL_3_FAST_TRIGGER_MISSING" if level == 3 else "MOMENTUM_OR_PULLBACK_MISSING", level3_any_trigger if level == 3 else momentum_or_pullback),
+            ("LEVEL_3_STRUCTURE_OPTIONAL" if level == 3 else "STRUCTURE_CONFIRMATION_PRESENT", "LEVEL_3_STRUCTURE_OPTIONAL" if level == 3 else "STRUCTURE_CONFIRMATION_MISSING", True if level == 3 else structure_confirmed),
             ("ROUND_3_SCORE_THRESHOLD", "ROUND_3_SCORE_BELOW_THRESHOLD", score_threshold_passed),
             ("SCORE_5_HAS_CLEAN_MOMENTUM", "SCORE_5_NEEDS_CLEAN_MOMENTUM", clean_score_five),
-            (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP" if level == 3 and not level_specific_passed else level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
+            (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), "LEVEL_3_NEEDS_ONE_FAST_TRIGGER" if level == 3 and not level_specific_passed else level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
         ]
         for passed_code, failed_code, passed in checks:
             (passed_rules if passed else failed_rules).append(passed_code if passed else failed_code)
@@ -2205,6 +2283,8 @@ class AutoValidationService:
             return f"{prefix}Waiting: need one structure confirmation from BOS, liquidity sweep, or FVG retest."
         if first_failure == "SCORE_5_NEEDS_CLEAN_MOMENTUM":
             return f"{prefix}Waiting: score 5 setups need clean momentum."
+        if first_failure in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"}:
+            return f"{prefix}Waiting: trend bias, RR, and spread are ready, but Level 3 still needs one trigger from momentum, BOS, liquidity sweep, or pullback/retest."
         if first_failure == "BALANCED_ENTRY_REQUIREMENT_MISSING":
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "balanced entry confluence"
@@ -2341,6 +2421,9 @@ class AutoValidationService:
         if status == "HALTED_RISK":
             diagnostics = self.session.get("risk_halt_diagnostics") if isinstance(self.session.get("risk_halt_diagnostics"), dict) else self._risk_halt_diagnostics()
             return str(diagnostics.get("message") or self._risk_halt_message(diagnostics))
+        if blocker in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"}:
+            symbol = str((signal or {}).get("symbol") or "The symbol").upper()
+            return f"{symbol} is close. It has trend bias, clean spread, and RR, but still needs one trigger such as momentum, BOS, liquidity sweep, or pullback."
         if blocker in {"CONFIRMATION_SCORE_BELOW_2", "CONFIRMATION_SCORE_LOW", "NO_READY_APPROVED_SIGNAL", "ROUND_3_SCORE_BELOW_THRESHOLD", "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING", "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING", "BALANCED_ENTRY_REQUIREMENT_MISSING", "MOMENTUM_OR_PULLBACK_MISSING", "STRUCTURE_CONFIRMATION_MISSING", "SCORE_5_NEEDS_CLEAN_MOMENTUM", "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP"}:
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "one more confirmation"
@@ -3909,6 +3992,7 @@ class AutoValidationService:
             "current_level": safe_level,
             "activation_time": timestamp,
             "last_activity_time": last_activity_time or timestamp,
+            "current_level_reason": "Original Round 3 baseline.",
             "open": 0,
             "closed": 0,
             "wins": 0,
@@ -3969,6 +4053,38 @@ class AutoValidationService:
                 last_activity = str(self.session.get("last_trade_activity_time") or activation_time) if inherit_global else started
                 item_levels = copy.deepcopy(global_levels) if inherit_global and global_levels else self._empty_adaptive_strategy_levels(activation_time)
                 history = [entry for entry in global_history if isinstance(entry, dict) and str(entry.get("symbol") or symbol).upper() == symbol] if inherit_global else []
+            symbol_history = [entry for entry in history if isinstance(entry, dict) and str(entry.get("symbol") or symbol).upper() == symbol]
+            for entry in symbol_history:
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("old_level") is None and entry.get("from_level") is not None:
+                    entry["old_level"] = entry.get("from_level")
+                if entry.get("new_level") is None and entry.get("to_level") is not None:
+                    entry["new_level"] = entry.get("to_level")
+                if entry.get("from_level") is None and entry.get("old_level") is not None:
+                    entry["from_level"] = entry.get("old_level")
+                if entry.get("to_level") is None and entry.get("new_level") is not None:
+                    entry["to_level"] = entry.get("new_level")
+            has_level_audit = any(str(entry.get("event") or "").upper() in {"ADAPTIVE_LEVEL_ADVANCED", "ADAPTIVE_LEVEL_CHANGED"} for entry in symbol_history)
+            raw_open = int(raw_item.get("open") or 0) if raw_item else 0
+            raw_closed = int(raw_item.get("closed") or 0) if raw_item else 0
+            copied_without_symbol_activity = symbol_level > 0 and raw_open + raw_closed == 0 and not has_level_audit
+            if copied_without_symbol_activity:
+                previous_level = symbol_level
+                symbol_level = 0
+                activation_time = started
+                last_activity = started
+                item_levels = self._empty_adaptive_strategy_levels(activation_time)
+                stay_entry = {
+                    "event": "ADAPTIVE_LEVEL_STAYED",
+                    "symbol": symbol,
+                    "old_level": previous_level,
+                    "new_level": 0,
+                    "reason": "no activity history yet",
+                    "timestamp": now,
+                }
+                symbol_history.append(stay_entry)
+                self._record_adaptive_level_audit(stay_entry)
             normalized_levels: dict[str, dict[str, Any]] = {}
             for key, definition in self._adaptive_level_definitions().items():
                 existing = item_levels.get(str(key)) if isinstance(item_levels.get(str(key)), dict) else {}
@@ -3994,16 +4110,65 @@ class AutoValidationService:
                 "current_level": symbol_level,
                 "activation_time": activation_time,
                 "last_activity_time": last_activity,
-                "open": int(raw_item.get("open") or 0) if raw_item else 0,
-                "closed": int(raw_item.get("closed") or 0) if raw_item else 0,
+                "current_level_reason": self._adaptive_level_reason_from_history(symbol_history, symbol_level),
+                "open": raw_open if not copied_without_symbol_activity else 0,
+                "closed": raw_closed if not copied_without_symbol_activity else 0,
                 "wins": int(raw_item.get("wins") or 0) if raw_item else 0,
                 "losses": int(raw_item.get("losses") or 0) if raw_item else 0,
                 "net_pnl": round(float(raw_item.get("net_pnl") or 0.0), 2) if raw_item else 0.0,
                 "levels": normalized_levels,
-                "history": history[-100:],
+                "history": symbol_history[-100:],
             }
         self.session["symbol_adaptive_state"] = migrated_state
         self._sync_global_adaptive_mirror()
+
+    def _adaptive_level_reason_from_history(self, history: list[dict[str, Any]], level: int) -> str:
+        for entry in reversed(history):
+            if not isinstance(entry, dict):
+                continue
+            new_level = entry.get("new_level") if entry.get("new_level") is not None else entry.get("to_level")
+            try:
+                if int(new_level) != int(level):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            reason = str(entry.get("reason") or "").strip()
+            if reason:
+                return reason.rstrip(".") + "."
+        return "Original Round 3 baseline." if int(level or 0) == 0 else "Advanced after symbol-specific inactivity."
+
+    def _adaptive_level_reason(self, symbol: str | None) -> str:
+        state = self._symbol_adaptive_state(symbol)
+        reason = str(state.get("current_level_reason") or "").strip()
+        return reason or self._adaptive_level_reason_from_history(state.get("history") if isinstance(state.get("history"), list) else [], int(state.get("current_level") or 0))
+
+    def _record_adaptive_level_audit(self, entry: dict[str, Any]) -> None:
+        history = self.session.get("adaptive_strategy_history") if isinstance(self.session.get("adaptive_strategy_history"), list) else []
+        key = (
+            str(entry.get("event") or ""),
+            str(entry.get("symbol") or "").upper(),
+            str(entry.get("old_level") if entry.get("old_level") is not None else entry.get("from_level")),
+            str(entry.get("new_level") if entry.get("new_level") is not None else entry.get("to_level")),
+            str(entry.get("reason") or ""),
+        )
+        for existing in history:
+            if not isinstance(existing, dict):
+                continue
+            existing_key = (
+                str(existing.get("event") or ""),
+                str(existing.get("symbol") or "").upper(),
+                str(existing.get("old_level") if existing.get("old_level") is not None else existing.get("from_level")),
+                str(existing.get("new_level") if existing.get("new_level") is not None else existing.get("to_level")),
+                str(existing.get("reason") or ""),
+            )
+            if existing_key == key:
+                return
+        history.append(entry)
+        self.session["adaptive_strategy_history"] = history[-100:]
+        try:
+            self.reason_panel_service.persist_adaptive_level_change(entry, session_id=str(self.session.get("session_id") or ""))
+        except Exception:
+            pass
 
     def _sync_global_adaptive_mirror(self) -> None:
         state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
@@ -4051,8 +4216,8 @@ class AutoValidationService:
     def _adaptive_level_specific_passed(self, confirmations: dict[str, Any], level_config: dict[str, Any]) -> bool:
         states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
         if int(level_config.get("level") or 0) == 3:
-            structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP"))
-            return bool(states.get("HTF_ALIGNMENT")) and bool(states.get("MOMENTUM_DISPLACEMENT")) and structure and bool(states.get("RR_2_0")) and bool(states.get("SPREAD_CLEAN"))
+            any_trigger = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("PULLBACK_RETEST"))
+            return bool(states.get("HTF_ALIGNMENT")) and bool(states.get("RR_2_0")) and bool(states.get("SPREAD_CLEAN")) and any_trigger
         if level_config.get("requires_balanced_entry"):
             momentum_or_pullback = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("PULLBACK_RETEST"))
             structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
@@ -4091,6 +4256,7 @@ class AutoValidationService:
         item["current_level"] = new_level
         item["activation_time"] = timestamp
         item["last_activity_time"] = timestamp
+        item["current_level_reason"] = "no qualifying trade for 45 minutes"
         levels = item.get("levels") if isinstance(item.get("levels"), dict) else self._empty_adaptive_strategy_levels(timestamp)
         level_item = levels.get(str(new_level)) if isinstance(levels.get(str(new_level)), dict) else {}
         level_item.update({"reached": True, "status": "Active", "activation_time": timestamp, "last_trade_activity_time": timestamp})
@@ -4108,7 +4274,9 @@ class AutoValidationService:
             "symbol": normalized_symbol,
             "from_level": level,
             "to_level": new_level,
-            "reason": "45 minutes without an opened or closed trade for this symbol.",
+            "old_level": level,
+            "new_level": new_level,
+            "reason": "no qualifying trade for 45 minutes",
             "timestamp": timestamp,
         }
         history.append(entry)
@@ -4118,6 +4286,10 @@ class AutoValidationService:
         item["history"] = symbol_history[-100:]
         state[normalized_symbol] = item
         self.session["symbol_adaptive_state"] = state
+        try:
+            self.reason_panel_service.persist_adaptive_level_change(entry, session_id=str(self.session.get("session_id") or ""))
+        except Exception:
+            pass
         self._log(
             "ADAPTIVE_LEVEL_ADVANCED",
             {

@@ -1282,6 +1282,11 @@ export function DashboardShell(_: {
         const message = readText(result, ["message"], "Round 3 validation is already started. Use Resume Validation to continue it.");
         setTradeError(message);
         showToast("error", message);
+      } else if (action === "resume" && (readText(result, ["status"], "") === "RESUME_BLOCKED" || result.can_resume === false)) {
+        const check = asRecord(result.resume_check);
+        const reason = readText(result, ["message"], "") || `Resume failed: ${readText(check, ["block_reason"], "backend did not provide a reason")}`;
+        setTradeError(reason);
+        showToast("error", reason);
       } else {
         showToast("success", autoValidationSuccessMessage(action));
       }
@@ -1289,8 +1294,9 @@ export function DashboardShell(_: {
         await refresh();
       }
     } catch (error) {
-      setTradeError(error instanceof Error ? error.message : "AUTO validation action failed.");
-      showToast("error", autoValidationErrorMessage(action));
+      const message = action === "resume" && error instanceof Error ? `Resume failed: backend route error: ${error.message}` : autoValidationErrorMessage(action);
+      setTradeError(message);
+      showToast("error", message);
     } finally {
       setWorkingAction(null);
     }

@@ -70,6 +70,15 @@ class MT5PositionMonitoringService:
 
         journal_records = self.persistent_trade_journal_service.list_trades(limit=100000)
         monitored = [self._monitor_position(position, journal_records) for position in mt5_result.get("positions", [])]
+        live_tickets = {str(item.get("ticket") or "") for item in monitored if str(item.get("ticket") or "")}
+        pending = [
+            self._monitor_pending_closure(record)
+            for record in journal_records
+            if str(record.get("status") or "").upper() == "CLOSURE_PENDING"
+            and str(record.get("mt5_ticket") or "") not in live_tickets
+            and (not symbol or str(record.get("symbol") or "").upper() == symbol)
+        ]
+        monitored.extend(pending)
         return {
             "status": "POSITIONS_FOUND" if monitored else "NO_OPEN_POSITIONS",
             "environment": "DEMO",
@@ -78,6 +87,38 @@ class MT5PositionMonitoringService:
             "empty_state": len(monitored) == 0,
             "message": "No open MT5 demo positions." if not monitored else "Open MT5 demo positions joined with journal records.",
             "timestamp": self._timestamp(),
+            **self._safety_flags(),
+        }
+
+    def _monitor_pending_closure(self, journal: dict[str, Any]) -> dict[str, Any]:
+        entry_price = self._float_or_none(journal.get("entry_price") or journal.get("entry"))
+        stop_loss = self._float_or_none(journal.get("stop_loss") or journal.get("sl"))
+        take_profit = self._float_or_none(journal.get("take_profit") or journal.get("tp"))
+        return {
+            "ticket": journal.get("mt5_ticket") or journal.get("ticket"),
+            "symbol": journal.get("symbol"),
+            "side": journal.get("side") or journal.get("action") or journal.get("direction"),
+            "lot": journal.get("lot"),
+            "entry_price": entry_price,
+            "current_price": journal.get("current_price") or journal.get("close_price") or entry_price,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "floating_pnl": journal.get("profit_loss") or 0.0,
+            "floating_pnl_percent": None,
+            "distance_to_sl": None,
+            "distance_to_tp": None,
+            "lifecycle_status": "CLOSURE_PENDING",
+            "journal_status": "CLOSURE_PENDING",
+            "validation_session_id": journal.get("validation_session_id"),
+            "session_id": journal.get("validation_session_id"),
+            "adaptive_strategy_level": journal.get("adaptive_strategy_level"),
+            "strategy_profile": journal.get("strategy_profile") or "",
+            "account_login": journal.get("account_login"),
+            "server": journal.get("server"),
+            "last_sync_time": self._timestamp(),
+            "journal_trade_id": journal.get("trade_id") or "",
+            "closure_pending": True,
+            "closure_pending_reason": journal.get("closure_pending_reason") or "Waiting for MT5 close history.",
             **self._safety_flags(),
         }
 
@@ -109,6 +150,8 @@ class MT5PositionMonitoringService:
             "strategy_profile": journal.get("strategy_profile") if journal else "",
             "account_login": position.get("account_login"),
             "server": position.get("server"),
+            "time": position.get("time"),
+            "opened_at": position.get("opened_at") or position.get("time"),
             "last_sync_time": self._timestamp(),
             "journal_trade_id": journal.get("trade_id") if journal else "",
             **self._safety_flags(),

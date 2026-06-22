@@ -65,8 +65,22 @@ async def pause_auto_validation() -> dict:
 @router.post("/resume")
 async def resume_auto_validation() -> dict:
     result = auto_validation_service.resume()
+    if result.get("status") == "RESUME_BLOCKED" or result.get("can_resume") is False:
+        return result
     auto_validation_runner.start()
-    return auto_validation_service.status()
+    status = auto_validation_service.status()
+    status["resume_check"] = result.get("resume_check") or auto_validation_service.resume_check(refresh_mt5=False)
+    return status
+
+
+@router.get("/resume-check")
+async def get_auto_validation_resume_check() -> dict:
+    return auto_validation_service.resume_check()
+
+
+@router.get("/runtime-status")
+async def get_auto_validation_runtime_status() -> dict:
+    return auto_validation_service.runtime_status()
 
 
 @router.post("/stop")

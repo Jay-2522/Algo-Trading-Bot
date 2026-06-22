@@ -77,6 +77,15 @@ class AutoValidationService:
         self._current_signal_watched: dict[str, Any] | None = None
         self._decision_traces: list[dict[str, Any]] = []
         self._latest_scan_diagnostics: dict[str, dict[str, Any]] = {}
+        self._runtime_order_state: dict[str, Any] = {
+            "latest_scan_decision": "",
+            "latest_scan_symbol": "",
+            "latest_scan_time": "",
+            "latest_order_sent_time": "",
+            "waiting_for_order": False,
+            "order_block_reason": "",
+            "time_between_accepted_and_order_ms": None,
+        }
         self._load_state()
         self._apply_balanced_round3_config()
         self._sync_round_archive()
@@ -290,6 +299,53 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
 
+    def runtime_status(self) -> dict[str, Any]:
+        self._refresh_session_metrics()
+        positions = self._open_positions()
+        mt5_open_tickets = sorted([self._position_ticket(position) for position in positions if self._position_ticket(position)])
+        diagnostics = self.session.get("active_round_diagnostics") if isinstance(self.session.get("active_round_diagnostics"), dict) else {}
+        latest_trace = copy.deepcopy(self.session.get("latest_decision_trace") if isinstance(self.session.get("latest_decision_trace"), dict) else {})
+        if self._decision_traces:
+            latest_trace = copy.deepcopy(self._decision_traces[-1])
+        latest_scan_decision = (
+            self._runtime_order_state.get("latest_scan_decision")
+            or latest_trace.get("execution_decision")
+            or latest_trace.get("decision")
+            or ""
+        )
+        latest_scan_symbol = (
+            self._runtime_order_state.get("latest_scan_symbol")
+            or latest_trace.get("symbol")
+            or ""
+        )
+        latest_scan_time = (
+            self._runtime_order_state.get("latest_scan_time")
+            or latest_trace.get("timestamp")
+            or ""
+        )
+        latest_order_time = self._runtime_order_state.get("latest_order_sent_time") or ""
+        if not latest_order_time:
+            for event in reversed(self.events):
+                if event.get("event") in {"ORDER_SENT", "ORDER_SUCCESS"}:
+                    latest_order_time = str(event.get("timestamp") or "")
+                    break
+        return {
+            "mt5_open_count": len(mt5_open_tickets),
+            "mt5_open_tickets": mt5_open_tickets,
+            "dashboard_open_count": int(self.session.get("current_open_trades") or 0),
+            "dashboard_open_tickets": diagnostics.get("latest_open_tickets", []),
+            "latest_scan_decision": latest_scan_decision,
+            "latest_scan_symbol": latest_scan_symbol,
+            "latest_scan_time": latest_scan_time,
+            "latest_order_sent_time": latest_order_time,
+            "waiting_for_order": bool(self._runtime_order_state.get("waiting_for_order")),
+            "order_block_reason": self._runtime_order_state.get("order_block_reason") or "",
+            "time_between_ACCEPTED_and_ORDER_ms": self._runtime_order_state.get("time_between_accepted_and_order_ms"),
+            "active_session_id": self.session.get("session_id"),
+            "counter_source": diagnostics.get("counter_source") or "live_mt5_open_positions",
+            "timestamp": self._timestamp(),
+        }
+
     def reset_active_open_trades(self) -> dict[str, Any]:
         session_id = str(self.session.get("session_id") or "")
         if not session_id or self.journal_service is None or not hasattr(self.journal_service, "clear_session_trades_by_status"):
@@ -461,7 +517,65 @@ class AutoValidationService:
             self._save_state()
         return self.status()
 
+    def resume_check(self, *, refresh_mt5: bool = True) -> dict[str, Any]:
+        if refresh_mt5:
+            try:
+                self._mt5_health_check()
+            except Exception as exc:
+                self._log("RESUME_MT5_HEALTH_CHECK_FAILED", {"error": str(exc)})
+        active_session_id = str(self.session.get("session_id") or "")
+        validation_status = str(self.session.get("status") or "UNKNOWN")
+        mt5_status = str(self.mt5_health_state.get("status") or "UNKNOWN")
+        risk_diagnostics = self._risk_halt_diagnostics()
+        risk_status = str(risk_diagnostics.get("status") or "INACTIVE")
+        open_trades = int(self.session.get("current_open_trades") or self.session.get("current_session_open_trades") or 0)
+        closed_trades = int(self.session.get("current_closed_trades") or self.session.get("current_session_closed") or 0)
+        block_reason = ""
+        if not active_session_id:
+            block_reason = "active session missing"
+        elif validation_status == "HALTED_RISK":
+            block_reason = str(risk_diagnostics.get("message") or "validation status is HALTED_RISK")
+        elif validation_status not in {"PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
+            block_reason = f"validation status is {validation_status}"
+        elif mt5_status == "MT5_DISCONNECTED":
+            block_reason = "MT5 disconnected"
+        elif risk_status == "RISK_HALTED":
+            block_reason = str(risk_diagnostics.get("message") or "risk halt is active")
+        can_resume = not block_reason
+        return {
+            "can_resume": can_resume,
+            "block_reason": block_reason,
+            "active_session_id": active_session_id,
+            "validation_status": validation_status,
+            "mt5_status": mt5_status,
+            "risk_status": risk_status,
+            "open_trades": open_trades,
+            "closed_trades": closed_trades,
+            "timestamp": self._timestamp(),
+        }
+
     def resume(self) -> dict[str, Any]:
+        check = self.resume_check(refresh_mt5=True)
+        self._log(
+            "RESUME_REQUEST_RECEIVED",
+            {
+                "active_session_id": check.get("active_session_id"),
+                "status_before": check.get("validation_status"),
+                "mt5_status": check.get("mt5_status"),
+                "risk_status": check.get("risk_status"),
+                "resume_allowed": check.get("can_resume"),
+                "block_reason": check.get("block_reason"),
+            },
+        )
+        if not check.get("can_resume"):
+            self._persist_resume_failed_event(check)
+            self._save_state()
+            return {
+                "status": "RESUME_BLOCKED",
+                "message": f"Resume failed: {check.get('block_reason') or 'unknown reason'}",
+                "resume_check": check,
+                **check,
+            }
         if self.session["status"] == "HALTED_RISK":
             self.session["risk_halt_diagnostics"] = self._risk_halt_diagnostics()
             self._persist_risk_halt_event()
@@ -655,6 +769,41 @@ class AutoValidationService:
         self._record_confidence_timeline(signals)
         checked = [self._checked_symbol_result(signal) for signal in signals]
         best_candidate = self._best_candidate(checked)
+        self._update_runtime_scan_state(best_candidate)
+        immediate = self._immediate_accepted_signal(signals)
+        if immediate is not None:
+            accepted_at = time.perf_counter()
+            signal, final_decision = immediate
+            self._current_signal_watched = signal
+            self._runtime_order_state.update(
+                {
+                    "latest_scan_decision": "ACCEPTED",
+                    "latest_scan_symbol": str(signal.get("symbol") or "").upper(),
+                    "latest_scan_time": final_decision.get("timestamp") or self._timestamp(),
+                    "waiting_for_order": True,
+                    "order_block_reason": "",
+                    "time_between_accepted_and_order_ms": None,
+                }
+            )
+            self._log(
+                "SCAN_ACCEPTED",
+                {
+                    "symbol": signal.get("symbol"),
+                    "signal_hash": signal.get("signal_hash"),
+                    "score": final_decision.get("score"),
+                    "required_score": final_decision.get("required_score"),
+                    "adaptive_level": final_decision.get("adaptive_level"),
+                    "active_session_id": self.session.get("session_id"),
+                    "timestamp": final_decision.get("timestamp"),
+                },
+            )
+            decision = self._execute_signal(signal, accepted_at=accepted_at, precomputed_final_decision=final_decision)
+            decision.update(self._scan_context(checked, signal))
+            self._last_execution_decision = decision
+            self._record_decision_traces(checked, decision)
+            self._save_state()
+            if decision["status"] in {"ORDER_SENT", "HALTED_RISK", "BLOCKED"}:
+                return decision
         blocked_decision: dict[str, Any] | None = None
         for signal in signals:
             self._current_signal_watched = signal
@@ -690,20 +839,100 @@ class AutoValidationService:
         self._log("NO_QUALIFIED_SIGNAL", decision)
         return decision
 
-    def _execute_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
+    def _immediate_accepted_signal(self, signals: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        accepted: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
+        for signal in signals:
+            if not self._ready(signal):
+                continue
+            final_decision = self._final_round3_order_decision(signal)
+            final_blockers = self._final_round3_order_blockers(final_decision, signal)
+            if final_blockers:
+                continue
+            accepted.append((int(self._number(final_decision.get("score"), 0)), signal, final_decision))
+        if not accepted:
+            return None
+        _, signal, final_decision = sorted(accepted, key=lambda item: item[0], reverse=True)[0]
+        return signal, final_decision
+
+    def _update_runtime_scan_state(self, checked: dict[str, Any] | None) -> None:
+        if not isinstance(checked, dict) or not checked:
+            return
+        decision = str(checked.get("execution_decision") or "").upper()
+        self._runtime_order_state.update(
+            {
+                "latest_scan_decision": decision,
+                "latest_scan_symbol": str(checked.get("symbol") or "").upper(),
+                "latest_scan_time": self._timestamp(),
+                "order_block_reason": "" if decision == "READY_FOR_ORDER" else str(checked.get("why_order_not_sent") or checked.get("blocking_reason") or ""),
+            }
+        )
+
+    def _open_positions_for_symbol(self, symbol: str) -> list[dict[str, Any]]:
+        normalized = str(symbol or "").upper()
+        return [position for position in self._open_positions() if str(position.get("symbol") or "").upper() == normalized]
+
+    def _execute_signal(
+        self,
+        signal: dict[str, Any],
+        accepted_at: float | None = None,
+        precomputed_final_decision: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        symbol = str(signal.get("symbol") or "").upper()
+        same_symbol_positions = self._open_positions_for_symbol(symbol)
+        if same_symbol_positions:
+            final_decision_for_duplicate = precomputed_final_decision or self._final_round3_order_decision(signal)
+            tickets = [self._position_ticket(position) for position in same_symbol_positions if self._position_ticket(position)]
+            self._log(
+                "POSITION_ALREADY_OPEN",
+                {
+                    "symbol": symbol,
+                    "tickets": tickets,
+                    "open_count": len(same_symbol_positions),
+                    "active_session_id": self.session.get("session_id"),
+                },
+            )
+            self._runtime_order_state.update(
+                {
+                    "waiting_for_order": False,
+                    "order_block_reason": "POSITION_ALREADY_OPEN",
+                }
+            )
+            return self._decision(
+                "BLOCKED",
+                ["POSITION_ALREADY_OPEN"],
+                {**signal, "final_decision": final_decision_for_duplicate},
+                {
+                    "final_decision": final_decision_for_duplicate,
+                    "decision_reason": f"{symbol} already has an open MT5 position.",
+                    "final_decision_reason": f"{symbol} already has an open MT5 position.",
+                    "open_tickets": tickets,
+                },
+            )
         blockers = self._validate_signal(signal)
         if blockers:
             event = "RISK_HALT_TRIGGERED" if self._halt_blocker(blockers) else "SIGNAL_BLOCKED"
             self._log(event, {"blockers": blockers, "signal_hash": signal.get("signal_hash")})
+            self._runtime_order_state.update(
+                {
+                    "waiting_for_order": False,
+                    "order_block_reason": blockers[0] if blockers else "",
+                }
+            )
             if self._halt_blocker(blockers):
                 return self._halt(blockers[0])
             return self._decision("BLOCKED", blockers, signal)
 
-        final_decision = self._final_round3_order_decision(signal)
+        final_decision = precomputed_final_decision or self._final_round3_order_decision(signal)
         final_blockers = self._final_round3_order_blockers(final_decision, signal)
         if final_blockers:
             legacy_audit = self._legacy_order_path_audit(signal, final_decision, final_blockers)
             self._log("BLOCKED_LEGACY_ORDER_PATH", legacy_audit)
+            self._runtime_order_state.update(
+                {
+                    "waiting_for_order": False,
+                    "order_block_reason": self._final_order_block_reason(final_decision, final_blockers),
+                }
+            )
             return self._decision(
                 "BLOCKED",
                 ["BLOCKED_LEGACY_ORDER_PATH", *final_blockers],
@@ -722,6 +951,18 @@ class AutoValidationService:
         signal = {**signal, "final_decision": final_decision}
         payload = self._guarded_payload(signal)
         self._increment_funnel("wrapper_submitted")
+        order_triggered_at = time.perf_counter()
+        self._log(
+            "ORDER_TRIGGERED",
+            {
+                "symbol": symbol,
+                "signal_hash": signal.get("signal_hash"),
+                "score": final_decision.get("score"),
+                "required_score": final_decision.get("required_score"),
+                "accepted_timestamp": final_decision.get("timestamp"),
+                "active_session_id": self.session.get("session_id"),
+            },
+        )
         result = service.send_test_order(payload)
         execution_timeline = self._record_post_sender_timeline(signal, payload, result)
         self._apply_execution_stage_counters(result)
@@ -731,6 +972,12 @@ class AutoValidationService:
             rejection = self._sender_rejection(result, payload)
             self._last_sender_rejection = rejection
             self._log("GUARDED_SENDER_REJECTED", rejection)
+            self._runtime_order_state.update(
+                {
+                    "waiting_for_order": False,
+                    "order_block_reason": rejection.get("final_blocker") or rejection.get("rejection_code") or "GUARDED_SENDER_REJECTED",
+                }
+            )
             return self._decision("BLOCKED", ["GUARDED_SENDER_REJECTED"], signal, {"sender_result": result, "last_sender_rejection": rejection, "guarded_sender_used": bool(result.get("guarded_sender_used")), "execution_timeline": execution_timeline})
         self._increment_funnel("orders_created")
         self._increment_funnel("opened")
@@ -740,6 +987,25 @@ class AutoValidationService:
         self._sent_signal_keys.add(self._duplicate_key(signal))
         self._last_trade_time = datetime.now(timezone.utc)
         self._log("ORDER_SENT", decision)
+        elapsed_ms = self._elapsed_ms(accepted_at or order_triggered_at)
+        self._runtime_order_state.update(
+            {
+                "latest_order_sent_time": self._timestamp(),
+                "waiting_for_order": False,
+                "order_block_reason": "",
+                "time_between_accepted_and_order_ms": elapsed_ms,
+            }
+        )
+        self._log(
+            "ORDER_SUCCESS",
+            {
+                "symbol": symbol,
+                "ticket": result.get("ticket") or result.get("mt5_ticket") or result.get("order"),
+                "time_between_ACCEPTED_and_ORDER": elapsed_ms,
+                "time_between_ACCEPTED_and_ORDER_ms": elapsed_ms,
+                "active_session_id": self.session.get("session_id"),
+            },
+        )
         self._refresh_session_metrics()
         self._save_state()
         return decision
@@ -997,7 +1263,7 @@ class AutoValidationService:
     def _active_journal_open_positions(self, profile: str) -> list[dict[str, Any]]:
         session_id = str(self.session.get("session_id") or "")
         allowed_symbols = self._allowed_symbols()
-        active_statuses = {"OPEN", "SENT", "PENDING"}
+        active_statuses = {"OPEN", "SENT", "PENDING", "CLOSURE_PENDING"}
         active_profile = str(profile or "").upper()
         return [
             trade
@@ -1044,6 +1310,18 @@ class AutoValidationService:
             for trade in trades
             if str(trade.get("mt5_ticket") or "")
         }
+        previous_open_trades = [
+            trade
+            for trade in trades
+            if str(trade.get("validation_session_id") or "") == session_id
+            and str(trade.get("status") or "").upper() in {"OPEN", "SENT", "CLOSURE_PENDING"}
+            and str(trade.get("mt5_ticket") or "")
+        ]
+        previous_open_tickets = {str(trade.get("mt5_ticket") or "") for trade in previous_open_trades}
+        mt5_open_tickets = {self._position_ticket(position) for position in positions if self._position_ticket(position)}
+        self._log("MT5_OPEN_TICKETS", {"tickets": sorted(mt5_open_tickets), "count": len(mt5_open_tickets), "active_session_id": session_id})
+        self._log("OPEN_TICKETS_PREVIOUS", {"tickets": sorted(previous_open_tickets), "count": len(previous_open_tickets), "active_session_id": session_id})
+        self._log("OPEN_TICKETS_MT5_NOW", {"tickets": sorted(mt5_open_tickets), "count": len(mt5_open_tickets), "active_session_id": session_id})
         allowed_symbols = self._allowed_symbols()
         session_positions: list[dict[str, Any]] = []
         unmatched_positions: list[dict[str, Any]] = []
@@ -1054,15 +1332,24 @@ class AutoValidationService:
             symbol = str(position.get("symbol") or "").upper()
             allowed_position = symbol in allowed_symbols
             auto_owned = matched_trade is not None or position_session == session_id or self._position_belongs_to_current_session(position)
+            current_session_allowed_position = allowed_position and self._position_opened_after_session_start(position)
             if not auto_owned:
+                if current_session_allowed_position:
+                    session_positions.append(position)
+                    self._persist_open_confirmed_reason(position)
+                    self._record_open_position(position, self._synthetic_open_position_trade(position))
+                    continue
                 unmatched_positions.append(position)
                 continue
             session_positions.append(position)
             self._persist_open_confirmed_reason(position)
             if matched_trade is not None:
                 self._record_open_position(position, matched_trade)
-            elif allowed_position and self._position_opened_after_session_start(position):
+            elif current_session_allowed_position:
                 self._record_open_position(position, self._synthetic_open_position_trade(position))
+        missing_open_tickets = sorted(previous_open_tickets - mt5_open_tickets)
+        if missing_open_tickets:
+            self._handle_missing_open_tickets(missing_open_tickets, trades_by_ticket)
         self._open_position_sync_diagnostics = {
             "mt5_open_positions_detected": len(positions),
             "mt5_open_positions": len(positions),
@@ -1075,11 +1362,87 @@ class AutoValidationService:
             "current_session_open_positions_by_symbol": self._positions_by_symbol(session_positions),
             "limit_count_source": "current_session_positions_only",
             "open_position_tickets": [self._position_ticket(position) for position in session_positions if self._position_ticket(position)],
+            "closure_pending_tickets": missing_open_tickets,
             "unmatched_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
             "historical_unowned_open_position_tickets": [self._position_ticket(position) for position in unmatched_positions if self._position_ticket(position)],
             "timestamp": self._timestamp(),
         }
         return session_positions
+
+    def _handle_missing_open_tickets(self, tickets: list[str], trades_by_ticket: dict[str, dict[str, Any]]) -> None:
+        if not tickets:
+            return
+        for ticket in tickets:
+            self._log("MISSING_OPEN_TICKET_DETECTED", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
+        close_result: dict[str, Any] = {}
+        try:
+            if self.close_sync_service is not None and hasattr(self.close_sync_service, "run"):
+                close_result = self.close_sync_service.run()
+        except Exception as exc:
+            close_result = {"status": "ERROR", "message": str(exc), "closed_trades": [], "warnings": []}
+        closed_by_ticket = {
+            str(trade.get("mt5_ticket") or trade.get("ticket") or ""): trade
+            for trade in close_result.get("closed_trades", [])
+            if isinstance(trade, dict) and str(trade.get("mt5_ticket") or trade.get("ticket") or "")
+        }
+        warnings = close_result.get("warnings") if isinstance(close_result.get("warnings"), list) else []
+        warning_by_ticket = {
+            str(item.get("mt5_ticket") or item.get("ticket") or ""): item
+            for item in warnings
+            if isinstance(item, dict) and str(item.get("mt5_ticket") or item.get("ticket") or "")
+        }
+        for ticket in tickets:
+            lookup = {
+                "ticket": ticket,
+                "close_sync_status": close_result.get("status"),
+                "closed_found": ticket in closed_by_ticket,
+                "warning": warning_by_ticket.get(ticket),
+                "message": close_result.get("message"),
+            }
+            self._log("MT5_HISTORY_LOOKUP_RESULT", lookup)
+            closed_trade = closed_by_ticket.get(ticket)
+            if closed_trade is None and self.journal_service is not None and hasattr(self.journal_service, "get_trade_by_ticket"):
+                try:
+                    current = self.journal_service.get_trade_by_ticket(ticket)
+                    if isinstance(current, dict) and str(current.get("status") or "").upper() == "CLOSED":
+                        closed_trade = current
+                except Exception:
+                    closed_trade = None
+            if closed_trade is not None:
+                self._log(
+                    "CLOSED_TRADE_WRITTEN",
+                    {
+                        "ticket": ticket,
+                        "result": closed_trade.get("result"),
+                        "pnl": closed_trade.get("net_pnl") or closed_trade.get("total_pnl") or closed_trade.get("profit_loss"),
+                        "active_session_id": self.session.get("session_id"),
+                    },
+                )
+                self._persist_closed_confirmed_reason(closed_trade)
+                continue
+            trade = trades_by_ticket.get(ticket) or {}
+            if self.journal_service is not None and hasattr(self.journal_service, "mark_trade_closure_pending_by_ticket"):
+                try:
+                    pending = self.journal_service.mark_trade_closure_pending_by_ticket(
+                        ticket,
+                        {
+                            "closure_pending_reason": "MT5 position disappeared from open list; waiting for close history.",
+                            "closure_pending_at": self._timestamp(),
+                            "last_closure_lookup_at": self._timestamp(),
+                        },
+                    )
+                except Exception:
+                    pending = None
+                if pending is not None:
+                    self._log(
+                        "CLOSURE_PENDING_CREATED",
+                        {
+                            "ticket": ticket,
+                            "symbol": pending.get("symbol") or trade.get("symbol"),
+                            "active_session_id": self.session.get("session_id"),
+                            "reason": pending.get("closure_pending_reason"),
+                        },
+                    )
 
     def _positions_by_symbol(self, positions: list[dict[str, Any]]) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -2678,10 +3041,30 @@ class AutoValidationService:
         if self._backfill_legacy_path_losses(closed):
             trades = self.trades()
             closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
-        open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT"}]
+        open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT", "CLOSURE_PENDING"}]
         open_ticket_keys = {str(trade.get("mt5_ticket") or "") for trade in open_trades if str(trade.get("mt5_ticket") or "")}
         mt5_open_ticket_keys = {self._position_ticket(position) for position in mt5_open_positions if self._position_ticket(position)}
-        open_trade_count = len(open_trades) + len(mt5_open_ticket_keys - open_ticket_keys)
+        dashboard_open_tickets = sorted(mt5_open_ticket_keys)
+        open_trade_count = len(mt5_open_ticket_keys)
+        self._log(
+            "DASHBOARD_OPEN_TICKETS",
+            {
+                "tickets": dashboard_open_tickets,
+                "count": open_trade_count,
+                "journal_open_tickets": sorted(open_ticket_keys),
+                "active_session_id": self.session.get("session_id"),
+            },
+        )
+        self._log(
+            "OPEN_TRADE_SYNC_COMPLETE",
+            {
+                "mt5_open_tickets": dashboard_open_tickets,
+                "mt5_open_count": len(mt5_open_ticket_keys),
+                "dashboard_open_tickets": dashboard_open_tickets,
+                "dashboard_open_count": open_trade_count,
+                "active_session_id": self.session.get("session_id"),
+            },
+        )
         opened_count = max(int(self.session.get("opened") or 0), int(self.session.get("orders_created") or 0), open_trade_count)
         daily_demo_trade_count = self._daily_trade_count()
         wins = [trade for trade in closed if trade.get("result") == "WIN"]
@@ -2726,9 +3109,9 @@ class AutoValidationService:
                     "open_trade_count": open_trade_count,
                     "closed_trade_count": len(closed),
                     "latest_closed_tickets": [str(trade.get("mt5_ticket") or trade.get("ticket") or "") for trade in closed[-5:]],
-                    "latest_open_tickets": sorted(mt5_open_ticket_keys or open_ticket_keys),
+                    "latest_open_tickets": dashboard_open_tickets,
                     "event_count": len(self.events),
-                    "counter_source": "active_session_trade_journal_plus_mt5_open_positions",
+                    "counter_source": "active_session_trade_journal_closed_plus_live_mt5_open_positions",
                     "reconciliation_action": reconciliation.get("action", "none"),
                     "reconciled_closed_tickets": reconciliation.get("tickets", []),
                 },
@@ -3258,6 +3641,15 @@ class AutoValidationService:
             self.reason_panel_service.persist_risk_halt(
                 diagnostics or self._risk_halt_diagnostics(),
                 session_id=str(self.session.get("session_id") or ""),
+            )
+        except Exception:
+            pass
+
+    def _persist_resume_failed_event(self, diagnostics: dict[str, Any]) -> None:
+        try:
+            self.reason_panel_service.persist_resume_failed(
+                diagnostics,
+                session_id=str(self.session.get("session_id") or diagnostics.get("active_session_id") or ""),
             )
         except Exception:
             pass
@@ -4679,6 +5071,8 @@ class AutoValidationService:
                     self._latest_scan_diagnostics = {str(key).upper(): value for key, value in raw_scans.items() if isinstance(value, dict)}
             except (OSError, json.JSONDecodeError):
                 self._latest_scan_diagnostics = {}
+        if isinstance(data.get("runtime_order_state"), dict):
+            self._runtime_order_state.update(data["runtime_order_state"])
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
             updated_at = str(data.get("updated_at") or self.session.get("started_at") or "")
             if not self.config.get("allow_persisted_auto_resume", False):
@@ -4720,6 +5114,7 @@ class AutoValidationService:
                 "confidence_timeline": self._confidence_timeline,
                 "decision_traces": self._decision_traces[-200:],
                 "latest_scan_diagnostics": self._latest_scan_diagnostics,
+                "runtime_order_state": self._runtime_order_state,
                 "sent_signal_keys": sorted(self._sent_signal_keys),
                 "updated_at": self._timestamp(),
             }

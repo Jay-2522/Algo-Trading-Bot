@@ -12,7 +12,7 @@ DEFAULT_JOURNAL_PATH = PROJECT_ROOT / "data" / "trade_journal" / "trade_journal.
 DEFAULT_VALIDATION_ROUNDS_PATH = PROJECT_ROOT / "data" / "validation_rounds"
 
 TRADE_SOURCES = {"MT5_DEMO", "SIMULATION", "FUTURE_BROKER"}
-TRADE_STATUSES = {"PLANNED", "SENT", "OPEN", "CLOSED", "REJECTED", "CANCELLED"}
+TRADE_STATUSES = {"PLANNED", "SENT", "OPEN", "CLOSURE_PENDING", "CLOSED", "REJECTED", "CANCELLED"}
 TRADE_RESULTS = {"WIN", "LOSS", "BREAKEVEN", "OPEN", "REJECTED", "UNKNOWN"}
 
 
@@ -108,6 +108,23 @@ class PersistentTradeJournalService:
             return None
         return self.record_trade_closed({**existing, **close_payload, "trade_id": existing["trade_id"], "mt5_ticket": existing.get("mt5_ticket")})
 
+    def mark_trade_closure_pending_by_ticket(self, ticket: str | int, payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        existing = self.get_trade_by_ticket(ticket)
+        if existing is None:
+            return None
+        payload = payload or {}
+        merged = {
+            **existing,
+            "status": "CLOSURE_PENDING",
+            "result": "OPEN",
+            "closure_pending": True,
+            "closure_pending_reason": self._text(payload.get("closure_pending_reason")) or "MT5 open position disappeared; waiting for MT5 close history.",
+            "closure_pending_at": self._text(payload.get("closure_pending_at")) or existing.get("closure_pending_at") or utc_now_iso(),
+            "last_closure_lookup_at": self._text(payload.get("last_closure_lookup_at")) or utc_now_iso(),
+            "updated_at": utc_now_iso(),
+        }
+        return self._upsert_trade(merged)
+
     def record_exit_management_update(self, ticket: str | int, payload: dict[str, Any]) -> dict[str, Any] | None:
         existing = self.get_trade_by_ticket(ticket)
         if existing is None:
@@ -122,7 +139,7 @@ class PersistentTradeJournalService:
         return self._upsert_trade(merged)
 
     def get_open_trades(self) -> list[dict[str, Any]]:
-        return [trade for trade in self.list_trades(limit=100000) if trade.get("status") == "OPEN"]
+        return [trade for trade in self.list_trades(limit=100000) if trade.get("status") in {"OPEN", "CLOSURE_PENDING"}]
 
     def get_closed_trades(self) -> list[dict[str, Any]]:
         return [trade for trade in self.list_trades(limit=100000) if trade.get("status") == "CLOSED"]

@@ -311,6 +311,37 @@ class ExecutionReasonPanelService:
         self._upsert(message)
         return message
 
+    def persist_resume_failed(self, diagnostics: dict[str, Any], *, session_id: str = "") -> dict[str, Any]:
+        reason_text = self._text(diagnostics.get("block_reason")) or "resume was blocked"
+        timestamp = self._text(diagnostics.get("timestamp")) or self._timestamp()
+        event_id = f"resume-failed-{session_id or 'active'}-{timestamp}"
+        message_text = f"Resume failed because {reason_text}."
+        message = {
+            "id": event_id,
+            "event_id": event_id,
+            "groqGenerated": False,
+            "reason": message_text,
+            "source": "execution",
+            "status": "RESUME_FAILED",
+            "symbol": "ROUND_3",
+            "side": "",
+            "ticket": "",
+            "strategy_profile": "DEMO_COLLECTION",
+            "decision": "RESUME_FAILED",
+            "order_opened": False,
+            "validation_session_id": session_id,
+            "active_session_id": session_id,
+            "resume_allowed": diagnostics.get("can_resume"),
+            "validation_status": diagnostics.get("validation_status"),
+            "mt5_status": diagnostics.get("mt5_status"),
+            "risk_status": diagnostics.get("risk_status"),
+            "final_decision_reason": message_text,
+            "timestamp": timestamp,
+            "data_source": "AUTO_VALIDATION_RESUME_CHECK",
+        }
+        self._upsert(message)
+        return message
+
     def _accepted_message(
         self,
         *,

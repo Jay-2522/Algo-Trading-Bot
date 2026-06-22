@@ -2,30 +2,6 @@
   "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
   "rounds": [
     {
-      "closed_trades": 9,
-      "ended_at": "2026-06-18T22:32:44+00:00",
-      "losses": 8,
-      "net_pnl": -1.55,
-      "round_label": "ROUND_1",
-      "round_number": 1,
-      "session_id": "auto-validation-bac8b8e0-28b7-4ca8-8c30-45e0bb50d336",
-      "started_at": "2026-06-18T18:49:16.083936+00:00",
-      "status": "ARCHIVED",
-      "wins": 1
-    },
-    {
-      "closed_trades": 32,
-      "ended_at": "2026-06-17T21:00:02+00:00",
-      "losses": 24,
-      "net_pnl": -3.62,
-      "round_label": "ROUND_2",
-      "round_number": 2,
-      "session_id": "auto-validation-6dbfe380-22b1-44ea-9fc2-f4b7c25c3de9",
-      "started_at": "2026-06-16T22:38:12.706827+00:00",
-      "status": "ARCHIVED",
-      "wins": 8
-    },
-    {
       "closed_trades": 0,
       "ended_at": null,
       "losses": 0,
@@ -35,18 +11,6 @@
       "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
       "started_at": "2026-06-18T21:46:44.271865+00:00",
       "status": "ACTIVE",
-      "wins": 0
-    },
-    {
-      "closed_trades": 2,
-      "ended_at": "2026-06-18T21:04:22+00:00",
-      "losses": 2,
-      "net_pnl": -0.52,
-      "round_label": "ARCHIVED_ATTEMPT",
-      "round_number": null,
-      "session_id": "auto-validation-6929cd3a-820d-4001-b899-fb8294e989d2",
-      "started_at": "2026-06-18T18:02:16.670064+00:00",
-      "status": "ARCHIVED",
       "wins": 0
     }
   ]

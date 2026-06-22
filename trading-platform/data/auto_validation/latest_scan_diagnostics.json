@@ -3,16 +3,17 @@
     "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
     "adaptive_level": 3,
     "analysis_ms": 1,
-    "bos": true,
+    "bos": false,
     "decision": "BLOCKED",
     "decision_ms": 1,
-    "estimated_readiness": "Close: missing HTF alignment and momentum/pullback",
+    "estimated_readiness": "Missing HTF alignment and momentum/pullback",
     "failed_hard_gates": [
       "DIRECTION_BIAS_MISMATCH",
       "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP",
       "MOMENTUM_OR_PULLBACK_MISSING",
       "ROUND_3_SCORE_BELOW_THRESHOLD",
-      "SCORE_5_NEEDS_CLEAN_MOMENTUM"
+      "SCORE_5_NEEDS_CLEAN_MOMENTUM",
+      "STRUCTURE_CONFIRMATION_MISSING"
     ],
     "fvg": true,
     "history_load_ms": 1,
@@ -20,8 +21,8 @@
     "history_warmup": {
       "diagnostics": [
         {
-          "cache_hit": false,
-          "cache_reason": null,
+          "cache_hit": true,
+          "cache_reason": "MT5_HISTORY_READ_FAILED_REUSED_LAST_SUCCESS",
           "candles_loaded": 300,
           "candles_required": 300,
           "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
@@ -183,10 +184,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T14:00:44.728533+00:00"
+      "timestamp": "2026-06-22T14:12:44.887246+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T14:00:44.727531+00:00",
+    "last_scan_timestamp": "2026-06-22T14:12:44.886236+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -199,12 +200,12 @@
     "reject_reason": "Blocked because direction does not match higher-timeframe bias.",
     "required_score": 5,
     "rr_ok": true,
-    "score": 4,
+    "score": 2,
     "session_bonus": true,
     "source": "CACHED_DECISION_TRACE",
     "spread_ok": true,
     "symbol": "EURUSD",
-    "timestamp": "2026-06-22T14:00:44.728533+00:00",
+    "timestamp": "2026-06-22T14:12:44.887246+00:00",
     "total_scan_ms": 1
   },
   "XAUUSD": {
@@ -230,8 +231,8 @@
     "history_warmup": {
       "diagnostics": [
         {
-          "cache_hit": true,
-          "cache_reason": "MT5_HISTORY_READ_FAILED_REUSED_LAST_SUCCESS",
+          "cache_hit": false,
+          "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
           "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
@@ -393,10 +394,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T14:00:44.738095+00:00"
+      "timestamp": "2026-06-22T14:12:44.915015+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T14:00:44.736577+00:00",
+    "last_scan_timestamp": "2026-06-22T14:12:44.915015+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -415,7 +416,7 @@
     "source": "CACHED_DECISION_TRACE",
     "spread_ok": true,
     "symbol": "XAUUSD",
-    "timestamp": "2026-06-22T14:00:44.739111+00:00",
+    "timestamp": "2026-06-22T14:12:44.916025+00:00",
     "total_scan_ms": 1
   }
 }

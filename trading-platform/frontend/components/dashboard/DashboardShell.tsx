@@ -3169,6 +3169,38 @@ function scanMissingList(scan: ApiRecord): string[] {
   return raw.map((item) => String(item)).filter(Boolean).slice(0, 4);
 }
 
+type ScanChecklistItem = { label: string; passed: boolean };
+
+function scanBoolean(scan: ApiRecord, keys: string[]): boolean {
+  return keys.some((key) => {
+    const value = scan[key];
+    if (value === true) return true;
+    const textValue = String(value ?? "").trim().toUpperCase();
+    return ["TRUE", "YES", "OK", "READY", "CLEAN", "PASSED", "ALIGNED", "PRESENT"].includes(textValue);
+  });
+}
+
+function scanChecklist(scan: ApiRecord): ScanChecklistItem[] {
+  const htfText = readText(scan, ["htf_alignment", "htf_bias"], "").toUpperCase();
+  const htfPassed = scanBoolean(scan, ["htf_alignment", "trend_alignment"]) || (Boolean(htfText) && !["NOT_ALIGNED", "UNCLEAR", "WAIT", "NONE", "FALSE"].includes(htfText));
+  const momentumPassed = scanBoolean(scan, ["momentum", "pullback_retest"]);
+  const structurePassed = scanBoolean(scan, ["bos", "liquidity_sweep", "fvg", "fvg_retest", "structure_confirmation"]);
+  return [
+    { label: "History ready", passed: scanBoolean(scan, ["history_ready"]) },
+    { label: "Spread clean", passed: scanBoolean(scan, ["spread_ok"]) },
+    { label: "RR >= 2", passed: scanBoolean(scan, ["rr_ok"]) },
+    { label: "HTF alignment", passed: htfPassed },
+    { label: "Momentum / Pullback", passed: momentumPassed },
+    { label: "Structure confirmation", passed: structurePassed },
+  ];
+}
+
+function scanNeeds(scan: ApiRecord): string[] {
+  return scanChecklist(scan)
+    .filter((item) => !item.passed)
+    .map((item) => item.label);
+}
+
 function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
   const available = scanRows.filter((scan) => readText(scan, ["timestamp"], ""));
   if (!available.length) return null;
@@ -3201,6 +3233,7 @@ function scanTimeLabel(scan: ApiRecord): string {
 function LiveScanStatusCard({ data }: { data: DashboardData }) {
   const scans = latestScanDiagnostics(data);
   const closest = closestScan(scans);
+  const closestNeeds = closest ? scanNeeds(closest).slice(0, 2) : [];
   return (
     <section className="premium-panel">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -3209,9 +3242,12 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
           <p className="premium-metric-value text-white">LIVE SCAN STATUS</p>
         </div>
         {closest ? (
-          <div className="rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-3 py-2 text-xs font-bold text-blue-100">
-            Closest To Trade: {readText(closest, ["symbol"], "—")} • Score {readNumber(closest, ["score"], 0)}/{readNumber(closest, ["required_score"], 5)}
-          </div>
+          <>
+            <div className="rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-blue-100">
+              <span className="whitespace-nowrap">Closest: {readText(closest, ["symbol"], "-")} — {readNumber(closest, ["score"], 0)}/{readNumber(closest, ["required_score"], 5)}</span>
+              <span className="ml-2 text-slate-300">Needs: {closestNeeds.length ? closestNeeds.join(" + ") : "ready"}</span>
+            </div>
+          </>
         ) : null}
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -3220,6 +3256,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
           const hasScan = Boolean(readText(scan, ["timestamp"], ""));
           const missing = scanMissingList(scan);
           const stale = hasScan && scanIsStale(scan);
+          const checklist = scanChecklist(scan);
           return (
             <div className="rounded-xl border border-slate-800/80 bg-[#08111F] p-4" key={symbol}>
               <div className="flex items-start justify-between gap-3">
@@ -3233,7 +3270,20 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
               </div>
               {hasScan ? (
                 <>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-4 xl:grid-cols-6">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="scan-status-pill">Last scan: {scanTimeLabel(scan)}</span>
+                    <span className="scan-status-pill">Duration: {Math.max(1, readNumber(scan, ["total_scan_ms"], 1))}ms</span>
+                    <span className={`scan-status-pill ${stale ? "warning" : "good"}`}>Status: {stale ? "Stale data" : "Fresh"}</span>
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {checklist.map((item) => (
+                      <div className={`scan-check-row ${item.passed ? "passed" : "missing"}`} key={`${symbol}-${item.label}`}>
+                        <span>{item.passed ? "✓" : "✕"}</span>
+                        <strong>{item.label}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden">
                     <ClientMetric label="Last scan" value={scanTimeLabel(scan)} compact />
                     <ClientMetric label="Duration" value={`${Math.max(1, readNumber(scan, ["total_scan_ms"], 1))}ms`} compact />
                     <ClientMetric label="History" value={readText(scan, ["history_ready"], "") === "true" || scan.history_ready === true ? "Ready" : "Waiting"} compact />
@@ -3241,7 +3291,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
                     <ClientMetric label="RR" value={scan.rr_ok === true ? "OK" : "Blocked"} compact />
                     <ClientMetric label="Status" value={stale ? "Stale" : "Fresh"} compact />
                   </div>
-                  <div className="mt-3">
+                  <div className="hidden">
                     <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-500">Missing</p>
                     <p className="mt-1 text-sm font-bold text-slate-200">{missing.length ? missing.join(", ") : "—"}</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">{readText(scan, ["estimated_readiness"], readText(scan, ["reject_reason"], ""))}</p>
@@ -4120,6 +4170,13 @@ type ReasonMessage = {
   confirmation_score?: number | null;
   confirmation_required?: number | null;
   confirmation_total?: number | null;
+  bos?: boolean | null;
+  fvg?: boolean | null;
+  fvg_retest?: boolean | null;
+  htf_bias?: string;
+  liquidity_sweep?: boolean | null;
+  momentum?: boolean | null;
+  pullback_retest?: boolean | null;
 };
 type ReasonContext = ApiRecord & { status: ReasonStatus; symbol: string; timestamp: string };
 
@@ -4534,6 +4591,13 @@ function normalizeReasonMessages(records: ApiRecord[]): ReasonMessage[] {
         confirmation_total: firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]),
         confirmation_passed: Array.isArray(record.confirmation_passed) ? record.confirmation_passed.map(String) : [],
         confirmation_missing: Array.isArray(record.confirmation_missing) ? record.confirmation_missing.map(String) : [],
+        bos: record.bos === true ? true : record.bos === false ? false : null,
+        fvg: record.fvg === true ? true : record.fvg === false ? false : null,
+        fvg_retest: record.fvg_retest === true ? true : record.fvg_retest === false ? false : null,
+        htf_bias: readText(record, ["htf_bias", "htf_alignment"], ""),
+        liquidity_sweep: record.liquidity_sweep === true ? true : record.liquidity_sweep === false ? false : null,
+        momentum: record.momentum === true ? true : record.momentum === false ? false : null,
+        pullback_retest: record.pullback_retest === true ? true : record.pullback_retest === false ? false : null,
         timeframe: readText(record, ["timeframe"], ""),
         validation_status: readText(record, ["validation_status"], ""),
         history_ready: record.history_ready === true ? true : record.history_ready === false ? false : null,
@@ -4616,9 +4680,92 @@ function latestScanSummary(message: ReasonMessage): string {
   const missingLabels = uniqueScanLabels((message.confirmation_missing ?? []).map(scanBlockerLabel));
   const groupedMissing = uniqueScanLabels(missingLabels.map(scanBlockerLabel)).filter((label) => !/clean spread|rr/i.test(label));
   const reasonLabels = groupedMissing.length ? groupedMissing : uniqueScanLabels((message.reason.match(/missing ([^.]+)/i)?.[1] ?? "").split(/,| and /).map(scanBlockerLabel));
-  const blockedBy = reasonLabels.length ? `blocked by missing ${joinHumanList(reasonLabels)}` : "blocked by current balanced gates";
+  const blockedBy = reasonLabels.length ? `blocked by missing ${joinHumanList(reasonLabels)}` : "waiting for balanced gate alignment";
   const scoreText = score !== null && required !== null ? `score ${score}/${required}` : "score pending";
-  return `Latest scan: ${scoreText} — ${blockedBy}.`;
+  return `Scan update: ${scoreText}. ${blockedBy}.`;
+}
+
+function isTradeLifecycleMessage(message: ReasonMessage): boolean {
+  return ["Accepted", "OPEN_CONFIRMED", "CLOSED", "CLOSED_WIN", "CLOSED_LOSS"].includes(message.status);
+}
+
+function botStatusLabel(status: ReasonStatus): string {
+  if (status === "SCAN_RESULT") return "SCAN";
+  if (status === "OPEN_CONFIRMED" || status === "Accepted") return "OPEN";
+  if (status === "CLOSED_WIN") return "WIN";
+  if (status === "CLOSED_LOSS") return "LOSS";
+  if (status === "CLOSED") return "CLOSED";
+  if (status === "POSITION_MONITOR") return "MONITOR";
+  if (status === "RISK_HALTED") return "RISK";
+  if (status === "RISK_CLEARED") return "NOTICE";
+  return status;
+}
+
+function cleanBotReasonText(value: string): string {
+  return value
+    .replace(/\b(SCAN_RESULT|CLOSED_LOSS|CLOSED_WIN|OPEN_CONFIRMED|POSITION_MONITOR)\b:?/gi, "")
+    .replace(/\bconfirmation_required\s*=\s*\d+\b/gi, "")
+    .replace(/\brequired round 3 entry rule failed\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function botDecisionText(message: ReasonMessage): string {
+  const symbol = message.symbol || "Signal";
+  const score = Number.isFinite(message.confirmation_score ?? Number.NaN) ? Number(message.confirmation_score) : null;
+  const required = Number.isFinite(message.confirmation_required ?? Number.NaN) ? Number(message.confirmation_required) : 5;
+  const raw = cleanBotReasonText(message.reason || "");
+  if (message.groqGenerated && raw && !/^\s*(score|symbol|ticket|status)\b/i.test(raw)) return raw;
+  if (message.status === "SCAN_RESULT") {
+    const derivedMissing = [
+      message.htf_bias && ["NOT_ALIGNED", "UNCLEAR", "WAIT", "NONE", "FALSE"].includes(message.htf_bias.toUpperCase()) ? "HTF alignment" : "",
+      message.momentum !== true && message.pullback_retest !== true ? "momentum/pullback" : "",
+      message.bos !== true && message.liquidity_sweep !== true && message.fvg !== true && message.fvg_retest !== true ? "structure confirmation" : "",
+    ].filter(Boolean);
+    const missing = uniqueScanLabels([...(message.confirmation_missing ?? []).map(scanBlockerLabel), ...derivedMissing]);
+    if (missing.length) {
+      return `${symbol} is not ready yet. History and spread are fine, but ${joinHumanList(missing.map((item) => item.toLowerCase()))} ${missing.length === 1 ? "is" : "are"} still missing.`;
+    }
+    return `${symbol} scan is close. Score ${score ?? 0}/${required}; waiting for the balanced entry gates to fully align.`;
+  }
+  if (message.status === "CLOSED_LOSS") {
+    const legacy = /legacy/i.test(raw) ? " This trade is marked as a legacy-path loss." : "";
+    const reason = raw || `${symbol} closed at stop loss because the entry did not hold after execution.`;
+    return reason.includes(symbol) ? `${reason}${legacy}` : `${symbol} ${reason.charAt(0).toLowerCase()}${reason.slice(1)}${legacy}`;
+  }
+  if (message.status === "CLOSED_WIN") {
+    return raw && raw.includes(symbol) ? raw : `${symbol} closed in profit. ${raw || "The setup reached its target."}`;
+  }
+  if (message.status === "OPEN_CONFIRMED" || message.status === "Accepted") {
+    const ticket = message.ticket ? ` Ticket ${message.ticket}.` : "";
+    if (raw && !/^symbol:/i.test(raw)) return raw.includes(symbol) ? raw : `${symbol} ${raw.charAt(0).toLowerCase()}${raw.slice(1)}`;
+    return `${symbol} trade opened successfully.${ticket}`;
+  }
+  return raw && raw.includes(symbol) ? raw : `${symbol}: ${raw || "Waiting for the next validation update."}`;
+}
+
+function latestScanCycleMs(messages: ReasonMessage[]): number {
+  const values = messages
+    .filter((message) => message.status === "SCAN_RESULT")
+    .map((message) => new Date(message.timestamp).getTime())
+    .filter(Number.isFinite);
+  return values.length ? Math.max(...values) : 0;
+}
+
+function currentBotMessages(messages: ReasonMessage[]): ReasonMessage[] {
+  const latestScanMs = latestScanCycleMs(messages);
+  return messages
+    .filter((message) => {
+      if (isTradeLifecycleMessage(message)) return true;
+      if (message.status === "SCAN_RESULT") {
+        const messageMs = new Date(message.timestamp).getTime();
+        return !latestScanMs || (Number.isFinite(messageMs) && latestScanMs - messageMs <= 10000);
+      }
+      if (isRiskNoticeStatus(message.status.toUpperCase())) return true;
+      const messageMs = new Date(message.timestamp).getTime();
+      return !latestScanMs || (Number.isFinite(messageMs) && messageMs >= latestScanMs);
+    })
+    .slice(0, 3);
 }
 
 function reasonMessagesSignature(messages: ReasonMessage[]): string {
@@ -4682,7 +4829,7 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
       ? storedMessages
       : storedMessages.filter((message) => !/history sync|insufficient historical data|history.*insufficient|insufficient real candles/i.test(message.reason) && message.validation_status !== "WAITING_FOR_MT5_HISTORY_SYNC"),
   );
-  const latestScan = storedMessages.filter((message) => message.status === "SCAN_RESULT").sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())[0] ?? null;
+  const botMessages = currentBotMessages(visibleMessages);
   return (
     <div className="premium-panel">
       <div className="flex items-start justify-between gap-3">
@@ -4692,16 +4839,15 @@ function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: Reaso
         </div>
         <p className="premium-metric-label">Latest 3 messages</p>
       </div>
-      {latestScan ? <p className="mt-3 rounded-lg border border-sky-300/10 bg-sky-400/[0.06] px-3 py-2 text-xs font-bold text-slate-300">{latestScanSummary(latestScan)}</p> : null}
-      {visibleMessages.length > 0 ? (
+      {botMessages.length > 0 ? (
         <div className="reason-message-list">
-          {visibleMessages.slice(0, 3).map((message) => (
+          {botMessages.map((message) => (
             <article className="reason-message" key={message.event_id || message.id}>
               <div>
-                <span className={`reason-status ${message.status.toLowerCase()}`}>{message.status}</span>
+                <span className={`reason-status ${message.status.toLowerCase()}`}>{botStatusLabel(message.status)}</span>
                 <strong>{message.symbol}</strong>
               </div>
-              <p>{message.reason}</p>
+              <p>{botDecisionText(message)}</p>
               <time>{formatTradeTime(message.timestamp)}</time>
             </article>
           ))}

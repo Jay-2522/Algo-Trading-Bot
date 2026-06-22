@@ -20,6 +20,8 @@ import {
   previewClientDemoTrade,
   pauseAutoValidation,
   rejectExecutionModeSignal,
+  resetAutoValidationClosedTrades,
+  resetAutoValidationOpenTrades,
   resumeAutoValidation,
   runAutoValidationExitManagement,
   sendGuardedClientDemoTrade,
@@ -63,6 +65,7 @@ type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
 type BrokerView = "startrader" | "vantage" | "fxpro";
 type PortalView = "portal" | "traderProfile" | "testEnvironment" | BrokerView | "chat";
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
+type AutoValidationAction = "start" | "pause" | "resume" | "stop" | "emergency-stop" | "reset-open-trades" | "reset-closed-trades";
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
 const TARGET_TRADES = 30;
@@ -1227,8 +1230,16 @@ export function DashboardShell(_: {
     }
   }
 
-  async function handleAutoValidationAction(action: "start" | "pause" | "resume" | "stop" | "emergency-stop") {
+  async function handleAutoValidationAction(action: AutoValidationAction) {
     if (workingAction !== null) return;
+    if (action === "reset-open-trades") {
+      const confirmed = window.confirm("Reset active open trade records for the current Round 3 session only? This will not send MT5 orders or change account balance/equity.");
+      if (!confirmed) return;
+    }
+    if (action === "reset-closed-trades") {
+      const confirmed = window.confirm("Reset active closed trade records for the current Round 3 session only? This clears current-round outcomes and analytics, but does not affect archived rounds or Round 2 history.");
+      if (!confirmed) return;
+    }
     setWorkingAction(`auto-validation-${action}`);
     setTradeError(null);
     showToast("loading", autoValidationLoadingMessage(action));
@@ -1262,6 +1273,10 @@ export function DashboardShell(_: {
               ? await resumeAutoValidation()
               : action === "emergency-stop"
                 ? await emergencyStopAutoValidation()
+                : action === "reset-open-trades"
+                  ? await resetAutoValidationOpenTrades()
+                  : action === "reset-closed-trades"
+                    ? await resetAutoValidationClosedTrades()
                 : await stopAutoValidation();
       setData((current) => {
         const next = { ...current, autoValidation: result };
@@ -1526,7 +1541,7 @@ function ClientPortalOverview({
   lastSuccessfulSync: string | null;
   loading: boolean;
   niftyLive: LivePriceState;
-  onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  onAutoValidationAction: (action: AutoValidationAction) => void;
   openFloatingPnl: number;
   scopedOpenPositions: ApiRecord[];
   todayPnl: number;
@@ -2364,7 +2379,7 @@ function TestEnvironmentView(props: {
   exitManagementState: { loading: boolean; message: string; error: string };
   lastSuccessfulSync: string | null;
   lifecycleSyncState: { loading: boolean; message: string; error: string };
-  onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  onAutoValidationAction: (action: AutoValidationAction) => void;
   onRefresh: () => void;
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
@@ -2712,7 +2727,7 @@ function ClientDashboardView({
   lastSuccessfulSync: string | null;
   lifecycleSyncState: { loading: boolean; message: string; error: string };
   loading: boolean;
-  onAutoValidationAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  onAutoValidationAction: (action: AutoValidationAction) => void;
   onRefresh: () => void;
   onSync: (action: "positions" | "lifecycle" | "exit-management") => void;
   openFloatingPnl: number;
@@ -2834,10 +2849,9 @@ function ClientDashboardView({
               <ClientButton disabled={controlsDisabled || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-resume"} onClick={() => onAutoValidationAction("resume")}>Resume Validation</ClientButton>
               <ClientButton disabled={controlsDisabled || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-pause"} onClick={() => onAutoValidationAction("pause")}>Pause</ClientButton>
               <ClientButton disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-stop"} onClick={() => onAutoValidationAction("stop")}>Stop</ClientButton>
-              <ClientButton danger disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-emergency-stop"} onClick={() => onAutoValidationAction("emergency-stop")}>Emergency Stop</ClientButton>
               <ClientButton disabled={controlsDisabled} loading={workingAction === "dashboard-refresh"} onClick={onRefresh}>Refresh</ClientButton>
-              <ClientButton disabled={controlsDisabled || lifecycleSyncState.loading} loading={lifecycleSyncState.loading} onClick={() => onSync("lifecycle")}>Sync Lifecycle</ClientButton>
-              <ClientButton disabled={controlsDisabled || exitManagementState.loading} loading={exitManagementState.loading} onClick={() => onSync("exit-management")}>Run Exit Management</ClientButton>
+              <ClientButton disabled={controlsDisabled} loading={workingAction === "auto-validation-reset-open-trades"} onClick={() => onAutoValidationAction("reset-open-trades")}>Reset Open Trades</ClientButton>
+              <ClientButton disabled={controlsDisabled} loading={workingAction === "auto-validation-reset-closed-trades"} onClick={() => onAutoValidationAction("reset-closed-trades")}>Reset Closed Trades</ClientButton>
             </div>
           </div>
         </div>
@@ -4010,7 +4024,7 @@ function clientBotState(mode: string, closed: number, open: number, target: numb
   return { label: "Stopped", statusText: "Validation Not Started", tone: "warning" };
 }
 
-function autoValidationLoadingMessage(action: "start" | "pause" | "resume" | "stop" | "emergency-stop"): string {
+function autoValidationLoadingMessage(action: AutoValidationAction): string {
   return action === "start"
     ? "Starting validation..."
     : action === "resume"
@@ -4019,10 +4033,14 @@ function autoValidationLoadingMessage(action: "start" | "pause" | "resume" | "st
         ? "Pausing validation..."
         : action === "stop"
           ? "Stopping validation..."
-          : "Sending emergency stop...";
+          : action === "reset-open-trades"
+            ? "Resetting open trade records..."
+            : action === "reset-closed-trades"
+              ? "Resetting closed trade records..."
+              : "Sending emergency stop...";
 }
 
-function autoValidationSuccessMessage(action: "start" | "pause" | "resume" | "stop" | "emergency-stop"): string {
+function autoValidationSuccessMessage(action: AutoValidationAction): string {
   return action === "start"
     ? "Validation started successfully"
     : action === "resume"
@@ -4031,10 +4049,14 @@ function autoValidationSuccessMessage(action: "start" | "pause" | "resume" | "st
         ? "Validation paused successfully"
         : action === "stop"
           ? "Validation stopped successfully"
-          : "Emergency stop sent successfully";
+          : action === "reset-open-trades"
+            ? "Open trade records reset"
+            : action === "reset-closed-trades"
+              ? "Closed trade records reset"
+              : "Emergency stop sent successfully";
 }
 
-function autoValidationErrorMessage(action: "start" | "pause" | "resume" | "stop" | "emergency-stop"): string {
+function autoValidationErrorMessage(action: AutoValidationAction): string {
   return action === "start"
     ? "Failed to start validation"
     : action === "resume"
@@ -4043,7 +4065,11 @@ function autoValidationErrorMessage(action: "start" | "pause" | "resume" | "stop
         ? "Failed to pause validation"
         : action === "stop"
           ? "Failed to stop validation"
-          : "Failed to send emergency stop";
+          : action === "reset-open-trades"
+            ? "Failed to reset open trades"
+            : action === "reset-closed-trades"
+              ? "Failed to reset closed trades"
+              : "Failed to send emergency stop";
 }
 
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {

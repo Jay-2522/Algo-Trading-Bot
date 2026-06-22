@@ -315,3 +315,11 @@ export function stopAutoValidation(reason = "Stopped from dashboard.") {
 export function emergencyStopAutoValidation() {
   return postJson<ApiRecord>("/auto-validation/emergency-stop");
 }
+
+export function resetAutoValidationOpenTrades() {
+  return postJson<ApiRecord>("/auto-validation/reset-open-trades");
+}
+
+export function resetAutoValidationClosedTrades() {
+  return postJson<ApiRecord>("/auto-validation/reset-closed-trades");
+}

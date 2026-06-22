@@ -211,6 +211,37 @@ class PersistentTradeJournalService:
         self._write_store({"trades": []})
         return {"status": "CLEARED_TEST_DATA_ONLY", "record_count": 0}
 
+    def clear_session_trades_by_status(self, session_id: str, statuses: set[str]) -> dict[str, Any]:
+        normalized_session = self._text(session_id)
+        normalized_statuses = {self._text(status).upper() for status in statuses if self._text(status)}
+        if not normalized_session or not normalized_statuses:
+            return {"status": "NOOP", "session_id": normalized_session, "removed_count": 0, "remaining_count": len(self.list_trades(limit=100000))}
+        store = self._read_store()
+        trades = store.get("trades", [])
+        kept: list[dict[str, Any]] = []
+        removed: list[dict[str, Any]] = []
+        for trade in trades:
+            trade_session = self._text(trade.get("validation_session_id") or trade.get("session_id"))
+            trade_status = self._text(trade.get("status")).upper()
+            if trade_session == normalized_session and trade_status in normalized_statuses:
+                removed.append(trade)
+            else:
+                kept.append(trade)
+        store["trades"] = kept
+        self._write_store(store)
+        return {
+            "status": "CLEARED_SESSION_TRADES",
+            "session_id": normalized_session,
+            "statuses": sorted(normalized_statuses),
+            "removed_count": len(removed),
+            "remaining_count": len(kept),
+            "removed_tickets": [self._text(trade.get("mt5_ticket") or trade.get("ticket")) for trade in removed if self._text(trade.get("mt5_ticket") or trade.get("ticket"))],
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
     def _base_record(self, payload: dict[str, Any], status: str, result: str) -> dict[str, Any]:
         now = utc_now_iso()
         existing = self.get_trade(str(payload.get("trade_id"))) if payload.get("trade_id") else None

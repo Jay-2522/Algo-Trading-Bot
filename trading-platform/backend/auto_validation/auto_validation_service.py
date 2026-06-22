@@ -281,6 +281,68 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
 
+    def reset_active_open_trades(self) -> dict[str, Any]:
+        session_id = str(self.session.get("session_id") or "")
+        if not session_id or self.journal_service is None or not hasattr(self.journal_service, "clear_session_trades_by_status"):
+            return {"status": "RESET_OPEN_TRADES_SKIPPED", "message": "No active session or journal reset support is available.", "session_id": session_id}
+        result = self.journal_service.clear_session_trades_by_status(session_id, {"OPEN", "SENT", "PENDING"})
+        self._sent_signal_keys = set()
+        self._seen_signal_hashes = set()
+        self._open_position_sync_diagnostics = {
+            **self._empty_open_position_sync_diagnostics(),
+            "action": "RESET_OPEN_TRADES",
+            "reset_removed_count": int(result.get("removed_count") or 0),
+            "timestamp": self._timestamp(),
+        }
+        self._refresh_session_metrics()
+        self.session["current_open_trades"] = 0
+        self.session["current_session_open_trades"] = 0
+        self.session["open_trades"] = 0
+        self.session["current_session_opened"] = max(0, int(self.session.get("current_session_opened") or 0) - int(result.get("removed_count") or 0))
+        self._log("RESET_OPEN_TRADES", {"session_id": session_id, "removed_count": result.get("removed_count"), "removed_tickets": result.get("removed_tickets", [])})
+        return {
+            "status": "RESET_OPEN_TRADES_COMPLETE",
+            "message": "Active-session open trade records were cleared. MT5 positions and account equity were not modified.",
+            "session": copy.deepcopy(self.session),
+            "reset": result,
+            "active_session_id": session_id,
+        }
+
+    def reset_active_closed_trades(self) -> dict[str, Any]:
+        session_id = str(self.session.get("session_id") or "")
+        if not session_id or self.journal_service is None or not hasattr(self.journal_service, "clear_session_trades_by_status"):
+            return {"status": "RESET_CLOSED_TRADES_SKIPPED", "message": "No active session or journal reset support is available.", "session_id": session_id}
+        result = self.journal_service.clear_session_trades_by_status(session_id, {"CLOSED"})
+        self._validation_close_reports = [report for report in self._validation_close_reports if str(report.get("validation_session_id") or "") != session_id]
+        self._reported_close_keys = {self._close_report_key(item) for item in self._validation_close_reports if self._close_report_key(item)}
+        self._refresh_session_metrics()
+        self.session.update(
+            {
+                "current_closed_trades": 0,
+                "current_session_closed": 0,
+                "wins": 0,
+                "losses": 0,
+                "win_rate": 0.0,
+                "net_pnl": 0.0,
+                "profit_factor": 0.0,
+                "max_drawdown": 0.0,
+                "remaining_trades_to_target": int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30),
+                "remaining_closed_trades": int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30),
+                "progress_percentage": 0.0,
+                "equity_curve": [],
+                "best_setup_type": "Unavailable",
+                "worst_setup_type": "Unavailable",
+            }
+        )
+        self._log("RESET_CLOSED_TRADES", {"session_id": session_id, "removed_count": result.get("removed_count"), "removed_tickets": result.get("removed_tickets", [])})
+        return {
+            "status": "RESET_CLOSED_TRADES_COMPLETE",
+            "message": "Active-session closed trade records were cleared. Archived rounds, Round 2 history, MT5 positions, and account equity were not modified.",
+            "session": copy.deepcopy(self.session),
+            "reset": result,
+            "active_session_id": session_id,
+        }
+
     def start(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}
         explicit_reset = payload.get("confirm_fresh_start") is True or payload.get("force_new_round") is True

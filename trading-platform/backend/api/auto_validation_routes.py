@@ -83,6 +83,16 @@ async def emergency_stop_auto_validation() -> dict:
     return auto_validation_service.status()
 
 
+@router.post("/reset-open-trades")
+async def reset_auto_validation_open_trades() -> dict:
+    return auto_validation_service.reset_active_open_trades()
+
+
+@router.post("/reset-closed-trades")
+async def reset_auto_validation_closed_trades() -> dict:
+    return auto_validation_service.reset_active_closed_trades()
+
+
 @router.get("/trades")
 async def get_auto_validation_trades() -> list[dict]:
     return auto_validation_service.trades()

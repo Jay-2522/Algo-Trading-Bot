@@ -26,10 +26,10 @@
       "wins": 8
     },
     {
-      "closed_trades": 5,
+      "closed_trades": 0,
       "ended_at": null,
-      "losses": 5,
-      "net_pnl": -4.62,
+      "losses": 0,
+      "net_pnl": 0.0,
       "round_label": "ROUND_3",
       "round_number": 3,
       "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",

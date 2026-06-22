@@ -2,6 +2,9 @@
   "trades": [
     {
       "account_login": "25543844",
+      "active_stats_excluded": true,
+      "active_stats_excluded_at": "2026-06-22T13:43:45.744292+00:00",
+      "active_stats_excluded_reason": "reset_closed_trades",
       "advisory_warnings": [
         "LIQUIDITY_SWEEP_MISSING",
         "BOS_MISSING",
@@ -174,7 +177,198 @@
       "execution_mode": "AUTO_VALIDATION",
       "exit_reason": "STOP_LOSS",
       "failed_rules": [],
+      "final_decision": {
+        "adaptive_level": null,
+        "failed_rules": [
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "final_decision_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session.",
+        "hard_gates_passed": false,
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "SPREAD_ACCEPTABLE",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "raw_status": "REJECTED",
+        "required_score": 5,
+        "round": "ROUND_3",
+        "score": 5,
+        "score_components": {
+          "confirmation_missing": [
+            "liquidity sweep",
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "FVG/imbalance"
+          ],
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": false,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "confirmation_weights": {},
+          "failed_rules": [
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "SPREAD_ACCEPTABLE",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "score_breakdown": {}
+        },
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "status": "REJECTED",
+        "symbol": "EURUSD"
+      },
       "final_decision_reason": "Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was 5, RR was 2.0.",
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "final_decision": {
+          "adaptive_level": null,
+          "failed_rules": [
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "final_decision_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session.",
+          "hard_gates_passed": false,
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "SPREAD_ACCEPTABLE",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "raw_status": "REJECTED",
+          "required_score": 5,
+          "round": "ROUND_3",
+          "score": 5,
+          "score_components": {
+            "confirmation_missing": [
+              "liquidity sweep",
+              "BOS",
+              "pullback/retest",
+              "momentum/displacement",
+              "ATR volatility",
+              "clean spread",
+              "RR >= 2.0",
+              "London/NY session"
+            ],
+            "confirmation_passed": [
+              "H4/H1 trend alignment",
+              "FVG/imbalance"
+            ],
+            "confirmation_states": {
+              "ATR_VOLATILITY": false,
+              "BOS": false,
+              "FVG_IMBALANCE": true,
+              "LIQUIDITY_SWEEP": false,
+              "MOMENTUM_DISPLACEMENT": false,
+              "PULLBACK_RETEST": false,
+              "RR_2_0": false,
+              "SESSION_LONDON_NY_BONUS": false,
+              "SPREAD_CLEAN": false,
+              "TREND_ALIGNMENT": true
+            },
+            "confirmation_weights": {},
+            "failed_rules": [
+              "ROUND_3_SCORE_BELOW_THRESHOLD"
+            ],
+            "passed_rules": [
+              "H4_HISTORY_AVAILABLE",
+              "M15_HISTORY_AVAILABLE",
+              "RR_2_0_OR_HIGHER",
+              "SPREAD_ACCEPTABLE",
+              "RISK_APPROVED",
+              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+              "STRONG_CONFIRMATIONS_2_PLUS"
+            ],
+            "score_breakdown": {}
+          },
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "status": "REJECTED",
+          "symbol": "EURUSD"
+        },
+        "legacy_required_detected": true,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 3,
+        "recorded_confirmation_score": 5,
+        "round3_confirmation_required": 5,
+        "round3_failed_rules": [
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "round3_final_decision": "REJECTED",
+        "round3_rejected_detected": true,
+        "score_components": {
+          "confirmation_missing": [
+            "liquidity sweep",
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "FVG/imbalance"
+          ],
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": false,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "confirmation_weights": {},
+          "failed_rules": [
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "SPREAD_ACCEPTABLE",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "score_breakdown": {}
+        },
+        "symbol": "EURUSD",
+        "ticket": "1462320548",
+        "timestamp": "2026-06-20T06:57:41.330Z"
+      },
+      "legacy_path_loss": true,
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
@@ -196,6 +390,48 @@
       "realized_pnl": -0.92,
       "result": "LOSS",
       "risk_reward_ratio": 2,
+      "score_components": {
+        "confirmation_missing": [
+          "liquidity sweep",
+          "BOS",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "confirmation_passed": [
+          "H4/H1 trend alignment",
+          "FVG/imbalance"
+        ],
+        "confirmation_states": {
+          "ATR_VOLATILITY": false,
+          "BOS": false,
+          "FVG_IMBALANCE": true,
+          "LIQUIDITY_SWEEP": false,
+          "MOMENTUM_DISPLACEMENT": false,
+          "PULLBACK_RETEST": false,
+          "RR_2_0": false,
+          "SESSION_LONDON_NY_BONUS": false,
+          "SPREAD_CLEAN": false,
+          "TREND_ALIGNMENT": true
+        },
+        "confirmation_weights": {},
+        "failed_rules": [
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "SPREAD_ACCEPTABLE",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "score_breakdown": {}
+      },
       "server": "VantageMarkets-Demo",
       "setup_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session.",
       "side": "SELL",
@@ -568,244 +804,14 @@
       "take_profit": 1.14258,
       "total_pnl": -0.92,
       "trade_id": "mt5_demo_1462320548",
-      "updated_at": "2026-06-19T19:12:30.348928+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "legacy_path_loss": true,
-      "legacy_execution_audit": {
-        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
-        "ticket": "1462320548",
-        "symbol": "EURUSD",
-        "legacy_required_detected": true,
-        "round3_rejected_detected": true,
-        "missing_final_decision_detected": true,
-        "recorded_confirmation_required": 3,
-        "round3_confirmation_required": 5,
-        "recorded_confirmation_score": 5,
-        "round3_final_decision": "REJECTED",
-        "round3_failed_rules": [
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ],
-        "final_decision": {
-          "status": "REJECTED",
-          "raw_status": "REJECTED",
-          "round": "ROUND_3",
-          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-          "symbol": "EURUSD",
-          "adaptive_level": null,
-          "score": 5,
-          "required_score": 5,
-          "hard_gates_passed": false,
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "SPREAD_ACCEPTABLE",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ],
-          "score_components": {
-            "confirmation_states": {
-              "ATR_VOLATILITY": false,
-              "BOS": false,
-              "FVG_IMBALANCE": true,
-              "LIQUIDITY_SWEEP": false,
-              "MOMENTUM_DISPLACEMENT": false,
-              "PULLBACK_RETEST": false,
-              "RR_2_0": false,
-              "SESSION_LONDON_NY_BONUS": false,
-              "SPREAD_CLEAN": false,
-              "TREND_ALIGNMENT": true
-            },
-            "score_breakdown": {},
-            "confirmation_weights": {},
-            "confirmation_passed": [
-              "H4/H1 trend alignment",
-              "FVG/imbalance"
-            ],
-            "confirmation_missing": [
-              "liquidity sweep",
-              "BOS",
-              "pullback/retest",
-              "momentum/displacement",
-              "ATR volatility",
-              "clean spread",
-              "RR >= 2.0",
-              "London/NY session"
-            ],
-            "passed_rules": [
-              "H4_HISTORY_AVAILABLE",
-              "M15_HISTORY_AVAILABLE",
-              "RR_2_0_OR_HIGHER",
-              "SPREAD_ACCEPTABLE",
-              "RISK_APPROVED",
-              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-              "STRONG_CONFIRMATIONS_2_PLUS"
-            ],
-            "failed_rules": [
-              "ROUND_3_SCORE_BELOW_THRESHOLD"
-            ]
-          },
-          "final_decision_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session."
-        },
-        "score_components": {
-          "confirmation_states": {
-            "ATR_VOLATILITY": false,
-            "BOS": false,
-            "FVG_IMBALANCE": true,
-            "LIQUIDITY_SWEEP": false,
-            "MOMENTUM_DISPLACEMENT": false,
-            "PULLBACK_RETEST": false,
-            "RR_2_0": false,
-            "SESSION_LONDON_NY_BONUS": false,
-            "SPREAD_CLEAN": false,
-            "TREND_ALIGNMENT": true
-          },
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "FVG/imbalance"
-          ],
-          "confirmation_missing": [
-            "liquidity sweep",
-            "BOS",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "SPREAD_ACCEPTABLE",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ]
-        },
-        "timestamp": "2026-06-20T06:57:41.330Z"
-      },
-      "final_decision": {
-        "status": "REJECTED",
-        "raw_status": "REJECTED",
-        "round": "ROUND_3",
-        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-        "symbol": "EURUSD",
-        "adaptive_level": null,
-        "score": 5,
-        "required_score": 5,
-        "hard_gates_passed": false,
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "SPREAD_ACCEPTABLE",
-          "RISK_APPROVED",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS"
-        ],
-        "failed_rules": [
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ],
-        "score_components": {
-          "confirmation_states": {
-            "ATR_VOLATILITY": false,
-            "BOS": false,
-            "FVG_IMBALANCE": true,
-            "LIQUIDITY_SWEEP": false,
-            "MOMENTUM_DISPLACEMENT": false,
-            "PULLBACK_RETEST": false,
-            "RR_2_0": false,
-            "SESSION_LONDON_NY_BONUS": false,
-            "SPREAD_CLEAN": false,
-            "TREND_ALIGNMENT": true
-          },
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "FVG/imbalance"
-          ],
-          "confirmation_missing": [
-            "liquidity sweep",
-            "BOS",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "SPREAD_ACCEPTABLE",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ]
-        },
-        "final_decision_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session."
-      },
-      "score_components": {
-        "confirmation_states": {
-          "ATR_VOLATILITY": false,
-          "BOS": false,
-          "FVG_IMBALANCE": true,
-          "LIQUIDITY_SWEEP": false,
-          "MOMENTUM_DISPLACEMENT": false,
-          "PULLBACK_RETEST": false,
-          "RR_2_0": false,
-          "SESSION_LONDON_NY_BONUS": false,
-          "SPREAD_CLEAN": false,
-          "TREND_ALIGNMENT": true
-        },
-        "score_breakdown": {},
-        "confirmation_weights": {},
-        "confirmation_passed": [
-          "H4/H1 trend alignment",
-          "FVG/imbalance"
-        ],
-        "confirmation_missing": [
-          "liquidity sweep",
-          "BOS",
-          "pullback/retest",
-          "momentum/displacement",
-          "ATR volatility",
-          "clean spread",
-          "RR >= 2.0",
-          "London/NY session"
-        ],
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "SPREAD_ACCEPTABLE",
-          "RISK_APPROVED",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS"
-        ],
-        "failed_rules": [
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ]
-      }
+      "updated_at": "2026-06-22T13:43:45.744292+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
     },
     {
       "account_login": "25543844",
+      "active_stats_excluded": true,
+      "active_stats_excluded_at": "2026-06-22T13:43:45.744292+00:00",
+      "active_stats_excluded_reason": "reset_closed_trades",
       "advisory_warnings": [
         "BOS_MISSING",
         "PULLBACK_RETEST_MISSING",
@@ -931,7 +937,7 @@
         "entry_quality": "Weak",
         "entry_time": "2026-06-19T07:13:44.449095+00:00",
         "generated_at": "2026-06-19T19:12:30.272317+00:00",
-        "max_adverse_excursion": 0.00005,
+        "max_adverse_excursion": 5e-05,
         "max_favorable_excursion": 0.00253,
         "missing_confirmation": "BOS, pullback/retest, momentum/displacement, and ATR volatility",
         "pnl": -0.96,
@@ -977,7 +983,199 @@
       "execution_mode": "AUTO_VALIDATION",
       "exit_reason": "STOP_LOSS",
       "failed_rules": [],
+      "final_decision": {
+        "adaptive_level": null,
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "final_decision_reason": "Rejected: spread too high.",
+        "hard_gates_passed": false,
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "raw_status": "REJECTED",
+        "required_score": 5,
+        "round": "ROUND_3",
+        "score": 6,
+        "score_components": {
+          "confirmation_missing": [
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep",
+            "FVG/imbalance"
+          ],
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "confirmation_weights": {},
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "score_breakdown": {}
+        },
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "status": "REJECTED",
+        "symbol": "EURUSD"
+      },
       "final_decision_reason": "Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was 6, RR was 2.0.",
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "final_decision": {
+          "adaptive_level": null,
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "final_decision_reason": "Rejected: spread too high.",
+          "hard_gates_passed": false,
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "raw_status": "REJECTED",
+          "required_score": 5,
+          "round": "ROUND_3",
+          "score": 6,
+          "score_components": {
+            "confirmation_missing": [
+              "BOS",
+              "pullback/retest",
+              "momentum/displacement",
+              "ATR volatility",
+              "clean spread",
+              "RR >= 2.0",
+              "London/NY session"
+            ],
+            "confirmation_passed": [
+              "H4/H1 trend alignment",
+              "liquidity sweep",
+              "FVG/imbalance"
+            ],
+            "confirmation_states": {
+              "ATR_VOLATILITY": false,
+              "BOS": false,
+              "FVG_IMBALANCE": true,
+              "LIQUIDITY_SWEEP": true,
+              "MOMENTUM_DISPLACEMENT": false,
+              "PULLBACK_RETEST": false,
+              "RR_2_0": false,
+              "SESSION_LONDON_NY_BONUS": false,
+              "SPREAD_CLEAN": false,
+              "TREND_ALIGNMENT": true
+            },
+            "confirmation_weights": {},
+            "failed_rules": [
+              "SPREAD_TOO_HIGH",
+              "ROUND_3_SCORE_BELOW_THRESHOLD"
+            ],
+            "passed_rules": [
+              "H4_HISTORY_AVAILABLE",
+              "M15_HISTORY_AVAILABLE",
+              "RR_2_0_OR_HIGHER",
+              "RISK_APPROVED",
+              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+              "STRONG_CONFIRMATIONS_2_PLUS"
+            ],
+            "score_breakdown": {}
+          },
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "status": "REJECTED",
+          "symbol": "EURUSD"
+        },
+        "legacy_required_detected": true,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 3,
+        "recorded_confirmation_score": 6,
+        "round3_confirmation_required": 5,
+        "round3_failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "round3_final_decision": "REJECTED",
+        "round3_rejected_detected": true,
+        "score_components": {
+          "confirmation_missing": [
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep",
+            "FVG/imbalance"
+          ],
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "confirmation_weights": {},
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "score_breakdown": {}
+        },
+        "symbol": "EURUSD",
+        "ticket": "1462396401",
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "legacy_path_loss": true,
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
@@ -999,6 +1197,48 @@
       "realized_pnl": -0.96,
       "result": "LOSS",
       "risk_reward_ratio": 2,
+      "score_components": {
+        "confirmation_missing": [
+          "BOS",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "confirmation_passed": [
+          "H4/H1 trend alignment",
+          "liquidity sweep",
+          "FVG/imbalance"
+        ],
+        "confirmation_states": {
+          "ATR_VOLATILITY": false,
+          "BOS": false,
+          "FVG_IMBALANCE": true,
+          "LIQUIDITY_SWEEP": true,
+          "MOMENTUM_DISPLACEMENT": false,
+          "PULLBACK_RETEST": false,
+          "RR_2_0": false,
+          "SESSION_LONDON_NY_BONUS": false,
+          "SPREAD_CLEAN": false,
+          "TREND_ALIGNMENT": true
+        },
+        "confirmation_weights": {},
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "score_breakdown": {}
+      },
       "server": "VantageMarkets-Demo",
       "setup_reason": "Rejected: spread too high.",
       "side": "SELL",
@@ -1357,245 +1597,14 @@
       "take_profit": 1.14246,
       "total_pnl": -0.96,
       "trade_id": "mt5_demo_1462396401",
-      "updated_at": "2026-06-19T19:12:30.272317+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "legacy_path_loss": true,
-      "legacy_execution_audit": {
-        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
-        "ticket": "1462396401",
-        "symbol": "EURUSD",
-        "legacy_required_detected": true,
-        "round3_rejected_detected": true,
-        "missing_final_decision_detected": true,
-        "recorded_confirmation_required": 3,
-        "round3_confirmation_required": 5,
-        "recorded_confirmation_score": 6,
-        "round3_final_decision": "REJECTED",
-        "round3_failed_rules": [
-          "SPREAD_TOO_HIGH",
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ],
-        "final_decision": {
-          "status": "REJECTED",
-          "raw_status": "REJECTED",
-          "round": "ROUND_3",
-          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-          "symbol": "EURUSD",
-          "adaptive_level": null,
-          "score": 6,
-          "required_score": 5,
-          "hard_gates_passed": false,
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "SPREAD_TOO_HIGH",
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ],
-          "score_components": {
-            "confirmation_states": {
-              "ATR_VOLATILITY": false,
-              "BOS": false,
-              "FVG_IMBALANCE": true,
-              "LIQUIDITY_SWEEP": true,
-              "MOMENTUM_DISPLACEMENT": false,
-              "PULLBACK_RETEST": false,
-              "RR_2_0": false,
-              "SESSION_LONDON_NY_BONUS": false,
-              "SPREAD_CLEAN": false,
-              "TREND_ALIGNMENT": true
-            },
-            "score_breakdown": {},
-            "confirmation_weights": {},
-            "confirmation_passed": [
-              "H4/H1 trend alignment",
-              "liquidity sweep",
-              "FVG/imbalance"
-            ],
-            "confirmation_missing": [
-              "BOS",
-              "pullback/retest",
-              "momentum/displacement",
-              "ATR volatility",
-              "clean spread",
-              "RR >= 2.0",
-              "London/NY session"
-            ],
-            "passed_rules": [
-              "H4_HISTORY_AVAILABLE",
-              "M15_HISTORY_AVAILABLE",
-              "RR_2_0_OR_HIGHER",
-              "RISK_APPROVED",
-              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-              "STRONG_CONFIRMATIONS_2_PLUS"
-            ],
-            "failed_rules": [
-              "SPREAD_TOO_HIGH",
-              "ROUND_3_SCORE_BELOW_THRESHOLD"
-            ]
-          },
-          "final_decision_reason": "Rejected: spread too high."
-        },
-        "score_components": {
-          "confirmation_states": {
-            "ATR_VOLATILITY": false,
-            "BOS": false,
-            "FVG_IMBALANCE": true,
-            "LIQUIDITY_SWEEP": true,
-            "MOMENTUM_DISPLACEMENT": false,
-            "PULLBACK_RETEST": false,
-            "RR_2_0": false,
-            "SESSION_LONDON_NY_BONUS": false,
-            "SPREAD_CLEAN": false,
-            "TREND_ALIGNMENT": true
-          },
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "liquidity sweep",
-            "FVG/imbalance"
-          ],
-          "confirmation_missing": [
-            "BOS",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "SPREAD_TOO_HIGH",
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ]
-        },
-        "timestamp": "2026-06-20T06:57:41.332Z"
-      },
-      "final_decision": {
-        "status": "REJECTED",
-        "raw_status": "REJECTED",
-        "round": "ROUND_3",
-        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-        "symbol": "EURUSD",
-        "adaptive_level": null,
-        "score": 6,
-        "required_score": 5,
-        "hard_gates_passed": false,
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "RISK_APPROVED",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS"
-        ],
-        "failed_rules": [
-          "SPREAD_TOO_HIGH",
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ],
-        "score_components": {
-          "confirmation_states": {
-            "ATR_VOLATILITY": false,
-            "BOS": false,
-            "FVG_IMBALANCE": true,
-            "LIQUIDITY_SWEEP": true,
-            "MOMENTUM_DISPLACEMENT": false,
-            "PULLBACK_RETEST": false,
-            "RR_2_0": false,
-            "SESSION_LONDON_NY_BONUS": false,
-            "SPREAD_CLEAN": false,
-            "TREND_ALIGNMENT": true
-          },
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "liquidity sweep",
-            "FVG/imbalance"
-          ],
-          "confirmation_missing": [
-            "BOS",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "SPREAD_TOO_HIGH",
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ]
-        },
-        "final_decision_reason": "Rejected: spread too high."
-      },
-      "score_components": {
-        "confirmation_states": {
-          "ATR_VOLATILITY": false,
-          "BOS": false,
-          "FVG_IMBALANCE": true,
-          "LIQUIDITY_SWEEP": true,
-          "MOMENTUM_DISPLACEMENT": false,
-          "PULLBACK_RETEST": false,
-          "RR_2_0": false,
-          "SESSION_LONDON_NY_BONUS": false,
-          "SPREAD_CLEAN": false,
-          "TREND_ALIGNMENT": true
-        },
-        "score_breakdown": {},
-        "confirmation_weights": {},
-        "confirmation_passed": [
-          "H4/H1 trend alignment",
-          "liquidity sweep",
-          "FVG/imbalance"
-        ],
-        "confirmation_missing": [
-          "BOS",
-          "pullback/retest",
-          "momentum/displacement",
-          "ATR volatility",
-          "clean spread",
-          "RR >= 2.0",
-          "London/NY session"
-        ],
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "RISK_APPROVED",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS"
-        ],
-        "failed_rules": [
-          "SPREAD_TOO_HIGH",
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ]
-      }
+      "updated_at": "2026-06-22T13:43:45.744292+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
     },
     {
       "account_login": "",
+      "active_stats_excluded": true,
+      "active_stats_excluded_at": "2026-06-22T13:43:45.744292+00:00",
+      "active_stats_excluded_reason": "reset_closed_trades",
       "advisory_warnings": [],
       "autopsy": {
         "adaptive_level": null,
@@ -1747,7 +1756,77 @@
       "execution_mode": "",
       "exit_reason": "STOP_LOSS",
       "failed_rules": [],
+      "final_decision": {
+        "adaptive_level": null,
+        "failed_rules": [],
+        "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision.",
+        "hard_gates_passed": false,
+        "passed_rules": [],
+        "raw_status": "UNKNOWN",
+        "required_score": 0,
+        "round": "ROUND_3",
+        "score": 0,
+        "score_components": {
+          "confirmation_missing": [],
+          "confirmation_passed": [],
+          "confirmation_states": {},
+          "confirmation_weights": {},
+          "failed_rules": [],
+          "passed_rules": [],
+          "score_breakdown": {}
+        },
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "status": "UNKNOWN",
+        "symbol": "EURUSD"
+      },
       "final_decision_reason": "",
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "final_decision": {
+          "adaptive_level": null,
+          "failed_rules": [],
+          "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision.",
+          "hard_gates_passed": false,
+          "passed_rules": [],
+          "raw_status": "UNKNOWN",
+          "required_score": 0,
+          "round": "ROUND_3",
+          "score": 0,
+          "score_components": {
+            "confirmation_missing": [],
+            "confirmation_passed": [],
+            "confirmation_states": {},
+            "confirmation_weights": {},
+            "failed_rules": [],
+            "passed_rules": [],
+            "score_breakdown": {}
+          },
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "status": "UNKNOWN",
+          "symbol": "EURUSD"
+        },
+        "legacy_required_detected": false,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 0,
+        "recorded_confirmation_score": 0,
+        "round3_confirmation_required": null,
+        "round3_failed_rules": [],
+        "round3_final_decision": "UNKNOWN",
+        "round3_rejected_detected": false,
+        "score_components": {
+          "confirmation_missing": [],
+          "confirmation_passed": [],
+          "confirmation_states": {},
+          "confirmation_weights": {},
+          "failed_rules": [],
+          "passed_rules": [],
+          "score_breakdown": {}
+        },
+        "symbol": "EURUSD",
+        "ticket": "1462168751",
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "legacy_path_loss": true,
       "live_execution_enabled": false,
       "lot": null,
       "mt5_comment": "",
@@ -1761,6 +1840,15 @@
       "realized_pnl": -0.88,
       "result": "LOSS",
       "risk_reward_ratio": 2,
+      "score_components": {
+        "confirmation_missing": [],
+        "confirmation_passed": [],
+        "confirmation_states": {},
+        "confirmation_weights": {},
+        "failed_rules": [],
+        "passed_rules": [],
+        "score_breakdown": {}
+      },
       "server": "",
       "setup_reason": "",
       "side": "SELL",
@@ -1777,90 +1865,14 @@
       "take_profit": null,
       "total_pnl": -0.88,
       "trade_id": "mt5_demo_1462168751",
-      "updated_at": "2026-06-19T19:12:30.191220+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "legacy_path_loss": true,
-      "legacy_execution_audit": {
-        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
-        "ticket": "1462168751",
-        "symbol": "EURUSD",
-        "legacy_required_detected": false,
-        "round3_rejected_detected": false,
-        "missing_final_decision_detected": true,
-        "recorded_confirmation_required": 0,
-        "round3_confirmation_required": null,
-        "recorded_confirmation_score": 0,
-        "round3_final_decision": "UNKNOWN",
-        "round3_failed_rules": [],
-        "final_decision": {
-          "status": "UNKNOWN",
-          "raw_status": "UNKNOWN",
-          "round": "ROUND_3",
-          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-          "symbol": "EURUSD",
-          "adaptive_level": null,
-          "score": 0,
-          "required_score": 0,
-          "hard_gates_passed": false,
-          "passed_rules": [],
-          "failed_rules": [],
-          "score_components": {
-            "confirmation_states": {},
-            "score_breakdown": {},
-            "confirmation_weights": {},
-            "confirmation_passed": [],
-            "confirmation_missing": [],
-            "passed_rules": [],
-            "failed_rules": []
-          },
-          "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
-        },
-        "score_components": {
-          "confirmation_states": {},
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [],
-          "confirmation_missing": [],
-          "passed_rules": [],
-          "failed_rules": []
-        },
-        "timestamp": "2026-06-20T06:57:41.332Z"
-      },
-      "final_decision": {
-        "status": "UNKNOWN",
-        "raw_status": "UNKNOWN",
-        "round": "ROUND_3",
-        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-        "symbol": "EURUSD",
-        "adaptive_level": null,
-        "score": 0,
-        "required_score": 0,
-        "hard_gates_passed": false,
-        "passed_rules": [],
-        "failed_rules": [],
-        "score_components": {
-          "confirmation_states": {},
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [],
-          "confirmation_missing": [],
-          "passed_rules": [],
-          "failed_rules": []
-        },
-        "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
-      },
-      "score_components": {
-        "confirmation_states": {},
-        "score_breakdown": {},
-        "confirmation_weights": {},
-        "confirmation_passed": [],
-        "confirmation_missing": [],
-        "passed_rules": [],
-        "failed_rules": []
-      }
+      "updated_at": "2026-06-22T13:43:45.744292+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
     },
     {
       "account_login": "",
+      "active_stats_excluded": true,
+      "active_stats_excluded_at": "2026-06-22T13:43:45.744292+00:00",
+      "active_stats_excluded_reason": "reset_closed_trades",
       "advisory_warnings": [],
       "autopsy": {
         "adaptive_level": null,
@@ -2012,7 +2024,77 @@
       "execution_mode": "",
       "exit_reason": "STOP_LOSS",
       "failed_rules": [],
+      "final_decision": {
+        "adaptive_level": null,
+        "failed_rules": [],
+        "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision.",
+        "hard_gates_passed": false,
+        "passed_rules": [],
+        "raw_status": "UNKNOWN",
+        "required_score": 0,
+        "round": "ROUND_3",
+        "score": 0,
+        "score_components": {
+          "confirmation_missing": [],
+          "confirmation_passed": [],
+          "confirmation_states": {},
+          "confirmation_weights": {},
+          "failed_rules": [],
+          "passed_rules": [],
+          "score_breakdown": {}
+        },
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "status": "UNKNOWN",
+        "symbol": "EURUSD"
+      },
       "final_decision_reason": "",
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "final_decision": {
+          "adaptive_level": null,
+          "failed_rules": [],
+          "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision.",
+          "hard_gates_passed": false,
+          "passed_rules": [],
+          "raw_status": "UNKNOWN",
+          "required_score": 0,
+          "round": "ROUND_3",
+          "score": 0,
+          "score_components": {
+            "confirmation_missing": [],
+            "confirmation_passed": [],
+            "confirmation_states": {},
+            "confirmation_weights": {},
+            "failed_rules": [],
+            "passed_rules": [],
+            "score_breakdown": {}
+          },
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "status": "UNKNOWN",
+          "symbol": "EURUSD"
+        },
+        "legacy_required_detected": false,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 0,
+        "recorded_confirmation_score": 0,
+        "round3_confirmation_required": null,
+        "round3_failed_rules": [],
+        "round3_final_decision": "UNKNOWN",
+        "round3_rejected_detected": false,
+        "score_components": {
+          "confirmation_missing": [],
+          "confirmation_passed": [],
+          "confirmation_states": {},
+          "confirmation_weights": {},
+          "failed_rules": [],
+          "passed_rules": [],
+          "score_breakdown": {}
+        },
+        "symbol": "EURUSD",
+        "ticket": "1462119261",
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "legacy_path_loss": true,
       "live_execution_enabled": false,
       "lot": null,
       "mt5_comment": "",
@@ -2026,6 +2108,15 @@
       "realized_pnl": -0.95,
       "result": "LOSS",
       "risk_reward_ratio": 2,
+      "score_components": {
+        "confirmation_missing": [],
+        "confirmation_passed": [],
+        "confirmation_states": {},
+        "confirmation_weights": {},
+        "failed_rules": [],
+        "passed_rules": [],
+        "score_breakdown": {}
+      },
       "server": "",
       "setup_reason": "",
       "side": "SELL",
@@ -2042,87 +2133,8 @@
       "take_profit": null,
       "total_pnl": -0.95,
       "trade_id": "mt5_demo_1462119261",
-      "updated_at": "2026-06-19T19:12:30.117490+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "legacy_path_loss": true,
-      "legacy_execution_audit": {
-        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
-        "ticket": "1462119261",
-        "symbol": "EURUSD",
-        "legacy_required_detected": false,
-        "round3_rejected_detected": false,
-        "missing_final_decision_detected": true,
-        "recorded_confirmation_required": 0,
-        "round3_confirmation_required": null,
-        "recorded_confirmation_score": 0,
-        "round3_final_decision": "UNKNOWN",
-        "round3_failed_rules": [],
-        "final_decision": {
-          "status": "UNKNOWN",
-          "raw_status": "UNKNOWN",
-          "round": "ROUND_3",
-          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-          "symbol": "EURUSD",
-          "adaptive_level": null,
-          "score": 0,
-          "required_score": 0,
-          "hard_gates_passed": false,
-          "passed_rules": [],
-          "failed_rules": [],
-          "score_components": {
-            "confirmation_states": {},
-            "score_breakdown": {},
-            "confirmation_weights": {},
-            "confirmation_passed": [],
-            "confirmation_missing": [],
-            "passed_rules": [],
-            "failed_rules": []
-          },
-          "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
-        },
-        "score_components": {
-          "confirmation_states": {},
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [],
-          "confirmation_missing": [],
-          "passed_rules": [],
-          "failed_rules": []
-        },
-        "timestamp": "2026-06-20T06:57:41.332Z"
-      },
-      "final_decision": {
-        "status": "UNKNOWN",
-        "raw_status": "UNKNOWN",
-        "round": "ROUND_3",
-        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-        "symbol": "EURUSD",
-        "adaptive_level": null,
-        "score": 0,
-        "required_score": 0,
-        "hard_gates_passed": false,
-        "passed_rules": [],
-        "failed_rules": [],
-        "score_components": {
-          "confirmation_states": {},
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [],
-          "confirmation_missing": [],
-          "passed_rules": [],
-          "failed_rules": []
-        },
-        "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
-      },
-      "score_components": {
-        "confirmation_states": {},
-        "score_breakdown": {},
-        "confirmation_weights": {},
-        "confirmation_passed": [],
-        "confirmation_missing": [],
-        "passed_rules": [],
-        "failed_rules": []
-      }
+      "updated_at": "2026-06-22T13:43:45.744292+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
     },
     {
       "account_login": "",
@@ -2319,6 +2331,9 @@
     },
     {
       "account_login": "25543844",
+      "active_stats_excluded": true,
+      "active_stats_excluded_at": "2026-06-22T13:43:45.744292+00:00",
+      "active_stats_excluded_reason": "reset_closed_trades",
       "advisory_warnings": [
         "BOS_MISSING",
         "FVG_IMBALANCE_MISSING",
@@ -2491,7 +2506,199 @@
       "execution_mode": "AUTO_VALIDATION",
       "exit_reason": "STOP_LOSS",
       "failed_rules": [],
+      "final_decision": {
+        "adaptive_level": null,
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "final_decision_reason": "Rejected: spread too high.",
+        "hard_gates_passed": false,
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "raw_status": "REJECTED",
+        "required_score": 5,
+        "round": "ROUND_3",
+        "score": 5,
+        "score_components": {
+          "confirmation_missing": [
+            "BOS",
+            "FVG/imbalance",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep"
+          ],
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": false,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "confirmation_weights": {},
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "score_breakdown": {}
+        },
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "status": "REJECTED",
+        "symbol": "EURUSD"
+      },
       "final_decision_reason": "Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was 5, RR was 2.0.",
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "final_decision": {
+          "adaptive_level": null,
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "final_decision_reason": "Rejected: spread too high.",
+          "hard_gates_passed": false,
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "raw_status": "REJECTED",
+          "required_score": 5,
+          "round": "ROUND_3",
+          "score": 5,
+          "score_components": {
+            "confirmation_missing": [
+              "BOS",
+              "FVG/imbalance",
+              "pullback/retest",
+              "momentum/displacement",
+              "ATR volatility",
+              "clean spread",
+              "RR >= 2.0",
+              "London/NY session"
+            ],
+            "confirmation_passed": [
+              "H4/H1 trend alignment",
+              "liquidity sweep"
+            ],
+            "confirmation_states": {
+              "ATR_VOLATILITY": false,
+              "BOS": false,
+              "FVG_IMBALANCE": false,
+              "LIQUIDITY_SWEEP": true,
+              "MOMENTUM_DISPLACEMENT": false,
+              "PULLBACK_RETEST": false,
+              "RR_2_0": false,
+              "SESSION_LONDON_NY_BONUS": false,
+              "SPREAD_CLEAN": false,
+              "TREND_ALIGNMENT": true
+            },
+            "confirmation_weights": {},
+            "failed_rules": [
+              "SPREAD_TOO_HIGH",
+              "ROUND_3_SCORE_BELOW_THRESHOLD"
+            ],
+            "passed_rules": [
+              "H4_HISTORY_AVAILABLE",
+              "M15_HISTORY_AVAILABLE",
+              "RR_2_0_OR_HIGHER",
+              "RISK_APPROVED",
+              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+              "STRONG_CONFIRMATIONS_2_PLUS"
+            ],
+            "score_breakdown": {}
+          },
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "status": "REJECTED",
+          "symbol": "EURUSD"
+        },
+        "legacy_required_detected": true,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 3,
+        "recorded_confirmation_score": 5,
+        "round3_confirmation_required": 5,
+        "round3_failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "round3_final_decision": "REJECTED",
+        "round3_rejected_detected": true,
+        "score_components": {
+          "confirmation_missing": [
+            "BOS",
+            "FVG/imbalance",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep"
+          ],
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": false,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "confirmation_weights": {},
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "score_breakdown": {}
+        },
+        "symbol": "EURUSD",
+        "ticket": "1462695961",
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "legacy_path_loss": true,
       "live_execution_enabled": false,
       "lot": 0.01,
       "mt5_comment": "Request executed",
@@ -2513,6 +2720,48 @@
       "realized_pnl": -0.91,
       "result": "LOSS",
       "risk_reward_ratio": 2,
+      "score_components": {
+        "confirmation_missing": [
+          "BOS",
+          "FVG/imbalance",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "confirmation_passed": [
+          "H4/H1 trend alignment",
+          "liquidity sweep"
+        ],
+        "confirmation_states": {
+          "ATR_VOLATILITY": false,
+          "BOS": false,
+          "FVG_IMBALANCE": false,
+          "LIQUIDITY_SWEEP": true,
+          "MOMENTUM_DISPLACEMENT": false,
+          "PULLBACK_RETEST": false,
+          "RR_2_0": false,
+          "SESSION_LONDON_NY_BONUS": false,
+          "SPREAD_CLEAN": false,
+          "TREND_ALIGNMENT": true
+        },
+        "confirmation_weights": {},
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "score_breakdown": {}
+      },
       "server": "VantageMarkets-Demo",
       "setup_reason": "Rejected: spread too high.",
       "side": "SELL",
@@ -2874,242 +3123,8 @@
       "take_profit": 1.14363,
       "total_pnl": -0.91,
       "trade_id": "mt5_demo_1462695961",
-      "updated_at": "2026-06-19T19:12:30.031296+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "legacy_path_loss": true,
-      "legacy_execution_audit": {
-        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
-        "ticket": "1462695961",
-        "symbol": "EURUSD",
-        "legacy_required_detected": true,
-        "round3_rejected_detected": true,
-        "missing_final_decision_detected": true,
-        "recorded_confirmation_required": 3,
-        "round3_confirmation_required": 5,
-        "recorded_confirmation_score": 5,
-        "round3_final_decision": "REJECTED",
-        "round3_failed_rules": [
-          "SPREAD_TOO_HIGH",
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ],
-        "final_decision": {
-          "status": "REJECTED",
-          "raw_status": "REJECTED",
-          "round": "ROUND_3",
-          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-          "symbol": "EURUSD",
-          "adaptive_level": null,
-          "score": 5,
-          "required_score": 5,
-          "hard_gates_passed": false,
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "SPREAD_TOO_HIGH",
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ],
-          "score_components": {
-            "confirmation_states": {
-              "ATR_VOLATILITY": false,
-              "BOS": false,
-              "FVG_IMBALANCE": false,
-              "LIQUIDITY_SWEEP": true,
-              "MOMENTUM_DISPLACEMENT": false,
-              "PULLBACK_RETEST": false,
-              "RR_2_0": false,
-              "SESSION_LONDON_NY_BONUS": false,
-              "SPREAD_CLEAN": false,
-              "TREND_ALIGNMENT": true
-            },
-            "score_breakdown": {},
-            "confirmation_weights": {},
-            "confirmation_passed": [
-              "H4/H1 trend alignment",
-              "liquidity sweep"
-            ],
-            "confirmation_missing": [
-              "BOS",
-              "FVG/imbalance",
-              "pullback/retest",
-              "momentum/displacement",
-              "ATR volatility",
-              "clean spread",
-              "RR >= 2.0",
-              "London/NY session"
-            ],
-            "passed_rules": [
-              "H4_HISTORY_AVAILABLE",
-              "M15_HISTORY_AVAILABLE",
-              "RR_2_0_OR_HIGHER",
-              "RISK_APPROVED",
-              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-              "STRONG_CONFIRMATIONS_2_PLUS"
-            ],
-            "failed_rules": [
-              "SPREAD_TOO_HIGH",
-              "ROUND_3_SCORE_BELOW_THRESHOLD"
-            ]
-          },
-          "final_decision_reason": "Rejected: spread too high."
-        },
-        "score_components": {
-          "confirmation_states": {
-            "ATR_VOLATILITY": false,
-            "BOS": false,
-            "FVG_IMBALANCE": false,
-            "LIQUIDITY_SWEEP": true,
-            "MOMENTUM_DISPLACEMENT": false,
-            "PULLBACK_RETEST": false,
-            "RR_2_0": false,
-            "SESSION_LONDON_NY_BONUS": false,
-            "SPREAD_CLEAN": false,
-            "TREND_ALIGNMENT": true
-          },
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "liquidity sweep"
-          ],
-          "confirmation_missing": [
-            "BOS",
-            "FVG/imbalance",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "SPREAD_TOO_HIGH",
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ]
-        },
-        "timestamp": "2026-06-20T06:57:41.332Z"
-      },
-      "final_decision": {
-        "status": "REJECTED",
-        "raw_status": "REJECTED",
-        "round": "ROUND_3",
-        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-        "symbol": "EURUSD",
-        "adaptive_level": null,
-        "score": 5,
-        "required_score": 5,
-        "hard_gates_passed": false,
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "RISK_APPROVED",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS"
-        ],
-        "failed_rules": [
-          "SPREAD_TOO_HIGH",
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ],
-        "score_components": {
-          "confirmation_states": {
-            "ATR_VOLATILITY": false,
-            "BOS": false,
-            "FVG_IMBALANCE": false,
-            "LIQUIDITY_SWEEP": true,
-            "MOMENTUM_DISPLACEMENT": false,
-            "PULLBACK_RETEST": false,
-            "RR_2_0": false,
-            "SESSION_LONDON_NY_BONUS": false,
-            "SPREAD_CLEAN": false,
-            "TREND_ALIGNMENT": true
-          },
-          "score_breakdown": {},
-          "confirmation_weights": {},
-          "confirmation_passed": [
-            "H4/H1 trend alignment",
-            "liquidity sweep"
-          ],
-          "confirmation_missing": [
-            "BOS",
-            "FVG/imbalance",
-            "pullback/retest",
-            "momentum/displacement",
-            "ATR volatility",
-            "clean spread",
-            "RR >= 2.0",
-            "London/NY session"
-          ],
-          "passed_rules": [
-            "H4_HISTORY_AVAILABLE",
-            "M15_HISTORY_AVAILABLE",
-            "RR_2_0_OR_HIGHER",
-            "RISK_APPROVED",
-            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-            "STRONG_CONFIRMATIONS_2_PLUS"
-          ],
-          "failed_rules": [
-            "SPREAD_TOO_HIGH",
-            "ROUND_3_SCORE_BELOW_THRESHOLD"
-          ]
-        },
-        "final_decision_reason": "Rejected: spread too high."
-      },
-      "score_components": {
-        "confirmation_states": {
-          "ATR_VOLATILITY": false,
-          "BOS": false,
-          "FVG_IMBALANCE": false,
-          "LIQUIDITY_SWEEP": true,
-          "MOMENTUM_DISPLACEMENT": false,
-          "PULLBACK_RETEST": false,
-          "RR_2_0": false,
-          "SESSION_LONDON_NY_BONUS": false,
-          "SPREAD_CLEAN": false,
-          "TREND_ALIGNMENT": true
-        },
-        "score_breakdown": {},
-        "confirmation_weights": {},
-        "confirmation_passed": [
-          "H4/H1 trend alignment",
-          "liquidity sweep"
-        ],
-        "confirmation_missing": [
-          "BOS",
-          "FVG/imbalance",
-          "pullback/retest",
-          "momentum/displacement",
-          "ATR volatility",
-          "clean spread",
-          "RR >= 2.0",
-          "London/NY session"
-        ],
-        "passed_rules": [
-          "H4_HISTORY_AVAILABLE",
-          "M15_HISTORY_AVAILABLE",
-          "RR_2_0_OR_HIGHER",
-          "RISK_APPROVED",
-          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
-          "STRONG_CONFIRMATIONS_2_PLUS"
-        ],
-        "failed_rules": [
-          "SPREAD_TOO_HIGH",
-          "ROUND_3_SCORE_BELOW_THRESHOLD"
-        ]
-      }
+      "updated_at": "2026-06-22T13:43:45.744292+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
     },
     {
       "account_login": "",

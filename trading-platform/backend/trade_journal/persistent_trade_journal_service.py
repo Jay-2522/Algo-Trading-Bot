@@ -9,6 +9,7 @@ from uuid import uuid4
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_JOURNAL_PATH = PROJECT_ROOT / "data" / "trade_journal" / "trade_journal.json"
+DEFAULT_VALIDATION_ROUNDS_PATH = PROJECT_ROOT / "data" / "validation_rounds"
 
 TRADE_SOURCES = {"MT5_DEMO", "SIMULATION", "FUTURE_BROKER"}
 TRADE_STATUSES = {"PLANNED", "SENT", "OPEN", "CLOSED", "REJECTED", "CANCELLED"}
@@ -22,8 +23,9 @@ def utc_now_iso() -> str:
 class PersistentTradeJournalService:
     """File-backed trade journal for explicit demo/simulation lifecycle records."""
 
-    def __init__(self, journal_path: Path | None = None) -> None:
+    def __init__(self, journal_path: Path | None = None, validation_rounds_path: Path | None = None) -> None:
         self.journal_path = journal_path or DEFAULT_JOURNAL_PATH
+        self.validation_rounds_path = validation_rounds_path or DEFAULT_VALIDATION_ROUNDS_PATH
 
     def get_status(self) -> dict[str, Any]:
         trades = self.list_trades(limit=100000)
@@ -171,6 +173,21 @@ class PersistentTradeJournalService:
     def get_recent_trades(self, limit: int = 20) -> list[dict[str, Any]]:
         return self.list_trades(limit=limit)
 
+    def get_all_time_trades(self, limit: int = 100000) -> list[dict[str, Any]]:
+        """Aggregate every locally persisted trade lifecycle row, across active and archived rounds."""
+        records: list[dict[str, Any]] = []
+        for trade in self.list_trades(limit=100000):
+            records.append(self._normalize_history_trade(trade, source="trade_journal"))
+        records.extend(self._archived_round_trades())
+        deduped: dict[str, dict[str, Any]] = {}
+        for trade in records:
+            key = self._dedupe_key(trade)
+            existing = deduped.get(key)
+            if existing is None or self._trade_preference_score(trade) >= self._trade_preference_score(existing):
+                deduped[key] = trade
+        sorted_records = sorted(deduped.values(), key=self._trade_sort_time, reverse=True)
+        return sorted_records[: max(1, limit)]
+
     def get_summary(self) -> dict[str, Any]:
         trades = self.list_trades(limit=100000)
         closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
@@ -206,6 +223,107 @@ class PersistentTradeJournalService:
             "live_execution_enabled": False,
             "broker_execution_enabled": False,
         }
+
+    def _archived_round_trades(self) -> list[dict[str, Any]]:
+        if not self.validation_rounds_path.exists():
+            return []
+        records: list[dict[str, Any]] = []
+        for path in sorted(self.validation_rounds_path.glob("*.json")):
+            if path.name == "rounds_index.json":
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            session = payload.get("session") if isinstance(payload.get("session"), dict) else {}
+            session_id = self._text(payload.get("session_id") or payload.get("active_session_id") or session.get("session_id"))
+            round_label = self._text(payload.get("round_label") or session.get("round_label"))
+            round_number = payload.get("round_number")
+            for collection_name in ("trades", "closed_trades", "all_trades", "trade_journal"):
+                collection = payload.get(collection_name)
+                if isinstance(collection, list):
+                    for trade in collection:
+                        if isinstance(trade, dict):
+                            records.append(
+                                self._normalize_history_trade(
+                                    {
+                                        **trade,
+                                        "validation_session_id": self._text(trade.get("validation_session_id") or trade.get("session_id")) or session_id,
+                                        "round_label": self._text(trade.get("round_label")) or round_label,
+                                        "round_number": trade.get("round_number") if trade.get("round_number") is not None else round_number,
+                                    },
+                                    source=f"validation_rounds/{path.name}",
+                                )
+                            )
+        return records
+
+    def _normalize_history_trade(self, trade: dict[str, Any], source: str) -> dict[str, Any]:
+        normalized = dict(trade)
+        ticket = self._text(normalized.get("mt5_ticket") or normalized.get("ticket"))
+        session_id = self._text(normalized.get("validation_session_id") or normalized.get("session_id"))
+        round_label = self._text(normalized.get("round_label") or normalized.get("round"))
+        if not round_label:
+            round_label = self._round_label_for_session(session_id)
+        normalized.update(
+            {
+                "ticket": ticket or self._text(normalized.get("trade_id")),
+                "mt5_ticket": ticket,
+                "validation_session_id": session_id,
+                "session_id": session_id,
+                "round_label": round_label,
+                "round": self._display_round_label(round_label, session_id),
+                "symbol": self._text(normalized.get("symbol")).upper(),
+                "side": self._text(normalized.get("side") or normalized.get("type") or normalized.get("direction")).upper(),
+                "status": self._text(normalized.get("status") or ("CLOSED" if normalized.get("closed_at") else "OPEN")).upper(),
+                "result": self._text(normalized.get("result") or ("OPEN" if not normalized.get("closed_at") else "UNKNOWN")).upper(),
+                "history_source": source,
+            }
+        )
+        return normalized
+
+    def _round_label_for_session(self, session_id: str) -> str:
+        if not session_id or not self.validation_rounds_path.exists():
+            return ""
+        path = self.validation_rounds_path / f"round_{session_id}.json"
+        if not path.exists():
+            return ""
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+        session = payload.get("session") if isinstance(payload.get("session"), dict) else {}
+        return self._text(payload.get("round_label") or session.get("round_label"))
+
+    def _display_round_label(self, round_label: str, session_id: str) -> str:
+        label = self._text(round_label)
+        if label.upper().startswith("ROUND_"):
+            suffix = label.split("_", 1)[1]
+            return f"Round {suffix}" if suffix else label
+        if label:
+            return label.replace("_", " ").title()
+        return "Validation" if session_id else "Manual"
+
+    def _dedupe_key(self, trade: dict[str, Any]) -> str:
+        ticket = self._text(trade.get("mt5_ticket") or trade.get("ticket"))
+        if ticket:
+            return f"ticket:{ticket}"
+        trade_id = self._text(trade.get("trade_id") or trade.get("id"))
+        if trade_id:
+            return f"trade:{trade_id}"
+        return f"row:{self._text(trade.get('validation_session_id'))}:{self._text(trade.get('symbol'))}:{self._text(trade.get('opened_at') or trade.get('created_at'))}"
+
+    def _trade_preference_score(self, trade: dict[str, Any]) -> tuple[int, str]:
+        status = self._text(trade.get("status")).upper()
+        status_score = 3 if status == "CLOSED" else 2 if status in {"OPEN", "SENT", "PENDING"} else 1
+        completeness = sum(1 for key in ("entry_price", "close_price", "stop_loss", "take_profit", "net_pnl", "opened_at", "closed_at") if trade.get(key) not in (None, ""))
+        return (status_score * 100 + completeness, self._trade_sort_time(trade))
+
+    def _trade_sort_time(self, trade: dict[str, Any]) -> str:
+        return self._text(trade.get("updated_at") or trade.get("closed_at") or trade.get("close_time") or trade.get("opened_at") or trade.get("open_time") or trade.get("created_at"))
 
     def clear_test_data_only(self) -> dict[str, Any]:
         self._write_store({"trades": []})

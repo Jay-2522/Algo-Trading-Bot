@@ -3,17 +3,16 @@
     "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
     "adaptive_level": 3,
     "analysis_ms": 1,
-    "bos": false,
+    "bos": true,
     "decision": "BLOCKED",
     "decision_ms": 1,
-    "estimated_readiness": "Missing HTF alignment and momentum/pullback",
+    "estimated_readiness": "Close: missing HTF alignment and momentum/pullback",
     "failed_hard_gates": [
       "DIRECTION_BIAS_MISMATCH",
       "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP",
       "MOMENTUM_OR_PULLBACK_MISSING",
       "ROUND_3_SCORE_BELOW_THRESHOLD",
-      "SCORE_5_NEEDS_CLEAN_MOMENTUM",
-      "STRUCTURE_CONFIRMATION_MISSING"
+      "SCORE_5_NEEDS_CLEAN_MOMENTUM"
     ],
     "fvg": true,
     "history_load_ms": 1,
@@ -25,7 +24,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:13552|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -34,7 +33,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 13552,
+          "process_id": 19632,
           "requested_symbol": "EURUSD",
           "resolved_symbol": "EURUSD",
           "source": "VANTAGE_DEMO",
@@ -75,7 +74,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:13552|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -84,7 +83,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 13552,
+          "process_id": 19632,
           "requested_symbol": "EURUSD",
           "resolved_symbol": "EURUSD",
           "source": "VANTAGE_DEMO",
@@ -125,7 +124,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:13552|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -134,7 +133,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 13552,
+          "process_id": 19632,
           "requested_symbol": "EURUSD",
           "resolved_symbol": "EURUSD",
           "source": "VANTAGE_DEMO",
@@ -184,10 +183,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T13:31:52.472449+00:00"
+      "timestamp": "2026-06-22T14:00:44.728533+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T13:31:52.472449+00:00",
+    "last_scan_timestamp": "2026-06-22T14:00:44.727531+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -200,25 +199,25 @@
     "reject_reason": "Blocked because direction does not match higher-timeframe bias.",
     "required_score": 5,
     "rr_ok": true,
-    "score": 2,
-    "session_bonus": false,
+    "score": 4,
+    "session_bonus": true,
     "source": "CACHED_DECISION_TRACE",
     "spread_ok": true,
     "symbol": "EURUSD",
-    "timestamp": "2026-06-22T13:31:52.473451+00:00",
+    "timestamp": "2026-06-22T14:00:44.728533+00:00",
     "total_scan_ms": 1
   },
   "XAUUSD": {
     "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "adaptive_level": 2,
+    "adaptive_level": 3,
     "analysis_ms": 1,
     "bos": false,
     "decision": "BLOCKED",
     "decision_ms": 1,
     "estimated_readiness": "Missing HTF alignment, momentum/pullback, and structure confirmation",
     "failed_hard_gates": [
-      "BALANCED_ENTRY_REQUIREMENT_MISSING",
       "DIRECTION_BIAS_MISMATCH",
+      "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP",
       "MOMENTUM_OR_PULLBACK_MISSING",
       "ROUND_3_SCORE_BELOW_THRESHOLD",
       "RR_BELOW_2_0",
@@ -231,11 +230,11 @@
     "history_warmup": {
       "diagnostics": [
         {
-          "cache_hit": false,
-          "cache_reason": null,
+          "cache_hit": true,
+          "cache_reason": "MT5_HISTORY_READ_FAILED_REUSED_LAST_SUCCESS",
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:13552|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -244,7 +243,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 13552,
+          "process_id": 19632,
           "requested_symbol": "XAUUSD",
           "resolved_symbol": "XAUUSD",
           "source": "VANTAGE_DEMO",
@@ -285,7 +284,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:13552|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -294,7 +293,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 13552,
+          "process_id": 19632,
           "requested_symbol": "XAUUSD",
           "resolved_symbol": "XAUUSD",
           "source": "VANTAGE_DEMO",
@@ -335,7 +334,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:13552|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:19632|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -344,7 +343,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 13552,
+          "process_id": 19632,
           "requested_symbol": "XAUUSD",
           "resolved_symbol": "XAUUSD",
           "source": "VANTAGE_DEMO",
@@ -394,10 +393,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T13:31:52.516994+00:00"
+      "timestamp": "2026-06-22T14:00:44.738095+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T13:31:52.516994+00:00",
+    "last_scan_timestamp": "2026-06-22T14:00:44.736577+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -408,15 +407,15 @@
     "momentum": false,
     "mt5_status": "MT5_CONNECTED",
     "pullback_retest": false,
-    "reject_reason": "Blocked because balanced entry gates are incomplete.",
+    "reject_reason": "Blocked because direction does not match higher-timeframe bias.",
     "required_score": 5,
     "rr_ok": false,
     "score": 1,
-    "session_bonus": false,
+    "session_bonus": true,
     "source": "CACHED_DECISION_TRACE",
     "spread_ok": true,
     "symbol": "XAUUSD",
-    "timestamp": "2026-06-22T13:31:52.517998+00:00",
+    "timestamp": "2026-06-22T14:00:44.739111+00:00",
     "total_scan_ms": 1
   }
 }

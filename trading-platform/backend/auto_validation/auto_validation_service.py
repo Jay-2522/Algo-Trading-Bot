@@ -279,10 +279,14 @@ class AutoValidationService:
 
     def scan_diagnostics_status(self) -> dict[str, Any]:
         if self.should_auto_start_runner():
-            self._log_scan_event("SCAN_LOOP_ALIVE", {"validation_status": self.session.get("status"), "runner_active": self.runner_state.get("runner_active")})
-        for symbol in ["EURUSD", "XAUUSD"]:
-            if symbol in self._allowed_symbols():
-                self.read_only_scan_symbol(symbol)
+            self._log_scan_event(
+                "SCAN_LOOP_ALIVE",
+                {
+                    "validation_status": self.session.get("status"),
+                    "runner_active": self.runner_state.get("runner_active"),
+                    "scan_loop_alive": self.runner_state.get("scan_loop_alive"),
+                },
+            )
         return {
             "status": "SCAN_DIAGNOSTICS_READY",
             "active_session_id": self.session.get("session_id"),
@@ -314,19 +318,9 @@ class AutoValidationService:
                         "last_scan_age_seconds": last_scan_age,
                     },
                 )
-                self._refresh_all_scan_diagnostics()
-                eurusd = self._latest_scan_diagnostics.get("EURUSD", {})
-                xauusd = self._latest_scan_diagnostics.get("XAUUSD", {})
-                last_times = {
-                    "EURUSD": eurusd.get("last_scan_timestamp") or eurusd.get("timestamp"),
-                    "XAUUSD": xauusd.get("last_scan_timestamp") or xauusd.get("timestamp"),
-                }
-                ages = [age for age in [self._scan_age_seconds(eurusd, now), self._scan_age_seconds(xauusd, now)] if age is not None]
-                last_scan_age = max(ages) if ages else None
-                stale = self._scan_is_stale(eurusd, now) or self._scan_is_stale(xauusd, now)
         return {
             "validation_status": self.session.get("status"),
-            "scan_loop_running": bool(self.runner_state.get("runner_active")),
+            "scan_loop_running": bool(self.runner_state.get("scan_loop_alive") or self.runner_state.get("runner_active")),
             "last_scan_age_seconds": last_scan_age,
             "last_scan_time_by_symbol": last_times,
             "eurusd_last_scan": eurusd.get("last_scan_timestamp") or eurusd.get("timestamp"),
@@ -335,6 +329,109 @@ class AutoValidationService:
             "xauusd_duration_ms": xauusd.get("total_scan_ms"),
             "scan_count_last_5min": self._scan_count_since(now - timedelta(minutes=5)),
             "stale": stale,
+            "timestamp": self._timestamp(),
+        }
+
+    def should_run_support_loop(self, loop_name: str) -> bool:
+        name = str(loop_name or "").lower()
+        if name == "scan":
+            return self.should_auto_start_runner()
+        if name in {"mt5_sync", "exit", "reason"}:
+            if not self._has_current_user_session():
+                return False
+            return str(self.session.get("status") or "").upper() not in {"STOPPED", "COMPLETED", "READY_ROUND_3"}
+        return False
+
+    def scan_loop_symbols(self) -> list[str]:
+        return [symbol for symbol in sorted(self._allowed_symbols()) if symbol in {"EURUSD", "XAUUSD"}]
+
+    def scan_loop_tick_symbol(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").upper()
+        self._log_scan_event("SCAN_START", {"symbol": normalized_symbol, "source": "scan_support_loop"})
+        result = self.read_only_scan_symbol(normalized_symbol)
+        diagnostic = result.get("diagnostic") if isinstance(result, dict) else {}
+        self._log_scan_event(
+            "SCAN_COMPLETE",
+            {
+                "symbol": normalized_symbol,
+                "score": diagnostic.get("score") if isinstance(diagnostic, dict) else None,
+                "decision": diagnostic.get("decision") if isinstance(diagnostic, dict) else None,
+                "duration_ms": diagnostic.get("total_scan_ms") if isinstance(diagnostic, dict) else None,
+                "source": "scan_support_loop",
+            },
+        )
+        return result if isinstance(result, dict) else {"status": "SCAN_COMPLETE", "symbol": normalized_symbol}
+
+    def mt5_sync_loop_tick(self) -> dict[str, Any]:
+        self._refresh_session_metrics()
+        positions = self._open_positions()
+        tickets = sorted([self._position_ticket(position) for position in positions if self._position_ticket(position)])
+        diagnostics = self.session.get("active_round_diagnostics") if isinstance(self.session.get("active_round_diagnostics"), dict) else {}
+        dashboard_tickets = diagnostics.get("latest_open_tickets", []) if isinstance(diagnostics, dict) else []
+        self._log_scan_event(
+            "OPEN_TRADE_SYNC_COMPLETE",
+            {
+                "MT5_OPEN_TICKETS": tickets,
+                "DASHBOARD_OPEN_TICKETS": dashboard_tickets,
+                "mt5_open_count": len(tickets),
+                "dashboard_open_count": int(self.session.get("current_open_trades") or 0),
+            },
+        )
+        self._save_state(sync_archive=False)
+        return {
+            "status": "MT5_SYNC_LOOP_COMPLETE",
+            "mt5_open_count": len(tickets),
+            "mt5_open_tickets": tickets,
+            "dashboard_open_count": int(self.session.get("current_open_trades") or 0),
+            "timestamp": self._timestamp(),
+        }
+
+    def exit_loop_tick(self) -> dict[str, Any]:
+        return self.open_trade_exit_diagnostics()
+
+    def reason_loop_tick(self) -> dict[str, Any]:
+        count = len(self.events[-20:])
+        self._log_scan_event("REASON_LOOP_REFRESHED", {"latest_reason_count": count, "active_session_id": self.session.get("session_id")})
+        return {"status": "REASON_LOOP_REFRESHED", "latest_reason_count": count, "timestamp": self._timestamp()}
+
+    def log_loop_event(self, event: str, details: dict[str, Any] | None = None) -> None:
+        self._append_event(event, details)
+
+    def runtime_health(self, runner_health: dict[str, Any] | None = None) -> dict[str, Any]:
+        runner = copy.deepcopy(runner_health or {})
+        diagnostics = self.session.get("active_round_diagnostics") if isinstance(self.session.get("active_round_diagnostics"), dict) else {}
+        sync = self._open_position_sync_diagnostics if isinstance(self._open_position_sync_diagnostics, dict) else {}
+        mt5_open_tickets = sync.get("open_position_tickets") if isinstance(sync.get("open_position_tickets"), list) else []
+        if not mt5_open_tickets:
+            mt5_open_tickets = diagnostics.get("latest_open_tickets", []) if isinstance(diagnostics.get("latest_open_tickets"), list) else []
+        mt5_open_count = int(sync.get("mt5_open_positions_detected") or sync.get("mt5_open_positions") or len(mt5_open_tickets) or self.session.get("current_open_trades") or 0)
+        dashboard_open_count = int(self.session.get("current_open_trades") or len(diagnostics.get("latest_open_tickets", []) if isinstance(diagnostics.get("latest_open_tickets"), list) else []) or 0)
+        last_mt5_age = runner.get("last_mt5_sync_age_seconds")
+        if last_mt5_age is None:
+            last_mt5_age = runner.get("last_mt5_sync_loop_age_seconds")
+        last_scan_age = runner.get("last_scan_age_seconds")
+        if last_scan_age is None:
+            last_scan_age = runner.get("last_scan_loop_age_seconds")
+        last_exit_age = runner.get("last_exit_age_seconds")
+        if last_exit_age is None:
+            last_exit_age = runner.get("last_exit_loop_age_seconds")
+        latest_reason_count = len(self.events[-3:])
+        return {
+            "validation_status": self.session.get("status"),
+            "active_session_id": self.session.get("session_id"),
+            "mt5_sync_loop_alive": bool(runner.get("mt5_sync_loop_alive")),
+            "scan_loop_alive": bool(runner.get("scan_loop_alive")),
+            "exit_loop_alive": bool(runner.get("exit_loop_alive")),
+            "reason_loop_alive": bool(runner.get("reason_loop_alive")),
+            "last_mt5_sync_age_seconds": last_mt5_age,
+            "last_scan_age_seconds": last_scan_age,
+            "last_exit_check_age_seconds": last_exit_age,
+            "mt5_open_count": mt5_open_count,
+            "mt5_open_tickets": sorted([str(ticket) for ticket in mt5_open_tickets if str(ticket)]),
+            "dashboard_open_count": dashboard_open_count,
+            "latest_reason_count": latest_reason_count,
+            "watchdog_restart_count": int(runner.get("watchdog_restart_count") or 0),
+            "last_loop_error": runner.get("last_loop_error") or "",
             "timestamp": self._timestamp(),
         }
 

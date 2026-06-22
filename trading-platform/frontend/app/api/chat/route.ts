@@ -58,6 +58,53 @@ const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
 const SYSTEM_PROMPT = "You are AlgoPilot. Answer briefly using only provided data. Do not invent trades, prices, balances, reasons, candle counts, or timeframes.";
 const POSITION_FIELD_MISSING = "That field is not available in the live position data yet.";
 
+const STRATEGY_GLOSSARY: Record<string, string> = {
+  "any trigger": "Any trigger means the bot needs at least one live entry confirmation before opening a Level 3 trade: momentum, BOS, liquidity sweep, or pullback/retest. If none of those appear, the setup stays blocked even when HTF bias, RR, and spread are ready.",
+  "htf bias": "HTF bias is the higher-timeframe direction read from H1/H4. Balanced Round 3 only allows buys with bullish higher-timeframe bias and sells with bearish higher-timeframe bias.",
+  momentum: "Momentum means price is moving with enough displacement in the trade direction to support entry. It is one of the entry triggers and helps avoid slow, low-quality setups.",
+  "pullback/retest": "Pullback/retest means price has returned into a valid entry area instead of chasing after an extended move. In Level 3 it can count as the one required trigger.",
+  bos: "BOS means break of structure: price has broken a relevant swing level in the intended direction. It is a structure confirmation, not the only way to qualify a trade.",
+  "liquidity sweep": "Liquidity sweep means price has taken liquidity beyond a recent high or low and then shown signs of reversing or continuing with intent. It can act as a structure trigger.",
+  fvg: "FVG means fair value gap or imbalance zone. A retest of that zone can add structure confirmation for the balanced entry model.",
+  rr: "RR is risk/reward. Round 3 requires RR >= 2.0, meaning the planned reward must be at least twice the planned risk before an order can be sent.",
+  "spread clean": "Spread clean means the current broker spread is inside the bot's allowed limit. If spread is not clean, the setup is blocked to avoid poor fills.",
+  "adaptive level": "Adaptive level is the per-symbol relaxation level. Each symbol has its own level, and the bot can relax only that symbol after inactivity while keeping hard gates like HTF bias, RR, spread, SL/TP, and risk approval.",
+  "level 0": "Level 0 is the strict balanced Round 3 mode. It prefers score >= 6 with all hard gates intact.",
+  "level 1": "Level 1 is a slightly more active mode for a symbol after inactivity. It can use score >= 5 while keeping all hard safety gates.",
+  "level 2": "Level 2 keeps the score >= 5 floor and hard gates, but allows the symbol to remain more active after continued inactivity.",
+  "level 3": "Level 3 is the fastest controlled mode. It still requires HTF bias, RR >= 2, clean spread, valid SL/TP, risk approval, and at least one trigger: momentum, BOS, liquidity sweep, or pullback/retest.",
+  "scan score": "Scan score is the current checklist score for a symbol. It measures how many active entry conditions are currently passing for that symbol's adaptive level.",
+  "final decision": "Final decision is the current Round 3 approval object. Orders may only be sent when the final decision is ACCEPTED for the active round, active session, matching symbol, passing score, and hard gates.",
+  "legacy-path loss": "Legacy-path loss means a trade was opened by an older approval path rather than the current final-decision gate. Those losses are tracked separately in autopsy and analytics.",
+  "breakeven trigger": "The breakeven trigger is the profit threshold where the bot can move SL to entry. Round 3 uses breakeven only after meaningful favorable movement, currently around +0.8R.",
+  "trailing stop": "Trailing stop is protective SL movement after the trade has advanced far enough, currently after about +1.2R. It protects gains without closing on tiny noise.",
+  "exit management": "Exit management monitors open MT5 positions for breakeven, trailing stop, max-hold/no-progress, opposite structure, and confirmed SL/TP closure. It must keep running even while the round is waiting for open trades to close.",
+};
+
+const STRATEGY_GLOSSARY_ALIASES: Record<string, string> = {
+  "what is any trigger": "any trigger",
+  "what does any trigger mean": "any trigger",
+  "higher timeframe bias": "htf bias",
+  "h1/h4": "htf bias",
+  "h4/h1": "htf bias",
+  "break of structure": "bos",
+  "fair value gap": "fvg",
+  "risk reward": "rr",
+  "risk/reward": "rr",
+  spread: "spread clean",
+  "adaptive strategy": "adaptive level",
+  "strategy level": "adaptive level",
+  "level three": "level 3",
+  "level zero": "level 0",
+  "scan score": "scan score",
+  "final decision": "final decision",
+  "legacy path": "legacy-path loss",
+  breakeven: "breakeven trigger",
+  "break even": "breakeven trigger",
+  trailing: "trailing stop",
+  exits: "exit management",
+};
+
 function normalizeMessages(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -92,6 +139,21 @@ function isBadText(value: unknown): boolean {
 function cleanText(value: unknown): string {
   const cleaned = text(value).replace(/\s+/g, " ").replace(/\.\.+/g, ".").trim();
   return isBadText(cleaned) ? "" : cleaned;
+}
+
+function answerStrategyGlossaryQuestion(question: string): string | null {
+  const normalized = question.toLowerCase().replace(/[?!.]/g, " ").replace(/\s+/g, " ").trim();
+  const direct = Object.keys(STRATEGY_GLOSSARY).find((term) => normalized === term || normalized.includes(term));
+  if (direct) return STRATEGY_GLOSSARY[direct];
+  const alias = Object.entries(STRATEGY_GLOSSARY_ALIASES).find(([phrase]) => normalized.includes(phrase));
+  if (alias) return STRATEGY_GLOSSARY[alias[1]];
+  const isDefinitionQuestion = /\b(what|define|meaning|mean|explain)\b/.test(normalized);
+  if (!isDefinitionQuestion) return null;
+  const compact = normalized.replace(/\s+/g, "");
+  if (compact.includes("bos")) return STRATEGY_GLOSSARY.bos;
+  if (compact.includes("fvg")) return STRATEGY_GLOSSARY.fvg;
+  if (compact === "rr" || compact.includes("whatisrr") || compact.includes("rrmean")) return STRATEGY_GLOSSARY.rr;
+  return null;
 }
 
 function numberValue(value: unknown): number | null {
@@ -983,7 +1045,7 @@ async function answerHistoryReadinessQuestion(question: string): Promise<string 
   }
   if (normalized.includes("why") && normalized.includes("trade")) {
     if (pending) return `No trades are opening because MT5 history sync is still warming. ${historyDiagnosticSummary(pending)}.${historyErrorSummary(pending)}`;
-    return "MT5 history is ready. If no trades open, Round 3 is still waiting for London/NY session, BOS, FVG, and RR >= 2.0.";
+    return "MT5 history is ready. If no trades open, Balanced Round 3 is waiting for the active symbol gates: HTF bias, RR >= 2.0, clean spread, risk approval, valid SL/TP, and the required trigger/score for that symbol's adaptive level.";
   }
   if (normalized.includes("history ready") || normalized.includes("history sync")) {
     if (pending) return `History is not ready. ${historyDiagnosticSummary(pending)}.${historyErrorSummary(pending)}`;
@@ -1378,13 +1440,18 @@ export async function POST(request: Request) {
     if (diagnosticAnswer) {
       return NextResponse.json({ reply: diagnosticAnswer });
     }
+    const glossaryAnswer = answerStrategyGlossaryQuestion(question);
+    if (glossaryAnswer) {
+      return NextResponse.json({ reply: glossaryAnswer });
+    }
 
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: BUSY_MESSAGE }, { status: 503 });
     }
 
-    const context = typeof body.context === "string" ? body.context.slice(0, 2000) : "";
+    const glossaryContext = Object.entries(STRATEGY_GLOSSARY).map(([term, definition]) => `${term}: ${definition}`).join("\n");
+    const context = `${typeof body.context === "string" ? body.context.slice(0, 2000) : ""}\n\nStrategy glossary:\n${glossaryContext}`.slice(0, 6000);
     const history = normalizeMessages(body.messages).slice(-3);
     console.log("Groq primary model:", GROQ_MODEL);
     console.log("Groq fallback model:", GROQ_FALLBACK_MODEL || "not configured");

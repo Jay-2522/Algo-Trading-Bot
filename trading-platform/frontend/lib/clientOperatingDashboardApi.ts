@@ -300,6 +300,11 @@ export async function fetchAutoValidationScanDiagnostics() {
   return { errors: result.error ? [result.error] : [], ok: result.ok, diagnostics: result.ok ? result.data : null };
 }
 
+export async function fetchAutoValidationRuntimeHealth() {
+  const result = await fetchJson<ApiRecord>("/auto-validation/runtime-health", {}, 5000);
+  return { errors: result.error ? [result.error] : [], ok: result.ok, health: result.ok ? result.data : null };
+}
+
 export function pauseAutoValidation() {
   return postJson<ApiRecord>("/auto-validation/pause");
 }

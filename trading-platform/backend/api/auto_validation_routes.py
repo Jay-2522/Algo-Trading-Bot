@@ -43,6 +43,7 @@ auto_validation_runner = AutoValidationRunner(auto_validation_service)
 
 @router.get("/status")
 async def get_auto_validation_status() -> dict:
+    auto_validation_runner.start_support_loops()
     if auto_validation_service.should_auto_start_runner() and not auto_validation_runner.is_active():
         auto_validation_service.log_scan_loop_restarted("status requested while validation/exit loop should be active")
         auto_validation_runner.start()
@@ -62,8 +63,9 @@ async def start_auto_validation(payload: dict[str, Any] = Body(default_factory=d
 async def pause_auto_validation() -> dict:
     result = await asyncio.to_thread(auto_validation_service.pause)
     auto_validation_runner.stop()
+    auto_validation_runner.start_support_loops()
     result["runner_active"] = False
-    result["scan_loop_running"] = False
+    result["scan_loop_running"] = bool(auto_validation_runner.support_status().get("scan_loop_alive"))
     return result
 
 
@@ -75,7 +77,7 @@ async def resume_auto_validation(background_tasks: BackgroundTasks) -> dict:
     auto_validation_runner.start()
     background_tasks.add_task(auto_validation_service.run_background_resume_sync)
     result["runner_active"] = auto_validation_runner.is_active()
-    result["scan_loop_running"] = auto_validation_runner.is_active()
+    result["scan_loop_running"] = bool(auto_validation_runner.support_status().get("scan_loop_alive") or auto_validation_runner.is_active())
     return result
 
 
@@ -94,17 +96,46 @@ async def get_auto_validation_runtime_status() -> dict:
     return await asyncio.to_thread(auto_validation_service.runtime_status)
 
 
+@router.get("/runtime-health")
+async def get_auto_validation_runtime_health() -> dict:
+    auto_validation_runner.start_support_loops()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(auto_validation_service.runtime_health, auto_validation_runner.support_status()),
+            timeout=5,
+        )
+    except asyncio.TimeoutError:
+        runner_health = auto_validation_runner.support_status()
+        return {
+            "validation_status": auto_validation_service.session.get("status"),
+            "active_session_id": auto_validation_service.session.get("session_id"),
+            "mt5_sync_loop_alive": bool(runner_health.get("mt5_sync_loop_alive")),
+            "scan_loop_alive": bool(runner_health.get("scan_loop_alive")),
+            "exit_loop_alive": bool(runner_health.get("exit_loop_alive")),
+            "reason_loop_alive": bool(runner_health.get("reason_loop_alive")),
+            "last_mt5_sync_age_seconds": runner_health.get("last_mt5_sync_age_seconds"),
+            "last_scan_age_seconds": runner_health.get("last_scan_age_seconds"),
+            "last_exit_check_age_seconds": runner_health.get("last_exit_age_seconds"),
+            "mt5_open_count": None,
+            "mt5_open_tickets": [],
+            "dashboard_open_count": auto_validation_service.session.get("current_open_trades"),
+            "latest_reason_count": len(auto_validation_service.events[-3:]),
+            "watchdog_restart_count": runner_health.get("watchdog_restart_count", 0),
+            "last_loop_error": "runtime health timed out while reading MT5/session state",
+        }
+
+
 @router.post("/stop")
 async def stop_auto_validation(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
     result = await asyncio.to_thread(auto_validation_service.stop, str(payload.get("reason") or "Stopped manually."))
-    auto_validation_runner.stop()
+    auto_validation_runner.stop(stop_support=True)
     return await asyncio.to_thread(auto_validation_service.status)
 
 
 @router.post("/emergency-stop")
 async def emergency_stop_auto_validation() -> dict:
     result = auto_validation_service.emergency_stop()
-    auto_validation_runner.stop()
+    auto_validation_runner.stop(stop_support=True)
     return auto_validation_service.status()
 
 
@@ -154,6 +185,7 @@ async def run_auto_validation_symbol_read_only_scan(symbol: str) -> dict:
 
 @router.get("/scan-diagnostics")
 async def get_auto_validation_scan_diagnostics() -> dict:
+    auto_validation_runner.start_support_loops()
     if auto_validation_service.should_auto_start_runner() and not auto_validation_runner.is_active():
         auto_validation_service.log_scan_loop_restarted("scan diagnostics requested while validation running but loop was inactive")
         auto_validation_runner.start()
@@ -162,6 +194,7 @@ async def get_auto_validation_scan_diagnostics() -> dict:
 
 @router.get("/scan-health")
 async def get_auto_validation_scan_health() -> dict:
+    auto_validation_runner.start_support_loops()
     if auto_validation_service.should_auto_start_runner() and not auto_validation_runner.is_active():
         auto_validation_service.log_scan_loop_restarted("validation running but scan loop was inactive")
         auto_validation_runner.start()
@@ -185,6 +218,7 @@ async def run_auto_validation_exit_management() -> dict:
 
 @router.get("/open-trade-exit-diagnostics")
 async def get_auto_validation_open_trade_exit_diagnostics() -> dict:
+    auto_validation_runner.start_support_loops()
     if auto_validation_service.should_auto_start_runner() and not auto_validation_runner.is_active():
         auto_validation_service.log_scan_loop_restarted("exit diagnostics requested while exit loop should be active")
         auto_validation_runner.start()

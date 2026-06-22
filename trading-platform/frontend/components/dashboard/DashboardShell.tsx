@@ -14,6 +14,7 @@ import {
   fetchClientSignals,
   fetchReasonMessages,
   approveExecutionModeSignal,
+  fetchAutoValidationRuntimeHealth,
   fetchAutoValidationScanDiagnostics,
   fetchAutoValidationStatus,
   previewClientDemoTrade,
@@ -719,6 +720,7 @@ export function DashboardShell(_: {
   const signalRequestInFlight = useRef(false);
   const autoValidationRequestInFlight = useRef(false);
   const scanDiagnosticsRequestInFlight = useRef(false);
+  const runtimeHealthRequestInFlight = useRef(false);
 
   const showToast = useCallback((tone: ToastState["tone"], message: string) => {
     setToast({ id: Date.now(), tone, message });
@@ -920,6 +922,30 @@ export function DashboardShell(_: {
     }
   }, []);
 
+  const refreshRuntimeHealth = useCallback(async () => {
+    if (runtimeHealthRequestInFlight.current) return;
+    runtimeHealthRequestInFlight.current = true;
+    try {
+      const result = await fetchAutoValidationRuntimeHealth();
+      if (result.ok && result.health) {
+        setData((current) => {
+          const currentAuto = asRecord(current.autoValidation) ?? {};
+          const nextAuto: ApiRecord = {
+            ...currentAuto,
+            runtime_health: result.health,
+          };
+          const next = { ...current, autoValidation: nextAuto };
+          writeCachedDashboardData(next);
+          return next;
+        });
+      }
+    } catch {
+      // Keep last runtime health visible while the next poll recovers.
+    } finally {
+      runtimeHealthRequestInFlight.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -955,6 +981,12 @@ export function DashboardShell(_: {
     const interval = window.setInterval(() => void refreshScanDiagnostics(), 3000);
     return () => window.clearInterval(interval);
   }, [refreshScanDiagnostics]);
+
+  useEffect(() => {
+    void refreshRuntimeHealth();
+    const interval = window.setInterval(() => void refreshRuntimeHealth(), 3000);
+    return () => window.clearInterval(interval);
+  }, [refreshRuntimeHealth]);
 
   useEffect(() => {
     if (!data.clientSignals.some((signal) => watchlistSignal(signal))) return;
@@ -3280,9 +3312,14 @@ function scanTimeLabel(scan: ApiRecord): string {
 
 function LiveScanStatusCard({ data }: { data: DashboardData }) {
   const scans = latestScanDiagnostics(data);
+  const runtimeHealth = asRecord(asRecord(data.autoValidation)?.runtime_health) ?? {};
   const closest = closestScan(scans);
   const hasAnyScan = scans.some((scan) => Boolean(readText(scan, ["timestamp"], "")));
   const allScansStale = hasAnyScan && scans.every((scan) => !readText(scan, ["timestamp"], "") || scanIsStale(scan));
+  const runtimeScanAge = readNumber(runtimeHealth, ["last_scan_age_seconds"], 0);
+  const runtimeScanStale = runtimeScanAge > 60;
+  const mt5SyncLive = runtimeHealth.mt5_sync_loop_alive === true;
+  const scanStale = allScansStale || runtimeScanStale;
   const closestNeeds = closest ? scanNeeds(closest).slice(0, 2) : [];
   return (
     <section className="premium-panel">
@@ -3291,17 +3328,17 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
           <p className="premium-section-eyebrow">Round 3</p>
           <p className="premium-metric-value text-white">LIVE SCAN STATUS</p>
         </div>
-        {closest ? (
+        {scanStale ? (
+          <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-amber-100">
+            {mt5SyncLive ? "Scan stale, MT5 sync live" : "Scan stale — waiting for fresh scan"}
+          </div>
+        ) : closest ? (
           <>
             <div className="rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-blue-100">
               <span className="whitespace-nowrap">Closest: {readText(closest, ["symbol"], "-")} — {readNumber(closest, ["score"], 0)}/{readNumber(closest, ["required_score"], 5)}</span>
               <span className="ml-2 text-slate-300">Needs: {closestNeeds.length ? closestNeeds.join(" + ") : "ready"}</span>
             </div>
           </>
-        ) : allScansStale ? (
-          <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-amber-100">
-            Scan stale — waiting for fresh scan
-          </div>
         ) : null}
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -4510,6 +4547,18 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
   const messages: ReasonContext[] = [];
   const niftyConnected = Boolean(data.niftyTick && numeric(data.niftyTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN));
   const autoStatus = asRecord(data.autoValidation);
+  const runtimeHealth = asRecord(autoStatus?.runtime_health) ?? {};
+  const scanAgeSeconds = readNumber(runtimeHealth, ["last_scan_age_seconds"], 0);
+  if (scanAgeSeconds > 60) {
+    messages.unshift({
+      id: `scan-stale-${readText(runtimeHealth, ["active_session_id"], "active")}`,
+      event_id: `scan-stale-${readText(runtimeHealth, ["active_session_id"], "active")}`,
+      symbol: "SYSTEM",
+      status: "Waiting",
+      timestamp: readText(runtimeHealth, ["timestamp"], new Date().toISOString()),
+      reason: runtimeHealth.mt5_sync_loop_alive === true ? "Scan is stale; waiting for fresh diagnostics. MT5 sync is still live." : "Scan is stale; waiting for fresh diagnostics.",
+    });
+  }
   const historyWarmup = asRecord(autoStatus?.history_warmup ?? asRecord(autoStatus?.last_execution_decision)?.history_warmup);
   const currentHistoryReady = historyWarmup?.history_ready === true || autoStatus?.history_ready === true;
   for (const signal of data.clientSignals) {

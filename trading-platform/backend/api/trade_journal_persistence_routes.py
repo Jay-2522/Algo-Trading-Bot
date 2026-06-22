@@ -44,6 +44,11 @@ async def get_recent_persistent_trades(limit: int = Query(default=20, ge=1, le=5
     return persistent_trade_journal_service.get_recent_trades(limit)
 
 
+@router.get("/all")
+async def get_all_persistent_trades(limit: int = Query(default=100000, ge=1, le=100000)) -> list[dict[str, Any]]:
+    return persistent_trade_journal_service.list_trades(limit)
+
+
 @router.get("/summary")
 async def get_persistent_trade_journal_summary() -> dict[str, Any]:
     return persistent_trade_journal_service.get_summary()

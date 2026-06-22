@@ -184,10 +184,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T05:38:35.959994+00:00"
+      "timestamp": "2026-06-22T13:31:52.472449+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T05:38:35.959994+00:00",
+    "last_scan_timestamp": "2026-06-22T13:31:52.472449+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -205,7 +205,7 @@
     "source": "CACHED_DECISION_TRACE",
     "spread_ok": true,
     "symbol": "EURUSD",
-    "timestamp": "2026-06-22T05:38:35.960989+00:00",
+    "timestamp": "2026-06-22T13:31:52.473451+00:00",
     "total_scan_ms": 1
   },
   "XAUUSD": {
@@ -394,10 +394,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T05:38:35.982102+00:00"
+      "timestamp": "2026-06-22T13:31:52.516994+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T05:38:35.981103+00:00",
+    "last_scan_timestamp": "2026-06-22T13:31:52.516994+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -416,7 +416,7 @@
     "source": "CACHED_DECISION_TRACE",
     "spread_ok": true,
     "symbol": "XAUUSD",
-    "timestamp": "2026-06-22T05:38:35.982102+00:00",
+    "timestamp": "2026-06-22T13:31:52.517998+00:00",
     "total_scan_ms": 1
   }
 }

@@ -310,9 +310,9 @@ class AutoValidationService:
 
     def reset_active_closed_trades(self) -> dict[str, Any]:
         session_id = str(self.session.get("session_id") or "")
-        if not session_id or self.journal_service is None or not hasattr(self.journal_service, "clear_session_trades_by_status"):
+        if not session_id or self.journal_service is None or not hasattr(self.journal_service, "exclude_session_trades_from_active_stats"):
             return {"status": "RESET_CLOSED_TRADES_SKIPPED", "message": "No active session or journal reset support is available.", "session_id": session_id}
-        result = self.journal_service.clear_session_trades_by_status(session_id, {"CLOSED"})
+        result = self.journal_service.exclude_session_trades_from_active_stats(session_id, {"CLOSED"}, reason="reset_closed_trades")
         self._validation_close_reports = [report for report in self._validation_close_reports if str(report.get("validation_session_id") or "") != session_id]
         self._reported_close_keys = {self._close_report_key(item) for item in self._validation_close_reports if self._close_report_key(item)}
         self._refresh_session_metrics()
@@ -332,9 +332,11 @@ class AutoValidationService:
                 "equity_curve": [],
                 "best_setup_type": "Unavailable",
                 "worst_setup_type": "Unavailable",
+                "closed_trades_reset_at": self._timestamp(),
             }
         )
-        self._log("RESET_CLOSED_TRADES", {"session_id": session_id, "removed_count": result.get("removed_count"), "removed_tickets": result.get("removed_tickets", [])})
+        self._save_state()
+        self._log("RESET_CLOSED_TRADES", {"session_id": session_id, "excluded_count": result.get("excluded_count"), "excluded_tickets": result.get("excluded_tickets", [])})
         return {
             "status": "RESET_CLOSED_TRADES_COMPLETE",
             "message": "Active-session closed trade records were cleared. Archived rounds, Round 2 history, MT5 positions, and account equity were not modified.",
@@ -483,7 +485,11 @@ class AutoValidationService:
         session_id = self.session.get("session_id")
         if not session_id or self.journal_service is None:
             return []
-        return [trade for trade in self.journal_service.list_trades(limit=100000) if trade.get("validation_session_id") == session_id]
+        return [
+            trade
+            for trade in self.journal_service.list_trades(limit=100000)
+            if trade.get("validation_session_id") == session_id and trade.get("active_stats_excluded") is not True
+        ]
 
     def _resume_incomplete_validation_session(self, payload: dict[str, Any] | None = None, trigger: str = "backend_startup", activate: bool = False) -> dict[str, Any] | None:
         candidate = self._latest_incomplete_validation_session()
@@ -3293,7 +3299,7 @@ class AutoValidationService:
                 },
             )
             group["trades"].append(trade)
-            if status == "CLOSED":
+            if status == "CLOSED" and trade.get("active_stats_excluded") is not True:
                 group["closed_count"] += 1
             if status in {"OPEN", "SENT", "PENDING"}:
                 group["open_count"] += 1

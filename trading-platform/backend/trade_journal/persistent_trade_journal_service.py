@@ -242,6 +242,39 @@ class PersistentTradeJournalService:
             "broker_execution_enabled": False,
         }
 
+    def exclude_session_trades_from_active_stats(self, session_id: str, statuses: set[str], reason: str = "manual_dashboard_reset") -> dict[str, Any]:
+        normalized_session = self._text(session_id)
+        normalized_statuses = {self._text(status).upper() for status in statuses if self._text(status)}
+        if not normalized_session or not normalized_statuses:
+            return {"status": "NOOP", "session_id": normalized_session, "excluded_count": 0, "trade_count": len(self.list_trades(limit=100000))}
+        store = self._read_store()
+        trades = store.get("trades", [])
+        excluded: list[dict[str, Any]] = []
+        now = utc_now_iso()
+        for trade in trades:
+            trade_session = self._text(trade.get("validation_session_id") or trade.get("session_id"))
+            trade_status = self._text(trade.get("status")).upper()
+            if trade_session == normalized_session and trade_status in normalized_statuses:
+                trade["active_stats_excluded"] = True
+                trade["active_stats_excluded_at"] = now
+                trade["active_stats_excluded_reason"] = self._text(reason)
+                trade["updated_at"] = now
+                excluded.append(trade)
+        store["trades"] = trades
+        self._write_store(store)
+        return {
+            "status": "EXCLUDED_SESSION_TRADES_FROM_ACTIVE_STATS",
+            "session_id": normalized_session,
+            "statuses": sorted(normalized_statuses),
+            "excluded_count": len(excluded),
+            "trade_count": len(trades),
+            "excluded_tickets": [self._text(trade.get("mt5_ticket") or trade.get("ticket")) for trade in excluded if self._text(trade.get("mt5_ticket") or trade.get("ticket"))],
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+        }
+
     def _base_record(self, payload: dict[str, Any], status: str, result: str) -> dict[str, Any]:
         now = utc_now_iso()
         existing = self.get_trade(str(payload.get("trade_id"))) if payload.get("trade_id") else None
@@ -285,6 +318,9 @@ class PersistentTradeJournalService:
             "confirmation_missing": payload.get("confirmation_missing") if isinstance(payload.get("confirmation_missing"), list) else (existing or {}).get("confirmation_missing", []),
             "adaptive_level": self._number_or_none(payload.get("adaptive_level")) if payload.get("adaptive_level") is not None else (existing or {}).get("adaptive_level"),
             "adaptive_strategy_level": self._number_or_none(payload.get("adaptive_strategy_level")) if payload.get("adaptive_strategy_level") is not None else (existing or {}).get("adaptive_strategy_level"),
+            "active_stats_excluded": bool(payload.get("active_stats_excluded")) if payload.get("active_stats_excluded") is not None else bool((existing or {}).get("active_stats_excluded", False)),
+            "active_stats_excluded_at": self._text(payload.get("active_stats_excluded_at")) or (existing or {}).get("active_stats_excluded_at", ""),
+            "active_stats_excluded_reason": self._text(payload.get("active_stats_excluded_reason")) or (existing or {}).get("active_stats_excluded_reason", ""),
             "legacy_path_loss": bool(payload.get("legacy_path_loss")) if payload.get("legacy_path_loss") is not None else bool((existing or {}).get("legacy_path_loss", False)),
             "legacy_execution_audit": payload.get("legacy_execution_audit") if isinstance(payload.get("legacy_execution_audit"), dict) else (existing or {}).get("legacy_execution_audit", {}),
             "strategy_profile": strategy_profile,

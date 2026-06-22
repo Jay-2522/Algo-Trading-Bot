@@ -97,7 +97,7 @@ export async function fetchClientOperatingDashboard() {
       broker_execution_enabled: false,
     }),
     openPositions: fetchJson<ApiRecord>("/mt5-demo/position-monitor/open", { positions: [] }),
-    recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/recent?limit=100", []),
+    recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/all?limit=100000", []),
     journalSummary: fetchJson<ApiRecord>("/trade-journal/persistence/summary", {}),
     outcomeSummary: fetchJson<ApiRecord>("/analytics/outcomes/summary", {}),
     guardedStatus: fetchJson<ApiRecord>("/mt5-demo/guarded-demo-order/status", {}),

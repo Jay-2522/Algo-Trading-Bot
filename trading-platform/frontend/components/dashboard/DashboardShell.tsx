@@ -14,14 +14,12 @@ import {
   fetchClientSignals,
   fetchReasonMessages,
   approveExecutionModeSignal,
-  emergencyStopAutoValidation,
   fetchAutoValidationScanDiagnostics,
   fetchAutoValidationStatus,
   previewClientDemoTrade,
   pauseAutoValidation,
   rejectExecutionModeSignal,
   resetAutoValidationClosedTrades,
-  resetAutoValidationOpenTrades,
   resumeAutoValidation,
   runAutoValidationExitManagement,
   sendGuardedClientDemoTrade,
@@ -65,7 +63,7 @@ type HeldSignals = Partial<Record<ScopedSymbol, ApiRecord>>;
 type BrokerView = "startrader" | "vantage" | "fxpro";
 type PortalView = "portal" | "traderProfile" | "testEnvironment" | BrokerView | "chat";
 type ToastState = { id: number; tone: "loading" | "success" | "error"; message: string };
-type AutoValidationAction = "start" | "pause" | "resume" | "stop" | "emergency-stop" | "reset-open-trades" | "reset-closed-trades";
+type AutoValidationAction = "start" | "pause" | "resume" | "stop" | "reset-closed-trades";
 
 const READY_SIGNAL_HOLD_SECONDS = 30;
 const TARGET_TRADES = 30;
@@ -439,8 +437,12 @@ function tradeSessionId(trade: ApiRecord): string {
   return readText(trade, ["validation_session_id", "session_id"], "");
 }
 
+function activeStatsExcluded(trade: ApiRecord): boolean {
+  return trade.active_stats_excluded === true || readText(trade, ["active_stats_excluded"], "").toLowerCase() === "true";
+}
+
 function closedTradesOnly(trades: ApiRecord[]): ApiRecord[] {
-  return trades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
+  return trades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED" && !activeStatsExcluded(trade));
 }
 
 function round3ClosedTrades(data: DashboardData, trades: ApiRecord[]): ApiRecord[] {
@@ -1003,7 +1005,7 @@ export function DashboardShell(_: {
       return held && signalHoldRemaining(held, nowMs) > 0 ? held : signal;
     });
   }, [data.clientSignals, heldReadySignals, nowMs]);
-  const closedTrades = useMemo(() => data.recentTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED"), [data.recentTrades]);
+  const closedTrades = useMemo(() => closedTradesOnly(data.recentTrades), [data.recentTrades]);
   const activeSessionId = currentValidationSessionId(data.autoValidation);
   const clientClosedTrades = useMemo(() => sessionScopedRecords(closedTrades, activeSessionId), [closedTrades, activeSessionId]);
   const clientOpenPositions = useMemo(() => validationOpenPositions(data.openPositions), [data.openPositions]);
@@ -1232,10 +1234,6 @@ export function DashboardShell(_: {
 
   async function handleAutoValidationAction(action: AutoValidationAction) {
     if (workingAction !== null) return;
-    if (action === "reset-open-trades") {
-      const confirmed = window.confirm("Reset active open trade records for the current Round 3 session only? This will not send MT5 orders or change account balance/equity.");
-      if (!confirmed) return;
-    }
     if (action === "reset-closed-trades") {
       const confirmed = window.confirm("Reset active closed trade records for the current Round 3 session only? This clears current-round outcomes and analytics, but does not affect archived rounds or Round 2 history.");
       if (!confirmed) return;
@@ -1271,12 +1269,8 @@ export function DashboardShell(_: {
             ? await pauseAutoValidation()
             : action === "resume"
               ? await resumeAutoValidation()
-              : action === "emergency-stop"
-                ? await emergencyStopAutoValidation()
-                : action === "reset-open-trades"
-                  ? await resetAutoValidationOpenTrades()
-                  : action === "reset-closed-trades"
-                    ? await resetAutoValidationClosedTrades()
+              : action === "reset-closed-trades"
+                ? await resetAutoValidationClosedTrades()
                 : await stopAutoValidation();
       setData((current) => {
         const next = { ...current, autoValidation: result };
@@ -1290,6 +1284,9 @@ export function DashboardShell(_: {
         showToast("error", message);
       } else {
         showToast("success", autoValidationSuccessMessage(action));
+      }
+      if (action === "reset-closed-trades") {
+        await refresh();
       }
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "AUTO validation action failed.");
@@ -1585,7 +1582,7 @@ function ClientPortalOverview({
       </section>
 
       <section className="portal-bottom-grid">
-        <TradeHistoryPanel closedTrades={closedTrades} />
+        <TradeHistoryPanel trades={data.recentTrades} />
         <MarketHoursCard />
       </section>
     </div>
@@ -2445,9 +2442,23 @@ function downloadCsv(filename: string, rows: string[][]): void {
   URL.revokeObjectURL(url);
 }
 
-function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
+function tradeHistoryTimestamp(trade: ApiRecord): string {
+  return readText(trade, ["updated_at", "closed_at", "close_time", "opened_at", "open_time", "created_at"], "");
+}
+
+function tradeRoundLabel(trade: ApiRecord): string {
+  const explicit = readText(trade, ["round_label", "round", "validation_round"], "");
+  if (explicit) return explicit.replace(/^ROUND_(\d+)$/i, "Round $1");
+  const sessionId = tradeSessionId(trade);
+  if (ARCHIVED_ROUND_2_SESSION_IDS.has(sessionId)) return "Round 2";
+  const profile = readText(trade, ["strategy_profile"], "").toUpperCase();
+  if (profile.includes("DEMO_COLLECTION")) return "Round 3";
+  return sessionId ? "Validation" : "Manual";
+}
+
+function TradeHistoryPanel({ trades: allTrades }: { trades: ApiRecord[] }) {
   const [filter, setFilter] = useState<"All" | "EURUSD" | "XAUUSD" | "Wins" | "Losses">("All");
-  const trades = closedTrades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED");
+  const trades = [...allTrades].sort((a, b) => tradeHistoryTimestamp(b).localeCompare(tradeHistoryTimestamp(a)));
   const filtered = trades.filter((trade) => {
     if (filter === "All") return true;
     if (filter === "EURUSD") return readText(trade, ["symbol"], "EURUSD").toUpperCase() === "EURUSD";
@@ -2459,19 +2470,22 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
   const losses = trades.filter((trade) => readText(trade, ["result"], "").toUpperCase() === "LOSS").length;
   const netPnl = trades.reduce((sum, trade) => sum + readNumber(trade, ["net_pnl", "total_pnl", "profit_loss", "pnl"], 0), 0);
   const exportCSV = () => {
-    const header = ["Time", "Symbol", "Buy/Sell", "Entry", "Stop Loss", "Take Profit", "Exit", "Result", "P&L", "Status", "Reason"];
-    const rows = trades.map((trade, index) => [
-      readText(trade, ["closed_at", "closeTime", "close_time"], ""),
+    const header = ["Ticket", "Round", "Session ID", "Symbol", "Direction", "Entry Price", "Current/Close Price", "SL", "TP", "Status", "Result", "P&L", "Opened Time", "Closed Time"];
+    const rows = trades.map((trade) => [
+      readText(trade, ["mt5_ticket", "ticket"], ""),
+      tradeRoundLabel(trade),
+      tradeSessionId(trade),
       readText(trade, ["symbol"], "EURUSD"),
       readText(trade, ["side", "type"], ""),
       String(readNumber(trade, ["entry_price", "entryPrice"], 0)),
+      String(readNumber(trade, ["current_price", "currentPrice", "close_price", "exitPrice"], 0)),
       String(readNumber(trade, ["stop_loss", "stopLoss"], 0)),
       String(readNumber(trade, ["take_profit", "takeProfit"], 0)),
-      String(readNumber(trade, ["close_price", "exitPrice"], 0)),
+      readText(trade, ["status"], ""),
       readText(trade, ["result"], ""),
       String(readNumber(trade, ["net_pnl", "total_pnl", "profit_loss", "pnl"], 0)),
-      readText(trade, ["status"], ""),
-      readText(trade, ["exit_reason", "setup_reason", "reason"], ""),
+      readText(trade, ["opened_at", "open_time", "created_at"], ""),
+      readText(trade, ["closed_at", "closeTime", "close_time"], ""),
     ]);
     const csv = [header, ...rows].map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -2502,7 +2516,7 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
         <div className="trade-history-table-wrap">
           <table className="trade-history-table">
             <thead>
-              <tr>{["Time", "Symbol", "Buy/Sell", "Entry", "Stop Loss", "Take Profit", "Exit", "Result", "P&L", "Status", "Reason"].map((item) => <th key={item}>{item}</th>)}</tr>
+              <tr>{["Ticket", "Round", "Session ID", "Symbol", "Direction", "Entry Price", "Current/Close Price", "SL", "TP", "Status", "Result", "P&L", "Opened Time", "Closed Time"].map((item) => <th key={item}>{item}</th>)}</tr>
             </thead>
             <tbody>
               {filtered.map((trade, index) => {
@@ -2511,19 +2525,24 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
                 const pnl = readNumber(trade, ["net_pnl", "total_pnl", "profit_loss", "pnl"], 0);
                 const symbol = readText(trade, ["symbol"], "EURUSD");
                 const digits = symbol === "XAUUSD" ? 2 : 5;
+                const status = readText(trade, ["status"], "OPEN").toUpperCase();
+                const currentOrClosePrice = readNumber(trade, ["current_price", "currentPrice", "close_price", "exitPrice"], Number.NaN);
                 return (
                   <tr key={readText(trade, ["trade_id", "id", "mt5_ticket"], String(index))}>
-                    <td>{formatTradeTime(readText(trade, ["closed_at", "closeTime", "close_time"], ""))}</td>
+                    <td>{readText(trade, ["mt5_ticket", "ticket"], "-")}</td>
+                    <td>{tradeRoundLabel(trade)}</td>
+                    <td className="trade-history-session">{tradeSessionId(trade) || "-"}</td>
                     <td>{symbol}</td>
                     <td><span className={`trade-type-pill ${type === "SELL" ? "sell" : "buy"}`}>{type}</span></td>
                     <td>{marketPriceText(readNumber(trade, ["entry_price", "entryPrice"], Number.NaN), digits)}</td>
+                    <td>{marketPriceText(currentOrClosePrice, digits)}</td>
                     <td>{marketPriceText(readNumber(trade, ["stop_loss", "stopLoss"], Number.NaN), digits)}</td>
                     <td>{marketPriceText(readNumber(trade, ["take_profit", "takeProfit"], Number.NaN), digits)}</td>
-                    <td>{marketPriceText(readNumber(trade, ["close_price", "exitPrice"], Number.NaN), digits)}</td>
-                    <td><span className={`result-pill ${result === "LOSS" ? "loss" : "win"}`}>{result || "UNKNOWN"}</span></td>
+                    <td>{status}</td>
+                    <td><span className={`result-pill ${result === "LOSS" ? "loss" : result === "WIN" ? "win" : ""}`}>{result || "-"}</span></td>
                     <td className={pnlClass(pnl)}>{money(pnl)}</td>
-                    <td>{readText(trade, ["status"], "CLOSED")}</td>
-                    <td>{readText(trade, ["exit_reason", "setup_reason", "reason"], "Closed trade")}</td>
+                    <td>{formatTradeTime(readText(trade, ["opened_at", "open_time", "created_at"], ""))}</td>
+                    <td>{formatTradeTime(readText(trade, ["closed_at", "closeTime", "close_time"], ""))}</td>
                   </tr>
                 );
               })}
@@ -2533,7 +2552,7 @@ function TradeHistoryPanel({ closedTrades }: { closedTrades: ApiRecord[] }) {
       ) : (
         <div className="trade-history-empty">
           <strong>No trades recorded yet.</strong>
-          <span>Trades will appear here automatically as validation closes positions.</span>
+          <span>Trades will appear here automatically as validation opens, updates, and closes positions.</span>
         </div>
       )}
       <div className="trade-history-summary">
@@ -2850,7 +2869,6 @@ function ClientDashboardView({
               <ClientButton disabled={controlsDisabled || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-pause"} onClick={() => onAutoValidationAction("pause")}>Pause</ClientButton>
               <ClientButton disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-stop"} onClick={() => onAutoValidationAction("stop")}>Stop</ClientButton>
               <ClientButton disabled={controlsDisabled} loading={workingAction === "dashboard-refresh"} onClick={onRefresh}>Refresh</ClientButton>
-              <ClientButton disabled={controlsDisabled} loading={workingAction === "auto-validation-reset-open-trades"} onClick={() => onAutoValidationAction("reset-open-trades")}>Reset Open Trades</ClientButton>
               <ClientButton disabled={controlsDisabled} loading={workingAction === "auto-validation-reset-closed-trades"} onClick={() => onAutoValidationAction("reset-closed-trades")}>Reset Closed Trades</ClientButton>
             </div>
           </div>
@@ -4033,11 +4051,7 @@ function autoValidationLoadingMessage(action: AutoValidationAction): string {
         ? "Pausing validation..."
         : action === "stop"
           ? "Stopping validation..."
-          : action === "reset-open-trades"
-            ? "Resetting open trade records..."
-            : action === "reset-closed-trades"
-              ? "Resetting closed trade records..."
-              : "Sending emergency stop...";
+          : "Resetting closed trade records...";
 }
 
 function autoValidationSuccessMessage(action: AutoValidationAction): string {
@@ -4046,14 +4060,10 @@ function autoValidationSuccessMessage(action: AutoValidationAction): string {
     : action === "resume"
       ? "Validation resumed successfully"
       : action === "pause"
-        ? "Validation paused successfully"
-        : action === "stop"
-          ? "Validation stopped successfully"
-          : action === "reset-open-trades"
-            ? "Open trade records reset"
-            : action === "reset-closed-trades"
-              ? "Closed trade records reset"
-              : "Emergency stop sent successfully";
+      ? "Validation paused successfully"
+      : action === "stop"
+        ? "Validation stopped successfully"
+        : "Closed trade records reset";
 }
 
 function autoValidationErrorMessage(action: AutoValidationAction): string {
@@ -4062,14 +4072,10 @@ function autoValidationErrorMessage(action: AutoValidationAction): string {
     : action === "resume"
       ? "Failed to resume validation"
       : action === "pause"
-        ? "Failed to pause validation"
-        : action === "stop"
-          ? "Failed to stop validation"
-          : action === "reset-open-trades"
-            ? "Failed to reset open trades"
-            : action === "reset-closed-trades"
-              ? "Failed to reset closed trades"
-              : "Failed to send emergency stop";
+      ? "Failed to pause validation"
+      : action === "stop"
+        ? "Failed to stop validation"
+        : "Failed to reset closed trades";
 }
 
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
@@ -4829,7 +4835,7 @@ function AutoValidationPanel({
   nowMs: number;
   pollError: string;
   workingAction: string | null;
-  onAction: (action: "start" | "pause" | "resume" | "stop" | "emergency-stop") => void;
+  onAction: (action: "start" | "pause" | "resume" | "stop") => void;
 }) {
   const session = asRecord(status?.session);
   const config = asRecord(status?.config);
@@ -4919,9 +4925,6 @@ function AutoValidationPanel({
           </button>
           <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("stop")} type="button">
             Stop
-          </button>
-          <button className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-black text-rose-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("emergency-stop")} type="button">
-            Emergency Stop
           </button>
         </div>
       </div>

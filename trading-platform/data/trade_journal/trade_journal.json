@@ -9,11 +9,145 @@
         "MOMENTUM_DISPLACEMENT_MISSING",
         "ATR_VOLATILITY_MISSING"
       ],
+      "autopsy": {
+        "adaptive_level": null,
+        "candles_after_entry": [
+          {
+            "close": 1.14389,
+            "high": 1.14408,
+            "low": 1.14374,
+            "open": 1.14406,
+            "source": "MT5_DEMO",
+            "tick_volume": 668,
+            "time": "2026-06-19T07:15:00+00:00"
+          },
+          {
+            "close": 1.14351,
+            "high": 1.1443,
+            "low": 1.14349,
+            "open": 1.1439,
+            "source": "MT5_DEMO",
+            "tick_volume": 803,
+            "time": "2026-06-19T07:30:00+00:00"
+          },
+          {
+            "close": 1.14282,
+            "high": 1.14351,
+            "low": 1.14268,
+            "open": 1.1435,
+            "source": "MT5_DEMO",
+            "tick_volume": 943,
+            "time": "2026-06-19T07:45:00+00:00"
+          },
+          {
+            "close": 1.14242,
+            "high": 1.14285,
+            "low": 1.14225,
+            "open": 1.14283,
+            "source": "MT5_DEMO",
+            "tick_volume": 1286,
+            "time": "2026-06-19T08:00:00+00:00"
+          },
+          {
+            "close": 1.14219,
+            "high": 1.14245,
+            "low": 1.14172,
+            "open": 1.14242,
+            "source": "MT5_DEMO",
+            "tick_volume": 1331,
+            "time": "2026-06-19T08:15:00+00:00"
+          }
+        ],
+        "candles_before_entry": [
+          {
+            "close": 1.1449799999999999,
+            "high": 1.14542,
+            "low": 1.14494,
+            "open": 1.1454,
+            "source": "MT5_DEMO",
+            "tick_volume": 544,
+            "time": "2026-06-19T06:00:00+00:00"
+          },
+          {
+            "close": 1.14432,
+            "high": 1.14499,
+            "low": 1.14429,
+            "open": 1.1449799999999999,
+            "source": "MT5_DEMO",
+            "tick_volume": 934,
+            "time": "2026-06-19T06:15:00+00:00"
+          },
+          {
+            "close": 1.1445400000000001,
+            "high": 1.14459,
+            "low": 1.1443,
+            "open": 1.14433,
+            "source": "MT5_DEMO",
+            "tick_volume": 814,
+            "time": "2026-06-19T06:30:00+00:00"
+          },
+          {
+            "close": 1.14419,
+            "high": 1.14457,
+            "low": 1.14414,
+            "open": 1.1445400000000001,
+            "source": "MT5_DEMO",
+            "tick_volume": 749,
+            "time": "2026-06-19T06:45:00+00:00"
+          },
+          {
+            "close": 1.14406,
+            "high": 1.14423,
+            "low": 1.14382,
+            "open": 1.14419,
+            "source": "MT5_DEMO",
+            "tick_volume": 856,
+            "time": "2026-06-19T07:00:00+00:00"
+          }
+        ],
+        "close_price": 1.14533,
+        "close_time": "2026-06-19T11:04:16+00:00",
+        "confirmations_missing": [
+          "liquidity sweep",
+          "BOS",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility"
+        ],
+        "confirmations_present": [
+          "H4/H1 trend alignment",
+          "FVG/imbalance",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "data_source": "VANTAGE_DEMO",
+        "did_price_move_in_favor_first": true,
+        "direction": "SELL",
+        "entry_price": 1.14441,
+        "entry_quality": "Weak",
+        "entry_time": "2026-06-19T07:01:38.037516+00:00",
+        "generated_at": "2026-06-19T19:12:30.348928+00:00",
+        "max_adverse_excursion": 0,
+        "max_favorable_excursion": 0.00269,
+        "missing_confirmation": "liquidity sweep, BOS, pullback/retest, momentum/displacement, and ATR volatility",
+        "pnl": -0.92,
+        "reason_for_loss": "SL was hit after entry without liquidity sweep and BOS.",
+        "score_at_entry": 5,
+        "should_have_waited": true,
+        "sl": 1.14533,
+        "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
+        "symbol": "EURUSD",
+        "ticket": "1462320548",
+        "tp": 1.14258,
+        "was_entry_early": true,
+        "why_sl_was_hit": "SL was hit after entry without liquidity sweep and BOS."
+      },
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
       "close_price": 1.14533,
       "closed_at": "2026-06-19T11:04:16+00:00",
-      "commission": 0.0,
+      "commission": 0,
       "confirmation_missing": [
         "liquidity sweep",
         "BOS",
@@ -28,9 +162,9 @@
         "RR >= 2.0",
         "London/NY session"
       ],
-      "confirmation_required": 3.0,
-      "confirmation_score": 5.0,
-      "confirmation_total": 10.0,
+      "confirmation_required": 3,
+      "confirmation_score": 5,
+      "confirmation_total": 10,
       "created_at": "2026-06-19T07:21:21.889615+00:00",
       "decision_reason": "Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was 5, RR was 2.0.",
       "demo_execution": true,
@@ -47,7 +181,7 @@
       "mt5_retcode": "10009",
       "mt5_ticket": "1462320548",
       "net_pnl": -0.92,
-      "notes": "Reconciled AUTO validation open MT5 position. Lifecycle closed from MT5 deal history.",
+      "notes": "Backfilled as legacy-path loss: trade opened despite missing or rejected current Round 3 final decision.",
       "opened_at": "2026-06-19T07:01:38.037516+00:00",
       "passed_rules": [
         "H4_HISTORY_AVAILABLE",
@@ -61,11 +195,11 @@
       "profit_loss": -0.92,
       "realized_pnl": -0.92,
       "result": "LOSS",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "VantageMarkets-Demo",
       "setup_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session.",
       "side": "SELL",
-      "signal_confidence": 68.0,
+      "signal_confidence": 68,
       "signal_hash": "b580b4b121b8a73f",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -74,7 +208,7 @@
       "strategy_metadata": {
         "adaptive_strategy_level": 3,
         "approval_audit": {
-          "RR": 2.0,
+          "RR": 2,
           "advisory_requirements": [
             {
               "advisory": true,
@@ -145,7 +279,7 @@
             "fvg_mandatory": false,
             "liquidity_sweep_mandatory": false,
             "min_confidence": null,
-            "min_rr": 2.0,
+            "min_rr": 2,
             "order_block_mandatory": false,
             "requires_directional_bias": true,
             "requires_h4_history": true,
@@ -168,7 +302,7 @@
           "liquidity_sweep_result": "FAIL",
           "liquidity_sweep_status": "MISSING",
           "m15_history_status": "AVAILABLE",
-          "min_rr": 2.0,
+          "min_rr": 2,
           "missing_requirements": [
             {
               "code": "CONFIRMATION_SCORE_LOW",
@@ -210,8 +344,8 @@
               "label": "Liquidity sweep missing; advisory confidence only."
             }
           ],
-          "required_rr": 2.0,
-          "risk_reward": 2.0,
+          "required_rr": 2,
+          "risk_reward": 2,
           "rr": null,
           "rr_result": "FAIL",
           "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
@@ -309,7 +443,7 @@
           }
         },
         "demo_risk_model": {
-          "min_rr": 2.0,
+          "min_rr": 2,
           "model": "AUTO_RUNNER_FIXED_RISK",
           "risk_distance": 0.00092
         },
@@ -328,14 +462,14 @@
             "liquidity_sweep_quality": 0,
             "order_block_quality": 10,
             "session_quality": 8.5,
-            "spread_quality": 10.0,
+            "spread_quality": 10,
             "trend_alignment": 20,
-            "volatility_quality": 10.0
+            "volatility_quality": 10
           },
           "rating": "WATCHLIST"
         },
         "round3_diagnostics": {
-          "RR": 2.0,
+          "RR": 2,
           "advisory_session_bonus": true,
           "advisory_warnings": [
             "LIQUIDITY_SWEEP_MISSING",
@@ -398,8 +532,8 @@
             "STRONG_CONFIRMATIONS_2_PLUS"
           ],
           "rejection_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session.",
-          "required_rr": 2.0,
-          "risk_reward": 2.0,
+          "required_rr": 2,
+          "risk_reward": 2,
           "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
           "session": "London",
           "signal_h1_count": 300,
@@ -423,19 +557,252 @@
           "order_block": true,
           "session": "London",
           "session_valid": true,
-          "spread_quality": 1.0,
-          "volatility_quality": 1.0
+          "spread_quality": 1,
+          "volatility_quality": 1
         },
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": 0.0,
+      "swap": 0,
       "symbol": "EURUSD",
       "take_profit": 1.14258,
       "total_pnl": -0.92,
       "trade_id": "mt5_demo_1462320548",
-      "updated_at": "2026-06-19T08:04:19.148831+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
+      "updated_at": "2026-06-19T19:12:30.348928+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "legacy_path_loss": true,
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "ticket": "1462320548",
+        "symbol": "EURUSD",
+        "legacy_required_detected": true,
+        "round3_rejected_detected": true,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 3,
+        "round3_confirmation_required": 5,
+        "recorded_confirmation_score": 5,
+        "round3_final_decision": "REJECTED",
+        "round3_failed_rules": [
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "final_decision": {
+          "status": "REJECTED",
+          "raw_status": "REJECTED",
+          "round": "ROUND_3",
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "symbol": "EURUSD",
+          "adaptive_level": null,
+          "score": 5,
+          "required_score": 5,
+          "hard_gates_passed": false,
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "SPREAD_ACCEPTABLE",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "score_components": {
+            "confirmation_states": {
+              "ATR_VOLATILITY": false,
+              "BOS": false,
+              "FVG_IMBALANCE": true,
+              "LIQUIDITY_SWEEP": false,
+              "MOMENTUM_DISPLACEMENT": false,
+              "PULLBACK_RETEST": false,
+              "RR_2_0": false,
+              "SESSION_LONDON_NY_BONUS": false,
+              "SPREAD_CLEAN": false,
+              "TREND_ALIGNMENT": true
+            },
+            "score_breakdown": {},
+            "confirmation_weights": {},
+            "confirmation_passed": [
+              "H4/H1 trend alignment",
+              "FVG/imbalance"
+            ],
+            "confirmation_missing": [
+              "liquidity sweep",
+              "BOS",
+              "pullback/retest",
+              "momentum/displacement",
+              "ATR volatility",
+              "clean spread",
+              "RR >= 2.0",
+              "London/NY session"
+            ],
+            "passed_rules": [
+              "H4_HISTORY_AVAILABLE",
+              "M15_HISTORY_AVAILABLE",
+              "RR_2_0_OR_HIGHER",
+              "SPREAD_ACCEPTABLE",
+              "RISK_APPROVED",
+              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+              "STRONG_CONFIRMATIONS_2_PLUS"
+            ],
+            "failed_rules": [
+              "ROUND_3_SCORE_BELOW_THRESHOLD"
+            ]
+          },
+          "final_decision_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session."
+        },
+        "score_components": {
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": false,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "FVG/imbalance"
+          ],
+          "confirmation_missing": [
+            "liquidity sweep",
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "SPREAD_ACCEPTABLE",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ]
+        },
+        "timestamp": "2026-06-20T06:57:41.330Z"
+      },
+      "final_decision": {
+        "status": "REJECTED",
+        "raw_status": "REJECTED",
+        "round": "ROUND_3",
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "symbol": "EURUSD",
+        "adaptive_level": null,
+        "score": 5,
+        "required_score": 5,
+        "hard_gates_passed": false,
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "SPREAD_ACCEPTABLE",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "failed_rules": [
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "score_components": {
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": false,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "FVG/imbalance"
+          ],
+          "confirmation_missing": [
+            "liquidity sweep",
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "SPREAD_ACCEPTABLE",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ]
+        },
+        "final_decision_reason": "Waiting: Score 2/5. Missing liquidity sweep, BOS, pullback/retest, momentum/displacement, ATR volatility, clean spread, RR >= 2.0, and London/NY session."
+      },
+      "score_components": {
+        "confirmation_states": {
+          "ATR_VOLATILITY": false,
+          "BOS": false,
+          "FVG_IMBALANCE": true,
+          "LIQUIDITY_SWEEP": false,
+          "MOMENTUM_DISPLACEMENT": false,
+          "PULLBACK_RETEST": false,
+          "RR_2_0": false,
+          "SESSION_LONDON_NY_BONUS": false,
+          "SPREAD_CLEAN": false,
+          "TREND_ALIGNMENT": true
+        },
+        "score_breakdown": {},
+        "confirmation_weights": {},
+        "confirmation_passed": [
+          "H4/H1 trend alignment",
+          "FVG/imbalance"
+        ],
+        "confirmation_missing": [
+          "liquidity sweep",
+          "BOS",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "SPREAD_ACCEPTABLE",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "failed_rules": [
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ]
+      }
     },
     {
       "account_login": "25543844",
@@ -445,11 +812,145 @@
         "MOMENTUM_DISPLACEMENT_MISSING",
         "ATR_VOLATILITY_MISSING"
       ],
+      "autopsy": {
+        "adaptive_level": null,
+        "candles_after_entry": [
+          {
+            "close": 1.14389,
+            "high": 1.14408,
+            "low": 1.14374,
+            "open": 1.14406,
+            "source": "MT5_DEMO",
+            "tick_volume": 668,
+            "time": "2026-06-19T07:15:00+00:00"
+          },
+          {
+            "close": 1.14351,
+            "high": 1.1443,
+            "low": 1.14349,
+            "open": 1.1439,
+            "source": "MT5_DEMO",
+            "tick_volume": 803,
+            "time": "2026-06-19T07:30:00+00:00"
+          },
+          {
+            "close": 1.14282,
+            "high": 1.14351,
+            "low": 1.14268,
+            "open": 1.1435,
+            "source": "MT5_DEMO",
+            "tick_volume": 943,
+            "time": "2026-06-19T07:45:00+00:00"
+          },
+          {
+            "close": 1.14242,
+            "high": 1.14285,
+            "low": 1.14225,
+            "open": 1.14283,
+            "source": "MT5_DEMO",
+            "tick_volume": 1286,
+            "time": "2026-06-19T08:00:00+00:00"
+          },
+          {
+            "close": 1.14219,
+            "high": 1.14245,
+            "low": 1.14172,
+            "open": 1.14242,
+            "source": "MT5_DEMO",
+            "tick_volume": 1331,
+            "time": "2026-06-19T08:15:00+00:00"
+          }
+        ],
+        "candles_before_entry": [
+          {
+            "close": 1.1449799999999999,
+            "high": 1.14542,
+            "low": 1.14494,
+            "open": 1.1454,
+            "source": "MT5_DEMO",
+            "tick_volume": 544,
+            "time": "2026-06-19T06:00:00+00:00"
+          },
+          {
+            "close": 1.14432,
+            "high": 1.14499,
+            "low": 1.14429,
+            "open": 1.1449799999999999,
+            "source": "MT5_DEMO",
+            "tick_volume": 934,
+            "time": "2026-06-19T06:15:00+00:00"
+          },
+          {
+            "close": 1.1445400000000001,
+            "high": 1.14459,
+            "low": 1.1443,
+            "open": 1.14433,
+            "source": "MT5_DEMO",
+            "tick_volume": 814,
+            "time": "2026-06-19T06:30:00+00:00"
+          },
+          {
+            "close": 1.14419,
+            "high": 1.14457,
+            "low": 1.14414,
+            "open": 1.1445400000000001,
+            "source": "MT5_DEMO",
+            "tick_volume": 749,
+            "time": "2026-06-19T06:45:00+00:00"
+          },
+          {
+            "close": 1.14406,
+            "high": 1.14423,
+            "low": 1.14382,
+            "open": 1.14419,
+            "source": "MT5_DEMO",
+            "tick_volume": 856,
+            "time": "2026-06-19T07:00:00+00:00"
+          }
+        ],
+        "close_price": 1.14521,
+        "close_time": "2026-06-19T11:04:00+00:00",
+        "confirmations_missing": [
+          "BOS",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility"
+        ],
+        "confirmations_present": [
+          "H4/H1 trend alignment",
+          "liquidity sweep",
+          "FVG/imbalance",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "data_source": "VANTAGE_DEMO",
+        "did_price_move_in_favor_first": true,
+        "direction": "SELL",
+        "entry_price": 1.14425,
+        "entry_quality": "Weak",
+        "entry_time": "2026-06-19T07:13:44.449095+00:00",
+        "generated_at": "2026-06-19T19:12:30.272317+00:00",
+        "max_adverse_excursion": 0.00005,
+        "max_favorable_excursion": 0.00253,
+        "missing_confirmation": "BOS, pullback/retest, momentum/displacement, and ATR volatility",
+        "pnl": -0.96,
+        "reason_for_loss": "SL was hit after entry without BOS and pullback/retest.",
+        "score_at_entry": 6,
+        "should_have_waited": true,
+        "sl": 1.14521,
+        "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
+        "symbol": "EURUSD",
+        "ticket": "1462396401",
+        "tp": 1.14246,
+        "was_entry_early": true,
+        "why_sl_was_hit": "SL was hit after entry without BOS and pullback/retest."
+      },
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
       "close_price": 1.14521,
       "closed_at": "2026-06-19T11:04:00+00:00",
-      "commission": 0.0,
+      "commission": 0,
       "confirmation_missing": [
         "BOS",
         "pullback/retest",
@@ -464,9 +965,9 @@
         "RR >= 2.0",
         "London/NY session"
       ],
-      "confirmation_required": 3.0,
-      "confirmation_score": 6.0,
-      "confirmation_total": 10.0,
+      "confirmation_required": 3,
+      "confirmation_score": 6,
+      "confirmation_total": 10,
       "created_at": "2026-06-19T07:45:10.834072+00:00",
       "decision_reason": "Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was 6, RR was 2.0.",
       "demo_execution": true,
@@ -483,7 +984,7 @@
       "mt5_retcode": "10009",
       "mt5_ticket": "1462396401",
       "net_pnl": -0.96,
-      "notes": "Reconciled AUTO validation open MT5 position. Lifecycle closed from MT5 deal history.",
+      "notes": "Backfilled as legacy-path loss: trade opened despite missing or rejected current Round 3 final decision.",
       "opened_at": "2026-06-19T07:13:44.449095+00:00",
       "passed_rules": [
         "H4_HISTORY_AVAILABLE",
@@ -497,11 +998,11 @@
       "profit_loss": -0.96,
       "realized_pnl": -0.96,
       "result": "LOSS",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "VantageMarkets-Demo",
       "setup_reason": "Rejected: spread too high.",
       "side": "SELL",
-      "signal_confidence": 74.0,
+      "signal_confidence": 74,
       "signal_hash": "03fd8bec377497e1",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -510,7 +1011,7 @@
       "strategy_metadata": {
         "adaptive_strategy_level": 3,
         "approval_audit": {
-          "RR": 2.0,
+          "RR": 2,
           "advisory_requirements": [],
           "advisory_session_bonus": true,
           "advisory_warnings": [
@@ -574,7 +1075,7 @@
             "fvg_mandatory": false,
             "liquidity_sweep_mandatory": false,
             "min_confidence": null,
-            "min_rr": 2.0,
+            "min_rr": 2,
             "order_block_mandatory": false,
             "requires_directional_bias": true,
             "requires_h4_history": true,
@@ -598,7 +1099,7 @@
           "liquidity_sweep_result": "PASS",
           "liquidity_sweep_status": "PRESENT",
           "m15_history_status": "AVAILABLE",
-          "min_rr": 2.0,
+          "min_rr": 2,
           "missing_requirements": [
             {
               "code": "CONFIRMATION_SCORE_LOW",
@@ -633,8 +1134,8 @@
           ],
           "rejection_reason": "Rejected: spread too high.",
           "relaxed_blockers": [],
-          "required_rr": 2.0,
-          "risk_reward": 2.0,
+          "required_rr": 2,
+          "risk_reward": 2,
           "rr": null,
           "rr_result": "FAIL",
           "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
@@ -732,7 +1233,7 @@
           }
         },
         "demo_risk_model": {
-          "min_rr": 2.0,
+          "min_rr": 2,
           "model": "AUTO_RUNNER_FIXED_RISK",
           "risk_distance": 0.00092
         },
@@ -751,14 +1252,14 @@
             "liquidity_sweep_quality": 15,
             "order_block_quality": 10,
             "session_quality": 8.5,
-            "spread_quality": 0.0,
+            "spread_quality": 0,
             "trend_alignment": 20,
-            "volatility_quality": 10.0
+            "volatility_quality": 10
           },
           "rating": "WATCHLIST"
         },
         "round3_diagnostics": {
-          "RR": 2.0,
+          "RR": 2,
           "advisory_session_bonus": true,
           "advisory_warnings": [
             "BOS_MISSING",
@@ -820,8 +1321,8 @@
             "STRONG_CONFIRMATIONS_2_PLUS"
           ],
           "rejection_reason": "Rejected: spread too high.",
-          "required_rr": 2.0,
-          "risk_reward": 2.0,
+          "required_rr": 2,
+          "risk_reward": 2,
           "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
           "session": "London",
           "signal_h1_count": 300,
@@ -845,28 +1346,393 @@
           "order_block": true,
           "session": "London",
           "session_valid": true,
-          "spread_quality": 0.0,
-          "volatility_quality": 1.0
+          "spread_quality": 0,
+          "volatility_quality": 1
         },
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": 0.0,
+      "swap": 0,
       "symbol": "EURUSD",
       "take_profit": 1.14246,
       "total_pnl": -0.96,
       "trade_id": "mt5_demo_1462396401",
-      "updated_at": "2026-06-19T08:03:59.708487+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
+      "updated_at": "2026-06-19T19:12:30.272317+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "legacy_path_loss": true,
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "ticket": "1462396401",
+        "symbol": "EURUSD",
+        "legacy_required_detected": true,
+        "round3_rejected_detected": true,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 3,
+        "round3_confirmation_required": 5,
+        "recorded_confirmation_score": 6,
+        "round3_final_decision": "REJECTED",
+        "round3_failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "final_decision": {
+          "status": "REJECTED",
+          "raw_status": "REJECTED",
+          "round": "ROUND_3",
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "symbol": "EURUSD",
+          "adaptive_level": null,
+          "score": 6,
+          "required_score": 5,
+          "hard_gates_passed": false,
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "score_components": {
+            "confirmation_states": {
+              "ATR_VOLATILITY": false,
+              "BOS": false,
+              "FVG_IMBALANCE": true,
+              "LIQUIDITY_SWEEP": true,
+              "MOMENTUM_DISPLACEMENT": false,
+              "PULLBACK_RETEST": false,
+              "RR_2_0": false,
+              "SESSION_LONDON_NY_BONUS": false,
+              "SPREAD_CLEAN": false,
+              "TREND_ALIGNMENT": true
+            },
+            "score_breakdown": {},
+            "confirmation_weights": {},
+            "confirmation_passed": [
+              "H4/H1 trend alignment",
+              "liquidity sweep",
+              "FVG/imbalance"
+            ],
+            "confirmation_missing": [
+              "BOS",
+              "pullback/retest",
+              "momentum/displacement",
+              "ATR volatility",
+              "clean spread",
+              "RR >= 2.0",
+              "London/NY session"
+            ],
+            "passed_rules": [
+              "H4_HISTORY_AVAILABLE",
+              "M15_HISTORY_AVAILABLE",
+              "RR_2_0_OR_HIGHER",
+              "RISK_APPROVED",
+              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+              "STRONG_CONFIRMATIONS_2_PLUS"
+            ],
+            "failed_rules": [
+              "SPREAD_TOO_HIGH",
+              "ROUND_3_SCORE_BELOW_THRESHOLD"
+            ]
+          },
+          "final_decision_reason": "Rejected: spread too high."
+        },
+        "score_components": {
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep",
+            "FVG/imbalance"
+          ],
+          "confirmation_missing": [
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ]
+        },
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "final_decision": {
+        "status": "REJECTED",
+        "raw_status": "REJECTED",
+        "round": "ROUND_3",
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "symbol": "EURUSD",
+        "adaptive_level": null,
+        "score": 6,
+        "required_score": 5,
+        "hard_gates_passed": false,
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "score_components": {
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": true,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep",
+            "FVG/imbalance"
+          ],
+          "confirmation_missing": [
+            "BOS",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ]
+        },
+        "final_decision_reason": "Rejected: spread too high."
+      },
+      "score_components": {
+        "confirmation_states": {
+          "ATR_VOLATILITY": false,
+          "BOS": false,
+          "FVG_IMBALANCE": true,
+          "LIQUIDITY_SWEEP": true,
+          "MOMENTUM_DISPLACEMENT": false,
+          "PULLBACK_RETEST": false,
+          "RR_2_0": false,
+          "SESSION_LONDON_NY_BONUS": false,
+          "SPREAD_CLEAN": false,
+          "TREND_ALIGNMENT": true
+        },
+        "score_breakdown": {},
+        "confirmation_weights": {},
+        "confirmation_passed": [
+          "H4/H1 trend alignment",
+          "liquidity sweep",
+          "FVG/imbalance"
+        ],
+        "confirmation_missing": [
+          "BOS",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ]
+      }
     },
     {
       "account_login": "",
       "advisory_warnings": [],
+      "autopsy": {
+        "adaptive_level": null,
+        "candles_after_entry": [
+          {
+            "close": 1.14419,
+            "high": 1.14457,
+            "low": 1.14414,
+            "open": 1.1445400000000001,
+            "source": "MT5_DEMO",
+            "tick_volume": 749,
+            "time": "2026-06-19T06:45:00+00:00"
+          },
+          {
+            "close": 1.14406,
+            "high": 1.14423,
+            "low": 1.14382,
+            "open": 1.14419,
+            "source": "MT5_DEMO",
+            "tick_volume": 856,
+            "time": "2026-06-19T07:00:00+00:00"
+          },
+          {
+            "close": 1.14389,
+            "high": 1.14408,
+            "low": 1.14374,
+            "open": 1.14406,
+            "source": "MT5_DEMO",
+            "tick_volume": 668,
+            "time": "2026-06-19T07:15:00+00:00"
+          },
+          {
+            "close": 1.14351,
+            "high": 1.1443,
+            "low": 1.14349,
+            "open": 1.1439,
+            "source": "MT5_DEMO",
+            "tick_volume": 803,
+            "time": "2026-06-19T07:30:00+00:00"
+          },
+          {
+            "close": 1.14282,
+            "high": 1.14351,
+            "low": 1.14268,
+            "open": 1.1435,
+            "source": "MT5_DEMO",
+            "tick_volume": 943,
+            "time": "2026-06-19T07:45:00+00:00"
+          }
+        ],
+        "candles_before_entry": [
+          {
+            "close": 1.14566,
+            "high": 1.14573,
+            "low": 1.14555,
+            "open": 1.14566,
+            "source": "MT5_DEMO",
+            "tick_volume": 520,
+            "time": "2026-06-19T05:30:00+00:00"
+          },
+          {
+            "close": 1.1454,
+            "high": 1.14566,
+            "low": 1.14534,
+            "open": 1.14566,
+            "source": "MT5_DEMO",
+            "tick_volume": 469,
+            "time": "2026-06-19T05:45:00+00:00"
+          },
+          {
+            "close": 1.1449799999999999,
+            "high": 1.14542,
+            "low": 1.14494,
+            "open": 1.1454,
+            "source": "MT5_DEMO",
+            "tick_volume": 544,
+            "time": "2026-06-19T06:00:00+00:00"
+          },
+          {
+            "close": 1.14432,
+            "high": 1.14499,
+            "low": 1.14429,
+            "open": 1.1449799999999999,
+            "source": "MT5_DEMO",
+            "tick_volume": 934,
+            "time": "2026-06-19T06:15:00+00:00"
+          },
+          {
+            "close": 1.1445400000000001,
+            "high": 1.14459,
+            "low": 1.1443,
+            "open": 1.14433,
+            "source": "MT5_DEMO",
+            "tick_volume": 814,
+            "time": "2026-06-19T06:30:00+00:00"
+          }
+        ],
+        "close_price": 1.14425,
+        "close_time": "2026-06-19T09:59:25+00:00",
+        "confirmations_missing": [
+          "H1/H4 HTF alignment",
+          "momentum/displacement",
+          "pullback/retest",
+          "BOS",
+          "liquidity sweep",
+          "FVG retest",
+          "clean spread",
+          "RR >= 2.0"
+        ],
+        "confirmations_present": [],
+        "data_source": "VANTAGE_DEMO",
+        "did_price_move_in_favor_first": false,
+        "direction": "SELL",
+        "entry_price": 1.14337,
+        "entry_quality": "Weak",
+        "entry_time": "2026-06-19T06:33:10.770400+00:00",
+        "generated_at": "2026-06-19T19:12:30.191220+00:00",
+        "max_adverse_excursion": 0.0012,
+        "max_favorable_excursion": 0.00069,
+        "missing_confirmation": "H1/H4 HTF alignment, momentum/displacement, pullback/retest, BOS, liquidity sweep, FVG retest, clean spread, and RR >= 2.0",
+        "pnl": -0.88,
+        "reason_for_loss": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
+        "score_at_entry": null,
+        "should_have_waited": true,
+        "sl": null,
+        "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
+        "symbol": "EURUSD",
+        "ticket": "1462168751",
+        "tp": null,
+        "was_entry_early": true,
+        "why_sl_was_hit": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement."
+      },
       "broker_execution_enabled": false,
       "broker_source": "",
       "close_price": 1.14425,
       "closed_at": "2026-06-19T09:59:25+00:00",
-      "commission": 0.0,
+      "commission": 0,
       "confirmation_missing": [],
       "confirmation_passed": [],
       "confirmation_required": null,
@@ -888,17 +1754,17 @@
       "mt5_retcode": "",
       "mt5_ticket": "1462168751",
       "net_pnl": -0.88,
-      "notes": "Reconciled from MT5-confirmed validation close report.",
+      "notes": "Backfilled as legacy-path loss: trade opened despite missing or rejected current Round 3 final decision.",
       "opened_at": "2026-06-19T06:33:10.770400+00:00",
       "passed_rules": [],
       "profit_loss": -0.88,
       "realized_pnl": -0.88,
       "result": "LOSS",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "",
       "setup_reason": "",
       "side": "SELL",
-      "signal_confidence": 0.0,
+      "signal_confidence": 0,
       "signal_hash": "",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -906,22 +1772,232 @@
       "stop_loss": null,
       "strategy_metadata": {},
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": 0.0,
+      "swap": 0,
       "symbol": "EURUSD",
       "take_profit": null,
       "total_pnl": -0.88,
       "trade_id": "mt5_demo_1462168751",
-      "updated_at": "2026-06-19T07:45:13.653047+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
+      "updated_at": "2026-06-19T19:12:30.191220+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "legacy_path_loss": true,
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "ticket": "1462168751",
+        "symbol": "EURUSD",
+        "legacy_required_detected": false,
+        "round3_rejected_detected": false,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 0,
+        "round3_confirmation_required": null,
+        "recorded_confirmation_score": 0,
+        "round3_final_decision": "UNKNOWN",
+        "round3_failed_rules": [],
+        "final_decision": {
+          "status": "UNKNOWN",
+          "raw_status": "UNKNOWN",
+          "round": "ROUND_3",
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "symbol": "EURUSD",
+          "adaptive_level": null,
+          "score": 0,
+          "required_score": 0,
+          "hard_gates_passed": false,
+          "passed_rules": [],
+          "failed_rules": [],
+          "score_components": {
+            "confirmation_states": {},
+            "score_breakdown": {},
+            "confirmation_weights": {},
+            "confirmation_passed": [],
+            "confirmation_missing": [],
+            "passed_rules": [],
+            "failed_rules": []
+          },
+          "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
+        },
+        "score_components": {
+          "confirmation_states": {},
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [],
+          "confirmation_missing": [],
+          "passed_rules": [],
+          "failed_rules": []
+        },
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "final_decision": {
+        "status": "UNKNOWN",
+        "raw_status": "UNKNOWN",
+        "round": "ROUND_3",
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "symbol": "EURUSD",
+        "adaptive_level": null,
+        "score": 0,
+        "required_score": 0,
+        "hard_gates_passed": false,
+        "passed_rules": [],
+        "failed_rules": [],
+        "score_components": {
+          "confirmation_states": {},
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [],
+          "confirmation_missing": [],
+          "passed_rules": [],
+          "failed_rules": []
+        },
+        "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
+      },
+      "score_components": {
+        "confirmation_states": {},
+        "score_breakdown": {},
+        "confirmation_weights": {},
+        "confirmation_passed": [],
+        "confirmation_missing": [],
+        "passed_rules": [],
+        "failed_rules": []
+      }
     },
     {
       "account_login": "",
       "advisory_warnings": [],
+      "autopsy": {
+        "adaptive_level": null,
+        "candles_after_entry": [
+          {
+            "close": 1.1445400000000001,
+            "high": 1.14459,
+            "low": 1.1443,
+            "open": 1.14433,
+            "source": "MT5_DEMO",
+            "tick_volume": 814,
+            "time": "2026-06-19T06:30:00+00:00"
+          },
+          {
+            "close": 1.14419,
+            "high": 1.14457,
+            "low": 1.14414,
+            "open": 1.1445400000000001,
+            "source": "MT5_DEMO",
+            "tick_volume": 749,
+            "time": "2026-06-19T06:45:00+00:00"
+          },
+          {
+            "close": 1.14406,
+            "high": 1.14423,
+            "low": 1.14382,
+            "open": 1.14419,
+            "source": "MT5_DEMO",
+            "tick_volume": 856,
+            "time": "2026-06-19T07:00:00+00:00"
+          },
+          {
+            "close": 1.14389,
+            "high": 1.14408,
+            "low": 1.14374,
+            "open": 1.14406,
+            "source": "MT5_DEMO",
+            "tick_volume": 668,
+            "time": "2026-06-19T07:15:00+00:00"
+          },
+          {
+            "close": 1.14351,
+            "high": 1.1443,
+            "low": 1.14349,
+            "open": 1.1439,
+            "source": "MT5_DEMO",
+            "tick_volume": 803,
+            "time": "2026-06-19T07:30:00+00:00"
+          }
+        ],
+        "candles_before_entry": [
+          {
+            "close": 1.14565,
+            "high": 1.1457,
+            "low": 1.14517,
+            "open": 1.14526,
+            "source": "MT5_DEMO",
+            "tick_volume": 599,
+            "time": "2026-06-19T05:15:00+00:00"
+          },
+          {
+            "close": 1.14566,
+            "high": 1.14573,
+            "low": 1.14555,
+            "open": 1.14566,
+            "source": "MT5_DEMO",
+            "tick_volume": 520,
+            "time": "2026-06-19T05:30:00+00:00"
+          },
+          {
+            "close": 1.1454,
+            "high": 1.14566,
+            "low": 1.14534,
+            "open": 1.14566,
+            "source": "MT5_DEMO",
+            "tick_volume": 469,
+            "time": "2026-06-19T05:45:00+00:00"
+          },
+          {
+            "close": 1.1449799999999999,
+            "high": 1.14542,
+            "low": 1.14494,
+            "open": 1.1454,
+            "source": "MT5_DEMO",
+            "tick_volume": 544,
+            "time": "2026-06-19T06:00:00+00:00"
+          },
+          {
+            "close": 1.14432,
+            "high": 1.14499,
+            "low": 1.14429,
+            "open": 1.1449799999999999,
+            "source": "MT5_DEMO",
+            "tick_volume": 934,
+            "time": "2026-06-19T06:15:00+00:00"
+          }
+        ],
+        "close_price": 1.14463,
+        "close_time": "2026-06-19T10:02:25+00:00",
+        "confirmations_missing": [
+          "H1/H4 HTF alignment",
+          "momentum/displacement",
+          "pullback/retest",
+          "BOS",
+          "liquidity sweep",
+          "FVG retest",
+          "clean spread",
+          "RR >= 2.0"
+        ],
+        "confirmations_present": [],
+        "data_source": "VANTAGE_DEMO",
+        "did_price_move_in_favor_first": false,
+        "direction": "SELL",
+        "entry_price": 1.14368,
+        "entry_quality": "Weak",
+        "entry_time": "2026-06-19T06:23:03.668963+00:00",
+        "generated_at": "2026-06-19T19:12:30.117490+00:00",
+        "max_adverse_excursion": 0.00091,
+        "max_favorable_excursion": 0.00019,
+        "missing_confirmation": "H1/H4 HTF alignment, momentum/displacement, pullback/retest, BOS, liquidity sweep, FVG retest, clean spread, and RR >= 2.0",
+        "pnl": -0.95,
+        "reason_for_loss": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
+        "score_at_entry": null,
+        "should_have_waited": true,
+        "sl": null,
+        "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
+        "symbol": "EURUSD",
+        "ticket": "1462119261",
+        "tp": null,
+        "was_entry_early": true,
+        "why_sl_was_hit": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement."
+      },
       "broker_execution_enabled": false,
       "broker_source": "",
       "close_price": 1.14463,
       "closed_at": "2026-06-19T10:02:25+00:00",
-      "commission": 0.0,
+      "commission": 0,
       "confirmation_missing": [],
       "confirmation_passed": [],
       "confirmation_required": null,
@@ -943,17 +2019,17 @@
       "mt5_retcode": "",
       "mt5_ticket": "1462119261",
       "net_pnl": -0.95,
-      "notes": "Reconciled from MT5-confirmed validation close report.",
+      "notes": "Backfilled as legacy-path loss: trade opened despite missing or rejected current Round 3 final decision.",
       "opened_at": "2026-06-19T06:23:03.668963+00:00",
       "passed_rules": [],
       "profit_loss": -0.95,
       "realized_pnl": -0.95,
       "result": "LOSS",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "",
       "setup_reason": "",
       "side": "SELL",
-      "signal_confidence": 62.0,
+      "signal_confidence": 62,
       "signal_hash": "",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -961,13 +2037,92 @@
       "stop_loss": null,
       "strategy_metadata": {},
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": 0.0,
+      "swap": 0,
       "symbol": "EURUSD",
       "take_profit": null,
       "total_pnl": -0.95,
       "trade_id": "mt5_demo_1462119261",
-      "updated_at": "2026-06-19T07:45:13.749605+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
+      "updated_at": "2026-06-19T19:12:30.117490+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "legacy_path_loss": true,
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "ticket": "1462119261",
+        "symbol": "EURUSD",
+        "legacy_required_detected": false,
+        "round3_rejected_detected": false,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 0,
+        "round3_confirmation_required": null,
+        "recorded_confirmation_score": 0,
+        "round3_final_decision": "UNKNOWN",
+        "round3_failed_rules": [],
+        "final_decision": {
+          "status": "UNKNOWN",
+          "raw_status": "UNKNOWN",
+          "round": "ROUND_3",
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "symbol": "EURUSD",
+          "adaptive_level": null,
+          "score": 0,
+          "required_score": 0,
+          "hard_gates_passed": false,
+          "passed_rules": [],
+          "failed_rules": [],
+          "score_components": {
+            "confirmation_states": {},
+            "score_breakdown": {},
+            "confirmation_weights": {},
+            "confirmation_passed": [],
+            "confirmation_missing": [],
+            "passed_rules": [],
+            "failed_rules": []
+          },
+          "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
+        },
+        "score_components": {
+          "confirmation_states": {},
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [],
+          "confirmation_missing": [],
+          "passed_rules": [],
+          "failed_rules": []
+        },
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "final_decision": {
+        "status": "UNKNOWN",
+        "raw_status": "UNKNOWN",
+        "round": "ROUND_3",
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "symbol": "EURUSD",
+        "adaptive_level": null,
+        "score": 0,
+        "required_score": 0,
+        "hard_gates_passed": false,
+        "passed_rules": [],
+        "failed_rules": [],
+        "score_components": {
+          "confirmation_states": {},
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [],
+          "confirmation_missing": [],
+          "passed_rules": [],
+          "failed_rules": []
+        },
+        "final_decision_reason": "Execution metadata missing or contradicted current Round 3 final decision."
+      },
+      "score_components": {
+        "confirmation_states": {},
+        "score_breakdown": {},
+        "confirmation_weights": {},
+        "confirmation_passed": [],
+        "confirmation_missing": [],
+        "passed_rules": [],
+        "failed_rules": []
+      }
     },
     {
       "account_login": "",
@@ -1001,14 +2156,14 @@
       "notes": "First controlled MT5 demo order executed through guarded sender.",
       "opened_at": "",
       "passed_rules": [],
-      "profit_loss": 0.0,
+      "profit_loss": 0,
       "realized_pnl": null,
       "result": "OPEN",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "",
       "setup_reason": "Break of structure not confirmed.",
       "side": "SELL",
-      "signal_confidence": 84.0,
+      "signal_confidence": 84,
       "signal_hash": "0f8cea1055673e08",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -1036,7 +2191,7 @@
           ],
           "order_block_result": "PASS",
           "production_rules_unchanged": true,
-          "rr": 2.0,
+          "rr": 2,
           "rr_result": "PASS",
           "session_result": "PASS",
           "spread_result": "PASS",
@@ -1134,9 +2289,9 @@
             "liquidity_sweep_quality": 15,
             "order_block_quality": 10,
             "session_quality": 8.5,
-            "spread_quality": 10.0,
+            "spread_quality": 10,
             "trend_alignment": 20,
-            "volatility_quality": 10.0
+            "volatility_quality": 10
           },
           "rating": "TRADEABLE"
         },
@@ -1149,8 +2304,8 @@
           "order_block": true,
           "session": "London",
           "session_valid": true,
-          "spread_quality": 1.0,
-          "volatility_quality": 1.0
+          "spread_quality": 1,
+          "volatility_quality": 1
         }
       },
       "strategy_profile": "",
@@ -1171,11 +2326,145 @@
         "MOMENTUM_DISPLACEMENT_MISSING",
         "ATR_VOLATILITY_MISSING"
       ],
+      "autopsy": {
+        "adaptive_level": null,
+        "candles_after_entry": [
+          {
+            "close": 1.14224,
+            "high": 1.14254,
+            "low": 1.1418,
+            "open": 1.14219,
+            "source": "MT5_DEMO",
+            "tick_volume": 1222,
+            "time": "2026-06-19T08:30:00+00:00"
+          },
+          {
+            "close": 1.14302,
+            "high": 1.1433200000000001,
+            "low": 1.14224,
+            "open": 1.14226,
+            "source": "MT5_DEMO",
+            "tick_volume": 1137,
+            "time": "2026-06-19T08:45:00+00:00"
+          },
+          {
+            "close": 1.14336,
+            "high": 1.14355,
+            "low": 1.14296,
+            "open": 1.14302,
+            "source": "MT5_DEMO",
+            "tick_volume": 1417,
+            "time": "2026-06-19T09:00:00+00:00"
+          },
+          {
+            "close": 1.14364,
+            "high": 1.14384,
+            "low": 1.14319,
+            "open": 1.14337,
+            "source": "MT5_DEMO",
+            "tick_volume": 1212,
+            "time": "2026-06-19T09:15:00+00:00"
+          },
+          {
+            "close": 1.14329,
+            "high": 1.14371,
+            "low": 1.14285,
+            "open": 1.14363,
+            "source": "MT5_DEMO",
+            "tick_volume": 1043,
+            "time": "2026-06-19T09:30:00+00:00"
+          }
+        ],
+        "candles_before_entry": [
+          {
+            "close": 1.14389,
+            "high": 1.14408,
+            "low": 1.14374,
+            "open": 1.14406,
+            "source": "MT5_DEMO",
+            "tick_volume": 668,
+            "time": "2026-06-19T07:15:00+00:00"
+          },
+          {
+            "close": 1.14351,
+            "high": 1.1443,
+            "low": 1.14349,
+            "open": 1.1439,
+            "source": "MT5_DEMO",
+            "tick_volume": 803,
+            "time": "2026-06-19T07:30:00+00:00"
+          },
+          {
+            "close": 1.14282,
+            "high": 1.14351,
+            "low": 1.14268,
+            "open": 1.1435,
+            "source": "MT5_DEMO",
+            "tick_volume": 943,
+            "time": "2026-06-19T07:45:00+00:00"
+          },
+          {
+            "close": 1.14242,
+            "high": 1.14285,
+            "low": 1.14225,
+            "open": 1.14283,
+            "source": "MT5_DEMO",
+            "tick_volume": 1286,
+            "time": "2026-06-19T08:00:00+00:00"
+          },
+          {
+            "close": 1.14219,
+            "high": 1.14245,
+            "low": 1.14172,
+            "open": 1.14242,
+            "source": "MT5_DEMO",
+            "tick_volume": 1331,
+            "time": "2026-06-19T08:15:00+00:00"
+          }
+        ],
+        "close_price": 1.14638,
+        "close_time": "2026-06-19T11:41:29+00:00",
+        "confirmations_missing": [
+          "BOS",
+          "FVG/imbalance",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility"
+        ],
+        "confirmations_present": [
+          "H4/H1 trend alignment",
+          "liquidity sweep",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "data_source": "VANTAGE_DEMO",
+        "did_price_move_in_favor_first": true,
+        "direction": "SELL",
+        "entry_price": 1.14547,
+        "entry_quality": "Weak",
+        "entry_time": "2026-06-19T08:18:57.201684+00:00",
+        "generated_at": "2026-06-19T19:12:30.031296+00:00",
+        "max_adverse_excursion": 0,
+        "max_favorable_excursion": 0.00367,
+        "missing_confirmation": "BOS, FVG/imbalance, pullback/retest, momentum/displacement, and ATR volatility",
+        "pnl": -0.91,
+        "reason_for_loss": "SL was hit after entry without BOS and FVG/imbalance.",
+        "score_at_entry": 5,
+        "should_have_waited": true,
+        "sl": 1.14638,
+        "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
+        "symbol": "EURUSD",
+        "ticket": "1462695961",
+        "tp": 1.14363,
+        "was_entry_early": true,
+        "why_sl_was_hit": "SL was hit after entry without BOS and FVG/imbalance."
+      },
       "broker_execution_enabled": false,
       "broker_source": "VANTAGE_DEMO",
       "close_price": 1.14638,
       "closed_at": "2026-06-19T11:41:29+00:00",
-      "commission": 0.0,
+      "commission": 0,
       "confirmation_missing": [
         "BOS",
         "FVG/imbalance",
@@ -1190,9 +2479,9 @@
         "RR >= 2.0",
         "London/NY session"
       ],
-      "confirmation_required": 3.0,
-      "confirmation_score": 5.0,
-      "confirmation_total": 10.0,
+      "confirmation_required": 3,
+      "confirmation_score": 5,
+      "confirmation_total": 10,
       "created_at": "2026-06-19T08:18:54.622292+00:00",
       "decision_reason": "Accepted using Adaptive Level 3 because hard gates passed, HTF bias was clear, score was 5, RR was 2.0.",
       "demo_execution": true,
@@ -1209,7 +2498,7 @@
       "mt5_retcode": "10009",
       "mt5_ticket": "1462695961",
       "net_pnl": -0.91,
-      "notes": "Reconciled AUTO validation open MT5 position. Lifecycle closed from MT5 deal history.",
+      "notes": "Backfilled as legacy-path loss: trade opened despite missing or rejected current Round 3 final decision.",
       "opened_at": "2026-06-19T08:18:57.201684+00:00",
       "passed_rules": [
         "H4_HISTORY_AVAILABLE",
@@ -1223,11 +2512,11 @@
       "profit_loss": -0.91,
       "realized_pnl": -0.91,
       "result": "LOSS",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "VantageMarkets-Demo",
       "setup_reason": "Rejected: spread too high.",
       "side": "SELL",
-      "signal_confidence": 64.0,
+      "signal_confidence": 64,
       "signal_hash": "6e5644c6b1cdc5bf",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -1236,7 +2525,7 @@
       "strategy_metadata": {
         "adaptive_strategy_level": 3,
         "approval_audit": {
-          "RR": 2.0,
+          "RR": 2,
           "advisory_requirements": [],
           "advisory_session_bonus": true,
           "advisory_warnings": [
@@ -1301,7 +2590,7 @@
             "fvg_mandatory": false,
             "liquidity_sweep_mandatory": false,
             "min_confidence": null,
-            "min_rr": 2.0,
+            "min_rr": 2,
             "order_block_mandatory": false,
             "requires_directional_bias": true,
             "requires_h4_history": true,
@@ -1325,7 +2614,7 @@
           "liquidity_sweep_result": "PASS",
           "liquidity_sweep_status": "PRESENT",
           "m15_history_status": "AVAILABLE",
-          "min_rr": 2.0,
+          "min_rr": 2,
           "missing_requirements": [
             {
               "code": "CONFIRMATION_SCORE_LOW",
@@ -1361,8 +2650,8 @@
           ],
           "rejection_reason": "Rejected: spread too high.",
           "relaxed_blockers": [],
-          "required_rr": 2.0,
-          "risk_reward": 2.0,
+          "required_rr": 2,
+          "risk_reward": 2,
           "rr": null,
           "rr_result": "FAIL",
           "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
@@ -1460,7 +2749,7 @@
           }
         },
         "demo_risk_model": {
-          "min_rr": 2.0,
+          "min_rr": 2,
           "model": "AUTO_RUNNER_FIXED_RISK",
           "risk_distance": 0.00092
         },
@@ -1479,14 +2768,14 @@
             "liquidity_sweep_quality": 15,
             "order_block_quality": 10,
             "session_quality": 8.5,
-            "spread_quality": 0.0,
+            "spread_quality": 0,
             "trend_alignment": 20,
-            "volatility_quality": 10.0
+            "volatility_quality": 10
           },
           "rating": "WATCHLIST"
         },
         "round3_diagnostics": {
-          "RR": 2.0,
+          "RR": 2,
           "advisory_session_bonus": true,
           "advisory_warnings": [
             "BOS_MISSING",
@@ -1549,8 +2838,8 @@
             "STRONG_CONFIRMATIONS_2_PLUS"
           ],
           "rejection_reason": "Rejected: spread too high.",
-          "required_rr": 2.0,
-          "risk_reward": 2.0,
+          "required_rr": 2,
+          "risk_reward": 2,
           "rule_name": "ROUND_3_EDGE_SCORE_FILTERS",
           "session": "London",
           "signal_h1_count": 300,
@@ -1574,19 +2863,253 @@
           "order_block": true,
           "session": "London",
           "session_valid": true,
-          "spread_quality": 0.0,
-          "volatility_quality": 1.0
+          "spread_quality": 0,
+          "volatility_quality": 1
         },
         "strategy_profile": "DEMO_COLLECTION"
       },
       "strategy_profile": "DEMO_COLLECTION",
-      "swap": 0.0,
+      "swap": 0,
       "symbol": "EURUSD",
       "take_profit": 1.14363,
       "total_pnl": -0.91,
       "trade_id": "mt5_demo_1462695961",
-      "updated_at": "2026-06-19T08:41:29.190853+00:00",
-      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501"
+      "updated_at": "2026-06-19T19:12:30.031296+00:00",
+      "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "legacy_path_loss": true,
+      "legacy_execution_audit": {
+        "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+        "ticket": "1462695961",
+        "symbol": "EURUSD",
+        "legacy_required_detected": true,
+        "round3_rejected_detected": true,
+        "missing_final_decision_detected": true,
+        "recorded_confirmation_required": 3,
+        "round3_confirmation_required": 5,
+        "recorded_confirmation_score": 5,
+        "round3_final_decision": "REJECTED",
+        "round3_failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "final_decision": {
+          "status": "REJECTED",
+          "raw_status": "REJECTED",
+          "round": "ROUND_3",
+          "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+          "symbol": "EURUSD",
+          "adaptive_level": null,
+          "score": 5,
+          "required_score": 5,
+          "hard_gates_passed": false,
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ],
+          "score_components": {
+            "confirmation_states": {
+              "ATR_VOLATILITY": false,
+              "BOS": false,
+              "FVG_IMBALANCE": false,
+              "LIQUIDITY_SWEEP": true,
+              "MOMENTUM_DISPLACEMENT": false,
+              "PULLBACK_RETEST": false,
+              "RR_2_0": false,
+              "SESSION_LONDON_NY_BONUS": false,
+              "SPREAD_CLEAN": false,
+              "TREND_ALIGNMENT": true
+            },
+            "score_breakdown": {},
+            "confirmation_weights": {},
+            "confirmation_passed": [
+              "H4/H1 trend alignment",
+              "liquidity sweep"
+            ],
+            "confirmation_missing": [
+              "BOS",
+              "FVG/imbalance",
+              "pullback/retest",
+              "momentum/displacement",
+              "ATR volatility",
+              "clean spread",
+              "RR >= 2.0",
+              "London/NY session"
+            ],
+            "passed_rules": [
+              "H4_HISTORY_AVAILABLE",
+              "M15_HISTORY_AVAILABLE",
+              "RR_2_0_OR_HIGHER",
+              "RISK_APPROVED",
+              "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+              "STRONG_CONFIRMATIONS_2_PLUS"
+            ],
+            "failed_rules": [
+              "SPREAD_TOO_HIGH",
+              "ROUND_3_SCORE_BELOW_THRESHOLD"
+            ]
+          },
+          "final_decision_reason": "Rejected: spread too high."
+        },
+        "score_components": {
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": false,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep"
+          ],
+          "confirmation_missing": [
+            "BOS",
+            "FVG/imbalance",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ]
+        },
+        "timestamp": "2026-06-20T06:57:41.332Z"
+      },
+      "final_decision": {
+        "status": "REJECTED",
+        "raw_status": "REJECTED",
+        "round": "ROUND_3",
+        "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+        "symbol": "EURUSD",
+        "adaptive_level": null,
+        "score": 5,
+        "required_score": 5,
+        "hard_gates_passed": false,
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ],
+        "score_components": {
+          "confirmation_states": {
+            "ATR_VOLATILITY": false,
+            "BOS": false,
+            "FVG_IMBALANCE": false,
+            "LIQUIDITY_SWEEP": true,
+            "MOMENTUM_DISPLACEMENT": false,
+            "PULLBACK_RETEST": false,
+            "RR_2_0": false,
+            "SESSION_LONDON_NY_BONUS": false,
+            "SPREAD_CLEAN": false,
+            "TREND_ALIGNMENT": true
+          },
+          "score_breakdown": {},
+          "confirmation_weights": {},
+          "confirmation_passed": [
+            "H4/H1 trend alignment",
+            "liquidity sweep"
+          ],
+          "confirmation_missing": [
+            "BOS",
+            "FVG/imbalance",
+            "pullback/retest",
+            "momentum/displacement",
+            "ATR volatility",
+            "clean spread",
+            "RR >= 2.0",
+            "London/NY session"
+          ],
+          "passed_rules": [
+            "H4_HISTORY_AVAILABLE",
+            "M15_HISTORY_AVAILABLE",
+            "RR_2_0_OR_HIGHER",
+            "RISK_APPROVED",
+            "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+            "STRONG_CONFIRMATIONS_2_PLUS"
+          ],
+          "failed_rules": [
+            "SPREAD_TOO_HIGH",
+            "ROUND_3_SCORE_BELOW_THRESHOLD"
+          ]
+        },
+        "final_decision_reason": "Rejected: spread too high."
+      },
+      "score_components": {
+        "confirmation_states": {
+          "ATR_VOLATILITY": false,
+          "BOS": false,
+          "FVG_IMBALANCE": false,
+          "LIQUIDITY_SWEEP": true,
+          "MOMENTUM_DISPLACEMENT": false,
+          "PULLBACK_RETEST": false,
+          "RR_2_0": false,
+          "SESSION_LONDON_NY_BONUS": false,
+          "SPREAD_CLEAN": false,
+          "TREND_ALIGNMENT": true
+        },
+        "score_breakdown": {},
+        "confirmation_weights": {},
+        "confirmation_passed": [
+          "H4/H1 trend alignment",
+          "liquidity sweep"
+        ],
+        "confirmation_missing": [
+          "BOS",
+          "FVG/imbalance",
+          "pullback/retest",
+          "momentum/displacement",
+          "ATR volatility",
+          "clean spread",
+          "RR >= 2.0",
+          "London/NY session"
+        ],
+        "passed_rules": [
+          "H4_HISTORY_AVAILABLE",
+          "M15_HISTORY_AVAILABLE",
+          "RR_2_0_OR_HIGHER",
+          "RISK_APPROVED",
+          "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS",
+          "STRONG_CONFIRMATIONS_2_PLUS"
+        ],
+        "failed_rules": [
+          "SPREAD_TOO_HIGH",
+          "ROUND_3_SCORE_BELOW_THRESHOLD"
+        ]
+      }
     },
     {
       "account_login": "",
@@ -1620,14 +3143,14 @@
       "notes": "First controlled MT5 demo order executed through guarded sender.",
       "opened_at": "",
       "passed_rules": [],
-      "profit_loss": 0.0,
+      "profit_loss": 0,
       "realized_pnl": null,
       "result": "OPEN",
-      "risk_reward_ratio": 2.0,
+      "risk_reward_ratio": 2,
       "server": "",
       "setup_reason": "Liquidity sweep not confirmed.",
       "side": "SELL",
-      "signal_confidence": 84.0,
+      "signal_confidence": 84,
       "signal_hash": "99c1ec23a17273ea",
       "simulation_only": true,
       "source": "MT5_DEMO",
@@ -1655,7 +3178,7 @@
           ],
           "order_block_result": "PASS",
           "production_rules_unchanged": true,
-          "rr": 2.0,
+          "rr": 2,
           "rr_result": "PASS",
           "session_result": "PASS",
           "spread_result": "PASS",
@@ -1753,9 +3276,9 @@
             "liquidity_sweep_quality": 0,
             "order_block_quality": 10,
             "session_quality": 8.5,
-            "spread_quality": 10.0,
+            "spread_quality": 10,
             "trend_alignment": 20,
-            "volatility_quality": 10.0
+            "volatility_quality": 10
           },
           "rating": "TRADEABLE"
         },
@@ -1768,8 +3291,8 @@
           "order_block": true,
           "session": "London",
           "session_valid": true,
-          "spread_quality": 1.0,
-          "volatility_quality": 1.0
+          "spread_quality": 1,
+          "volatility_quality": 1
         }
       },
       "strategy_profile": "",

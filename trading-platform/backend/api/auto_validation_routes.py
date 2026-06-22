@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Body
@@ -95,6 +96,35 @@ async def get_auto_validation_summary() -> dict:
 @router.get("/read-only-scan")
 async def run_auto_validation_read_only_scan() -> dict:
     return auto_validation_service.read_only_scan()
+
+
+@router.get("/read-only-scan/{symbol}")
+async def run_auto_validation_symbol_read_only_scan(symbol: str) -> dict:
+    normalized_symbol = str(symbol or "").upper()
+    timeout_seconds = 12
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(auto_validation_service.read_only_scan_symbol, normalized_symbol), timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        diagnostic = auto_validation_service.record_scan_timeout_warning(normalized_symbol, timeout_seconds * 1000)
+        return {
+            "status": "SCAN_TIMEOUT_WARNING",
+            "symbol": normalized_symbol,
+            "active_session_id": auto_validation_service.session.get("session_id"),
+            "diagnostic": diagnostic,
+            "read_only": True,
+            "order_sent": False,
+            "timestamp": diagnostic.get("timestamp"),
+        }
+
+
+@router.get("/scan-diagnostics")
+async def get_auto_validation_scan_diagnostics() -> dict:
+    return auto_validation_service.scan_diagnostics_status()
+
+
+@router.get("/scan-health")
+async def get_auto_validation_scan_health() -> dict:
+    return auto_validation_service.scan_health()
 
 
 @router.post("/sync-lifecycle")

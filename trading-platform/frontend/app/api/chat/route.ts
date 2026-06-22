@@ -50,6 +50,7 @@ const GROQ_MODEL = process.env.GROQ_MODEL || "gemma2-9b-it";
 const GROQ_FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "";
 const REASON_STORE_PATH = path.join(process.cwd(), "..", "data", "reason_panel", "reason_messages.json");
 const VALIDATION_ROUNDS_DIR = path.join(process.cwd(), "..", "data", "validation_rounds");
+const TRADE_JOURNAL_PATH = path.join(process.cwd(), "..", "data", "trade_journal", "trade_journal.json");
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 const BUSY_MESSAGE = "The assistant is temporarily busy. Please try again in a few seconds.";
 const VALIDATION_SYMBOLS = new Set(["EURUSD", "XAUUSD", "NIFTY50"]);
@@ -170,6 +171,17 @@ async function readReasonRecords(): Promise<ReasonRecord[]> {
   }
 }
 
+async function readTradeJournalRecords(): Promise<Record<string, unknown>[]> {
+  try {
+    const raw = await readFile(TRADE_JOURNAL_PATH, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    const trades = asRecord(parsed)?.trades;
+    return Array.isArray(trades) ? trades.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : [];
+  } catch {
+    return [];
+  }
+}
+
 async function readReasonDiagnostics(): Promise<ReasonDiagnostic[]> {
   try {
     return (await readReasonRecords())
@@ -263,6 +275,47 @@ function isClosedTradeQuestion(question: string): boolean {
   ) && !isLivePositionQuestion(question);
 }
 
+function isTradeAutopsyQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("autopsy") ||
+    normalized.includes("mfe") ||
+    normalized.includes("mae") ||
+    normalized.includes("max favorable") ||
+    normalized.includes("max adverse") ||
+    normalized.includes("move in favor") ||
+    normalized.includes("moved in favor") ||
+    normalized.includes("first moved") ||
+    normalized.includes("entry timing") ||
+    normalized.includes("entries early") ||
+    normalized.includes("were entries early") ||
+    normalized.includes("waiting one candle") ||
+    normalized.includes("waited one candle") ||
+    normalized.includes("recurring pattern") ||
+    normalized.includes("compare all losses") ||
+    normalized.includes("all losses") ||
+    normalized.includes("losses happened immediately") ||
+    normalized.includes("symbol performs better") ||
+    normalized.includes("which symbol performs better") ||
+    normalized.includes("confirmation is most valuable") ||
+    normalized.includes("why did ticket") ||
+    normalized.includes("ticket") && normalized.includes("lose") ||
+    normalized.includes("latest loss") ||
+    normalized.includes("wrong with") ||
+    normalized.includes("should the bot have waited") ||
+    normalized.includes("should have waited") ||
+    normalized.includes("confirmation caused") ||
+    normalized.includes("which confirmation") ||
+    normalized.includes("causing most losses") ||
+    (normalized.includes("loss") && (normalized.includes("confirmation") || normalized.includes("pattern") || normalized.includes("early") || normalized.includes("wait")))
+  );
+}
+
+function ticketFromQuestion(question: string): string {
+  const match = question.match(/\bticket\s*#?\s*(\d{5,})\b/i) || question.match(/\b(\d{8,})\b/);
+  return match?.[1] ?? "";
+}
+
 function isProgressQuestion(question: string): boolean {
   const normalized = question.toLowerCase();
   return normalized.includes("validation progress") || normalized.includes("remaining trade") || normalized.includes("current progress") || normalized.includes("progress");
@@ -308,6 +361,173 @@ async function answerValidationHaltedQuestion(question: string): Promise<string 
     return `${message || "A stale risk halt was cleared safely."} Validation is paused, not running. Current active round remains ${closed} closed, ${wins} wins, ${losses} losses, net P&L ${formatMoney(netPnl)}.`;
   }
   return `Validation is not currently risk halted. Status is ${mode}. Current active round: ${closed} closed, ${wins} wins, ${losses} losses, net P&L ${formatMoney(netPnl)}.`;
+}
+
+function tradePnlValue(trade: Record<string, unknown>): number {
+  return numberValue(trade.net_pnl) ?? numberValue(trade.total_pnl) ?? numberValue(trade.profit_loss) ?? numberValue(trade.pnl) ?? 0;
+}
+
+function tradeTicketValue(trade: Record<string, unknown>): string {
+  return cleanText(trade.mt5_ticket) || cleanText(trade.ticket) || cleanText(trade.trade_id);
+}
+
+function tradeAutopsyRecord(trade: Record<string, unknown>): Record<string, unknown> | null {
+  return asRecord(trade.autopsy);
+}
+
+function autopsyList(autopsy: Record<string, unknown> | null, key: string): string[] {
+  const raw = autopsy?.[key];
+  return Array.isArray(raw) ? raw.map(cleanText).filter(Boolean) : [];
+}
+
+type AutopsyTrade = {
+  trade: Record<string, unknown>;
+  autopsy: Record<string, unknown>;
+};
+
+function autopsyConfidenceScore(items: AutopsyTrade[]): number {
+  if (!items.length) return 0;
+  const completeness = items.filter(({ autopsy }) => Object.keys(autopsy).length > 0).length / items.length;
+  return Math.round(Math.min(0.95, Math.max(0.45, completeness * 0.9 + Math.min(items.length, 10) * 0.005)) * 100);
+}
+
+function autopsyConfirmationBucket(value: string): string {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("bos")) return "BOS missing";
+  if (normalized.includes("liquidity") || normalized.includes("sweep")) return "Liquidity sweep missing";
+  if (normalized.includes("fvg") || normalized.includes("imbalance")) return "FVG missing";
+  if (normalized.includes("momentum") || normalized.includes("displacement")) return "Momentum missing";
+  if (normalized.includes("pullback") || normalized.includes("retest")) return "Pullback/retest missing";
+  if (normalized.includes("htf") || normalized.includes("h1/h4") || normalized.includes("trend")) return "HTF alignment missing";
+  if (normalized.includes("atr") || normalized.includes("volatility")) return "ATR volatility missing";
+  if (normalized.includes("spread")) return "Clean spread missing";
+  if (normalized.includes("rr")) return "RR >= 2.0 missing";
+  return value;
+}
+
+function rankedCounts(values: string[], denominator: number): string {
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    const label = autopsyConfirmationBucket(value);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([label, count]) => `${label}: ${count}/${denominator} (${denominator ? Math.round((count / denominator) * 100) : 0}%)`)
+    .join("; ");
+}
+
+function modeText(values: string[], fallback = "Unavailable"): string {
+  const counts = new Map<string, number>();
+  values.map(cleanText).filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+  const top = [...counts.entries()].sort((left, right) => right[1] - left[1])[0];
+  return top ? `${top[0]} (${top[1]})` : fallback;
+}
+
+function activeRoundAutopsyTrades(trades: Record<string, unknown>[], activeSessionId: string): AutopsyTrade[] {
+  return trades
+    .filter((trade) => !activeSessionId || cleanText(trade.validation_session_id) === activeSessionId)
+    .filter((trade) => cleanText(trade.status).toUpperCase() === "CLOSED")
+    .map((trade) => ({ trade, autopsy: tradeAutopsyRecord(trade) ?? {} }))
+    .filter(({ autopsy }) => Object.keys(autopsy).length > 0)
+    .sort((left, right) => Date.parse(cleanText(right.trade.closed_at) || cleanText(right.trade.updated_at)) - Date.parse(cleanText(left.trade.closed_at) || cleanText(left.trade.updated_at)));
+}
+
+function lossAutopsies(items: AutopsyTrade[]): AutopsyTrade[] {
+  return items.filter(({ trade }) => cleanText(trade.result).toUpperCase() === "LOSS" || tradePnlValue(trade) < 0);
+}
+
+function winAutopsies(items: AutopsyTrade[]): AutopsyTrade[] {
+  return items.filter(({ trade }) => cleanText(trade.result).toUpperCase() === "WIN" || tradePnlValue(trade) > 0);
+}
+
+function formatAutopsyAnswer(trade: Record<string, unknown>): string {
+  const autopsy = tradeAutopsyRecord(trade);
+  const ticket = tradeTicketValue(trade);
+  const symbol = cleanText(trade.symbol) || cleanText(autopsy?.symbol) || "Trade";
+  const side = cleanText(trade.side) || cleanText(autopsy?.direction) || "trade";
+  const pnl = tradePnlValue(trade);
+  const score = numberValue(autopsy?.score_at_entry) ?? numberValue(trade.confirmation_score);
+  const missing = autopsyList(autopsy, "confirmations_missing");
+  const reason = cleanText(autopsy?.reason_for_loss) || cleanText(trade.exit_reason) || "Loss reason is not available yet.";
+  const waited = autopsy?.should_have_waited === true ? "Yes, the bot should have waited." : autopsy?.should_have_waited === false ? "No clear wait signal was recorded." : "Wait assessment is not available yet.";
+  const fix = cleanText(autopsy?.suggested_rule_fix) || "No rule fix has been generated yet.";
+  const entryQuality = cleanText(autopsy?.entry_quality) || "Pending";
+  const mfe = numberValue(autopsy?.max_favorable_excursion);
+  const mae = numberValue(autopsy?.max_adverse_excursion);
+  const movedFirst = autopsy?.did_price_move_in_favor_first === true ? "moved in favor first" : autopsy?.did_price_move_in_favor_first === false ? "moved adverse first" : "first move unavailable";
+  return `${symbol} ticket ${ticket} ${side} closed with P&L ${formatMoney(pnl)}. Entry quality: ${entryQuality}.${score !== null ? ` Score at entry: ${score}.` : ""} ${missing.length ? `Missing confirmation: ${missing.join(", ")}.` : "No missing confirmation was recorded."} MFE ${mfe ?? "n/a"}, MAE ${mae ?? "n/a"}; price ${movedFirst}. Why: ${reason} ${waited} Suggested fix: ${fix} Confidence: ${autopsy ? 92 : 45}%.`;
+}
+
+async function answerTradeAutopsyQuestion(question: string): Promise<string | null> {
+  if (!isTradeAutopsyQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const activeSessionId = cleanText(status?.active_session_id) || cleanText(asRecord(status?.session)?.session_id);
+  const autopsies = activeRoundAutopsyTrades(await readTradeJournalRecords(), activeSessionId);
+  if (!autopsies.length) return "No active-round autopsy objects are available yet.";
+  const losses = lossAutopsies(autopsies);
+  const wins = winAutopsies(autopsies);
+  const normalized = question.toLowerCase();
+  const confidence = autopsyConfidenceScore(autopsies);
+  if (normalized.includes("which confirmation") && normalized.includes("valuable")) {
+    const allBuckets = [...new Set(autopsies.flatMap(({ autopsy }) => autopsyList(autopsy, "confirmations_present").map(autopsyConfirmationBucket)))];
+    const rows = allBuckets.map((label) => {
+      const scoped = autopsies.filter(({ autopsy }) => autopsyList(autopsy, "confirmations_present").map(autopsyConfirmationBucket).includes(label));
+      const scopedWins = winAutopsies(scoped).length;
+      return { label, trades: scoped.length, wins: scopedWins, winRate: scoped.length ? (scopedWins / scoped.length) * 100 : 0 };
+    }).filter((row) => row.trades > 0).sort((left, right) => right.winRate - left.winRate || right.trades - left.trades);
+    if (!rows.length) return `Autopsies exist, but no present-confirmation win-rate contribution is available yet. Confidence: ${confidence}%.`;
+    return `Most valuable confirmations by active-round autopsy win rate: ${rows.map((row) => `${row.label}: ${row.wins}/${row.trades} wins (${row.winRate.toFixed(0)}%)`).join("; ")}. Confidence: ${confidence}%.`;
+  }
+  if (normalized.includes("which confirmation") || normalized.includes("confirmation caused") || normalized.includes("causing most losses")) {
+    const missing = losses.flatMap(({ autopsy }) => autopsyList(autopsy, "confirmations_missing"));
+    if (!missing.length) return `Loss autopsies exist, but no missing-confirmation counts are available. Confidence: ${confidence}%.`;
+    return `Ranked missing confirmations across ${losses.length} active-round losses: ${rankedCounts(missing, losses.length)}. Confidence: ${confidence}%.`;
+  }
+  if (normalized.includes("move in favor") || normalized.includes("moved in favor") || normalized.includes("mfe") || normalized.includes("mae") || normalized.includes("first moved")) {
+    const rows = losses.map(({ trade, autopsy }) => {
+      const moved = autopsy.did_price_move_in_favor_first === true ? "yes" : autopsy.did_price_move_in_favor_first === false ? "no" : "unknown";
+      return `${tradeTicketValue(trade)}: MFE ${numberValue(autopsy.max_favorable_excursion) ?? "n/a"}, MAE ${numberValue(autopsy.max_adverse_excursion) ?? "n/a"}, moved in favor first: ${moved}`;
+    });
+    return `Price movement before SL from loss autopsies: ${rows.join("; ")}. Confidence: ${confidence}%.`;
+  }
+  if (normalized.includes("entries early") || normalized.includes("entry timing") || normalized.includes("should the bot have waited") || normalized.includes("should have waited") || normalized.includes("waiting one candle") || normalized.includes("waited one candle")) {
+    const early = losses.filter(({ autopsy }) => autopsy.was_entry_early === true || autopsy.should_have_waited === true);
+    const pattern = modeText(early.flatMap(({ autopsy }) => autopsyList(autopsy, "confirmations_missing").map(autopsyConfirmationBucket)), "No repeated timing pattern");
+    const answer = early.length > 0 ? "Yes" : "No";
+    return `${answer}. ${early.length}/${losses.length} loss autopsies indicate the bot should have waited 1-3 M15 candles. Common timing pattern: ${pattern}. Confidence: ${confidence}%.`;
+  }
+  if (normalized.includes("compare all losses") || normalized.includes("recurring pattern") || (normalized.includes("all losses") && normalized.includes("pattern"))) {
+    const missing = losses.flatMap(({ autopsy }) => autopsyList(autopsy, "confirmations_missing"));
+    const levels = losses.map(({ autopsy }) => cleanText(autopsy.adaptive_level));
+    const sessions = losses.map(({ trade }) => {
+      const metadata = asRecord(trade.strategy_metadata);
+      const components = asRecord(metadata?.strategy_components);
+      return cleanText(components?.session) || cleanText(asRecord(trade.autopsy)?.session);
+    });
+    const scores = losses.map(({ autopsy }) => cleanText(autopsy.score_at_entry)).filter(Boolean);
+    const weakness = modeText(missing.map(autopsyConfirmationBucket), "No repeated structure weakness");
+    const fixes = losses.map(({ autopsy }) => cleanText(autopsy.suggested_rule_fix)).filter(Boolean);
+    return `Recurring loss patterns from ${losses.length} autopsies: missing confirmations: ${rankedCounts(missing, losses.length)}. Common adaptive level: ${modeText(levels)}. Common market session: ${modeText(sessions)}. Common score at entry: ${modeText(scores)}. Common structure weakness: ${weakness}. Suggested improvement: ${modeText(fixes)}. Confidence: ${confidence}%.`;
+  }
+  if (normalized.includes("symbol performs better") || normalized.includes("which symbol performs better")) {
+    const bySymbol = ["EURUSD", "XAUUSD"].map((symbol) => {
+      const scoped = autopsies.filter(({ trade, autopsy }) => (cleanText(trade.symbol) || cleanText(autopsy.symbol)).toUpperCase() === symbol);
+      const pnl = scoped.reduce((sum, item) => sum + tradePnlValue(item.trade), 0);
+      const winRate = scoped.length ? (winAutopsies(scoped).length / scoped.length) * 100 : 0;
+      return { symbol, trades: scoped.length, pnl, winRate };
+    }).sort((left, right) => right.pnl - left.pnl || right.winRate - left.winRate);
+    return `${bySymbol[0].symbol} performs better by active-round autopsies: ${bySymbol.map((row) => `${row.symbol}: ${row.trades} trades, ${row.winRate.toFixed(0)}% win rate, ${formatMoney(row.pnl)}`).join("; ")}. Confidence: ${confidence}%.`;
+  }
+  if (normalized.includes("losses happened immediately")) {
+    const immediate = losses.filter(({ trade }) => (numberValue(trade.duration_minutes) ?? 9999) <= 15);
+    return `Immediate losses (<=15 minutes): ${immediate.length ? immediate.map(({ trade }) => `${tradeTicketValue(trade)} (${numberValue(trade.duration_minutes)} min)`).join("; ") : "none recorded"}. Confidence: ${confidence}%.`;
+  }
+  const ticket = ticketFromQuestion(question);
+  const trade = ticket ? autopsies.find((item) => tradeTicketValue(item.trade) === ticket)?.trade : losses[0]?.trade;
+  if (!trade) return ticket ? `I could not find ticket ${ticket} in the active round trade journal.` : "No current-round loss autopsy is available yet.";
+  if (!tradeAutopsyRecord(trade)) return `Ticket ${tradeTicketValue(trade)} does not have an autopsy object yet. Run backend status once to trigger active-round autopsy backfill.`;
+  return formatAutopsyAnswer(trade);
 }
 
 type ValidationRoundSnapshot = Record<string, unknown> & {
@@ -521,6 +741,18 @@ function isCloserToQualifyingQuestion(question: string): boolean {
   return normalized.includes("which symbol") && (normalized.includes("closer") || normalized.includes("qualifying") || normalized.includes("qualify") || normalized.includes("trading"));
 }
 
+function isLatestScanQuestion(question: string): boolean {
+  const normalized = question.toLowerCase();
+  return (
+    normalized.includes("latest scan") ||
+    normalized.includes("scan diagnostic") ||
+    normalized.includes("scan diagnostics") ||
+    normalized.includes("score component") ||
+    normalized.includes("current score") ||
+    (normalized.includes("confirmation") && normalized.includes("missing"))
+  );
+}
+
 function isAdaptiveLevelQuestion(question: string): boolean {
   const normalized = question.toLowerCase();
   return (
@@ -638,10 +870,43 @@ function scanRecordSummary(record: ReasonRecord): string {
   return `${record.symbol}${levelText} latest scan: score ${score}/${required}, ${blocked}.`;
 }
 
+function latestScanDiagnosticsFromStatus(status: Record<string, unknown> | null): Record<string, Record<string, unknown>> {
+  const root = asRecord(status?.latest_scan_diagnostics) ?? asRecord(asRecord(status?.session)?.latest_scan_diagnostics) ?? {};
+  return Object.fromEntries(Object.entries(root).filter((entry): entry is [string, Record<string, unknown>] => Boolean(asRecord(entry[1]))).map(([symbol, value]) => [symbol.toUpperCase(), value as Record<string, unknown>]));
+}
+
+function scanDiagnosticSummary(symbol: string, diagnostic: Record<string, unknown>): string {
+  const score = numberValue(diagnostic.score) ?? 0;
+  const required = numberValue(diagnostic.required_score) ?? 5;
+  const level = numberValue(diagnostic.adaptive_level) ?? 0;
+  const decision = cleanText(diagnostic.decision) || "PENDING";
+  const missing = Array.isArray(diagnostic.missing_confirmations) ? diagnostic.missing_confirmations.map(cleanText).filter(Boolean) : [];
+  const reason = cleanText(diagnostic.reject_reason);
+  const timing = numberValue(diagnostic.total_scan_ms);
+  const components = [
+    `HTF ${diagnostic.htf_alignment === true ? "yes" : "no"}`,
+    `momentum ${diagnostic.momentum === true ? "yes" : "no"}`,
+    `pullback ${diagnostic.pullback_retest === true ? "yes" : "no"}`,
+    `BOS ${diagnostic.bos === true ? "yes" : "no"}`,
+    `liquidity sweep ${diagnostic.liquidity_sweep === true ? "yes" : "no"}`,
+    `FVG ${diagnostic.fvg === true ? "yes" : "no"}`,
+    `RR ${diagnostic.rr_ok === true ? "ok" : "blocked"}`,
+    `spread ${diagnostic.spread_ok === true ? "clean" : "blocked"}`,
+  ];
+  return `${symbol} latest scan: Level ${level}, score ${score}/${required}, decision ${decision}. Missing: ${missing.length ? missing.join(", ") : "none"}. ${reason ? `Reason: ${reason}. ` : ""}Components: ${components.join("; ")}.${timing !== null ? ` Scan time ${timing} ms.` : ""}`;
+}
+
 async function answerSymbolScanQuestion(question: string): Promise<string | null> {
-  if (!isSymbolNoTradeQuestion(question) && !isCloserToQualifyingQuestion(question)) return null;
+  if (!isSymbolNoTradeQuestion(question) && !isCloserToQualifyingQuestion(question) && !isLatestScanQuestion(question)) return null;
+  const status = await readBackendRecord("/auto-validation/status");
+  const diagnostics = latestScanDiagnosticsFromStatus(status);
   const records = await readReasonRecords();
   if (isCloserToQualifyingQuestion(question)) {
+    const scanDiagnostics = ["EURUSD", "XAUUSD"].map((symbol) => ({ symbol, diagnostic: diagnostics[symbol] })).filter((item) => item.diagnostic);
+    if (scanDiagnostics.length) {
+      const ranked = scanDiagnostics.sort((left, right) => (numberValue(right.diagnostic?.score) ?? 0) - (numberValue(left.diagnostic?.score) ?? 0));
+      return `${ranked[0].symbol} is closest based on latest scan diagnostics. ${ranked.map((item) => scanDiagnosticSummary(item.symbol, item.diagnostic as Record<string, unknown>)).join(" ")}`;
+    }
     const scans = ["EURUSD", "XAUUSD"].map((symbol) => latestScanRecord(records, symbol)).filter(Boolean) as ReasonRecord[];
     if (!scans.length) return "No EURUSD/XAUUSD scan records are available yet.";
     const ranked = scans.sort((left, right) => (right.confirmation_score ?? 0) - (left.confirmation_score ?? 0));
@@ -650,7 +915,13 @@ async function answerSymbolScanQuestion(question: string): Promise<string | null
     return `${best.symbol} is closer to qualifying based on the latest scan score. ${summaries}`;
   }
   const symbol = questionSymbol(question);
-  if (!symbol || !["EURUSD", "XAUUSD"].includes(symbol)) return null;
+  if (!symbol || !["EURUSD", "XAUUSD"].includes(symbol)) {
+    if (isLatestScanQuestion(question) && Object.keys(diagnostics).length) {
+      return ["EURUSD", "XAUUSD"].filter((item) => diagnostics[item]).map((item) => scanDiagnosticSummary(item, diagnostics[item])).join(" ");
+    }
+    return null;
+  }
+  if (diagnostics[symbol]) return scanDiagnosticSummary(symbol, diagnostics[symbol]);
   const scan = latestScanRecord(records, symbol);
   if (!scan) return `${symbol} has no scan record yet in the active Bot Decisions store.`;
   return scanRecordSummary(scan);
@@ -1054,6 +1325,10 @@ export async function POST(request: Request) {
     const validationHaltedAnswer = await answerValidationHaltedQuestion(question);
     if (validationHaltedAnswer) {
       return NextResponse.json({ reply: validationHaltedAnswer });
+    }
+    const tradeAutopsyAnswer = await answerTradeAutopsyQuestion(question);
+    if (tradeAutopsyAnswer) {
+      return NextResponse.json({ reply: tradeAutopsyAnswer });
     }
     const adaptiveLevelAnswer = await answerAdaptiveLevelQuestion(question);
     if (adaptiveLevelAnswer) {

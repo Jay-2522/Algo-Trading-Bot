@@ -15,6 +15,7 @@ import {
   fetchReasonMessages,
   approveExecutionModeSignal,
   emergencyStopAutoValidation,
+  fetchAutoValidationScanDiagnostics,
   fetchAutoValidationStatus,
   previewClientDemoTrade,
   pauseAutoValidation,
@@ -712,6 +713,7 @@ export function DashboardShell(_: {
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
   const autoValidationRequestInFlight = useRef(false);
+  const scanDiagnosticsRequestInFlight = useRef(false);
 
   const showToast = useCallback((tone: ToastState["tone"], message: string) => {
     setToast({ id: Date.now(), tone, message });
@@ -885,6 +887,34 @@ export function DashboardShell(_: {
     }
   }, [refreshOpenPositions]);
 
+  const refreshScanDiagnostics = useCallback(async () => {
+    if (scanDiagnosticsRequestInFlight.current) return;
+    scanDiagnosticsRequestInFlight.current = true;
+    try {
+      const result = await fetchAutoValidationScanDiagnostics();
+      if (result.ok && result.diagnostics) {
+        setData((current) => {
+          const currentAuto = asRecord(current.autoValidation) ?? {};
+          const latest = asRecord(result.diagnostics?.latest_scan_diagnostics) ?? asRecord(currentAuto.latest_scan_diagnostics) ?? {};
+          const nextAuto: ApiRecord = {
+            ...currentAuto,
+            latest_scan_diagnostics: latest,
+            closest_to_trade: asRecord(result.diagnostics?.closest_to_trade) ?? currentAuto.closest_to_trade,
+          };
+          const session = asRecord(currentAuto.session);
+          if (session) nextAuto.session = { ...session, latest_scan_diagnostics: latest };
+          const next = { ...current, autoValidation: nextAuto };
+          writeCachedDashboardData(next);
+          return next;
+        });
+      }
+    } catch {
+      // Keep the last successful scan snapshot visible.
+    } finally {
+      scanDiagnosticsRequestInFlight.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -914,6 +944,12 @@ export function DashboardShell(_: {
     const interval = window.setInterval(() => void refreshAutoValidation(), 3000);
     return () => window.clearInterval(interval);
   }, [refreshAutoValidation]);
+
+  useEffect(() => {
+    void refreshScanDiagnostics();
+    const interval = window.setInterval(() => void refreshScanDiagnostics(), 3000);
+    return () => window.clearInterval(interval);
+  }, [refreshScanDiagnostics]);
 
   useEffect(() => {
     if (!data.clientSignals.some((signal) => watchlistSignal(signal))) return;
@@ -2822,6 +2858,8 @@ function ClientDashboardView({
         <ValidationReasonPanel contexts={reasonContexts} refreshToken={reasonRefreshToken} />
       </section>
 
+      <LiveScanStatusCard data={data} />
+
       <section className="premium-table-panel">
         <ClientSectionTitle eyebrow="Active Positions" title="Open Demo Trades" />
         {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={Array.isArray(exitManagement?.managed_positions) ? (exitManagement.managed_positions.filter((item) => asRecord(item)) as ApiRecord[]) : []} /> : <EmptyState text="No Active Positions" />}
@@ -2976,7 +3014,7 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
             <div className="premium-table-wrap mt-4">
               <table className="premium-table text-xs">
                 <thead>
-                  <tr>{["Ticket", "Symbol", "Result", "Entry Setup", "Exit Reason", "Root Cause"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
+                  <tr>{["Ticket", "Symbol", "Result", "Entry Quality", "Missing Confirmation", "Why SL Was Hit", "Suggested Fix"].map((item) => <th className="px-3 py-2" key={item}>{item}</th>)}</tr>
                 </thead>
                 <tbody>
                   {autopsyRows.map((trade, index) => (
@@ -2984,11 +3022,10 @@ function TradeIntelligenceSection({ closedTrades, reasonContexts }: { closedTrad
                       <td className="px-3 py-2">{friendlyText(trade, ["mt5_ticket", "ticket", "trade_id"], "No ticket")}</td>
                       <td className="px-3 py-2">{friendlyText(trade, ["symbol"], "Symbol pending")}</td>
                       <td className={`px-3 py-2 ${tradePnl(trade) >= 0 ? "text-emerald-200" : "text-rose-200"}`}>{tradeResultLabel(trade)}</td>
-                      <td className="px-3 py-2" title={entrySetupForTrade(trade)}>
-                        <TradeSetupTags trade={trade} />
-                      </td>
-                      <td className="px-3 py-2">{exitReasonForTrade(trade)}</td>
-                      <td className="px-3 py-2 text-slate-100" title={rootCauseForTrade(trade)}>{compactRootCauseForTrade(trade)}</td>
+                      <td className="px-3 py-2" title={entrySetupForTrade(trade)}>{tradeAutopsyText(trade, "entry_quality", "Pending")}</td>
+                      <td className="px-3 py-2" title={autopsyConfirmationTooltip(trade)}>{tradeAutopsyText(trade, "missing_confirmation", "None")}</td>
+                      <td className="px-3 py-2 text-slate-100" title={rootCauseForTrade(trade)}>{tradeAutopsyText(trade, "why_sl_was_hit", compactRootCauseForTrade(trade))}</td>
+                      <td className="px-3 py-2 text-blue-100">{tradeAutopsyText(trade, "suggested_rule_fix", "Monitor repeat pattern.")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -3084,6 +3121,106 @@ function AdaptiveStrategyEvolutionCard({ data }: { data: DashboardData }) {
             </div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function latestScanDiagnostics(data: DashboardData): ApiRecord[] {
+  const autoStatus = asRecord(data.autoValidation);
+  const root = asRecord(autoStatus?.latest_scan_diagnostics) ?? asRecord(asRecord(autoStatus?.session)?.latest_scan_diagnostics) ?? {};
+  return ["EURUSD", "XAUUSD"].map((symbol) => ({ symbol, ...(asRecord(root[symbol]) ?? {}) }));
+}
+
+function scanMissingList(scan: ApiRecord): string[] {
+  const raw = Array.isArray(scan.missing_confirmations) ? scan.missing_confirmations : [];
+  return raw.map((item) => String(item)).filter(Boolean).slice(0, 4);
+}
+
+function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
+  const available = scanRows.filter((scan) => readText(scan, ["timestamp"], ""));
+  if (!available.length) return null;
+  return [...available].sort((left, right) => {
+    const scoreDelta = readNumber(right, ["score"], 0) - readNumber(left, ["score"], 0);
+    if (scoreDelta !== 0) return scoreDelta;
+    return readNumber(left, ["missing_count"], 99) - readNumber(right, ["missing_count"], 99);
+  })[0];
+}
+
+function scanTimestamp(scan: ApiRecord): string {
+  return readText(scan, ["last_scan_timestamp", "timestamp"], "");
+}
+
+function scanIsStale(scan: ApiRecord): boolean {
+  const timestamp = scanTimestamp(scan);
+  if (!timestamp) return true;
+  const parsed = new Date(timestamp).getTime();
+  return !Number.isFinite(parsed) || Date.now() - parsed > 60000;
+}
+
+function scanTimeLabel(scan: ApiRecord): string {
+  const timestamp = scanTimestamp(scan);
+  if (!timestamp) return "—";
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function LiveScanStatusCard({ data }: { data: DashboardData }) {
+  const scans = latestScanDiagnostics(data);
+  const closest = closestScan(scans);
+  return (
+    <section className="premium-panel">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="premium-section-eyebrow">Round 3</p>
+          <p className="premium-metric-value text-white">LIVE SCAN STATUS</p>
+        </div>
+        {closest ? (
+          <div className="rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-3 py-2 text-xs font-bold text-blue-100">
+            Closest To Trade: {readText(closest, ["symbol"], "—")} • Score {readNumber(closest, ["score"], 0)}/{readNumber(closest, ["required_score"], 5)}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        {scans.map((scan) => {
+          const symbol = readText(scan, ["symbol"], "—");
+          const hasScan = Boolean(readText(scan, ["timestamp"], ""));
+          const missing = scanMissingList(scan);
+          const stale = hasScan && scanIsStale(scan);
+          return (
+            <div className="rounded-xl border border-slate-800/80 bg-[#08111F] p-4" key={symbol}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-white">{symbol}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    {hasScan ? `Level ${readNumber(scan, ["adaptive_level"], 0)} • ${readText(scan, ["decision"], "PENDING")}` : "No scan yet"}
+                  </p>
+                </div>
+                <p className={`font-mono text-lg font-black ${stale ? "text-amber-200" : "text-blue-100"}`}>{hasScan ? (stale ? "STALE DATA" : `${readNumber(scan, ["score"], 0)}/${readNumber(scan, ["required_score"], 5)}`) : "—"}</p>
+              </div>
+              {hasScan ? (
+                <>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4 xl:grid-cols-6">
+                    <ClientMetric label="Last scan" value={scanTimeLabel(scan)} compact />
+                    <ClientMetric label="Duration" value={`${Math.max(1, readNumber(scan, ["total_scan_ms"], 1))}ms`} compact />
+                    <ClientMetric label="History" value={readText(scan, ["history_ready"], "") === "true" || scan.history_ready === true ? "Ready" : "Waiting"} compact />
+                    <ClientMetric label="Spread" value={scan.spread_ok === true ? "Clean" : "Blocked"} compact />
+                    <ClientMetric label="RR" value={scan.rr_ok === true ? "OK" : "Blocked"} compact />
+                    <ClientMetric label="Status" value={stale ? "Stale" : "Fresh"} compact />
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-500">Missing</p>
+                    <p className="mt-1 text-sm font-bold text-slate-200">{missing.length ? missing.join(", ") : "—"}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">{readText(scan, ["estimated_readiness"], readText(scan, ["reject_reason"], ""))}</p>
+                  </div>
+                </>
+              ) : (
+                <EmptyState text="Run a per-symbol read-only scan to populate diagnostics." />
+              )}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -3307,6 +3444,25 @@ function tradeResultLabel(trade: ApiRecord): string {
   return tradePnl(trade) >= 0 ? "WIN" : "LOSS";
 }
 
+function tradeAutopsy(trade: ApiRecord): ApiRecord {
+  return asRecord(trade.autopsy) ?? {};
+}
+
+function tradeAutopsyText(trade: ApiRecord, key: string, fallback = ""): string {
+  return cleanAnalysisText(readText(tradeAutopsy(trade), [key], "")) || fallback;
+}
+
+function autopsyConfirmations(trade: ApiRecord, key: "confirmations_present" | "confirmations_missing"): string[] {
+  const value = tradeAutopsy(trade)[key];
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function autopsyConfirmationTooltip(trade: ApiRecord): string {
+  const present = autopsyConfirmations(trade, "confirmations_present");
+  const missing = autopsyConfirmations(trade, "confirmations_missing");
+  return `Present: ${present.length ? present.join(", ") : "None"} | Missing: ${missing.length ? missing.join(", ") : "None"}`;
+}
+
 function entrySetupForTrade(trade: ApiRecord): string {
   const { approval } = tradeMetadata(trade);
   return cleanAnalysisText(readText(approval, ["final_approval_reason"], "") || readText(trade, ["setup_reason", "notes"], "")) || "Entry setup recorded without additional notes.";
@@ -3388,6 +3544,11 @@ function lossReasonForTrade(trade: ApiRecord): string {
 
 function lossFeatureLabelsForTrade(trade: ApiRecord): string[] {
   const labels: string[] = [];
+  const autopsyMissing = autopsyConfirmations(trade, "confirmations_missing");
+  if (autopsyMissing.length) {
+    autopsyMissing.forEach((item) => labels.push(item));
+    return labels;
+  }
   if (passFailState(trade, "bos_result", "bos") === "missing") labels.push("BOS missing");
   if (passFailState(trade, "liquidity_sweep_result", "liquidity_sweep") === "missing") labels.push("Liquidity sweep missing");
   if (passFailState(trade, "fvg_result", "fvg") === "missing") labels.push("FVG missing");

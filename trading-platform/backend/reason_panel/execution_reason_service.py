@@ -156,10 +156,17 @@ class ExecutionReasonPanelService:
         exit_reason = self._text(trade.get("exit_reason")) or "MT5 history confirmed close"
         metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
         round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        autopsy = trade.get("autopsy") if isinstance(trade.get("autopsy"), dict) else {}
         missing = round3.get("confirmation_missing") if isinstance(round3.get("confirmation_missing"), list) else []
+        if not missing and isinstance(autopsy.get("confirmations_missing"), list):
+            missing = autopsy.get("confirmations_missing", [])
         weak = self._join_text([self._text(item).lower() for item in missing[:2]]) if missing else "one or more entry conditions weakened"
         if status == "CLOSED_LOSS":
-            reason = f"{side or 'Trade'} failed{f' after {duration} minutes' if duration else ''}. Entry was based on score {self._text(round3.get('confirmation_score')) or 'n/a'}, but {weak}; price reached {exit_reason.lower()} with P&L {self._text(pnl) or '0'}."
+            autopsy_reason = self._text(autopsy.get("reason_for_loss"))
+            fix = self._text(autopsy.get("suggested_rule_fix"))
+            score_text = self._text(round3.get("confirmation_score") or autopsy.get("score_at_entry")) or "n/a"
+            fallback_reason = f"Entry was based on score {score_text}, but {weak}; price reached {exit_reason.lower()} with P&L {self._text(pnl) or '0'}."
+            reason = f"{side or 'Trade'} failed{f' after {duration} minutes' if duration else ''}. {autopsy_reason or fallback_reason}{f' Suggested fix: {fix}' if fix else ''}"
         elif status == "CLOSED_WIN":
             reason = f"{side or 'Trade'} reached target{f' after {duration} minutes' if duration else ''}. Momentum carried price to take profit with P&L {self._text(pnl) or '0'}."
         else:
@@ -180,6 +187,7 @@ class ExecutionReasonPanelService:
             "order_closed": True,
             "pnl": pnl,
             "exit_reason": self._text(trade.get("exit_reason")),
+            "autopsy": autopsy,
             "validation_session_id": session_id or self._text(trade.get("validation_session_id")),
             "final_decision_reason": status,
             "timestamp": timestamp or self._text(trade.get("closed_at") or trade.get("close_time") or trade.get("generated_at")) or self._timestamp(),

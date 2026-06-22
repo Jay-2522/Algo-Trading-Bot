@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import copy
 import json
 from pathlib import Path
+import time
 from typing import Any
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from backend.validation_rounds.validation_round_archive_service import Validatio
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATE_PATH = PROJECT_ROOT / "data" / "auto_validation" / "session_state.json"
+DEFAULT_SCAN_DIAGNOSTICS_PATH = PROJECT_ROOT / "data" / "auto_validation" / "latest_scan_diagnostics.json"
 
 
 class AutoValidationService:
@@ -74,6 +76,7 @@ class AutoValidationService:
         self._last_execution_decision: dict[str, Any] | None = None
         self._current_signal_watched: dict[str, Any] | None = None
         self._decision_traces: list[dict[str, Any]] = []
+        self._latest_scan_diagnostics: dict[str, dict[str, Any]] = {}
         self._load_state()
         self._apply_balanced_round3_config()
         self._sync_round_archive()
@@ -102,6 +105,8 @@ class AutoValidationService:
             "mt5_health": copy.deepcopy(self.mt5_health_state),
             "history_warmup": copy.deepcopy(self._history_warmup_diagnostics),
             "history_ready": bool(self._history_warmup_diagnostics.get("history_ready")),
+            "latest_scan_diagnostics": copy.deepcopy(self._latest_scan_diagnostics),
+            "closest_to_trade": self._closest_scan_candidate(),
             "risk_halt": copy.deepcopy(self.session.get("risk_halt_diagnostics", self._risk_halt_diagnostics())),
             "active_session_id": self.session.get("session_id", ""),
             "dashboard_session_id": self.session.get("session_id", ""),
@@ -164,6 +169,115 @@ class AutoValidationService:
             "best_candidate": copy.deepcopy(best),
             "checked_symbols": copy.deepcopy(checked),
             "reason": reason,
+            "timestamp": self._timestamp(),
+        }
+
+    def read_only_scan_symbol(self, symbol: str) -> dict[str, Any]:
+        """Evaluate one symbol without sending orders or touching validation run state."""
+        requested_symbol = str(symbol or "").upper()
+        if requested_symbol not in self._allowed_symbols():
+            return {
+                "status": "SYMBOL_NOT_ALLOWED",
+                "symbol": requested_symbol,
+                "active_session_id": self.session.get("session_id"),
+                "allowed_symbols": sorted(self._allowed_symbols()),
+                "timestamp": self._timestamp(),
+            }
+        scan_started_at = self._timestamp()
+        self._log_scan_event("SCAN_START", {"symbol": requested_symbol, "message": f"SCAN_START {requested_symbol}"})
+        total_start = time.perf_counter()
+        self._apply_balanced_round3_config()
+        history_start = time.perf_counter()
+        mt5_health = copy.deepcopy(self.mt5_health_state)
+        warmup = self._cached_history_for_symbol(requested_symbol)
+        history_ms = self._elapsed_ms(history_start)
+        analysis_start = time.perf_counter()
+        trace = self._latest_trace_for_symbol(requested_symbol)
+        analysis_ms = self._elapsed_ms(analysis_start)
+        decision_start = time.perf_counter()
+        if trace is None:
+            checked = {
+                "symbol": requested_symbol,
+                "status": "NO_SCAN_TRACE",
+                "score": 0,
+                "required_score": int(self._adaptive_level_config(symbol=requested_symbol).get("required_score") or 5),
+                "confirmation_score": 0,
+                "confirmation_required": int(self._adaptive_level_config(symbol=requested_symbol).get("required_score") or 5),
+                "adaptive_level": self._current_adaptive_strategy_level(requested_symbol),
+                "execution_decision": "REJECTED",
+                "why_order_not_sent": "No latest scan trace is available for this symbol yet.",
+                "confirmation_missing": ["scan trace"],
+                "failed_hard_gates": ["NO_SCAN_TRACE_AVAILABLE"],
+                "conditions": {},
+                "ready_for_execution": False,
+            }
+        else:
+            checked = self._checked_from_trace(requested_symbol, trace)
+        decision_ms = self._elapsed_ms(decision_start)
+        total_ms = self._elapsed_ms(total_start)
+        diagnostic = self._scan_diagnostic_from_checked(requested_symbol, checked, warmup, mt5_health, history_ms, analysis_ms, decision_ms, total_ms)
+        diagnostic["source"] = "CACHED_DECISION_TRACE"
+        diagnostic["last_scan_timestamp"] = scan_started_at
+        self._store_latest_scan_diagnostic(diagnostic)
+        trace = self._scan_trace_from_diagnostic(diagnostic)
+        self._persist_scan_trace(trace)
+        if total_ms <= 0:
+            self._log_scan_event("SCAN_NOT_EXECUTED", {"symbol": requested_symbol, "duration_ms": total_ms})
+        if total_ms > 5000:
+            self._log_scan_event("SCAN_TIMEOUT_WARNING", {"symbol": requested_symbol, "total_scan_ms": total_ms})
+        self._log_scan_event("SCAN_COMPLETE", {"symbol": requested_symbol, "score": diagnostic.get("score"), "duration_ms": total_ms, "message": f"SCAN_COMPLETE {requested_symbol} score={diagnostic.get('score')} duration={total_ms}ms"})
+        self._log_scan_event("READ_ONLY_SCAN_SYMBOL", {"symbol": requested_symbol, "decision": diagnostic.get("decision"), "score": diagnostic.get("score"), "total_scan_ms": total_ms})
+        return {
+            "status": "READ_ONLY_SCAN_COMPLETE",
+            "symbol": requested_symbol,
+            "active_session_id": self.session.get("session_id"),
+            "diagnostic": copy.deepcopy(diagnostic),
+            "mt5_health": copy.deepcopy(mt5_health),
+            "history_warmup": copy.deepcopy(warmup),
+            "read_only": True,
+            "order_sent": False,
+            "timestamp": diagnostic.get("timestamp"),
+        }
+
+    def record_scan_timeout_warning(self, symbol: str, timeout_ms: int) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").upper()
+        diagnostic = {
+            **copy.deepcopy(self._latest_scan_diagnostics.get(normalized_symbol, {})),
+            "symbol": normalized_symbol,
+            "timestamp": self._timestamp(),
+            "decision": "TIMEOUT",
+            "reject_reason": f"Read-only scan exceeded {timeout_ms} ms before returning diagnostics.",
+            "total_scan_ms": timeout_ms,
+            "mt5_status": str(self.mt5_health_state.get("status") or "UNKNOWN"),
+            "active_session_id": self.session.get("session_id"),
+        }
+        self._store_latest_scan_diagnostic(diagnostic)
+        self._log_scan_event("SCAN_TIMEOUT_WARNING", {"symbol": normalized_symbol, "total_scan_ms": timeout_ms})
+        return diagnostic
+
+    def scan_diagnostics_status(self) -> dict[str, Any]:
+        for symbol in ["EURUSD", "XAUUSD"]:
+            if symbol in self._allowed_symbols():
+                self.read_only_scan_symbol(symbol)
+        return {
+            "status": "SCAN_DIAGNOSTICS_READY",
+            "active_session_id": self.session.get("session_id"),
+            "latest_scan_diagnostics": copy.deepcopy(self._latest_scan_diagnostics),
+            "closest_to_trade": self._closest_scan_candidate(),
+            "timestamp": self._timestamp(),
+        }
+
+    def scan_health(self) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        eurusd = self._latest_scan_diagnostics.get("EURUSD", {})
+        xauusd = self._latest_scan_diagnostics.get("XAUUSD", {})
+        return {
+            "eurusd_last_scan": eurusd.get("last_scan_timestamp") or eurusd.get("timestamp"),
+            "xauusd_last_scan": xauusd.get("last_scan_timestamp") or xauusd.get("timestamp"),
+            "eurusd_duration_ms": eurusd.get("total_scan_ms"),
+            "xauusd_duration_ms": xauusd.get("total_scan_ms"),
+            "scan_count_last_5min": self._scan_count_since(now - timedelta(minutes=5)),
+            "stale": self._scan_is_stale(eurusd, now) or self._scan_is_stale(xauusd, now),
             "timestamp": self._timestamp(),
         }
 
@@ -508,9 +622,27 @@ class AutoValidationService:
                 return self._halt(blockers[0])
             return self._decision("BLOCKED", blockers, signal)
 
+        final_decision = self._final_round3_order_decision(signal)
+        final_blockers = self._final_round3_order_blockers(final_decision, signal)
+        if final_blockers:
+            legacy_audit = self._legacy_order_path_audit(signal, final_decision, final_blockers)
+            self._log("BLOCKED_LEGACY_ORDER_PATH", legacy_audit)
+            return self._decision(
+                "BLOCKED",
+                ["BLOCKED_LEGACY_ORDER_PATH", *final_blockers],
+                {**signal, "final_decision": final_decision},
+                {
+                    "final_decision": final_decision,
+                    "legacy_order_block": legacy_audit,
+                    "decision_reason": self._final_order_block_reason(final_decision, final_blockers),
+                    "final_decision_reason": self._final_order_block_reason(final_decision, final_blockers),
+                },
+            )
+
         service = self.guarded_execution_service
         if service is None:
             return self._halt("GUARDED_SENDER_UNAVAILABLE")
+        signal = {**signal, "final_decision": final_decision}
         payload = self._guarded_payload(signal)
         self._increment_funnel("wrapper_submitted")
         result = service.send_test_order(payload)
@@ -525,7 +657,7 @@ class AutoValidationService:
             return self._decision("BLOCKED", ["GUARDED_SENDER_REJECTED"], signal, {"sender_result": result, "last_sender_rejection": rejection, "guarded_sender_used": bool(result.get("guarded_sender_used")), "execution_timeline": execution_timeline})
         self._increment_funnel("orders_created")
         self._increment_funnel("opened")
-        decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True, "execution_timeline": execution_timeline})
+        decision = self._decision("ORDER_SENT", [], signal, {"sender_result": result, "guarded_sender_used": True, "mt5_order_sent": True, "execution_timeline": execution_timeline, "final_decision": final_decision})
         self._record_opened_trade_from_sender(signal, payload, result, decision)
         self._seen_signal_hashes.add(str(signal.get("signal_hash") or ""))
         self._sent_signal_keys.add(self._duplicate_key(signal))
@@ -613,6 +745,7 @@ class AutoValidationService:
         strategy_profile = str(signal.get("strategy_profile") or self.config.get("strategy_profile") or "DEMO_COLLECTION").upper()
         symbol = str(signal.get("symbol") or "").upper()
         adaptive_level = self._current_adaptive_strategy_level(symbol) if strategy_profile == "DEMO_COLLECTION" else None
+        final_decision = signal.get("final_decision") if isinstance(signal.get("final_decision"), dict) else {}
         return {
             "symbol": symbol,
             "side": str(signal.get("signal") or "").upper(),
@@ -635,6 +768,8 @@ class AutoValidationService:
                 "quality_score": signal.get("quality_score") or {},
                 "approval_audit": signal.get("approval_audit") or {},
                 "round3_diagnostics": signal.get("round3_diagnostics") or self._round3_signal_diagnostics(signal) if strategy_profile == "DEMO_COLLECTION" else {},
+                "final_decision": final_decision,
+                "score_components": final_decision.get("score_components") if isinstance(final_decision.get("score_components"), dict) else {},
                 "adaptive_strategy_level": adaptive_level,
                 "candle_source": signal.get("candle_source") or {},
                 "sl_tp_source": signal.get("sl_tp_source"),
@@ -883,6 +1018,8 @@ class AutoValidationService:
             return
         symbol = str(payload.get("symbol") or signal.get("symbol") or "").upper()
         level = self._current_adaptive_strategy_level(symbol)
+        final_decision = (decision or {}).get("final_decision") if isinstance((decision or {}).get("final_decision"), dict) else signal.get("final_decision") if isinstance(signal.get("final_decision"), dict) else {}
+        score_components = final_decision.get("score_components") if isinstance(final_decision.get("score_components"), dict) else {}
         entry = result.get("entry") or result.get("entry_estimate") or payload.get("entry_price") or signal.get("entry")
         sl = result.get("sl") or payload.get("stop_loss") or signal.get("stop_loss")
         tp = result.get("tp") or payload.get("take_profit") or signal.get("take_profit")
@@ -901,6 +1038,7 @@ class AutoValidationService:
                 "tp": tp,
                 "confirmation_score": (decision or {}).get("confirmation_score"),
                 "confirmation_required": (decision or {}).get("confirmation_required"),
+                "final_decision": final_decision,
                 "adaptive_level": level,
                 "validation_session_id": self.session.get("session_id"),
             },
@@ -933,14 +1071,17 @@ class AutoValidationService:
             "setup_reason": payload.get("setup_reason") or signal.get("setup_reason"),
             "decision_reason": (decision or {}).get("decision_reason") or (decision or {}).get("final_decision_reason"),
             "final_decision_reason": (decision or {}).get("final_decision_reason"),
+            "final_decision": final_decision,
+            "score_components": score_components,
             "passed_rules": (decision or {}).get("passed_rules"),
             "failed_rules": (decision or {}).get("failed_rules"),
             "advisory_warnings": (decision or {}).get("advisory_warnings"),
-            "confirmation_score": (decision or {}).get("confirmation_score"),
-            "confirmation_required": (decision or {}).get("confirmation_required"),
+            "confirmation_score": final_decision.get("score") if final_decision else (decision or {}).get("confirmation_score"),
+            "confirmation_required": final_decision.get("required_score") if final_decision else (decision or {}).get("confirmation_required"),
             "confirmation_total": (decision or {}).get("confirmation_total"),
-            "confirmation_passed": (decision or {}).get("confirmation_passed"),
-            "confirmation_missing": (decision or {}).get("confirmation_missing"),
+            "confirmation_passed": score_components.get("confirmation_passed") if score_components else (decision or {}).get("confirmation_passed"),
+            "confirmation_missing": score_components.get("confirmation_missing") if score_components else (decision or {}).get("confirmation_missing"),
+            "adaptive_level": final_decision.get("adaptive_level") if final_decision else level,
             "adaptive_strategy_level": level,
             "strategy_profile": payload.get("strategy_profile") or signal.get("strategy_profile") or self.config.get("strategy_profile"),
             "strategy_metadata": payload.get("strategy_metadata"),
@@ -1171,6 +1312,282 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
 
+    def _warmup_history_for_symbol(self, symbol: str) -> dict[str, Any]:
+        required = self._history_required_candles()
+        normalized_symbol = str(symbol or "").upper()
+        diagnostics: list[dict[str, Any]] = []
+        for timeframe in self._history_timeframes():
+            try:
+                history = self.history_backfill_service.fetch_history(normalized_symbol, timeframe, count=required)
+            except Exception as exc:
+                history = {
+                    "symbol": normalized_symbol,
+                    "timeframe": timeframe,
+                    "returned_count": 0,
+                    "source": "MT5_DEMO",
+                    "status": "HISTORY_SYNC_ERROR",
+                    "message": str(exc),
+                }
+            candles_loaded = int(history.get("returned_count") or len(history.get("candles", []) or []))
+            ready = str(history.get("status") or "").upper() == "OK" and candles_loaded >= required
+            diagnostics.append(
+                {
+                    "symbol": str(history.get("symbol") or normalized_symbol).upper(),
+                    "requested_symbol": str(history.get("requested_symbol") or normalized_symbol).upper(),
+                    "resolved_symbol": str(history.get("resolved_symbol") or history.get("symbol") or normalized_symbol),
+                    "timeframe": str(history.get("timeframe") or timeframe).upper(),
+                    "candles_loaded": candles_loaded,
+                    "candles_required": required,
+                    "data_source": str(history.get("broker_source") or history.get("source") or "MT5_DEMO"),
+                    "source": str(history.get("broker_source") or history.get("source") or "MT5_DEMO"),
+                    "mt5_last_error": history.get("mt5_last_error"),
+                    "process_id": history.get("process_id"),
+                    "connection_id": history.get("connection_id"),
+                    "history_ready": ready,
+                    "status": "READY" if ready else "WAITING_FOR_MT5_HISTORY_SYNC",
+                    "mt5_status": str(history.get("status") or "HISTORY_UNAVAILABLE"),
+                    "message": str(history.get("message") or ""),
+                }
+            )
+        pending = self._first_pending_history_diagnostic(diagnostics)
+        return {
+            "status": "HISTORY_READY" if pending is None and diagnostics else "WAITING_FOR_MT5_HISTORY_SYNC",
+            "message": "MT5 history sync ready." if pending is None else (
+                f"Waiting for MT5 {pending.get('timeframe')} history sync: {pending.get('requested_symbol')} resolved as {pending.get('resolved_symbol')}, "
+                f"loaded {pending.get('candles_loaded')} / required {pending.get('candles_required')} candles."
+            ),
+            "history_ready": pending is None and bool(diagnostics),
+            "symbols": [normalized_symbol],
+            "timeframes": self._history_timeframes(),
+            "required_candles": required,
+            "diagnostics": diagnostics,
+            "timestamp": self._timestamp(),
+        }
+
+    def _elapsed_ms(self, started_at: float) -> int:
+        return max(1, int((time.perf_counter() - started_at) * 1000))
+
+    def _parse_timestamp(self, value: Any) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+    def _scan_is_stale(self, diagnostic: dict[str, Any], now: datetime | None = None) -> bool:
+        timestamp = self._parse_timestamp(diagnostic.get("last_scan_timestamp") or diagnostic.get("timestamp"))
+        if timestamp is None:
+            return True
+        return (now or datetime.now(timezone.utc)) - timestamp > timedelta(seconds=60)
+
+    def _scan_count_since(self, cutoff: datetime) -> int:
+        count = 0
+        for event in self.events:
+            if event.get("event") != "SCAN_COMPLETE":
+                continue
+            timestamp = self._parse_timestamp(event.get("timestamp"))
+            if timestamp and timestamp >= cutoff:
+                count += 1
+        return count
+
+    def _cached_history_for_symbol(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").upper()
+        required = self._history_required_candles()
+        warmup = self._history_warmup_diagnostics if isinstance(self._history_warmup_diagnostics, dict) else {}
+        diagnostics = [
+            item
+            for item in (warmup.get("diagnostics") if isinstance(warmup.get("diagnostics"), list) else [])
+            if isinstance(item, dict) and str(item.get("symbol") or item.get("requested_symbol") or "").upper() == normalized_symbol
+        ]
+        if not diagnostics:
+            return {
+                "status": "NO_CACHED_HISTORY",
+                "message": f"No cached MT5 history diagnostics are available for {normalized_symbol}.",
+                "history_ready": False,
+                "symbols": [normalized_symbol],
+                "timeframes": self._history_timeframes(),
+                "required_candles": required,
+                "diagnostics": [],
+                "timestamp": self._timestamp(),
+            }
+        pending = self._first_pending_history_diagnostic(diagnostics)
+        return {
+            "status": "HISTORY_READY" if pending is None else "WAITING_FOR_MT5_HISTORY_SYNC",
+            "message": "Cached MT5 history sync ready." if pending is None else (
+                f"Cached history pending for {pending.get('timeframe')}: loaded {pending.get('candles_loaded')} / required {pending.get('candles_required')} candles."
+            ),
+            "history_ready": pending is None,
+            "symbols": [normalized_symbol],
+            "timeframes": self._history_timeframes(),
+            "required_candles": required,
+            "diagnostics": copy.deepcopy(diagnostics),
+            "timestamp": self._timestamp(),
+            "source": "CACHED_HISTORY_WARMUP",
+        }
+
+    def _latest_trace_for_symbol(self, symbol: str) -> dict[str, Any] | None:
+        normalized_symbol = str(symbol or "").upper()
+        traces = [item for item in self._decision_traces if isinstance(item, dict) and str(item.get("symbol") or "").upper() == normalized_symbol]
+        if not traces and isinstance(self.session.get("decision_traces"), list):
+            traces = [item for item in self.session["decision_traces"] if isinstance(item, dict) and str(item.get("symbol") or "").upper() == normalized_symbol]
+        if not traces:
+            return None
+        return copy.deepcopy(sorted(traces, key=lambda item: str(item.get("timestamp") or ""), reverse=True)[0])
+
+    def _checked_from_trace(self, symbol: str, trace: dict[str, Any]) -> dict[str, Any]:
+        conditions = trace.get("conditions") if isinstance(trace.get("conditions"), dict) else {}
+        failed = trace.get("failed_hard_gates") if isinstance(trace.get("failed_hard_gates"), list) else []
+        score = int(self._number(trace.get("score"), 0))
+        required = int(self._number(trace.get("required_score"), self._adaptive_level_config(symbol=symbol).get("required_score") or 5))
+        return {
+            "symbol": symbol,
+            "status": trace.get("execution_decision") or trace.get("decision") or "REJECTED",
+            "score": score,
+            "required_score": required,
+            "confirmation_score": score,
+            "confirmation_required": required,
+            "adaptive_level": trace.get("adaptive_level") or self._current_adaptive_strategy_level(symbol),
+            "execution_decision": trace.get("execution_decision") or trace.get("decision") or "REJECTED",
+            "why_order_not_sent": trace.get("why_order_not_sent") or trace.get("reason") or "",
+            "confirmation_missing": trace.get("confirmation_missing") if isinstance(trace.get("confirmation_missing"), list) else [],
+            "failed_hard_gates": failed,
+            "conditions": conditions,
+            "ready_for_execution": str(trace.get("execution_decision") or trace.get("decision") or "").upper() == "READY_FOR_ORDER",
+        }
+
+    def _scan_diagnostic_from_checked(
+        self,
+        symbol: str,
+        checked: dict[str, Any],
+        warmup: dict[str, Any],
+        mt5_health: dict[str, Any],
+        history_ms: int,
+        analysis_ms: int,
+        decision_ms: int,
+        total_ms: int,
+    ) -> dict[str, Any]:
+        conditions = checked.get("conditions") if isinstance(checked.get("conditions"), dict) else {}
+        blockers = checked.get("failed_hard_gates") if isinstance(checked.get("failed_hard_gates"), list) else checked.get("blockers") if isinstance(checked.get("blockers"), list) else []
+        missing = self._scan_missing_confirmations(checked, conditions, warmup)
+        score = int(self._number(checked.get("confirmation_score") or checked.get("score"), 0))
+        required = int(self._number(checked.get("required_score") or checked.get("confirmation_required"), self._adaptive_level_config(symbol=symbol).get("required_score") or 5))
+        decision = str(checked.get("execution_decision") or "REJECTED").upper()
+        if decision == "READY_FOR_ORDER":
+            decision = "QUALIFIED_READ_ONLY"
+        reject_reason = str(checked.get("why_order_not_sent") or checked.get("blocking_reason") or "").strip()
+        if not reject_reason and missing:
+            reject_reason = f"Missing {self._join_labels(missing)}."
+        return {
+            "symbol": symbol,
+            "timestamp": self._timestamp(),
+            "active_session_id": self.session.get("session_id"),
+            "adaptive_level": int(checked.get("adaptive_level") or self._current_adaptive_strategy_level(symbol)),
+            "score": score,
+            "required_score": required,
+            "decision": decision,
+            "reject_reason": reject_reason or "No blocker recorded.",
+            "missing_confirmations": missing,
+            "missing_count": len(missing),
+            "estimated_readiness": self._scan_readiness_text(score, required, missing),
+            "htf_alignment": bool(conditions.get("htf_bias") in {"ALIGNED", True} or conditions.get("htf_bias") is True),
+            "momentum": bool(conditions.get("momentum")),
+            "pullback_retest": bool(conditions.get("pullback_retest")),
+            "bos": bool(conditions.get("bos")),
+            "liquidity_sweep": bool(conditions.get("liquidity_sweep")),
+            "fvg": bool(conditions.get("fvg") or conditions.get("fvg_retest")),
+            "rr_ok": bool((conditions.get("RR_2_0") is True) or self._number(checked.get("risk_reward"), 0) >= 2.0 or "RR_BELOW_2_0" not in blockers),
+            "spread_ok": bool(conditions.get("spread_clean") is True or "SPREAD_TOO_HIGH" not in blockers),
+            "session_bonus": bool(conditions.get("session_bonus")),
+            "history_ready": bool(warmup.get("history_ready")),
+            "mt5_status": str(mt5_health.get("status") or "UNKNOWN"),
+            "history_load_ms": history_ms,
+            "analysis_ms": analysis_ms,
+            "decision_ms": decision_ms,
+            "total_scan_ms": total_ms,
+            "failed_hard_gates": list(blockers),
+            "history_warmup": copy.deepcopy(warmup),
+        }
+
+    def _scan_missing_confirmations(self, checked: dict[str, Any], conditions: dict[str, Any], warmup: dict[str, Any]) -> list[str]:
+        missing: list[str] = []
+        if warmup.get("history_ready") is not True:
+            missing.append("history ready")
+        htf = conditions.get("htf_bias")
+        if not (htf is True or str(htf).upper() == "ALIGNED"):
+            missing.append("HTF alignment")
+        if not (conditions.get("momentum") or conditions.get("pullback_retest")):
+            missing.append("momentum/pullback")
+        if not (conditions.get("bos") or conditions.get("liquidity_sweep") or conditions.get("fvg_retest") or conditions.get("fvg")):
+            missing.append("structure confirmation")
+        raw_missing = checked.get("confirmation_missing") if isinstance(checked.get("confirmation_missing"), list) else []
+        for item in raw_missing:
+            label = str(item or "").strip()
+            if label and label not in missing:
+                missing.append(label)
+        seen: set[str] = set()
+        result: list[str] = []
+        for item in missing:
+            key = item.lower()
+            if key not in seen:
+                seen.add(key)
+                result.append(item)
+        return result
+
+    def _scan_readiness_text(self, score: int, required: int, missing: list[str]) -> str:
+        deficit = max(0, required - score)
+        if deficit == 0 and not missing:
+            return "Qualified in read-only mode"
+        if len(missing) == 1:
+            return f"Only {missing[0]} missing"
+        if deficit <= 1 and missing:
+            return f"Close: missing {self._join_labels(missing[:2])}"
+        return f"Missing {self._join_labels(missing[:3])}" if missing else f"Needs +{deficit} score"
+
+    def _store_latest_scan_diagnostic(self, diagnostic: dict[str, Any]) -> None:
+        symbol = str(diagnostic.get("symbol") or "").upper()
+        if not symbol:
+            return
+        self._latest_scan_diagnostics[symbol] = copy.deepcopy(diagnostic)
+        self.session["latest_scan_diagnostics"] = copy.deepcopy(self._latest_scan_diagnostics)
+        try:
+            DEFAULT_SCAN_DIAGNOSTICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            DEFAULT_SCAN_DIAGNOSTICS_PATH.write_text(json.dumps(self._latest_scan_diagnostics, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _scan_trace_from_diagnostic(self, diagnostic: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "timestamp": diagnostic.get("timestamp") or self._timestamp(),
+            "adaptive_level": diagnostic.get("adaptive_level"),
+            "symbol": diagnostic.get("symbol"),
+            "direction_candidate": "",
+            "score": diagnostic.get("score"),
+            "required_score": diagnostic.get("required_score"),
+            "conditions": {
+                "htf_bias": diagnostic.get("htf_alignment"),
+                "momentum": diagnostic.get("momentum"),
+                "pullback_retest": diagnostic.get("pullback_retest"),
+                "bos": diagnostic.get("bos"),
+                "liquidity_sweep": diagnostic.get("liquidity_sweep"),
+                "fvg": diagnostic.get("fvg"),
+                "session_bonus": diagnostic.get("session_bonus"),
+            },
+            "hard_gates_passed": diagnostic.get("decision") == "QUALIFIED_READ_ONLY",
+            "failed_hard_gates": diagnostic.get("failed_hard_gates") if isinstance(diagnostic.get("failed_hard_gates"), list) else [],
+            "execution_decision": diagnostic.get("decision"),
+            "why_order_not_sent": diagnostic.get("reject_reason"),
+            "decision": diagnostic.get("decision"),
+            "reason": diagnostic.get("reject_reason"),
+        }
+
+    def _closest_scan_candidate(self) -> dict[str, Any] | None:
+        diagnostics = [item for item in self._latest_scan_diagnostics.values() if isinstance(item, dict)]
+        if not diagnostics:
+            return None
+        return copy.deepcopy(sorted(diagnostics, key=lambda item: (int(item.get("score") or 0), -int(item.get("missing_count") or 99)), reverse=True)[0])
+
     def _first_pending_history_diagnostic(self, diagnostics: list[dict[str, Any]]) -> dict[str, Any] | None:
         pending = [item for item in diagnostics if item.get("history_ready") is not True]
         if not pending:
@@ -1332,6 +1749,13 @@ class AutoValidationService:
 
     def _friendly_gate_reason(self, gate: str) -> str:
         labels = {
+            "BLOCKED_LEGACY_ORDER_PATH": "legacy approval path tried to send an order after the current final decision rejected it",
+            "FINAL_DECISION_REJECTED": "current Round 3 final decision rejected the signal",
+            "FINAL_DECISION_ROUND_MISMATCH": "final decision round does not match the active round",
+            "FINAL_DECISION_SESSION_MISMATCH": "final decision session does not match the active session",
+            "FINAL_DECISION_SYMBOL_MISMATCH": "final decision symbol does not match the signal",
+            "FINAL_DECISION_SCORE_BELOW_THRESHOLD": "final decision score is below the current adaptive threshold",
+            "FINAL_DECISION_HARD_GATES_FAILED": "current Round 3 hard gates did not pass",
             "BALANCED_ENTRY_REQUIREMENT_MISSING": "balanced entry gates are incomplete",
             "MOMENTUM_OR_PULLBACK_MISSING": "momentum or pullback/retest is missing",
             "STRUCTURE_CONFIRMATION_MISSING": "BOS, liquidity sweep, or FVG retest is missing",
@@ -1727,6 +2151,100 @@ class AutoValidationService:
             return f"{prefix}Waiting: Level 3 needs {self._join_labels(missing) or 'momentum plus BOS or liquidity sweep'}."
         return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}."
 
+    def _active_round_label(self) -> str:
+        return str(self.session.get("round_label") or f"ROUND_{self.session.get('round_number') or 3}" or "ROUND_3").upper()
+
+    def _score_components_snapshot(self, round3: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "confirmation_states": copy.deepcopy(round3.get("confirmation_states") if isinstance(round3.get("confirmation_states"), dict) else {}),
+            "score_breakdown": copy.deepcopy(round3.get("score_breakdown") if isinstance(round3.get("score_breakdown"), dict) else {}),
+            "confirmation_weights": copy.deepcopy(round3.get("confirmation_weights") if isinstance(round3.get("confirmation_weights"), dict) else {}),
+            "confirmation_passed": list(round3.get("confirmation_passed") or []),
+            "confirmation_missing": list(round3.get("confirmation_missing") or []),
+            "passed_rules": list(round3.get("passed_rules") or []),
+            "failed_rules": list(round3.get("failed_rules") or []),
+        }
+
+    def _final_round3_order_decision(self, signal: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(signal.get("symbol") or "").upper()
+        round3 = self._round3_signal_diagnostics(signal)
+        threshold = int(self._adaptive_level_config(symbol=symbol).get("required_score") or round3.get("confirmation_required") or 5)
+        score = int(self._number(round3.get("confirmation_score"), 0))
+        failed_rules = [str(item) for item in round3.get("failed_rules", []) if str(item or "").strip()]
+        status = str(round3.get("final_decision") or "").upper()
+        hard_gates_passed = status == "ACCEPTED" and not failed_rules and score >= threshold
+        return {
+            "status": "ACCEPTED" if hard_gates_passed else "REJECTED",
+            "raw_status": status or "UNKNOWN",
+            "round": self._active_round_label(),
+            "session_id": self.session.get("session_id"),
+            "symbol": symbol,
+            "adaptive_level": round3.get("adaptive_level"),
+            "score": score,
+            "required_score": threshold,
+            "hard_gates_passed": hard_gates_passed,
+            "passed_rules": list(round3.get("passed_rules") or []),
+            "failed_rules": failed_rules,
+            "advisory_warnings": list(round3.get("advisory_warnings") or []),
+            "score_components": self._score_components_snapshot(round3),
+            "final_decision_reason": round3.get("final_decision_reason") or round3.get("rejection_reason") or "",
+            "round3_diagnostics": copy.deepcopy(round3),
+            "timestamp": self._timestamp(),
+        }
+
+    def _final_round3_order_blockers(self, final_decision: dict[str, Any], signal: dict[str, Any]) -> list[str]:
+        blockers: list[str] = []
+        symbol = str(signal.get("symbol") or "").upper()
+        session_id = str(self.session.get("session_id") or "")
+        threshold = int(self._adaptive_level_config(symbol=symbol).get("required_score") or final_decision.get("required_score") or 5)
+        if str(final_decision.get("status") or "").upper() != "ACCEPTED":
+            blockers.append("FINAL_DECISION_REJECTED")
+        if str(final_decision.get("round") or "").upper() != self._active_round_label():
+            blockers.append("FINAL_DECISION_ROUND_MISMATCH")
+        if str(final_decision.get("session_id") or "") != session_id:
+            blockers.append("FINAL_DECISION_SESSION_MISMATCH")
+        if str(final_decision.get("symbol") or "").upper() != symbol:
+            blockers.append("FINAL_DECISION_SYMBOL_MISMATCH")
+        if int(self._number(final_decision.get("score"), 0)) < threshold:
+            blockers.append("FINAL_DECISION_SCORE_BELOW_THRESHOLD")
+        if final_decision.get("hard_gates_passed") is not True:
+            blockers.append("FINAL_DECISION_HARD_GATES_FAILED")
+        return sorted(set(blockers))
+
+    def _final_order_block_reason(self, final_decision: dict[str, Any], blockers: list[str]) -> str:
+        reason = str(final_decision.get("final_decision_reason") or "").strip()
+        if reason:
+            return reason
+        failed = final_decision.get("failed_rules") if isinstance(final_decision.get("failed_rules"), list) else []
+        if failed:
+            return f"Blocked because {self._friendly_gate_reason(str(failed[0]))}."
+        return f"Blocked because {self._friendly_gate_reason(blockers[0])}." if blockers else "Blocked because the current Round 3 final decision did not approve the order."
+
+    def _legacy_order_path_audit(self, signal: dict[str, Any], final_decision: dict[str, Any], blockers: list[str]) -> dict[str, Any]:
+        approval_audit = signal.get("approval_audit") if isinstance(signal.get("approval_audit"), dict) else {}
+        preview = signal.get("preview_decision") if isinstance(signal.get("preview_decision"), dict) else {}
+        return {
+            "event": "BLOCKED_LEGACY_ORDER_PATH",
+            "symbol": str(signal.get("symbol") or "").upper(),
+            "signal_hash": signal.get("signal_hash"),
+            "active_round": self._active_round_label(),
+            "active_session_id": self.session.get("session_id"),
+            "blockers": blockers,
+            "legacy_fields": {
+                "execution_status": signal.get("execution_status"),
+                "risk_status": signal.get("risk_status"),
+                "status_level": signal.get("status_level"),
+                "confirmation_score": signal.get("confirmation_score"),
+                "confirmation_required": signal.get("confirmation_required"),
+                "confidence": signal.get("confidence"),
+                "watchlist": signal.get("watchlist"),
+                "approval_audit": approval_audit,
+                "preview_decision": preview,
+            },
+            "final_decision": final_decision,
+            "timestamp": self._timestamp(),
+        }
+
     def _execution_decision_reason(self, status: str, blockers: list[str], signal: dict[str, Any] | None = None) -> str:
         blockers = [str(blocker) for blocker in blockers if str(blocker or "").strip()]
         blocker = blockers[0] if blockers else ""
@@ -1743,6 +2261,9 @@ class AutoValidationService:
             return f"Rejected: RR {rr_text} below required 2.0."
         if blocker in {"SPREAD_TOO_HIGH", "SPREAD_TOO_WIDE", "SPREAD_UNAVAILABLE", "VALID_TICK_SPREAD_REQUIRED"}:
             return "Rejected: spread too high."
+        if blocker == "BLOCKED_LEGACY_ORDER_PATH":
+            final_decision = (signal or {}).get("final_decision") if isinstance((signal or {}).get("final_decision"), dict) else {}
+            return self._final_order_block_reason(final_decision, blockers) if final_decision else "Blocked: legacy approval path tried to send an order but the current Round 3 final decision rejected it."
         if blocker == "HIGH_IMPACT_NEWS_BLACKOUT":
             return "Rejected: high-impact news blackout is active."
         if "RISK" in blocker or blocker in {"SL_TP_REQUIRED", "SL_TP_INVALID"}:
@@ -2000,6 +2521,12 @@ class AutoValidationService:
             return
         trades = self.trades()
         closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
+        if self._backfill_closed_trade_autopsies(closed):
+            trades = self.trades()
+            closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
+        if self._backfill_legacy_path_losses(closed):
+            trades = self.trades()
+            closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
         open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT"}]
         open_ticket_keys = {str(trade.get("mt5_ticket") or "") for trade in open_trades if str(trade.get("mt5_ticket") or "")}
         mt5_open_ticket_keys = {self._position_ticket(position) for position in mt5_open_positions if self._position_ticket(position)}
@@ -2117,6 +2644,269 @@ class AutoValidationService:
             except Exception:
                 continue
         return {"action": "reconciled_close_reports_to_journal" if reconciled else "already_reconciled", "tickets": reconciled}
+
+    def _backfill_closed_trade_autopsies(self, closed_trades: list[dict[str, Any]]) -> bool:
+        if self.journal_service is None or not hasattr(self.journal_service, "record_trade_closed"):
+            return False
+        updated = False
+        for trade in closed_trades:
+            if isinstance(trade.get("autopsy"), dict) and trade.get("autopsy"):
+                continue
+            autopsy = self._closed_trade_autopsy(trade)
+            if not autopsy:
+                continue
+            try:
+                enriched = self.journal_service.record_trade_closed({**trade, "autopsy": autopsy})
+                self._persist_closed_confirmed_reason(enriched)
+                updated = True
+            except Exception:
+                continue
+        return updated
+
+    def _backfill_legacy_path_losses(self, closed_trades: list[dict[str, Any]]) -> bool:
+        if self.journal_service is None or not hasattr(self.journal_service, "record_trade_closed"):
+            return False
+        updated = False
+        for trade in closed_trades:
+            if str(trade.get("result") or "").upper() != "LOSS":
+                continue
+            if trade.get("legacy_path_loss") is True:
+                continue
+            audit = self._legacy_loss_audit_from_trade(trade)
+            if not audit:
+                continue
+            try:
+                self.journal_service.record_trade_closed(
+                    {
+                        **trade,
+                        "legacy_path_loss": True,
+                        "legacy_execution_audit": audit,
+                        "final_decision": audit.get("final_decision") if isinstance(audit.get("final_decision"), dict) else trade.get("final_decision"),
+                        "score_components": audit.get("score_components") if isinstance(audit.get("score_components"), dict) else trade.get("score_components"),
+                        "notes": "Backfilled as legacy-path loss: trade opened despite missing or rejected current Round 3 final decision.",
+                    }
+                )
+                updated = True
+            except Exception:
+                continue
+        return updated
+
+    def _legacy_loss_audit_from_trade(self, trade: dict[str, Any]) -> dict[str, Any]:
+        metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        existing_final = trade.get("final_decision") if isinstance(trade.get("final_decision"), dict) else {}
+        recorded_required = self._number_or_none(trade.get("confirmation_required"))
+        round3_required = self._number_or_none(round3.get("confirmation_required"))
+        round3_status = str(round3.get("final_decision") or "").upper()
+        legacy_required = recorded_required is not None and recorded_required < 5 and round3_required is not None and round3_required >= 5
+        rejected_by_round3 = round3_status == "REJECTED"
+        missing_final = not existing_final
+        if not (legacy_required or rejected_by_round3 or missing_final):
+            return {}
+        score = self._number_or_none(trade.get("confirmation_score") or round3.get("confirmation_score"))
+        required = int(round3_required or recorded_required or 5)
+        failed_rules = [str(item) for item in round3.get("failed_rules", []) if str(item or "").strip()]
+        final_decision = existing_final or {
+            "status": "REJECTED" if rejected_by_round3 or failed_rules else "UNKNOWN",
+            "raw_status": round3_status or "UNKNOWN",
+            "round": self._active_round_label(),
+            "session_id": trade.get("validation_session_id") or self.session.get("session_id"),
+            "symbol": str(trade.get("symbol") or "").upper(),
+            "adaptive_level": self._adaptive_level_for_trade(trade),
+            "score": int(score or 0),
+            "required_score": required,
+            "hard_gates_passed": False,
+            "passed_rules": list(round3.get("passed_rules") or []),
+            "failed_rules": failed_rules,
+            "score_components": self._score_components_snapshot(round3),
+            "final_decision_reason": round3.get("final_decision_reason") or "Execution metadata missing or contradicted current Round 3 final decision.",
+        }
+        return {
+            "audit_type": "LEGACY_PATH_LOSS_BACKFILL",
+            "ticket": str(trade.get("mt5_ticket") or trade.get("ticket") or ""),
+            "symbol": str(trade.get("symbol") or "").upper(),
+            "legacy_required_detected": legacy_required,
+            "round3_rejected_detected": rejected_by_round3,
+            "missing_final_decision_detected": missing_final,
+            "recorded_confirmation_required": recorded_required,
+            "round3_confirmation_required": round3_required,
+            "recorded_confirmation_score": score,
+            "round3_final_decision": round3_status or "UNKNOWN",
+            "round3_failed_rules": failed_rules,
+            "final_decision": final_decision,
+            "score_components": final_decision.get("score_components") if isinstance(final_decision.get("score_components"), dict) else {},
+            "timestamp": self._timestamp(),
+        }
+
+    def _closed_trade_autopsy(self, trade: dict[str, Any]) -> dict[str, Any]:
+        ticket = str(trade.get("mt5_ticket") or trade.get("ticket") or "")
+        symbol = str(trade.get("symbol") or "").upper()
+        direction = str(trade.get("side") or trade.get("direction") or trade.get("action") or "").upper()
+        if not ticket or not symbol:
+            return {}
+        entry_time = str(trade.get("opened_at") or trade.get("entry_time") or trade.get("created_at") or "")
+        close_time = str(trade.get("closed_at") or trade.get("close_time") or trade.get("updated_at") or "")
+        entry = self._number_or_none(trade.get("entry_price") or trade.get("entry"))
+        close_price = self._number_or_none(trade.get("close_price") or trade.get("exit_price") or trade.get("exit"))
+        sl = self._number_or_none(trade.get("stop_loss") or trade.get("sl"))
+        tp = self._number_or_none(trade.get("take_profit") or trade.get("tp"))
+        pnl = round(self._trade_pnl(trade), 2)
+        metadata = trade.get("strategy_metadata") if isinstance(trade.get("strategy_metadata"), dict) else {}
+        round3 = metadata.get("round3_diagnostics") if isinstance(metadata.get("round3_diagnostics"), dict) else {}
+        adaptive_level = self._adaptive_level_for_trade(trade)
+        score_at_entry = self._number_or_none(trade.get("confirmation_score") or round3.get("confirmation_score"))
+        confirmations_present = self._autopsy_confirmation_labels(trade, round3, present=True)
+        confirmations_missing = self._autopsy_confirmation_labels(trade, round3, present=False)
+        candles = self._trade_m15_candles(symbol, entry_time, close_time)
+        before = candles.get("before", [])
+        after = candles.get("after", [])
+        excursion = self._trade_excursion(direction, entry, after)
+        reason_for_loss = self._autopsy_loss_reason(trade, confirmations_missing, excursion)
+        was_entry_early = self._autopsy_entry_was_early(confirmations_missing, before, direction)
+        should_have_waited = was_entry_early or bool(confirmations_missing)
+        suggested_rule_fix = self._autopsy_suggested_rule_fix(confirmations_missing, was_entry_early)
+        return {
+            "ticket": ticket,
+            "symbol": symbol,
+            "direction": direction,
+            "entry_time": entry_time,
+            "close_time": close_time,
+            "entry_price": entry,
+            "sl": sl,
+            "tp": tp,
+            "close_price": close_price,
+            "pnl": pnl,
+            "adaptive_level": adaptive_level,
+            "score_at_entry": score_at_entry,
+            "confirmations_present": confirmations_present,
+            "confirmations_missing": confirmations_missing,
+            "candles_before_entry": before,
+            "candles_after_entry": after,
+            "did_price_move_in_favor_first": excursion.get("did_price_move_in_favor_first"),
+            "max_favorable_excursion": excursion.get("max_favorable_excursion"),
+            "max_adverse_excursion": excursion.get("max_adverse_excursion"),
+            "reason_for_loss": reason_for_loss,
+            "was_entry_early": was_entry_early,
+            "should_have_waited": should_have_waited,
+            "suggested_rule_fix": suggested_rule_fix,
+            "entry_quality": self._autopsy_entry_quality(score_at_entry, confirmations_missing, excursion),
+            "missing_confirmation": self._join_labels(confirmations_missing) if confirmations_missing else "None",
+            "why_sl_was_hit": reason_for_loss if pnl < 0 else "TP was reached before SL.",
+            "data_source": candles.get("data_source", "MT5_M15_HISTORY"),
+            "generated_at": self._timestamp(),
+        }
+
+    def _autopsy_confirmation_labels(self, trade: dict[str, Any], round3: dict[str, Any], *, present: bool) -> list[str]:
+        direct = trade.get("confirmation_passed" if present else "confirmation_missing")
+        if isinstance(direct, list) and direct:
+            return [str(item) for item in direct if str(item or "").strip()]
+        round3_values = round3.get("confirmation_passed" if present else "confirmation_missing")
+        if isinstance(round3_values, list) and round3_values:
+            return [str(item) for item in round3_values if str(item or "").strip()]
+        states = round3.get("confirmation_states") if isinstance(round3.get("confirmation_states"), dict) else {}
+        labels = {
+            "HTF_ALIGNMENT": "H1/H4 HTF alignment",
+            "MOMENTUM_DISPLACEMENT": "momentum/displacement",
+            "PULLBACK_RETEST": "pullback/retest",
+            "BOS": "BOS",
+            "LIQUIDITY_SWEEP": "liquidity sweep",
+            "FVG_RETEST": "FVG retest",
+            "SPREAD_CLEAN": "clean spread",
+            "RR_2_0": "RR >= 2.0",
+        }
+        return [label for code, label in labels.items() if bool(states.get(code)) is present]
+
+    def _trade_m15_candles(self, symbol: str, entry_time: str, close_time: str) -> dict[str, Any]:
+        try:
+            history = self.history_backfill_service.fetch_history(symbol, "M15", count=1000)
+        except Exception as exc:
+            return {"before": [], "after": [], "data_source": f"MT5_M15_HISTORY_UNAVAILABLE: {exc}"}
+        candles = history.get("candles") if isinstance(history.get("candles"), list) else []
+        normalized = [candle for candle in candles if isinstance(candle, dict)]
+        entry_dt = self._parse_time(entry_time)
+        if entry_dt is None:
+            return {"before": normalized[-5:], "after": normalized[-5:], "data_source": history.get("source", "MT5_M15_HISTORY")}
+        indexed = [(self._parse_time(candle.get("time")), candle) for candle in normalized]
+        indexed = [(ts, candle) for ts, candle in indexed if ts is not None]
+        before = [candle for ts, candle in indexed if ts <= entry_dt][-5:]
+        after = [candle for ts, candle in indexed if ts > entry_dt][:5]
+        return {"before": before, "after": after, "data_source": history.get("source", "MT5_M15_HISTORY")}
+
+    def _trade_excursion(self, direction: str, entry: float | None, after: list[dict[str, Any]]) -> dict[str, Any]:
+        if entry is None or not after:
+            return {"did_price_move_in_favor_first": None, "max_favorable_excursion": None, "max_adverse_excursion": None}
+        favorable = 0.0
+        adverse = 0.0
+        first: bool | None = None
+        for candle in after:
+            high = self._number_or_none(candle.get("high"))
+            low = self._number_or_none(candle.get("low"))
+            if high is None or low is None:
+                continue
+            if direction == "SELL":
+                fav = max(0.0, entry - low)
+                adv = max(0.0, high - entry)
+            else:
+                fav = max(0.0, high - entry)
+                adv = max(0.0, entry - low)
+            if first is None and (fav > 0 or adv > 0):
+                first = fav >= adv
+            favorable = max(favorable, fav)
+            adverse = max(adverse, adv)
+        return {
+            "did_price_move_in_favor_first": first,
+            "max_favorable_excursion": round(favorable, 5),
+            "max_adverse_excursion": round(adverse, 5),
+        }
+
+    def _autopsy_loss_reason(self, trade: dict[str, Any], missing: list[str], excursion: dict[str, Any]) -> str:
+        pnl = self._trade_pnl(trade)
+        exit_reason = str(trade.get("exit_reason") or "UNKNOWN").replace("_", " ").lower()
+        if pnl >= 0:
+            return "Winning trade closed in profit."
+        if missing:
+            return f"SL was hit after entry without {self._join_labels(missing[:2])}."
+        if excursion.get("did_price_move_in_favor_first") is False:
+            return f"Price moved adverse first and reached {exit_reason}."
+        return f"Price reversed into {exit_reason} after limited follow-through."
+
+    def _autopsy_entry_was_early(self, missing: list[str], before: list[dict[str, Any]], direction: str) -> bool:
+        if any("BOS" in item.upper() or "LIQUIDITY" in item.upper() or "FVG" in item.upper() for item in missing):
+            return True
+        if len(before) < 2:
+            return bool(missing)
+        latest = before[-1]
+        previous = before[-2]
+        latest_close = self._number_or_none(latest.get("close"))
+        previous_close = self._number_or_none(previous.get("close"))
+        if latest_close is None or previous_close is None:
+            return bool(missing)
+        if direction == "SELL":
+            return latest_close > previous_close and bool(missing)
+        return latest_close < previous_close and bool(missing)
+
+    def _autopsy_suggested_rule_fix(self, missing: list[str], was_entry_early: bool) -> str:
+        text = " ".join(missing).lower()
+        if "bos" in text:
+            return "Require BOS or a clear liquidity sweep before accepting score-5 entries."
+        if "liquidity" in text:
+            return "Wait for liquidity sweep confirmation before lower-level entries."
+        if "fvg" in text or "retest" in text:
+            return "Wait for FVG/retest confirmation instead of entering late after displacement."
+        if "momentum" in text:
+            return "Require a fresh momentum candle before entry."
+        if was_entry_early:
+            return "Wait one more M15 candle for confirmation before entry."
+        return "Keep current rule; monitor whether this condition repeats."
+
+    def _autopsy_entry_quality(self, score: float | None, missing: list[str], excursion: dict[str, Any]) -> str:
+        adverse = self._number_or_none(excursion.get("max_adverse_excursion")) or 0.0
+        favorable = self._number_or_none(excursion.get("max_favorable_excursion")) or 0.0
+        if score is not None and score >= 6 and not missing:
+            return "High"
+        if missing or adverse > favorable:
+            return "Weak"
+        return "Moderate"
 
     def _persist_closed_confirmed_reason(self, trade: dict[str, Any]) -> None:
         try:
@@ -2528,6 +3318,10 @@ class AutoValidationService:
     def _log(self, event: str, details: dict[str, Any] | None = None) -> None:
         self.events.append({"event": event, "details": details or {}, "timestamp": self._timestamp()})
         self._save_state()
+
+    def _log_scan_event(self, event: str, details: dict[str, Any] | None = None) -> None:
+        self.events.append({"event": event, "details": details or {}, "timestamp": self._timestamp()})
+        self.events = self.events[-500:]
 
     def log_runner_error(self, message: str) -> None:
         self._log("RUNNER_ERROR", {"error": message})
@@ -3634,6 +4428,17 @@ class AutoValidationService:
             self._decision_traces = [item for item in data["decision_traces"] if isinstance(item, dict)][-200:]
         elif isinstance(self.session.get("decision_traces"), list):
             self._decision_traces = [item for item in self.session["decision_traces"] if isinstance(item, dict)][-200:]
+        if isinstance(data.get("latest_scan_diagnostics"), dict):
+            self._latest_scan_diagnostics = {str(key).upper(): value for key, value in data["latest_scan_diagnostics"].items() if isinstance(value, dict)}
+        elif isinstance(self.session.get("latest_scan_diagnostics"), dict):
+            self._latest_scan_diagnostics = {str(key).upper(): value for key, value in self.session["latest_scan_diagnostics"].items() if isinstance(value, dict)}
+        elif DEFAULT_SCAN_DIAGNOSTICS_PATH.exists():
+            try:
+                raw_scans = json.loads(DEFAULT_SCAN_DIAGNOSTICS_PATH.read_text(encoding="utf-8"))
+                if isinstance(raw_scans, dict):
+                    self._latest_scan_diagnostics = {str(key).upper(): value for key, value in raw_scans.items() if isinstance(value, dict)}
+            except (OSError, json.JSONDecodeError):
+                self._latest_scan_diagnostics = {}
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
             updated_at = str(data.get("updated_at") or self.session.get("started_at") or "")
             if not self.config.get("allow_persisted_auto_resume", False):
@@ -3674,6 +4479,7 @@ class AutoValidationService:
                 "execution_timelines": self._execution_timelines[-100:],
                 "confidence_timeline": self._confidence_timeline,
                 "decision_traces": self._decision_traces[-200:],
+                "latest_scan_diagnostics": self._latest_scan_diagnostics,
                 "sent_signal_keys": sorted(self._sent_signal_keys),
                 "updated_at": self._timestamp(),
             }

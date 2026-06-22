@@ -80,6 +80,21 @@ class MT5TradeCloseSyncService:
     def get_latest(self) -> dict[str, Any]:
         return self._latest
 
+    def verify_ticket(self, ticket: str | int, trade: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Verify one closure from an MT5 OUT deal without inferring from position absence."""
+        ticket_text = str(ticket or "").strip()
+        trade = trade or self.persistent_trade_journal_service.get_trade_by_ticket(ticket_text) or {}
+        state = self._read_mt5_state()
+        if state.get("status") != "READY":
+            return {"status": "CLOSURE_UNCONFIRMED", "ticket": ticket_text, "reason": state.get("message") or state.get("status")}
+        if self._is_still_open(trade, state.get("open_positions", []), state.get("account")):
+            return {"status": "OPEN", "ticket": ticket_text, "reason": "MT5 position is still open."}
+        deal = self._find_close_deal(trade, state.get("deals", []), state.get("orders", []))
+        if deal is None:
+            return {"status": "CLOSURE_UNCONFIRMED", "ticket": ticket_text, "reason": "MT5 history contains no matching closing deal."}
+        payload = self._close_payload(trade, deal, state.get("account"))
+        return {"status": "CLOSURE_CONFIRMED", "ticket": ticket_text, "close_payload": payload, **payload}
+
     def get_history(self, limit: int = 100) -> list[dict[str, Any]]:
         return self._history[-limit:]
 
@@ -208,7 +223,14 @@ class MT5TradeCloseSyncService:
             "profit_loss": net_pnl,
             "result": self._result_from_pnl(net_pnl),
             "duration_minutes": self._duration_minutes(trade.get("opened_at"), closed_at),
-            "exit_reason": self._exit_reason(trade, close_price),
+            "exit_reason": self._exit_reason(trade, close_price, deal),
+            "mt5_closure_confirmed": True,
+            "mt5_close_deal_ticket": str(getattr(deal, "ticket", "") or ""),
+            "mt5_close_order_ticket": str(getattr(deal, "order", "") or ""),
+            "mt5_position_id": str(getattr(deal, "position_id", "") or trade.get("mt5_ticket") or ""),
+            "mt5_deal_entry": self._deal_entry_name(deal),
+            "mt5_deal_reason": self._deal_reason_name(deal),
+            "closure_source": "MT5_HISTORY_DEAL",
             "account_login": str(trade.get("account_login") or getattr(account, "login", "") or ""),
             "server": str(trade.get("server") or getattr(account, "server", "") or ""),
             "notes": f"{trade.get('notes', '')} Close synchronized from MT5 history.".strip(),
@@ -252,7 +274,18 @@ class MT5TradeCloseSyncService:
             return None
         return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
-    def _exit_reason(self, trade: dict[str, Any], close_price: float) -> str:
+    def _exit_reason(self, trade: dict[str, Any], close_price: float, deal: Any) -> str:
+        deal_reason = self._deal_reason_name(deal)
+        if deal_reason == "SL":
+            return "STOP_LOSS"
+        if deal_reason == "TP":
+            return "TAKE_PROFIT"
+        if deal_reason in {"CLIENT", "MOBILE", "WEB"}:
+            return "MANUAL"
+        if deal_reason == "EXPERT":
+            return "BACKEND_CLOSE_REQUEST" if str(getattr(deal, "comment", "") or "").upper().find("EXIT") >= 0 else "EXPERT"
+        if deal_reason in {"SO", "ROLLOVER", "VMARGIN", "SPLIT"}:
+            return "BROKER"
         stop_loss = self._float_or_zero(trade.get("stop_loss"))
         take_profit = self._float_or_zero(trade.get("take_profit"))
         tolerance = 0.0001
@@ -261,6 +294,20 @@ class MT5TradeCloseSyncService:
         if stop_loss and abs(close_price - stop_loss) <= tolerance:
             return "STOP_LOSS"
         return "UNKNOWN"
+
+    def _deal_reason_name(self, deal: Any) -> str:
+        value = getattr(deal, "reason", None)
+        for name in dir(mt5):
+            if name.startswith("DEAL_REASON_") and getattr(mt5, name, object()) == value:
+                return name.replace("DEAL_REASON_", "")
+        return str(value) if value is not None else "UNKNOWN"
+
+    def _deal_entry_name(self, deal: Any) -> str:
+        value = getattr(deal, "entry", None)
+        for name in dir(mt5):
+            if name.startswith("DEAL_ENTRY_") and getattr(mt5, name, object()) == value:
+                return name.replace("DEAL_ENTRY_", "")
+        return str(value) if value is not None else "UNKNOWN"
 
     def _duration_minutes(self, opened_at: Any, closed_at: str) -> float | None:
         try:

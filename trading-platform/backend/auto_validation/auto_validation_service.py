@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 import copy
 import json
 from pathlib import Path
+import subprocess
+import sys
 from threading import RLock
 import time
 from typing import Any
@@ -93,6 +95,7 @@ class AutoValidationService:
         self._latest_bot_decisions: list[dict[str, Any]] = []
         self._closed_trade_records: list[dict[str, Any]] = []
         self._runtime_last_error = ""
+        self._closure_verification_in_progress: set[str] = set()
         self._load_state()
         self._apply_balanced_round3_config()
         self._sync_round_archive()
@@ -383,7 +386,7 @@ class AutoValidationService:
         positions = [dict(item) for item in result.get("positions", []) if isinstance(item, dict) and not item.get("closure_pending")]
         self._reconcile_open_mt5_positions(positions)
         self._refresh_session_metrics(mt5_open_positions=positions)
-        closed_records = [trade for trade in self.trades() if str(trade.get("status") or "").upper() == "CLOSED"]
+        closed_records = [trade for trade in self.trades() if str(trade.get("status") or "").upper() == "CLOSED" and trade.get("mt5_closure_confirmed") is True]
         with self._runtime_state_lock:
             self._live_mt5_positions = copy.deepcopy(positions)
             self._last_mt5_sync_at = str(result.get("timestamp") or self._timestamp())
@@ -411,11 +414,23 @@ class AutoValidationService:
         }
 
     def exit_loop_tick(self) -> dict[str, Any]:
-        return self.open_trade_exit_diagnostics()
+        positions = copy.deepcopy(self._live_mt5_positions)
+        trades = self.trades()
+        if self.exit_management_service is None:
+            return {"status": "NOT_CONFIGURED", "positions_checked": 0, "timestamp": self._timestamp()}
+        result = self.exit_management_service.diagnostics(session=dict(self.session), config=dict(self.config), positions=positions, trades=trades)
+        for item in result.get("diagnostics", []) if isinstance(result.get("diagnostics"), list) else []:
+            if isinstance(item, dict):
+                self._log_exit_diagnostic(item, persist_reason=True)
+        self._exit_management_diagnostics = result
+        return result
 
     def journal_lifecycle_loop_tick(self) -> dict[str, Any]:
-        result = self._sync_lifecycle_services(manual=False)
+        result = self._reconcile_active_close_reports_into_journal()
         self._refresh_session_metrics(mt5_open_positions=copy.deepcopy(self._live_mt5_positions))
+        closed_records = [trade for trade in self.trades() if str(trade.get("status") or "").upper() == "CLOSED" and trade.get("mt5_closure_confirmed") is True]
+        with self._runtime_state_lock:
+            self._closed_trade_records = copy.deepcopy(closed_records)
         self._save_state(sync_archive=False)
         return {"status": "JOURNAL_LIFECYCLE_REFRESHED", "result": result, "timestamp": self._timestamp()}
 
@@ -511,7 +526,7 @@ class AutoValidationService:
             "mt5_open_positions": positions,
             "mt5_open_count": len(positions),
             "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
-            "closed_trades": len(closed_records),
+            "closed_trades": int(session.get("current_closed_trades") or 0),
             "closed_trade_records": copy.deepcopy(closed_records),
             "latest_outcomes": copy.deepcopy(sorted(closed_records, key=lambda item: str(item.get("closed_at") or item.get("close_time") or ""), reverse=True)[:5]),
             "wins": int(session.get("wins") or 0),
@@ -1588,10 +1603,19 @@ class AutoValidationService:
         return positions if isinstance(positions, list) else []
 
     def _read_open_positions_result(self) -> dict[str, Any]:
-        if self.position_service is None:
-            return {"status": "UNAVAILABLE", "positions": [], "message": "MT5 position service unavailable."}
         try:
-            result = self.position_service.get_open_positions()
+            completed = subprocess.run(
+                [sys.executable, "-m", "backend.auto_validation.mt5_position_probe"],
+                cwd=str(PROJECT_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+            output = (completed.stdout or "").strip().splitlines()
+            result = json.loads(output[-1]) if output else {"status": "READ_FAILED", "positions": [], "message": completed.stderr or "MT5 probe returned no data."}
+        except subprocess.TimeoutExpired:
+            return {"status": "READ_TIMEOUT", "positions": [], "message": "Isolated MT5 position probe exceeded 8 seconds."}
         except Exception as exc:
             return {"status": "READ_FAILED", "positions": [], "message": str(exc)}
         return result if isinstance(result, dict) else {"status": "READ_FAILED", "positions": [], "message": "Invalid MT5 position response."}
@@ -1691,7 +1715,7 @@ class AutoValidationService:
             trade
             for trade in trades
             if str(trade.get("validation_session_id") or "") == session_id
-            and str(trade.get("status") or "").upper() in {"OPEN", "SENT", "CLOSURE_PENDING"}
+            and str(trade.get("status") or "").upper() in {"OPEN", "SENT", "CLOSURE_PENDING", "CLOSURE_UNCONFIRMED"}
             and str(trade.get("mt5_ticket") or "")
         ]
         previous_open_tickets = {str(trade.get("mt5_ticket") or "") for trade in previous_open_trades}
@@ -1750,6 +1774,7 @@ class AutoValidationService:
         if not tickets:
             return
         for ticket in tickets:
+            self._log("MT5_CLOSURE_VERIFY_START", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
             self._log("MISSING_OPEN_TICKET_DETECTED", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
         close_result: dict[str, Any] = {}
         try:
@@ -1786,6 +1811,8 @@ class AutoValidationService:
                 except Exception:
                     closed_trade = None
             if closed_trade is not None:
+                self._log("MT5_CLOSURE_CONFIRMED", {"ticket": ticket, "close_time": closed_trade.get("closed_at") or closed_trade.get("close_time"), "close_price": closed_trade.get("close_price"), "profit": closed_trade.get("net_pnl") or closed_trade.get("profit_loss"), "exit_reason": closed_trade.get("exit_reason")})
+                self._log("CLOSURE_COUNT_APPLIED", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
                 self._log(
                     "CLOSED_TRADE_WRITTEN",
                     {
@@ -1798,12 +1825,17 @@ class AutoValidationService:
                 self._persist_closed_confirmed_reason(closed_trade)
                 continue
             trade = trades_by_ticket.get(ticket) or {}
-            if self.journal_service is not None and hasattr(self.journal_service, "mark_trade_closure_pending_by_ticket"):
+            self._log("MT5_CLOSURE_UNCONFIRMED", {"ticket": ticket, "reason": "MT5 history contains no matching closing deal."})
+            self._log("CLOSURE_COUNT_SKIPPED", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
+            marker = getattr(self.journal_service, "mark_trade_closure_unconfirmed_by_ticket", None) if self.journal_service is not None else None
+            if not callable(marker) and self.journal_service is not None:
+                marker = getattr(self.journal_service, "mark_trade_closure_pending_by_ticket", None)
+            if callable(marker):
                 try:
-                    pending = self.journal_service.mark_trade_closure_pending_by_ticket(
+                    pending = marker(
                         ticket,
                         {
-                            "closure_pending_reason": "MT5 position disappeared from open list; waiting for close history.",
+                            "closure_pending_reason": f"Ticket {ticket} disappeared from open positions but MT5 history did not confirm closure yet.",
                             "closure_pending_at": self._timestamp(),
                             "last_closure_lookup_at": self._timestamp(),
                         },
@@ -2299,8 +2331,23 @@ class AutoValidationService:
         checklist_items = self._scan_checklist_items(symbol, checked, conditions, warmup, blockers)
         checklist_passed = len([item for item in checklist_items if item.get("passed") is True])
         checklist_total = len(checklist_items)
-        score = checklist_passed
-        required = checklist_total
+        level = int(checked.get("adaptive_level") or self._current_adaptive_strategy_level(symbol))
+        confirmation_groups = {
+            "HTF bias": bool(conditions.get("htf_bias") in {"ALIGNED", True} or conditions.get("htf_bias") is True),
+            "Momentum": bool(conditions.get("momentum")),
+            "BOS/liquidity sweep": bool(conditions.get("bos") or conditions.get("liquidity_sweep")),
+            "Pullback/retest": bool(conditions.get("pullback_retest")),
+            "FVG/imbalance": bool(conditions.get("fvg") or conditions.get("fvg_retest")),
+        }
+        confirmation_passed = len([value for value in confirmation_groups.values() if value])
+        required_confirmations = self._level3_confirmation_required(symbol) if level == 3 else checklist_total
+        score = confirmation_passed if level == 3 else checklist_passed
+        required = required_confirmations if level == 3 else checklist_total
+        base_gate_states = {
+            "RR >= 2": bool((conditions.get("RR_2_0") is True) or self._number(checked.get("risk_reward"), 0) >= 2.0 or "RR_BELOW_2_0" not in {str(item) for item in blockers}),
+            "Spread clean": bool(conditions.get("spread_clean") is True or "SPREAD_TOO_HIGH" not in {str(item) for item in blockers}),
+            "Risk approved": str(checked.get("risk_status") or "").upper() == "APPROVED" or "RISK_REJECTED" not in {str(item) for item in blockers},
+        }
         decision = str(checked.get("execution_decision") or "REJECTED").upper()
         if decision == "READY_FOR_ORDER":
             decision = "QUALIFIED_READ_ONLY"
@@ -2320,6 +2367,14 @@ class AutoValidationService:
             "checklist_passed": checklist_passed,
             "checklist_total": checklist_total,
             "checklist_items": checklist_items,
+            "base_gates_passed": len([value for value in base_gate_states.values() if value]),
+            "base_gates_total": len(base_gate_states),
+            "base_gate_states": base_gate_states,
+            "confirmation_groups": confirmation_groups,
+            "confirmations_passed": confirmation_passed,
+            "confirmations_total": 5,
+            "confirmations_required": required_confirmations,
+            "sl_tp_valid": self._signal_sl_tp_valid(checked) or "SL_TP_INVALID" not in {str(item) for item in blockers},
             "decision": decision,
             "reject_reason": reject_reason or "No blocker recorded.",
             "missing_confirmations": missing,
@@ -2365,12 +2420,14 @@ class AutoValidationService:
         spread_ok = bool(conditions.get("spread_clean") is True or "SPREAD_TOO_HIGH" not in blocker_set)
 
         if level == 3:
-            any_trigger = bool(momentum or pullback or bos or liquidity)
+            confirmation_count = sum([htf_passed, momentum, bos or liquidity, pullback, fvg])
+            required = self._level3_confirmation_required(symbol)
+            risk_ok = str(checked.get("risk_status") or "").upper() == "APPROVED" or "RISK_REJECTED" not in blocker_set
             rows = [
-                ("HTF bias", htf_passed, "Higher-timeframe bias is clear and aligned."),
                 ("RR >= 2", rr_ok, "Risk/reward meets the minimum."),
                 ("Spread clean", spread_ok, "Spread is acceptable for execution."),
-                ("Any trigger", any_trigger, "Momentum, BOS, liquidity sweep, or pullback/retest is present."),
+                ("Risk approved", risk_ok, "Risk validation approved the setup."),
+                (f"{required} of 5 confirmations", confirmation_count >= required, "HTF bias, momentum, BOS/liquidity sweep, pullback/retest, and FVG/imbalance are evaluated."),
             ]
         else:
             rows = [
@@ -2395,14 +2452,23 @@ class AutoValidationService:
         missing: list[str] = []
         if warmup.get("history_ready") is not True:
             missing.append("history ready")
+        level = int(checked.get("adaptive_level") or 0)
+        if level == 3:
+            groups = [
+                conditions.get("htf_bias") is True or str(conditions.get("htf_bias")).upper() == "ALIGNED",
+                bool(conditions.get("momentum")),
+                bool(conditions.get("bos") or conditions.get("liquidity_sweep")),
+                bool(conditions.get("pullback_retest")),
+                bool(conditions.get("fvg") or conditions.get("fvg_retest")),
+            ]
+            required = self._level3_confirmation_required(str(checked.get("symbol") or "EURUSD").upper())
+            deficit = max(0, required - len([value for value in groups if value]))
+            if deficit:
+                missing.append(f"{deficit} more Level 3 confirmation{'s' if deficit != 1 else ''}")
+            return self._dedupe_labels(missing)
         htf = conditions.get("htf_bias")
         if not (htf is True or str(htf).upper() == "ALIGNED"):
             missing.append("HTF alignment")
-        level = int(checked.get("adaptive_level") or 0)
-        if level == 3:
-            if not (conditions.get("momentum") or conditions.get("bos") or conditions.get("liquidity_sweep") or conditions.get("pullback_retest")):
-                missing.append("momentum, BOS, liquidity sweep, or pullback/retest")
-            return self._dedupe_labels(missing)
         if not (conditions.get("momentum") or conditions.get("pullback_retest")):
             missing.append("momentum/pullback")
         if not (conditions.get("bos") or conditions.get("liquidity_sweep") or conditions.get("fvg_retest") or conditions.get("fvg")):
@@ -2704,6 +2770,8 @@ class AutoValidationService:
             "SL_TP_REQUIRED": "valid SL/TP is missing",
             "SL_TP_INVALID": "SL/TP is invalid",
             "RISK_REJECTED": "risk validation failed",
+            "SL_TP_INVALID": "stop-loss or take-profit is invalid",
+            "LEVEL_3_CONFIRMATIONS_MISSING": "Level 3 confirmation count is below the current requirement",
             "DIRECTION_BIAS_MISMATCH": "direction does not match higher-timeframe bias",
             "H4_HISTORY_INSUFFICIENT": "H4 history is not ready",
             "H1_HISTORY_INSUFFICIENT": "H1 history is not ready",
@@ -2883,22 +2951,25 @@ class AutoValidationService:
         states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
         momentum_or_pullback = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("PULLBACK_RETEST"))
         structure_confirmed = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
-        level3_any_trigger = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("PULLBACK_RETEST"))
         score_threshold_passed = confirmations["score"] >= confirmations["required_score"]
         clean_score_five = level == 3 or confirmations["score"] > 5 or bool(states.get("MOMENTUM_DISPLACEMENT"))
         level3_structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP"))
+        risk_approved = str(signal.get("risk_status") or "").upper() == "APPROVED"
+        sl_tp_valid = self._signal_sl_tp_valid(signal)
         checks = [
             ("H4_HISTORY_AVAILABLE", "H4_HISTORY_INSUFFICIENT", h4_ok),
             ("H1_HISTORY_AVAILABLE", "H1_HISTORY_INSUFFICIENT", h1_ok),
             ("M15_HISTORY_AVAILABLE", "M15_HISTORY_INSUFFICIENT", m15_ok),
             ("RR_2_0_OR_HIGHER", "RR_BELOW_2_0", rr is not None and rr >= 2.0),
             ("SPREAD_ACCEPTABLE", "SPREAD_TOO_HIGH", bool(states.get("SPREAD_CLEAN"))),
-            ("DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS", "DIRECTION_BIAS_MISMATCH", confirmations["direction_valid"]),
-            ("LEVEL_3_FAST_TRIGGER_PRESENT" if level == 3 else "MOMENTUM_OR_PULLBACK_PRESENT", "LEVEL_3_FAST_TRIGGER_MISSING" if level == 3 else "MOMENTUM_OR_PULLBACK_MISSING", level3_any_trigger if level == 3 else momentum_or_pullback),
+            ("RISK_APPROVED", "RISK_REJECTED", risk_approved),
+            ("SL_TP_VALID", "SL_TP_INVALID", sl_tp_valid),
+            ("LEVEL_3_DIRECTION_CANDIDATE_PRESENT" if level == 3 else "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS", "NO_BUY_SELL_SIGNAL" if level == 3 else "DIRECTION_BIAS_MISMATCH", confirmations["direction_valid"]),
+            ("LEVEL_3_CONFIRMATION_COUNT_MET" if level == 3 else "MOMENTUM_OR_PULLBACK_PRESENT", "LEVEL_3_CONFIRMATIONS_MISSING" if level == 3 else "MOMENTUM_OR_PULLBACK_MISSING", score_threshold_passed if level == 3 else momentum_or_pullback),
             ("LEVEL_3_STRUCTURE_OPTIONAL" if level == 3 else "STRUCTURE_CONFIRMATION_PRESENT", "LEVEL_3_STRUCTURE_OPTIONAL" if level == 3 else "STRUCTURE_CONFIRMATION_MISSING", True if level == 3 else structure_confirmed),
             ("ROUND_3_SCORE_THRESHOLD", "ROUND_3_SCORE_BELOW_THRESHOLD", score_threshold_passed),
             ("SCORE_5_HAS_CLEAN_MOMENTUM", "SCORE_5_NEEDS_CLEAN_MOMENTUM", clean_score_five),
-            (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), "LEVEL_3_NEEDS_ONE_FAST_TRIGGER" if level == 3 and not level_specific_passed else level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
+            (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
         ]
         for passed_code, failed_code, passed in checks:
             (passed_rules if passed else failed_rules).append(passed_code if passed else failed_code)
@@ -2964,6 +3035,7 @@ class AutoValidationService:
     def _round3_confirmation_summary(self, signal: dict[str, Any], components: dict[str, Any]) -> dict[str, Any]:
         symbol = str(signal.get("symbol") or "").upper()
         level_config = self._adaptive_level_config(symbol=symbol)
+        level = int(level_config.get("level") or 0)
         trend = signal.get("market_structure_state") if isinstance(signal.get("market_structure_state"), dict) else {}
         direction = self._round3_direction_candidate(signal, components)
         raw_trend_bias = str(trend.get("trend_bias") or trend.get("higher_timeframe_bias") or components.get("higher_timeframe_bias") or components.get("trend_bias") or "").upper()
@@ -3014,22 +3086,33 @@ class AutoValidationService:
         missing_codes = [code for code, passed in states.items() if not passed]
         score_breakdown = {code: weights.get(code, 0) for code in passed_codes}
         score = sum(score_breakdown.values())
+        confirmation_groups = {
+            "HTF_BIAS": bool(states["HTF_ALIGNMENT"]),
+            "MOMENTUM": bool(states["MOMENTUM_DISPLACEMENT"]),
+            "BOS_OR_LIQUIDITY_SWEEP": bool(states["BOS"] or states["LIQUIDITY_SWEEP"]),
+            "PULLBACK_RETEST": bool(states["PULLBACK_RETEST"]),
+            "FVG_IMBALANCE": bool(fvg or states["FVG_RETEST"]),
+        }
+        if level == 3:
+            score = len([passed for passed in confirmation_groups.values() if passed])
+            score_breakdown = {code: 1 for code, passed in confirmation_groups.items() if passed}
         return {
             "score": score,
             "required_score": int(level_config["required_score"]),
             "preferred_score": int(level_config.get("preferred_score", 6)),
-            "total": sum(weights.values()),
+            "total": 5 if level == 3 else sum(weights.values()),
             "weights": weights,
             "score_breakdown": score_breakdown,
-            "strong_count": len([code for code in passed_codes if code in strong_codes]),
+            "strong_count": score if level == 3 else len([code for code in passed_codes if code in strong_codes]),
             "strong_required": int(level_config["strong_required"]),
-            "direction_valid": direction in {"BUY", "SELL"} and trend_aligned,
+            "direction_valid": direction in {"BUY", "SELL"} and (trend_aligned if level < 3 else True),
             "direction": direction,
             "direction_candidate": direction,
             "trend_bias": htf_bias or trend_bias or raw_trend_bias or direction,
             "h1_bias": h1_bias,
             "h4_bias": h4_bias,
             "states": states,
+            "confirmation_groups": confirmation_groups,
             "passed_codes": passed_codes,
             "missing_codes": missing_codes,
             "passed_labels": [labels[code] for code in passed_codes],
@@ -3063,6 +3146,10 @@ class AutoValidationService:
         if first_failure == "RR_BELOW_2_0":
             rr_text = f"{rr:.1f}" if rr is not None else "missing"
             return f"Rejected: RR {rr_text} below required 2.0."
+        if first_failure == "RISK_REJECTED":
+            return "Rejected: risk approval is required."
+        if first_failure == "SL_TP_INVALID":
+            return "Rejected: stop-loss or take-profit is invalid."
         if first_failure == "DIRECTION_BIAS_MISMATCH":
             return f"Rejected: direction {confirmations.get('direction') or 'unclear'} does not match higher-timeframe bias {confirmations.get('trend_bias') or 'unclear'}."
         if first_failure == "ROUND_3_SCORE_BELOW_THRESHOLD":
@@ -3077,6 +3164,11 @@ class AutoValidationService:
             return f"{prefix}Waiting: score 5 setups need clean momentum."
         if first_failure in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"}:
             return f"{prefix}Waiting: trend bias, RR, and spread are ready, but Level 3 still needs one trigger from momentum, BOS, liquidity sweep, or pullback/retest."
+        if first_failure == "LEVEL_3_CONFIRMATIONS_MISSING":
+            groups = confirmations.get("confirmation_groups") if isinstance(confirmations.get("confirmation_groups"), dict) else {}
+            present = len([value for value in groups.values() if value])
+            required = int(confirmations.get("required_score") or 2)
+            return f"{prefix}Waiting: Level 3 confirmations {present}/{required}. Need confirmations from HTF bias, momentum, BOS/liquidity sweep, pullback/retest, or FVG/imbalance."
         if first_failure == "BALANCED_ENTRY_REQUIREMENT_MISSING":
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "balanced entry confluence"
@@ -3413,6 +3505,42 @@ class AutoValidationService:
             "xauusd_confidence_timeline": self._confidence_timeline.get("XAUUSD", [])[-20:],
         }
 
+    def _verify_active_closed_trades(self, trades: list[dict[str, Any]]) -> bool:
+        verifier = getattr(self.close_sync_service, "verify_ticket", None)
+        if not callable(verifier) or self.journal_service is None:
+            return False
+        changed = False
+        for trade in trades:
+            if str(trade.get("status") or "").upper() != "CLOSED" or trade.get("mt5_closure_confirmed") is True:
+                continue
+            ticket = str(trade.get("mt5_ticket") or trade.get("ticket") or "")
+            if not ticket:
+                continue
+            with self._runtime_state_lock:
+                if ticket in self._closure_verification_in_progress:
+                    continue
+                self._closure_verification_in_progress.add(ticket)
+            try:
+                self._log("MT5_CLOSURE_VERIFY_START", {"ticket": ticket, "active_session_id": self.session.get("session_id"), "source": "closed_trade_audit"})
+                result = verifier(ticket, trade)
+                if result.get("status") == "CLOSURE_CONFIRMED":
+                    payload = result.get("close_payload") if isinstance(result.get("close_payload"), dict) else result
+                    updated = self.journal_service.mark_trade_closed_by_ticket(ticket, payload)
+                    self._log("MT5_CLOSURE_CONFIRMED", {"ticket": ticket, "close_time": payload.get("closed_at"), "close_price": payload.get("close_price"), "profit": payload.get("net_pnl"), "exit_reason": payload.get("exit_reason"), "mt5_deal_reason": payload.get("mt5_deal_reason")})
+                    self._log("CLOSURE_COUNT_APPLIED", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
+                    changed = updated is not None or changed
+                    continue
+                marker = getattr(self.journal_service, "mark_trade_closure_unconfirmed_by_ticket", None)
+                if callable(marker):
+                    marker(ticket, {"closure_pending_reason": f"Ticket {ticket} disappeared from open positions but MT5 history did not confirm closure yet.", "last_closure_lookup_at": self._timestamp()})
+                    changed = True
+                self._log("MT5_CLOSURE_UNCONFIRMED", {"ticket": ticket, "reason": result.get("reason") or "MT5 history contains no matching closing deal."})
+                self._log("CLOSURE_COUNT_SKIPPED", {"ticket": ticket, "active_session_id": self.session.get("session_id")})
+            finally:
+                with self._runtime_state_lock:
+                    self._closure_verification_in_progress.discard(ticket)
+        return changed
+
     def _refresh_session_metrics(self, mt5_open_positions: list[dict[str, Any]] | None = None) -> None:
         reconciliation = self._reconcile_active_close_reports_into_journal()
         if mt5_open_positions is None:
@@ -3464,14 +3592,16 @@ class AutoValidationService:
             )
             return
         trades = self.trades()
-        closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
+        if self._verify_active_closed_trades(trades):
+            trades = self.trades()
+        closed = [trade for trade in trades if trade.get("status") == "CLOSED" and trade.get("mt5_closure_confirmed") is True]
         if self._backfill_closed_trade_autopsies(closed):
             trades = self.trades()
-            closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
+            closed = [trade for trade in trades if trade.get("status") == "CLOSED" and trade.get("mt5_closure_confirmed") is True]
         if self._backfill_legacy_path_losses(closed):
             trades = self.trades()
-            closed = [trade for trade in trades if trade.get("status") == "CLOSED"]
-        open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT", "CLOSURE_PENDING"}]
+            closed = [trade for trade in trades if trade.get("status") == "CLOSED" and trade.get("mt5_closure_confirmed") is True]
+        open_trades = [trade for trade in trades if trade.get("status") in {"OPEN", "SENT", "CLOSURE_PENDING", "CLOSURE_UNCONFIRMED"}]
         open_ticket_keys = {str(trade.get("mt5_ticket") or "") for trade in open_trades if str(trade.get("mt5_ticket") or "")}
         mt5_open_ticket_keys = {self._position_ticket(position) for position in mt5_open_positions if self._position_ticket(position)}
         dashboard_open_tickets = sorted(mt5_open_ticket_keys)
@@ -4062,6 +4192,7 @@ class AutoValidationService:
         self.config["balanced_round3_min_score"] = 5
         self.config["balanced_round3_preferred_score"] = 6
         self.config["adaptive_inactivity_minutes"] = 45
+        self.config["level3_fast_entry_inactivity_minutes"] = 30
         self.config["min_rr"] = max(2.0, float(self.config.get("min_rr") or 2.0))
         self.config["break_even_trigger_r"] = 0.8
         self.config["trailing_stop_trigger_r"] = 1.2
@@ -4069,6 +4200,7 @@ class AutoValidationService:
         self.config["exit_stale_minutes"] = max(180, int(self.config.get("exit_stale_minutes") or 180))
         self.config["exit_soft_adverse_minutes"] = max(180, int(self.config.get("exit_soft_adverse_minutes") or 180))
         self.config["exit_no_progress_minutes"] = max(180, int(self.config.get("exit_no_progress_minutes") or 180))
+        self.config["max_hold_hard_close_enabled"] = False
         settings = self.config.get("per_symbol_exit_settings") if isinstance(self.config.get("per_symbol_exit_settings"), dict) else {}
         for symbol, symbol_settings in settings.items():
             if not isinstance(symbol_settings, dict):
@@ -4843,20 +4975,43 @@ class AutoValidationService:
                 "failed_rule": "BALANCED_ENTRY_REQUIREMENT_MISSING",
             },
             3: {
-                "name": "Balanced Active",
-                "required_score": 5,
-                "preferred_score": 6,
+                "name": "Controlled Fast Entry",
+                "required_score": 2,
+                "preferred_score": 2,
                 "strong_required": 2,
-                "requires_balanced_entry": True,
-                "passed_rule": "BALANCED_ENTRY_REQUIREMENT_MET",
-                "failed_rule": "BALANCED_ENTRY_REQUIREMENT_MISSING",
+                "requires_balanced_entry": False,
+                "passed_rule": "LEVEL_3_CONFIRMATIONS_MET",
+                "failed_rule": "LEVEL_3_CONFIRMATIONS_MISSING",
             },
         }
 
     def _adaptive_level_config(self, level: int | None = None, symbol: str | None = None) -> dict[str, Any]:
         definitions = self._adaptive_level_definitions()
         safe_level = max(0, min(3, int(level if level is not None else self._current_adaptive_strategy_level(symbol))))
-        return {**definitions[safe_level], "level": safe_level}
+        config = {**definitions[safe_level], "level": safe_level}
+        if safe_level == 3 and symbol:
+            required = self._level3_confirmation_required(str(symbol).upper())
+            config.update({"required_score": required, "strong_required": required, "fast_entry_enabled": required == 1})
+        return config
+
+    def _level3_confirmation_required(self, symbol: str) -> int:
+        state = self._symbol_adaptive_state(symbol)
+        if state.get("fast_entry_enabled") is True:
+            return 1
+        if self.session.get("status") not in {"RUNNING", "VALIDATION_IN_PROGRESS"} or self._live_mt5_positions:
+            return 2
+        last_activity = self._adaptive_last_activity_at(symbol)
+        minutes = float(self.config.get("level3_fast_entry_inactivity_minutes") or 30)
+        if last_activity is None or datetime.now(timezone.utc) < last_activity + timedelta(minutes=minutes):
+            return 2
+        state["fast_entry_enabled"] = True
+        state["fast_entry_enabled_at"] = self._timestamp()
+        state["current_level_reason"] = f"Level 3 fast entry enabled after {int(minutes)} minutes without a new trade and no open positions."
+        all_state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        all_state[symbol] = state
+        self.session["symbol_adaptive_state"] = all_state
+        self._log("ADAPTIVE_FAST_ENTRY_ENABLED", {"symbol": symbol, "confirmation_required": 1, "inactivity_minutes": minutes, "active_session_id": self.session.get("session_id")})
+        return 1
 
     def _empty_adaptive_strategy_levels(self, activation_time: str | None = None) -> dict[str, dict[str, Any]]:
         levels: dict[str, dict[str, Any]] = {}
@@ -5115,8 +5270,7 @@ class AutoValidationService:
     def _adaptive_level_specific_passed(self, confirmations: dict[str, Any], level_config: dict[str, Any]) -> bool:
         states = confirmations.get("states") if isinstance(confirmations.get("states"), dict) else {}
         if int(level_config.get("level") or 0) == 3:
-            any_trigger = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("PULLBACK_RETEST"))
-            return bool(states.get("HTF_ALIGNMENT")) and bool(states.get("RR_2_0")) and bool(states.get("SPREAD_CLEAN")) and any_trigger
+            return int(confirmations.get("score") or 0) >= int(level_config.get("required_score") or 2)
         if level_config.get("requires_balanced_entry"):
             momentum_or_pullback = bool(states.get("MOMENTUM_DISPLACEMENT") or states.get("PULLBACK_RETEST"))
             structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
@@ -5208,6 +5362,8 @@ class AutoValidationService:
         level = int(symbol_state.get("current_level") or 0)
         timestamp = str((details or {}).get("closed_at") or (details or {}).get("opened_at") or self._timestamp())
         symbol_state["last_activity_time"] = timestamp
+        symbol_state["fast_entry_enabled"] = False
+        symbol_state["fast_entry_enabled_at"] = None
         levels = symbol_state.get("levels") if isinstance(symbol_state.get("levels"), dict) else {}
         item = levels.get(str(level)) if isinstance(levels.get(str(level)), dict) else {}
         if activity == "OPENED":
@@ -5670,6 +5826,7 @@ class AutoValidationService:
             "max_daily_loss_amount": 100.0,
             "max_total_drawdown_amount": 150.0,
             "exit_management_enabled": True,
+            "max_hold_hard_close_enabled": False,
             "break_even_trigger_r": 0.8,
             "trailing_stop_trigger_r": 1.2,
             "trailing_stop_distance_r": 0.75,

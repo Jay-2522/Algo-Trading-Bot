@@ -12,7 +12,7 @@ DEFAULT_JOURNAL_PATH = PROJECT_ROOT / "data" / "trade_journal" / "trade_journal.
 DEFAULT_VALIDATION_ROUNDS_PATH = PROJECT_ROOT / "data" / "validation_rounds"
 
 TRADE_SOURCES = {"MT5_DEMO", "SIMULATION", "FUTURE_BROKER"}
-TRADE_STATUSES = {"PLANNED", "SENT", "OPEN", "CLOSURE_PENDING", "CLOSED", "REJECTED", "CANCELLED"}
+TRADE_STATUSES = {"PLANNED", "SENT", "OPEN", "CLOSURE_PENDING", "CLOSURE_UNCONFIRMED", "CLOSED", "REJECTED", "CANCELLED"}
 TRADE_RESULTS = {"WIN", "LOSS", "BREAKEVEN", "OPEN", "REJECTED", "UNKNOWN"}
 
 
@@ -125,6 +125,24 @@ class PersistentTradeJournalService:
         }
         return self._upsert_trade(merged)
 
+    def mark_trade_closure_unconfirmed_by_ticket(self, ticket: str | int, payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        existing = self.get_trade_by_ticket(ticket)
+        if existing is None:
+            return None
+        payload = payload or {}
+        merged = {
+            **existing,
+            "status": "CLOSURE_UNCONFIRMED",
+            "result": "OPEN",
+            "closure_pending": True,
+            "mt5_closure_confirmed": False,
+            "closure_pending_reason": self._text(payload.get("closure_pending_reason")) or f"Ticket {ticket} disappeared from open positions but MT5 history did not confirm closure yet.",
+            "closure_pending_at": self._text(payload.get("closure_pending_at")) or existing.get("closure_pending_at") or utc_now_iso(),
+            "last_closure_lookup_at": self._text(payload.get("last_closure_lookup_at")) or utc_now_iso(),
+            "updated_at": utc_now_iso(),
+        }
+        return self._upsert_trade(merged)
+
     def record_exit_management_update(self, ticket: str | int, payload: dict[str, Any]) -> dict[str, Any] | None:
         existing = self.get_trade_by_ticket(ticket)
         if existing is None:
@@ -139,7 +157,7 @@ class PersistentTradeJournalService:
         return self._upsert_trade(merged)
 
     def get_open_trades(self) -> list[dict[str, Any]]:
-        return [trade for trade in self.list_trades(limit=100000) if trade.get("status") in {"OPEN", "CLOSURE_PENDING"}]
+        return [trade for trade in self.list_trades(limit=100000) if trade.get("status") in {"OPEN", "CLOSURE_PENDING", "CLOSURE_UNCONFIRMED"}]
 
     def get_closed_trades(self) -> list[dict[str, Any]]:
         return [trade for trade in self.list_trades(limit=100000) if trade.get("status") == "CLOSED"]
@@ -471,6 +489,13 @@ class PersistentTradeJournalService:
             "net_pnl": self._number_or_none(payload.get("net_pnl")),
             "duration_minutes": self._number_or_none(payload.get("duration_minutes")),
             "exit_reason": self._text(payload.get("exit_reason")),
+            "mt5_closure_confirmed": bool(payload.get("mt5_closure_confirmed")) if payload.get("mt5_closure_confirmed") is not None else bool((existing or {}).get("mt5_closure_confirmed", False)),
+            "mt5_close_deal_ticket": self._text(payload.get("mt5_close_deal_ticket")) or (existing or {}).get("mt5_close_deal_ticket", ""),
+            "mt5_close_order_ticket": self._text(payload.get("mt5_close_order_ticket")) or (existing or {}).get("mt5_close_order_ticket", ""),
+            "mt5_position_id": self._text(payload.get("mt5_position_id")) or (existing or {}).get("mt5_position_id", ""),
+            "mt5_deal_entry": self._text(payload.get("mt5_deal_entry")) or (existing or {}).get("mt5_deal_entry", ""),
+            "mt5_deal_reason": self._text(payload.get("mt5_deal_reason")) or (existing or {}).get("mt5_deal_reason", ""),
+            "closure_source": self._text(payload.get("closure_source")) or (existing or {}).get("closure_source", ""),
             "autopsy": payload.get("autopsy") if isinstance(payload.get("autopsy"), dict) else (existing or {}).get("autopsy", {}),
             "result": self._enum(result, TRADE_RESULTS, "UNKNOWN"),
             "created_at": created_at,

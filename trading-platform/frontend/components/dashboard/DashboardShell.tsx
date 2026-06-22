@@ -3225,6 +3225,13 @@ function scanTimeLabel(scan: ApiRecord): string {
   return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function scanScoreLabel(scan: ApiRecord): string {
+  if (readNumber(scan, ["adaptive_level"], 0) === 3) {
+    return `Base gates: ${readNumber(scan, ["base_gates_passed"], 0)}/${readNumber(scan, ["base_gates_total"], 3)} • Confirmations: ${readNumber(scan, ["confirmations_passed"], 0)}/${readNumber(scan, ["confirmations_total"], 5)}`;
+  }
+  return `${readNumber(scan, ["score"], 0)}/${readNumber(scan, ["required_score"], 5)}`;
+}
+
 function LiveScanStatusCard({ data }: { data: DashboardData }) {
   const scans = latestScanDiagnostics(data);
   const runtimeHealth = asRecord(asRecord(data.autoValidation)?.runtime_health) ?? {};
@@ -3250,7 +3257,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
         ) : closest ? (
           <>
             <div className="rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-blue-100">
-              <span className="whitespace-nowrap">Closest: {readText(closest, ["symbol"], "-")} — {readNumber(closest, ["score"], 0)}/{readNumber(closest, ["required_score"], 5)}</span>
+              <span className="whitespace-nowrap">Closest: {readText(closest, ["symbol"], "-")} — {scanScoreLabel(closest)}</span>
               <span className="ml-2 text-slate-300">Needs: {closestNeeds.length ? closestNeeds.join(" + ") : "ready"}</span>
             </div>
           </>
@@ -3272,7 +3279,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
                     {hasScan ? `Level ${readNumber(scan, ["adaptive_level"], 0)} • ${readText(scan, ["decision"], "PENDING")}` : "No scan yet"}
                   </p>
                 </div>
-                <p className={`font-mono text-lg font-black ${stale ? "text-amber-200" : "text-blue-100"}`}>{hasScan ? (stale ? "STALE DATA" : `${readNumber(scan, ["score"], 0)}/${readNumber(scan, ["required_score"], 5)}`) : "—"}</p>
+                <p className={`max-w-[68%] text-right font-mono text-sm font-black leading-5 ${stale ? "text-amber-200" : "text-blue-100"}`}>{hasScan ? (stale ? "STALE DATA" : scanScoreLabel(scan)) : "—"}</p>
               </div>
               {hasScan ? (
                 <>

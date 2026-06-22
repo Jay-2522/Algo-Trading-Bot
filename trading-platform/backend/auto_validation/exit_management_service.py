@@ -335,12 +335,13 @@ class AutoValidationExitManagementService:
             return {**base, "action": "CLOSE", "exit_reason": "SIGNAL_REVERSAL_EXIT", "close_volume": volume}
         if not balanced_round3 and age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and structure_invalidated and r_multiple <= -0.35:
             return {**base, "action": "CLOSE", "exit_reason": "SOFT_ADVERSE_EXIT", "close_volume": volume}
-        if age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
+        max_hold_close_enabled = config.get("max_hold_hard_close_enabled") is True
+        if max_hold_close_enabled and age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
             return {**base, "action": "CLOSE", "exit_reason": "TIME_STALE_EXIT", "close_volume": volume}
 
         if risk <= 0:
             return {**base, "exit_reason": "HOLD_WAITING_FOR_VALID_RISK"}
-        if age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
+        if max_hold_close_enabled and age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
             return {**base, "action": "CLOSE", "exit_reason": "NO_PROGRESS_EXIT", "close_volume": volume}
         break_even_r = float(symbol_settings.get("break_even_trigger_r", config.get("break_even_trigger_r", 1.0)) if symbol_settings else config.get("break_even_trigger_r", 1.0))
         trailing_r = float(symbol_settings.get("trailing_stop_trigger_r", config.get("trailing_stop_trigger_r", 1.5)) if symbol_settings else config.get("trailing_stop_trigger_r", 1.5))

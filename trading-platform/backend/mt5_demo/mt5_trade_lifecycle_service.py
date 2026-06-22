@@ -213,7 +213,14 @@ class MT5TradeLifecycleService:
             "profit_loss": total_pnl,
             "result": self._result_from_pnl(total_pnl),
             "duration_minutes": duration,
-            "exit_reason": self._exit_reason(trade, self._float_or_zero(getattr(close_deal, "price", 0.0))),
+            "exit_reason": self._exit_reason(trade, self._float_or_zero(getattr(close_deal, "price", 0.0)), close_deal),
+            "mt5_closure_confirmed": True,
+            "mt5_close_deal_ticket": str(getattr(close_deal, "ticket", "") or ""),
+            "mt5_close_order_ticket": str(getattr(close_deal, "order", "") or ""),
+            "mt5_position_id": str(getattr(close_deal, "position_id", "") or trade.get("mt5_ticket") or ""),
+            "mt5_deal_entry": self._deal_constant_name("DEAL_ENTRY_", getattr(close_deal, "entry", None)),
+            "mt5_deal_reason": self._deal_constant_name("DEAL_REASON_", getattr(close_deal, "reason", None)),
+            "closure_source": "MT5_HISTORY_DEAL",
             "account_login": str(trade.get("account_login") or getattr(account, "login", "") or ""),
             "server": str(trade.get("server") or getattr(account, "server", "") or ""),
             "notes": f"{trade.get('notes', '')} Lifecycle closed from MT5 deal history.".strip(),
@@ -260,7 +267,16 @@ class MT5TradeLifecycleService:
             return None
         return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
-    def _exit_reason(self, trade: dict[str, Any], close_price: float) -> str:
+    def _exit_reason(self, trade: dict[str, Any], close_price: float, deal: Any) -> str:
+        deal_reason = self._deal_constant_name("DEAL_REASON_", getattr(deal, "reason", None))
+        if deal_reason == "SL":
+            return "STOP_LOSS"
+        if deal_reason == "TP":
+            return "TAKE_PROFIT"
+        if deal_reason in {"CLIENT", "MOBILE", "WEB"}:
+            return "MANUAL"
+        if deal_reason in {"SO", "ROLLOVER", "VMARGIN", "SPLIT"}:
+            return "BROKER"
         stop_loss = self._float_or_zero(trade.get("stop_loss"))
         take_profit = self._float_or_zero(trade.get("take_profit"))
         tolerance = 0.0001
@@ -269,6 +285,12 @@ class MT5TradeLifecycleService:
         if stop_loss and abs(close_price - stop_loss) <= tolerance:
             return "STOP_LOSS"
         return "UNKNOWN"
+
+    def _deal_constant_name(self, prefix: str, value: Any) -> str:
+        for name in dir(mt5):
+            if name.startswith(prefix) and getattr(mt5, name, object()) == value:
+                return name.replace(prefix, "")
+        return str(value) if value is not None else "UNKNOWN"
 
     def _duration_minutes(self, opened_at: Any, closed_at: str) -> float | None:
         try:

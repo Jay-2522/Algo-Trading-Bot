@@ -15,6 +15,31 @@ class ExecutionReasonPanelService:
     def __init__(self, store_path: Path | None = None) -> None:
         self.store_path = store_path or DEFAULT_REASON_STORE_PATH
 
+    def latest_for_session(self, session_id: str, limit: int = 3) -> list[dict[str, Any]]:
+        """Return stable, current-session messages without mutating the reason store."""
+        meaningful = {"SCAN_RESULT", "OPEN_CONFIRMED", "POSITION_MONITOR", "CLOSED", "CLOSED_WIN", "CLOSED_LOSS", "ACCEPTED"}
+        records = [
+            item
+            for item in self._read()
+            if self._text(item.get("validation_session_id") or item.get("active_session_id")) == self._text(session_id)
+            and self._text(item.get("status")).upper() in meaningful
+        ]
+        records.sort(
+            key=lambda item: (self._timestamp_value(self._text(item.get("timestamp"))), self._text(item.get("event_id") or item.get("id"))),
+            reverse=True,
+        )
+        seen: set[str] = set()
+        result: list[dict[str, Any]] = []
+        for item in records:
+            event_id = self._text(item.get("event_id") or item.get("id"))
+            if not event_id or event_id in seen:
+                continue
+            seen.add(event_id)
+            result.append(item)
+            if len(result) >= max(1, limit):
+                break
+        return result
+
     def persist_order_sent(
         self,
         *,

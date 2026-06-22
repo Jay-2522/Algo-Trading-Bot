@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import copy
 import json
 from pathlib import Path
+from threading import RLock
 import time
 from typing import Any
 from uuid import uuid4
@@ -86,6 +87,12 @@ class AutoValidationService:
             "order_block_reason": "",
             "time_between_accepted_and_order_ms": None,
         }
+        self._runtime_state_lock = RLock()
+        self._live_mt5_positions: list[dict[str, Any]] = []
+        self._last_mt5_sync_at: str | None = None
+        self._latest_bot_decisions: list[dict[str, Any]] = []
+        self._closed_trade_records: list[dict[str, Any]] = []
+        self._runtime_last_error = ""
         self._load_state()
         self._apply_balanced_round3_config()
         self._sync_round_archive()
@@ -336,7 +343,7 @@ class AutoValidationService:
         name = str(loop_name or "").lower()
         if name == "scan":
             return self.should_auto_start_runner()
-        if name in {"mt5_sync", "exit", "reason"}:
+        if name in {"mt5_sync", "exit", "journal", "bot_decision"}:
             if not self._has_current_user_session():
                 return False
             return str(self.session.get("status") or "").upper() not in {"STOPPED", "COMPLETED", "READY_ROUND_3"}
@@ -363,8 +370,25 @@ class AutoValidationService:
         return result if isinstance(result, dict) else {"status": "SCAN_COMPLETE", "symbol": normalized_symbol}
 
     def mt5_sync_loop_tick(self) -> dict[str, Any]:
-        self._refresh_session_metrics()
-        positions = self._open_positions()
+        result = self._read_open_positions_result()
+        if result.get("status") not in {"POSITIONS_FOUND", "NO_OPEN_POSITIONS"}:
+            self._runtime_last_error = str(result.get("message") or result.get("status") or "MT5 position sync failed")
+            self._log_scan_event("MT5_SYNC_RETAINED_LAST_SNAPSHOT", {"error": self._runtime_last_error, "cached_open_count": len(self._live_mt5_positions)})
+            return {
+                "status": "MT5_SYNC_FAILED_USING_LAST_SNAPSHOT",
+                "mt5_open_count": len(self._live_mt5_positions),
+                "mt5_open_tickets": self._position_tickets(self._live_mt5_positions),
+                "timestamp": self._timestamp(),
+            }
+        positions = [dict(item) for item in result.get("positions", []) if isinstance(item, dict) and not item.get("closure_pending")]
+        self._reconcile_open_mt5_positions(positions)
+        self._refresh_session_metrics(mt5_open_positions=positions)
+        closed_records = [trade for trade in self.trades() if str(trade.get("status") or "").upper() == "CLOSED"]
+        with self._runtime_state_lock:
+            self._live_mt5_positions = copy.deepcopy(positions)
+            self._last_mt5_sync_at = str(result.get("timestamp") or self._timestamp())
+            self._closed_trade_records = closed_records
+            self._runtime_last_error = ""
         tickets = sorted([self._position_ticket(position) for position in positions if self._position_ticket(position)])
         diagnostics = self.session.get("active_round_diagnostics") if isinstance(self.session.get("active_round_diagnostics"), dict) else {}
         dashboard_tickets = diagnostics.get("latest_open_tickets", []) if isinstance(diagnostics, dict) else []
@@ -389,10 +413,18 @@ class AutoValidationService:
     def exit_loop_tick(self) -> dict[str, Any]:
         return self.open_trade_exit_diagnostics()
 
-    def reason_loop_tick(self) -> dict[str, Any]:
-        count = len(self.events[-20:])
-        self._log_scan_event("REASON_LOOP_REFRESHED", {"latest_reason_count": count, "active_session_id": self.session.get("session_id")})
-        return {"status": "REASON_LOOP_REFRESHED", "latest_reason_count": count, "timestamp": self._timestamp()}
+    def journal_lifecycle_loop_tick(self) -> dict[str, Any]:
+        result = self._sync_lifecycle_services(manual=False)
+        self._refresh_session_metrics(mt5_open_positions=copy.deepcopy(self._live_mt5_positions))
+        self._save_state(sync_archive=False)
+        return {"status": "JOURNAL_LIFECYCLE_REFRESHED", "result": result, "timestamp": self._timestamp()}
+
+    def bot_decision_loop_tick(self) -> dict[str, Any]:
+        session_id = str(self.session.get("session_id") or "")
+        messages = self.reason_panel_service.latest_for_session(session_id, limit=3)
+        with self._runtime_state_lock:
+            self._latest_bot_decisions = copy.deepcopy(messages)
+        return {"status": "BOT_DECISIONS_REFRESHED", "latest_reason_count": len(messages), "timestamp": self._timestamp()}
 
     def log_loop_event(self, event: str, details: dict[str, Any] | None = None) -> None:
         self._append_event(event, details)
@@ -423,15 +455,76 @@ class AutoValidationService:
             "scan_loop_alive": bool(runner.get("scan_loop_alive")),
             "exit_loop_alive": bool(runner.get("exit_loop_alive")),
             "reason_loop_alive": bool(runner.get("reason_loop_alive")),
+            "journal_loop_alive": bool(runner.get("journal_loop_alive")),
+            "bot_decision_loop_alive": bool(runner.get("bot_decision_loop_alive")),
             "last_mt5_sync_age_seconds": last_mt5_age,
             "last_scan_age_seconds": last_scan_age,
             "last_exit_check_age_seconds": last_exit_age,
             "mt5_open_count": mt5_open_count,
             "mt5_open_tickets": sorted([str(ticket) for ticket in mt5_open_tickets if str(ticket)]),
             "dashboard_open_count": dashboard_open_count,
+            "dashboard_open_tickets": sorted([str(ticket) for ticket in diagnostics.get("latest_open_tickets", []) if str(ticket)]),
             "latest_reason_count": latest_reason_count,
             "watchdog_restart_count": int(runner.get("watchdog_restart_count") or 0),
             "last_loop_error": runner.get("last_loop_error") or "",
+            "timestamp": self._timestamp(),
+        }
+
+    def runtime_snapshot(self, runner_health: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Return one fast, atomic dashboard snapshot without performing MT5 or journal I/O."""
+        runner = copy.deepcopy(runner_health or {})
+        with self._runtime_state_lock:
+            positions = copy.deepcopy(self._live_mt5_positions)
+            decisions = copy.deepcopy(self._latest_bot_decisions)
+            closed_records = copy.deepcopy(self._closed_trade_records)
+            last_sync = self._last_mt5_sync_at
+            runtime_error = self._runtime_last_error
+        session = copy.deepcopy(self.session)
+        scans = copy.deepcopy(self._latest_scan_diagnostics)
+        scan_times = [self._parse_time(item.get("last_scan_timestamp") or item.get("timestamp")) for item in scans.values() if isinstance(item, dict)]
+        scan_times = [item for item in scan_times if item is not None]
+        last_scan = max(scan_times).isoformat() if scan_times else None
+        last_scan_age = max(0, int((datetime.now(timezone.utc) - max(scan_times)).total_seconds())) if scan_times else None
+        scan_stale = last_scan_age is None or last_scan_age > 60
+        loop_health = {
+            "mt5_sync_loop_alive": bool(runner.get("mt5_sync_loop_alive")),
+            "scan_loop_alive": bool(runner.get("scan_loop_alive")),
+            "exit_loop_alive": bool(runner.get("exit_loop_alive")),
+            "journal_loop_alive": bool(runner.get("journal_loop_alive")),
+            "bot_decision_loop_alive": bool(runner.get("bot_decision_loop_alive")),
+            "reason_loop_alive": bool(runner.get("reason_loop_alive")),
+            "last_mt5_sync_age_seconds": runner.get("last_mt5_sync_age_seconds"),
+            "last_scan_age_seconds": last_scan_age,
+            "last_exit_check_age_seconds": runner.get("last_exit_age_seconds"),
+            "watchdog_restart_count": int(runner.get("watchdog_restart_count") or 0),
+            "last_loop_error": runner.get("last_loop_error") or runtime_error,
+        }
+        return {
+            "active_session_id": session.get("session_id"),
+            "validation_status": session.get("status"),
+            "mode": session.get("status"),
+            "session": session,
+            "config": copy.deepcopy(self.config),
+            "mt5_status": self.mt5_health_state.get("status"),
+            "mt5_health": copy.deepcopy(self.mt5_health_state),
+            "mt5_last_sync": last_sync,
+            "mt5_open_positions": positions,
+            "mt5_open_count": len(positions),
+            "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
+            "closed_trades": len(closed_records),
+            "closed_trade_records": copy.deepcopy(closed_records),
+            "latest_outcomes": copy.deepcopy(sorted(closed_records, key=lambda item: str(item.get("closed_at") or item.get("close_time") or ""), reverse=True)[:5]),
+            "wins": int(session.get("wins") or 0),
+            "losses": int(session.get("losses") or 0),
+            "net_pnl": float(session.get("net_pnl") or 0),
+            "progress": float(session.get("progress_percentage") or 0),
+            "bot_decisions_latest_3": decisions,
+            "latest_scan_diagnostics": scans,
+            "closest_to_trade": {} if scan_stale else self._closest_scan_candidate(),
+            "live_scan_status": {"symbols": scans, "last_scan_timestamp": last_scan, "last_scan_age_seconds": last_scan_age, "stale": scan_stale},
+            "loop_health": loop_health,
+            "runtime_health": {**loop_health, "validation_status": session.get("status"), "active_session_id": session.get("session_id"), "mt5_open_count": len(positions), "mt5_open_tickets": self._position_tickets(positions), "dashboard_open_count": len(positions), "dashboard_open_tickets": self._position_tickets(positions)},
+            "last_error": runner.get("last_loop_error") or runtime_error,
             "timestamp": self._timestamp(),
         }
 
@@ -1490,14 +1583,21 @@ class AutoValidationService:
             return tick
 
     def _open_positions(self) -> list[dict[str, Any]]:
-        if self.position_service is None:
-            return []
-        try:
-            result = self.position_service.get_open_positions()
-        except Exception:
-            return []
+        result = self._read_open_positions_result()
         positions = result.get("positions", []) if isinstance(result, dict) else []
         return positions if isinstance(positions, list) else []
+
+    def _read_open_positions_result(self) -> dict[str, Any]:
+        if self.position_service is None:
+            return {"status": "UNAVAILABLE", "positions": [], "message": "MT5 position service unavailable."}
+        try:
+            result = self.position_service.get_open_positions()
+        except Exception as exc:
+            return {"status": "READ_FAILED", "positions": [], "message": str(exc)}
+        return result if isinstance(result, dict) else {"status": "READ_FAILED", "positions": [], "message": "Invalid MT5 position response."}
+
+    def _position_tickets(self, positions: list[dict[str, Any]]) -> list[str]:
+        return sorted({self._position_ticket(position) for position in positions if self._position_ticket(position)})
 
     def _limit_count_positions(self, positions: list[dict[str, Any]], profile: str) -> list[dict[str, Any]]:
         if str(profile or "").upper() != "DEMO_COLLECTION":
@@ -1560,10 +1660,10 @@ class AutoValidationService:
             return True
         return self._position_has_auto_validation_marker(position) and self._position_opened_after_session_start(position)
 
-    def _reconcile_open_mt5_positions(self) -> list[dict[str, Any]]:
+    def _reconcile_open_mt5_positions(self, positions_override: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         session_id = str(self.session.get("session_id") or "")
         if not self._has_current_user_session():
-            positions = self._open_positions()
+            positions = copy.deepcopy(positions_override) if positions_override is not None else self._open_positions()
             self._open_position_sync_diagnostics = {
                 **self._empty_open_position_sync_diagnostics(),
                 "mt5_open_positions_detected": len(positions),
@@ -1580,7 +1680,7 @@ class AutoValidationService:
                 "timestamp": self._timestamp(),
             }
             return []
-        positions = self._open_positions()
+        positions = copy.deepcopy(positions_override) if positions_override is not None else self._open_positions()
         trades = self.trades()
         trades_by_ticket = {
             str(trade.get("mt5_ticket") or ""): trade
@@ -3313,9 +3413,10 @@ class AutoValidationService:
             "xauusd_confidence_timeline": self._confidence_timeline.get("XAUUSD", [])[-20:],
         }
 
-    def _refresh_session_metrics(self) -> None:
+    def _refresh_session_metrics(self, mt5_open_positions: list[dict[str, Any]] | None = None) -> None:
         reconciliation = self._reconcile_active_close_reports_into_journal()
-        mt5_open_positions = self._reconcile_open_mt5_positions()
+        if mt5_open_positions is None:
+            mt5_open_positions = self._reconcile_open_mt5_positions()
         target_trades = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
         if not self._has_current_user_session():
             self.session.update(

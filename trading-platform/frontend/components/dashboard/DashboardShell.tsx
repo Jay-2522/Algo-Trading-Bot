@@ -9,14 +9,11 @@ import type { ForexMapMarker } from "./ForexSessionsMap";
 
 import {
   fetchClientOperatingDashboard,
-  fetchClientOpenPositions,
   fetchClientMarketPrices,
   fetchClientSignals,
   fetchReasonMessages,
   approveExecutionModeSignal,
-  fetchAutoValidationRuntimeHealth,
-  fetchAutoValidationScanDiagnostics,
-  fetchAutoValidationStatus,
+  fetchAutoValidationRuntimeSnapshot,
   previewClientDemoTrade,
   pauseAutoValidation,
   rejectExecutionModeSignal,
@@ -25,7 +22,6 @@ import {
   runAutoValidationExitManagement,
   sendGuardedClientDemoTrade,
   sendPortalChatMessage,
-  syncReasonMessages,
   setExecutionMode,
   startAutoValidation,
   stopAutoValidation,
@@ -718,9 +714,7 @@ export function DashboardShell(_: {
   const requestInFlight = useRef(false);
   const priceRequestInFlight = useRef(false);
   const signalRequestInFlight = useRef(false);
-  const autoValidationRequestInFlight = useRef(false);
-  const scanDiagnosticsRequestInFlight = useRef(false);
-  const runtimeHealthRequestInFlight = useRef(false);
+  const runtimeSnapshotRequestInFlight = useRef(false);
 
   const showToast = useCallback((tone: ToastState["tone"], message: string) => {
     setToast({ id: Date.now(), tone, message });
@@ -741,22 +735,11 @@ export function DashboardShell(_: {
     setClientReady(true);
   }, []);
 
-  const refreshOpenPositions = useCallback(async () => {
-    const result = await fetchClientOpenPositions();
-    if (!result.ok) return;
-    setData((current) => {
-      const next = { ...current, openPositions: result.positions };
-      writeCachedDashboardData(next);
-      return next;
-    });
-  }, []);
-
   const refresh = useCallback(async () => {
     if (requestInFlight.current) return true;
     requestInFlight.current = true;
     setLoading(true);
     try {
-      void refreshOpenPositions();
       const result = await fetchClientOperatingDashboard();
       const payload = result.data;
       const fullSuccess = result.errors.length === 0;
@@ -801,7 +784,7 @@ export function DashboardShell(_: {
       setLoading(false);
       requestInFlight.current = false;
     }
-  }, [refreshOpenPositions]);
+  }, []);
 
   const refreshPrices = useCallback(async () => {
     if (priceRequestInFlight.current) return;
@@ -868,19 +851,20 @@ export function DashboardShell(_: {
     }
   }, []);
 
-  const refreshAutoValidation = useCallback(async () => {
-    if (autoValidationRequestInFlight.current) return;
-    autoValidationRequestInFlight.current = true;
+  const refreshRuntimeSnapshot = useCallback(async () => {
+    if (runtimeSnapshotRequestInFlight.current) return;
+    runtimeSnapshotRequestInFlight.current = true;
     try {
-      const result = await fetchAutoValidationStatus();
-      if (result.ok) {
+      const result = await fetchAutoValidationRuntimeSnapshot();
+      if (result.ok && result.snapshot) {
         setData((current) => {
-          const next = { ...current, autoValidation: recordOrPrevious(result.status, current.autoValidation) };
+          const positions = result.snapshot?.mt5_last_sync && Array.isArray(result.snapshot?.mt5_open_positions)
+            ? (result.snapshot.mt5_open_positions.filter((item) => typeof item === "object" && item !== null) as ApiRecord[])
+            : current.openPositions;
+          const next = { ...current, autoValidation: result.snapshot, openPositions: positions };
           writeCachedDashboardData(next);
           return next;
         });
-        void refreshOpenPositions();
-        setReasonRefreshToken((value) => value + 1);
       }
       if (result.errors.length > 0) {
         setErrors(result.errors);
@@ -890,71 +874,13 @@ export function DashboardShell(_: {
       setErrors([error instanceof Error ? error.message : "Backend unavailable"]);
       setPanelErrors((current) => ({ ...current, autoValidation: error instanceof Error ? error.message : "Backend unavailable" }));
     } finally {
-      autoValidationRequestInFlight.current = false;
-    }
-  }, [refreshOpenPositions]);
-
-  const refreshScanDiagnostics = useCallback(async () => {
-    if (scanDiagnosticsRequestInFlight.current) return;
-    scanDiagnosticsRequestInFlight.current = true;
-    try {
-      const result = await fetchAutoValidationScanDiagnostics();
-      if (result.ok && result.diagnostics) {
-        setData((current) => {
-          const currentAuto = asRecord(current.autoValidation) ?? {};
-          const latest = asRecord(result.diagnostics?.latest_scan_diagnostics) ?? asRecord(currentAuto.latest_scan_diagnostics) ?? {};
-          const nextAuto: ApiRecord = {
-            ...currentAuto,
-            latest_scan_diagnostics: latest,
-            closest_to_trade: asRecord(result.diagnostics?.closest_to_trade) ?? currentAuto.closest_to_trade,
-          };
-          const session = asRecord(currentAuto.session);
-          if (session) nextAuto.session = { ...session, latest_scan_diagnostics: latest };
-          const next = { ...current, autoValidation: nextAuto };
-          writeCachedDashboardData(next);
-          return next;
-        });
-      }
-    } catch {
-      // Keep the last successful scan snapshot visible.
-    } finally {
-      scanDiagnosticsRequestInFlight.current = false;
-    }
-  }, []);
-
-  const refreshRuntimeHealth = useCallback(async () => {
-    if (runtimeHealthRequestInFlight.current) return;
-    runtimeHealthRequestInFlight.current = true;
-    try {
-      const result = await fetchAutoValidationRuntimeHealth();
-      if (result.ok && result.health) {
-        setData((current) => {
-          const currentAuto = asRecord(current.autoValidation) ?? {};
-          const nextAuto: ApiRecord = {
-            ...currentAuto,
-            runtime_health: result.health,
-          };
-          const next = { ...current, autoValidation: nextAuto };
-          writeCachedDashboardData(next);
-          return next;
-        });
-      }
-    } catch {
-      // Keep last runtime health visible while the next poll recovers.
-    } finally {
-      runtimeHealthRequestInFlight.current = false;
+      runtimeSnapshotRequestInFlight.current = false;
     }
   }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  useEffect(() => {
-    void refreshOpenPositions();
-    const interval = window.setInterval(() => void refreshOpenPositions(), 3000);
-    return () => window.clearInterval(interval);
-  }, [refreshOpenPositions]);
 
   useEffect(() => {
     const interval = window.setInterval(() => void refresh(), 10000);
@@ -972,21 +898,10 @@ export function DashboardShell(_: {
   }, [refreshSignals]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => void refreshAutoValidation(), 3000);
+    void refreshRuntimeSnapshot();
+    const interval = window.setInterval(() => void refreshRuntimeSnapshot(), 2000);
     return () => window.clearInterval(interval);
-  }, [refreshAutoValidation]);
-
-  useEffect(() => {
-    void refreshScanDiagnostics();
-    const interval = window.setInterval(() => void refreshScanDiagnostics(), 3000);
-    return () => window.clearInterval(interval);
-  }, [refreshScanDiagnostics]);
-
-  useEffect(() => {
-    void refreshRuntimeHealth();
-    const interval = window.setInterval(() => void refreshRuntimeHealth(), 3000);
-    return () => window.clearInterval(interval);
-  }, [refreshRuntimeHealth]);
+  }, [refreshRuntimeSnapshot]);
 
   useEffect(() => {
     if (!data.clientSignals.some((signal) => watchlistSignal(signal))) return;
@@ -1358,7 +1273,7 @@ export function DashboardShell(_: {
     setReasonRefreshToken((token) => token + 1);
     setLastSuccessfulSync(timestamp);
     setToast(null);
-    void Promise.allSettled([refreshPrices(), refreshSignals(), refreshAutoValidation()]).then((results) => {
+    void Promise.allSettled([refreshPrices(), refreshSignals(), refreshRuntimeSnapshot()]).then((results) => {
       const failed = results.some((result) => result.status === "rejected");
       if (failed) showToast("error", "Some dashboard data could not refresh");
     });
@@ -4548,6 +4463,20 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
   const niftyConnected = Boolean(data.niftyTick && numeric(data.niftyTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN));
   const autoStatus = asRecord(data.autoValidation);
   const runtimeHealth = asRecord(autoStatus?.runtime_health) ?? {};
+  const snapshotDecisions = Array.isArray(autoStatus?.bot_decisions_latest_3) ? autoStatus.bot_decisions_latest_3 : [];
+  for (const value of snapshotDecisions) {
+    const item = asRecord(value);
+    if (!item) continue;
+    messages.push({
+      ...item,
+      id: readText(item, ["event_id", "id"], ""),
+      event_id: readText(item, ["event_id", "id"], ""),
+      symbol: readText(item, ["symbol"], "SYSTEM").toUpperCase(),
+      status: decisionStatusFromRecord(item),
+      timestamp: readText(item, ["timestamp"], new Date(0).toISOString()),
+      reason: readText(item, ["reason", "final_decision_reason"], "Validation update received."),
+    });
+  }
   const scanAgeSeconds = readNumber(runtimeHealth, ["last_scan_age_seconds"], 0);
   if (scanAgeSeconds > 60) {
     messages.unshift({
@@ -4882,50 +4811,8 @@ function setReasonMessagesIfChanged(setter: React.Dispatch<React.SetStateAction<
 }
 
 function ValidationReasonPanel({ contexts, refreshToken = 0 }: { contexts: ReasonContext[]; refreshToken?: number }) {
-  const [storedMessages, setStoredMessages] = useState<ReasonMessage[]>([]);
-  const fetchInFlightRef = useRef(false);
-  const syncInFlightRef = useRef(false);
-  const responseSequenceRef = useRef(0);
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (fetchInFlightRef.current) return;
-      fetchInFlightRef.current = true;
-      const sequence = responseSequenceRef.current + 1;
-      responseSequenceRef.current = sequence;
-      try {
-        const records = await fetchReasonMessages();
-        if (!cancelled && sequence === responseSequenceRef.current) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
-      } finally {
-        fetchInFlightRef.current = false;
-      }
-    };
-    void load();
-    const interval = window.setInterval(load, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [refreshToken]);
-  const contextKey = useMemo(() => JSON.stringify(contexts.slice(0, 6)), [contexts]);
-  useEffect(() => {
-    if (!contexts.length) return;
-    let cancelled = false;
-    if (syncInFlightRef.current) return;
-    syncInFlightRef.current = true;
-    const sequence = responseSequenceRef.current + 1;
-    responseSequenceRef.current = sequence;
-    void syncReasonMessages(contexts)
-      .then((records) => {
-        if (!cancelled && sequence === responseSequenceRef.current) setReasonMessagesIfChanged(setStoredMessages, normalizeReasonMessages(records));
-      })
-      .finally(() => {
-        syncInFlightRef.current = false;
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [contextKey]);
+  void refreshToken;
+  const storedMessages = useMemo(() => normalizeReasonMessages(contexts), [contexts]);
   const currentHistoryWaiting = contexts.some((context) => context.history_ready === false || readText(context, ["validation_status"], "").toUpperCase() === "WAITING_FOR_MT5_HISTORY_SYNC");
   const visibleMessages = filterVisibleBotMessages(
     currentHistoryWaiting

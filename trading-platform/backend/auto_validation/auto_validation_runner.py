@@ -36,7 +36,7 @@ class AutoValidationRunner:
                 "last_error": "",
                 "restart_count": 0,
             }
-            for name in ("mt5_sync", "scan", "exit", "reason")
+            for name in ("mt5_sync", "scan", "exit", "journal", "bot_decision")
         }
         self._publish_state()
 
@@ -71,8 +71,8 @@ class AutoValidationRunner:
             payload[f"{name}_restart_count"] = state.get("restart_count") or 0
             if state.get("last_error"):
                 payload["last_loop_error"] = state.get("last_error")
-        payload["reason_loop_alive"] = payload.pop("reason_loop_loop_alive", payload.get("reason_loop_alive", False))
-        payload["last_reason_loop_age_seconds"] = payload.pop("last_reason_loop_age_seconds", payload.get("last_reason_age_seconds"))
+        payload["reason_loop_alive"] = bool(payload.get("bot_decision_loop_alive"))
+        payload["last_reason_loop_age_seconds"] = payload.get("last_bot_decision_age_seconds")
         return payload
 
     def is_active(self) -> bool:
@@ -176,7 +176,8 @@ class AutoValidationRunner:
             "mt5_sync": (3.0, 12.0, self._mt5_sync_tick),
             "scan": (3.0, 10.0, self._scan_tick),
             "exit": (5.0, 8.0, self._exit_tick),
-            "reason": (3.0, 4.0, self._reason_tick),
+            "journal": (4.0, 10.0, self._journal_tick),
+            "bot_decision": (3.0, 4.0, self._bot_decision_tick),
         }
         for name, (interval, timeout, callback) in specs.items():
             task = self._support_tasks.get(name)
@@ -222,8 +223,11 @@ class AutoValidationRunner:
     async def _exit_tick(self) -> None:
         await asyncio.to_thread(self.service.exit_loop_tick)
 
-    async def _reason_tick(self) -> None:
-        await asyncio.to_thread(self.service.reason_loop_tick)
+    async def _journal_tick(self) -> None:
+        await asyncio.to_thread(self.service.journal_lifecycle_loop_tick)
+
+    async def _bot_decision_tick(self) -> None:
+        await asyncio.to_thread(self.service.bot_decision_loop_tick)
 
     async def _scan_tick(self) -> None:
         symbols = await asyncio.to_thread(self.service.scan_loop_symbols)
@@ -245,7 +249,7 @@ class AutoValidationRunner:
 
     def _watchdog_check(self) -> None:
         now = datetime.now(timezone.utc)
-        stale_thresholds = {"mt5_sync": 20, "scan": 20, "exit": 20, "reason": 15}
+        stale_thresholds = {"mt5_sync": 20, "scan": 20, "exit": 20, "journal": 20, "bot_decision": 15}
         for name, threshold in stale_thresholds.items():
             if not self.service.should_run_support_loop(name):
                 continue
@@ -263,7 +267,8 @@ class AutoValidationRunner:
                 "mt5_sync": (3.0, 12.0, self._mt5_sync_tick),
                 "scan": (3.0, 10.0, self._scan_tick),
                 "exit": (5.0, 8.0, self._exit_tick),
-                "reason": (3.0, 4.0, self._reason_tick),
+                "journal": (4.0, 10.0, self._journal_tick),
+                "bot_decision": (3.0, 4.0, self._bot_decision_tick),
             }
             interval, timeout, callback = specs[name]
             self._support_tasks[name] = asyncio.create_task(self._support_loop(name, interval, timeout, callback))

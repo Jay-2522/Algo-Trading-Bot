@@ -113,6 +113,7 @@ async def get_auto_validation_runtime_health() -> dict:
             "scan_loop_alive": bool(runner_health.get("scan_loop_alive")),
             "exit_loop_alive": bool(runner_health.get("exit_loop_alive")),
             "reason_loop_alive": bool(runner_health.get("reason_loop_alive")),
+            "journal_loop_alive": bool(runner_health.get("journal_loop_alive")),
             "last_mt5_sync_age_seconds": runner_health.get("last_mt5_sync_age_seconds"),
             "last_scan_age_seconds": runner_health.get("last_scan_age_seconds"),
             "last_exit_check_age_seconds": runner_health.get("last_exit_age_seconds"),
@@ -123,6 +124,13 @@ async def get_auto_validation_runtime_health() -> dict:
             "watchdog_restart_count": runner_health.get("watchdog_restart_count", 0),
             "last_loop_error": "runtime health timed out while reading MT5/session state",
         }
+
+
+@router.get("/runtime-snapshot")
+async def get_auto_validation_runtime_snapshot() -> dict:
+    """Serve the dashboard from one cached snapshot; never block on MT5 or scans."""
+    auto_validation_runner.start_support_loops()
+    return auto_validation_service.runtime_snapshot(auto_validation_runner.support_status())
 
 
 @router.post("/stop")

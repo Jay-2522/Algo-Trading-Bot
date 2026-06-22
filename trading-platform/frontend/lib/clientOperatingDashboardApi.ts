@@ -96,13 +96,12 @@ export async function fetchClientOperatingDashboard() {
       live_execution_enabled: false,
       broker_execution_enabled: false,
     }),
-    openPositions: fetchJson<ApiRecord>("/mt5-demo/position-monitor/open", { positions: [] }),
     recentTrades: fetchJson<ApiRecord[]>("/trade-journal/persistence/all?limit=100000", []),
     journalSummary: fetchJson<ApiRecord>("/trade-journal/persistence/summary", {}),
     outcomeSummary: fetchJson<ApiRecord>("/analytics/outcomes/summary", {}),
     guardedStatus: fetchJson<ApiRecord>("/mt5-demo/guarded-demo-order/status", {}),
     executionMode: fetchJson<ApiRecord>("/execution-mode/status", {}),
-    autoValidation: fetchJson<ApiRecord>("/auto-validation/status", {}, 2500),
+    runtimeSnapshot: fetchJson<ApiRecord>("/auto-validation/runtime-snapshot", {}, 2500),
   };
 
   const entries = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise] as const));
@@ -122,6 +121,14 @@ export async function fetchClientOperatingDashboard() {
       }
     } else {
       errors.push(entry.reason instanceof Error ? entry.reason.message : "Dashboard request failed");
+    }
+  }
+  const runtimeSnapshot = data.runtimeSnapshot;
+  if (runtimeSnapshot && typeof runtimeSnapshot === "object") {
+    const snapshot = runtimeSnapshot as ApiRecord;
+    data.autoValidation = snapshot;
+    if (snapshot.mt5_last_sync && Array.isArray(snapshot.mt5_open_positions)) {
+      data.openPositions = { positions: snapshot.mt5_open_positions };
     }
   }
   return { data, errors };
@@ -303,6 +310,11 @@ export async function fetchAutoValidationScanDiagnostics() {
 export async function fetchAutoValidationRuntimeHealth() {
   const result = await fetchJson<ApiRecord>("/auto-validation/runtime-health", {}, 5000);
   return { errors: result.error ? [result.error] : [], ok: result.ok, health: result.ok ? result.data : null };
+}
+
+export async function fetchAutoValidationRuntimeSnapshot() {
+  const result = await fetchJson<ApiRecord>("/auto-validation/runtime-snapshot", {}, 1500);
+  return { errors: result.error ? [result.error] : [], ok: result.ok, snapshot: result.ok ? result.data : null };
 }
 
 export function pauseAutoValidation() {

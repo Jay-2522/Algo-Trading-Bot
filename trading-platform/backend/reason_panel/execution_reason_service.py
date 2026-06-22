@@ -342,6 +342,49 @@ class ExecutionReasonPanelService:
         self._upsert(message)
         return message
 
+    def persist_exit_management(self, diagnostic: dict[str, Any], *, session_id: str = "") -> dict[str, Any] | None:
+        ticket = self._text(diagnostic.get("ticket"))
+        symbol = self._text(diagnostic.get("symbol")).upper()
+        if not ticket or not symbol:
+            return None
+        status = self._text(diagnostic.get("exit_status")).upper() or "EXIT_MANAGEMENT"
+        action = self._text(diagnostic.get("exit_action")).upper() or "HOLD"
+        reason = self._text(diagnostic.get("exit_reason")).replace("_", " ").lower()
+        r_multiple = self._text(diagnostic.get("current_r_multiple"))
+        if action == "MODIFY_SL":
+            text = f"Ticket {ticket} moved SL to {self._text(diagnostic.get('new_stop_loss')) or 'a protected level'} because {reason} triggered at {r_multiple}R."
+        elif action == "CLOSE":
+            text = f"Ticket {ticket} close was requested because {reason} triggered at {r_multiple}R."
+        else:
+            text = self._text(diagnostic.get("why_still_holding")) or f"Ticket {ticket} is still held because no exit trigger has fired."
+        event_id = f"exit-management-{ticket}-{status.lower()}-{action.lower()}"
+        message = {
+            "id": event_id,
+            "event_id": event_id,
+            "groqGenerated": False,
+            "reason": text,
+            "source": "execution",
+            "status": "POSITION_MONITOR",
+            "symbol": symbol,
+            "side": self._text(diagnostic.get("direction")).upper(),
+            "ticket": ticket,
+            "strategy_profile": "DEMO_COLLECTION",
+            "decision": status,
+            "order_opened": False,
+            "validation_session_id": session_id,
+            "active_session_id": session_id,
+            "current_r_multiple": diagnostic.get("current_r_multiple"),
+            "floating_pnl": diagnostic.get("floating_pnl"),
+            "exit_action": action,
+            "exit_reason": diagnostic.get("exit_reason"),
+            "next_exit_trigger": diagnostic.get("next_exit_trigger"),
+            "final_decision_reason": text,
+            "timestamp": self._text(diagnostic.get("timestamp")) or self._timestamp(),
+            "data_source": "EXIT_MANAGEMENT_LOOP",
+        }
+        self._upsert(message)
+        return message
+
     def _accepted_message(
         self,
         *,

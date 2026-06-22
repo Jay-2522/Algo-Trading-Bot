@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -101,14 +101,146 @@ class AutoValidationExitManagementService:
         self._history.append(self._latest)
         return self._latest
 
+    def diagnostics(
+        self,
+        *,
+        session: dict[str, Any],
+        config: dict[str, Any],
+        positions: list[dict[str, Any]],
+        trades: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        trades_by_ticket = {str(trade.get("mt5_ticket") or ""): trade for trade in trades if str(trade.get("mt5_ticket") or "")}
+        diagnostics: list[dict[str, Any]] = []
+        for position in positions:
+            trade = trades_by_ticket.get(self._ticket(position), {})
+            decision = self._decision(position, trade, config)
+            safety_blockers = self._exit_safety_blockers(decision, position, trade, session, config) if decision.get("action") != "HOLD" else []
+            diagnostics.append(self._position_diagnostic(position, trade, decision, safety_blockers, config))
+        return {
+            "status": "READY",
+            "message": "Open trade exit diagnostics evaluated without sending close or modify requests.",
+            "positions_checked": len(positions),
+            "diagnostics": diagnostics,
+            "timestamp": self._timestamp(),
+            **self._safety_flags(),
+        }
+
     def _enabled(self, session: dict[str, Any], config: dict[str, Any]) -> bool:
         return (
-            session.get("status") == "RUNNING"
+            session.get("status") in {"RUNNING", "VALIDATION_IN_PROGRESS", "WAITING_FOR_OPEN_TRADES_TO_CLOSE"}
             and str(config.get("strategy_profile") or "").upper() == "DEMO_COLLECTION"
             and config.get("exit_management_enabled", True) is True
             and config.get("live_execution_enabled") is False
             and config.get("broker_execution_enabled") is False
         )
+
+    def _position_diagnostic(
+        self,
+        position: dict[str, Any],
+        trade: dict[str, Any],
+        decision: dict[str, Any],
+        safety_blockers: list[str],
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
+        symbol = str(decision.get("symbol") or "").upper()
+        side = str(decision.get("side") or "").upper()
+        entry = self._number(decision.get("entry_price"), 0.0)
+        current = self._number(decision.get("current_price"), 0.0)
+        stop_loss = self._number(decision.get("stop_loss"), 0.0)
+        take_profit = self._number(decision.get("take_profit"), 0.0)
+        risk = abs(entry - stop_loss) if entry > 0 and stop_loss > 0 else 0.0
+        r_multiple = self._number(decision.get("r_multiple"), 0.0)
+        max_favorable = self._number(
+            position.get("max_favorable_excursion")
+            or trade.get("max_favorable_excursion")
+            or (max(0.0, current - entry) if side == "BUY" else max(0.0, entry - current)),
+            0.0,
+        )
+        max_adverse = self._number(
+            position.get("max_adverse_excursion")
+            or trade.get("max_adverse_excursion")
+            or (max(0.0, entry - current) if side == "BUY" else max(0.0, current - entry)),
+            0.0,
+        )
+        max_favorable_r = round(max_favorable / risk, 3) if risk > 0 else 0.0
+        max_adverse_r = round(max_adverse / risk, 3) if risk > 0 else 0.0
+        symbol_settings = self._symbol_exit_settings(symbol, config)
+        break_even_r = float(symbol_settings.get("break_even_trigger_r", config.get("break_even_trigger_r", 0.8)) if symbol_settings else config.get("break_even_trigger_r", 0.8))
+        trailing_r = float(symbol_settings.get("trailing_stop_trigger_r", config.get("trailing_stop_trigger_r", 1.2)) if symbol_settings else config.get("trailing_stop_trigger_r", 1.2))
+        stale_minutes = int(symbol_settings.get("stale_exit_minutes", config.get("exit_stale_minutes", 180)) if symbol_settings else config.get("exit_stale_minutes", 180))
+        no_progress_minutes = float(symbol_settings.get("no_progress_minutes", config.get("exit_no_progress_minutes", 180)) if symbol_settings else config.get("exit_no_progress_minutes", 180))
+        next_trigger = self._next_exit_trigger(decision, break_even_r, trailing_r, stale_minutes, no_progress_minutes)
+        action = str(decision.get("action") or "HOLD").upper()
+        exit_reason = str(decision.get("exit_reason") or "HOLD").upper()
+        if safety_blockers:
+            exit_status = "BLOCKED"
+            why = f"Exit action {action} is blocked by {', '.join(safety_blockers)}."
+        elif action == "HOLD":
+            exit_status = "HOLDING"
+            why = self._friendly_hold_reason(exit_reason, r_multiple, break_even_r)
+        elif action == "MODIFY_SL":
+            exit_status = "PROTECTION_READY"
+            why = f"Rule-based protection is ready: {exit_reason.replace('_', ' ').lower()}."
+        else:
+            exit_status = "CLOSE_READY"
+            why = f"Rule-based close is ready: {exit_reason.replace('_', ' ').lower()}."
+        return {
+            "ticket": str(decision.get("ticket") or self._ticket(position)),
+            "symbol": symbol,
+            "direction": side,
+            "entry_time": trade.get("opened_at") or trade.get("created_at") or position.get("opened_at") or position.get("time"),
+            "age_minutes": decision.get("age_minutes"),
+            "age": f"{decision.get('age_minutes')} minutes",
+            "entry_price": entry,
+            "current_price": current,
+            "floating_pnl": decision.get("unrealized_pnl"),
+            "sl": stop_loss,
+            "tp": take_profit,
+            "current_r_multiple": r_multiple,
+            "max_favorable_excursion": round(max_favorable, 6),
+            "max_favorable_excursion_r": max_favorable_r,
+            "max_adverse_excursion": round(max_adverse, 6),
+            "max_adverse_excursion_r": max_adverse_r,
+            "exit_status": exit_status,
+            "exit_action": action,
+            "exit_reason": exit_reason,
+            "why_still_holding": why,
+            "next_exit_trigger": next_trigger,
+            "safety_blockers": safety_blockers,
+            "break_even_trigger_r": break_even_r,
+            "trailing_trigger_r": trailing_r,
+            "max_hold_minutes": stale_minutes,
+            "no_progress_minutes": no_progress_minutes,
+            "new_stop_loss": decision.get("new_stop_loss"),
+            "market_safety": decision.get("market_safety") if isinstance(decision.get("market_safety"), dict) else {},
+            "timestamp": self._timestamp(),
+        }
+
+    def _next_exit_trigger(self, decision: dict[str, Any], break_even_r: float, trailing_r: float, stale_minutes: float, no_progress_minutes: float) -> str:
+        r_multiple = self._number(decision.get("r_multiple"), 0.0)
+        age = self._number(decision.get("age_minutes"), 0.0)
+        if r_multiple < break_even_r:
+            return f"Move SL to breakeven at +{break_even_r}R."
+        if r_multiple < trailing_r:
+            return f"Enable trailing stop at +{trailing_r}R."
+        if age < no_progress_minutes:
+            return f"No-progress review at {no_progress_minutes} minutes."
+        if age < stale_minutes:
+            return f"Max-hold review at {stale_minutes} minutes."
+        return "Awaiting rule-based close/protection execution."
+
+    def _friendly_hold_reason(self, reason: str, r_multiple: float, break_even_r: float) -> str:
+        if reason == "HOLD_BELOW_BREAKEVEN_TRIGGER":
+            return f"Still held because current profit is {round(r_multiple, 3)}R, below the +{break_even_r}R breakeven trigger."
+        if reason == "HOLD_WAITING_FOR_STALE_TIMEOUT":
+            return "Still held because max hold time has not expired."
+        if reason == "HOLD_NO_REVERSAL":
+            return "Still held because no strong opposite structure signal is confirmed."
+        if reason == "HOLD_NO_CONFIDENCE_DROP":
+            return "Still held because no confidence/structure invalidation exit is confirmed."
+        if reason == "HOLD_WAITING_FOR_VALID_RISK":
+            return "Still held because valid entry/SL risk data is required before protection rules can be applied."
+        return f"Still held because {reason.replace('_', ' ').lower()}."
 
     def _decision(self, position: dict[str, Any], trade: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
         symbol = str(position.get("symbol") or trade.get("symbol") or "").upper()
@@ -203,12 +335,12 @@ class AutoValidationExitManagementService:
             return {**base, "action": "CLOSE", "exit_reason": "SIGNAL_REVERSAL_EXIT", "close_volume": volume}
         if not balanced_round3 and age_minutes > soft_adverse_minutes and unrealized_pnl < 0 and structure_invalidated and r_multiple <= -0.35:
             return {**base, "action": "CLOSE", "exit_reason": "SOFT_ADVERSE_EXIT", "close_volume": volume}
-        if not balanced_round3 and age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
+        if age_minutes >= stale_minutes and r_multiple < float(config.get("exit_stale_min_r", 0.2)):
             return {**base, "action": "CLOSE", "exit_reason": "TIME_STALE_EXIT", "close_volume": volume}
 
         if risk <= 0:
             return {**base, "exit_reason": "HOLD_WAITING_FOR_VALID_RISK"}
-        if not balanced_round3 and age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
+        if age_minutes > no_progress_minutes and r_multiple < no_progress_min_r:
             return {**base, "action": "CLOSE", "exit_reason": "NO_PROGRESS_EXIT", "close_volume": volume}
         break_even_r = float(symbol_settings.get("break_even_trigger_r", config.get("break_even_trigger_r", 1.0)) if symbol_settings else config.get("break_even_trigger_r", 1.0))
         trailing_r = float(symbol_settings.get("trailing_stop_trigger_r", config.get("trailing_stop_trigger_r", 1.5)) if symbol_settings else config.get("trailing_stop_trigger_r", 1.5))
@@ -394,11 +526,17 @@ class AutoValidationExitManagementService:
         return self._number(tick.get("ask"), 0.0)
 
     def _age_minutes(self, position: dict[str, Any], trade: dict[str, Any]) -> float:
-        opened = position.get("opened_at") or trade.get("opened_at") or trade.get("created_at") or position.get("time")
-        parsed = self._parse_time(opened)
+        opened_values = [trade.get("opened_at"), trade.get("created_at"), position.get("opened_at"), position.get("time")]
+        parsed = None
+        now = datetime.now(timezone.utc)
+        for opened in opened_values:
+            candidate = self._parse_time(opened)
+            if candidate is not None and candidate <= now + timedelta(minutes=1):
+                parsed = candidate
+                break
         if parsed is None:
             return 0.0
-        return max(0.0, round((datetime.now(timezone.utc) - parsed).total_seconds() / 60, 2))
+        return max(0.0, round((now - parsed).total_seconds() / 60, 2))
 
     def _parse_time(self, value: Any) -> datetime | None:
         if isinstance(value, datetime):

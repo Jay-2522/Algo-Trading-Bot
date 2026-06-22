@@ -3,7 +3,7 @@
   "rounds": [
     {
       "closed_trades": 0,
-      "ended_at": null,
+      "ended_at": "2026-06-19T13:03:21.410981+00:00",
       "losses": 0,
       "net_pnl": 0.0,
       "round_label": "ROUND_3",

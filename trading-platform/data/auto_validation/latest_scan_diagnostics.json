@@ -3,7 +3,7 @@
     "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
     "adaptive_level": 3,
     "adaptive_level_reason": "30 minutes without an opened or closed trade.",
-    "analysis_ms": 600,
+    "analysis_ms": 612,
     "bos": false,
     "checklist_items": [
       {
@@ -216,10 +216,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T19:49:36.472887+00:00"
+      "timestamp": "2026-06-22T20:15:56.890733+00:00"
     },
     "htf_alignment": true,
-    "last_scan_timestamp": "2026-06-22T19:49:36.471782+00:00",
+    "last_scan_timestamp": "2026-06-22T20:15:56.890733+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "momentum, BOS, liquidity sweep, or pullback/retest"
@@ -236,14 +236,14 @@
     "source": "LIVE_READ_ONLY_SCAN",
     "spread_ok": true,
     "symbol": "EURUSD",
-    "timestamp": "2026-06-22T19:49:37.073984+00:00",
-    "total_scan_ms": 601
+    "timestamp": "2026-06-22T20:15:57.502996+00:00",
+    "total_scan_ms": 612
   },
   "XAUUSD": {
     "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
     "adaptive_level": 3,
     "adaptive_level_reason": "45 minutes without an opened or closed trade for this symbol.",
-    "analysis_ms": 528,
+    "analysis_ms": 619,
     "bos": false,
     "checklist_items": [
       {
@@ -458,10 +458,10 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-22T19:49:37.082340+00:00"
+      "timestamp": "2026-06-22T20:15:57.575651+00:00"
     },
     "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-22T19:49:37.082340+00:00",
+    "last_scan_timestamp": "2026-06-22T20:15:57.575651+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
       "HTF alignment",
@@ -479,7 +479,7 @@
     "source": "LIVE_READ_ONLY_SCAN",
     "spread_ok": true,
     "symbol": "XAUUSD",
-    "timestamp": "2026-06-22T19:49:37.610626+00:00",
-    "total_scan_ms": 528
+    "timestamp": "2026-06-22T20:15:58.195287+00:00",
+    "total_scan_ms": 619
   }
 }

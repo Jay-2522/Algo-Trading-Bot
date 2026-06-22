@@ -235,6 +235,10 @@ class AutoValidationService:
         total_ms = self._elapsed_ms(total_start)
         diagnostic = self._scan_diagnostic_from_checked(requested_symbol, checked, warmup, mt5_health, history_ms, analysis_ms, decision_ms, total_ms)
         diagnostic["source"] = "LIVE_READ_ONLY_SCAN" if best_checked else "CACHED_DECISION_TRACE"
+        if not best_checked:
+            diagnostic["decision"] = "REJECTED"
+            diagnostic["reject_reason"] = "Waiting for a fresh live scan for this symbol."
+            diagnostic["estimated_readiness"] = "Scan stale — waiting for fresh scan"
         diagnostic["last_scan_timestamp"] = scan_started_at
         self._store_latest_scan_diagnostic(diagnostic)
         trace = self._scan_trace_from_diagnostic(diagnostic)
@@ -274,6 +278,8 @@ class AutoValidationService:
         return diagnostic
 
     def scan_diagnostics_status(self) -> dict[str, Any]:
+        if self.should_auto_start_runner():
+            self._log_scan_event("SCAN_LOOP_ALIVE", {"validation_status": self.session.get("status"), "runner_active": self.runner_state.get("runner_active")})
         for symbol in ["EURUSD", "XAUUSD"]:
             if symbol in self._allowed_symbols():
                 self.read_only_scan_symbol(symbol)
@@ -289,13 +295,46 @@ class AutoValidationService:
         now = datetime.now(timezone.utc)
         eurusd = self._latest_scan_diagnostics.get("EURUSD", {})
         xauusd = self._latest_scan_diagnostics.get("XAUUSD", {})
+        last_times = {
+            "EURUSD": eurusd.get("last_scan_timestamp") or eurusd.get("timestamp"),
+            "XAUUSD": xauusd.get("last_scan_timestamp") or xauusd.get("timestamp"),
+        }
+        ages = [age for age in [self._scan_age_seconds(eurusd, now), self._scan_age_seconds(xauusd, now)] if age is not None]
+        last_scan_age = max(ages) if ages else None
+        stale = self._scan_is_stale(eurusd, now) or self._scan_is_stale(xauusd, now)
+        if self.should_auto_start_runner():
+            self._log_scan_event("SCAN_LOOP_ALIVE", {"validation_status": self.session.get("status"), "runner_active": self.runner_state.get("runner_active")})
+            if stale:
+                self._log_scan_event(
+                    "SCAN_STALE_WHILE_RUNNING",
+                    {
+                        "validation_status": self.session.get("status"),
+                        "runner_active": self.runner_state.get("runner_active"),
+                        "last_scan_time_by_symbol": last_times,
+                        "last_scan_age_seconds": last_scan_age,
+                    },
+                )
+                self._refresh_all_scan_diagnostics()
+                eurusd = self._latest_scan_diagnostics.get("EURUSD", {})
+                xauusd = self._latest_scan_diagnostics.get("XAUUSD", {})
+                last_times = {
+                    "EURUSD": eurusd.get("last_scan_timestamp") or eurusd.get("timestamp"),
+                    "XAUUSD": xauusd.get("last_scan_timestamp") or xauusd.get("timestamp"),
+                }
+                ages = [age for age in [self._scan_age_seconds(eurusd, now), self._scan_age_seconds(xauusd, now)] if age is not None]
+                last_scan_age = max(ages) if ages else None
+                stale = self._scan_is_stale(eurusd, now) or self._scan_is_stale(xauusd, now)
         return {
+            "validation_status": self.session.get("status"),
+            "scan_loop_running": bool(self.runner_state.get("runner_active")),
+            "last_scan_age_seconds": last_scan_age,
+            "last_scan_time_by_symbol": last_times,
             "eurusd_last_scan": eurusd.get("last_scan_timestamp") or eurusd.get("timestamp"),
             "xauusd_last_scan": xauusd.get("last_scan_timestamp") or xauusd.get("timestamp"),
             "eurusd_duration_ms": eurusd.get("total_scan_ms"),
             "xauusd_duration_ms": xauusd.get("total_scan_ms"),
             "scan_count_last_5min": self._scan_count_since(now - timedelta(minutes=5)),
-            "stale": self._scan_is_stale(eurusd, now) or self._scan_is_stale(xauusd, now),
+            "stale": stale,
             "timestamp": self._timestamp(),
         }
 
@@ -510,14 +549,75 @@ class AutoValidationService:
         self._save_state()
         return self.status()
 
-    def pause(self) -> dict[str, Any]:
-        if self.session["status"] in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
-            self.session["status"] = "PAUSED"
-            self._log("SESSION_PAUSED")
-            self._save_state()
-        return self.status()
+    def _control_snapshot(self, *, can_pause: bool | None = None, can_resume: bool | None = None, block_reason: str = "") -> dict[str, Any]:
+        risk_diagnostics = self._risk_halt_diagnostics()
+        return {
+            "active_session_id": str(self.session.get("session_id") or ""),
+            "validation_status": "VALIDATION_IN_PROGRESS" if self.session.get("status") == "RUNNING" else str(self.session.get("status") or "UNKNOWN"),
+            "session_status": str(self.session.get("status") or "UNKNOWN"),
+            "runner_active": bool(self.runner_state.get("runner_active")),
+            "scan_loop_running": bool(self.runner_state.get("runner_active")),
+            "order_sending_enabled": bool(self.config.get("auto_validation_enabled")),
+            "mt5_status": str(self.mt5_health_state.get("status") or "UNKNOWN"),
+            "risk_status": str(risk_diagnostics.get("status") or "INACTIVE"),
+            "open_trades": int(self.session.get("current_open_trades") or self.session.get("current_session_open_trades") or 0),
+            "closed_trades": int(self.session.get("current_closed_trades") or self.session.get("current_session_closed") or 0),
+            "can_pause": can_pause,
+            "can_resume": can_resume,
+            "block_reason": block_reason,
+            "timestamp": self._timestamp(),
+        }
 
-    def resume_check(self, *, refresh_mt5: bool = True) -> dict[str, Any]:
+    def pause_check(self) -> dict[str, Any]:
+        status = str(self.session.get("status") or "UNKNOWN")
+        terminal = {"COMPLETED", "STOPPED", "READY_ROUND_3", "IDLE", "OFF"}
+        block_reason = ""
+        if not str(self.session.get("session_id") or ""):
+            block_reason = "active session missing"
+        elif status in terminal:
+            block_reason = f"validation status is {status}"
+        return self._control_snapshot(can_pause=not block_reason, block_reason=block_reason)
+
+    def pause(self) -> dict[str, Any]:
+        check = self.pause_check()
+        self._append_event(
+            "PAUSE_REQUEST_RECEIVED",
+            {
+                "active_session_id": check.get("active_session_id"),
+                "status_before": check.get("session_status"),
+                "pause_allowed": check.get("can_pause"),
+                "block_reason": check.get("block_reason"),
+            },
+        )
+        if not check.get("can_pause"):
+            self._append_event("PAUSE_RESPONSE_SENT", {"status": "PAUSE_BLOCKED", "block_reason": check.get("block_reason")})
+            self._save_state(sync_archive=False)
+            return {"status": "PAUSE_BLOCKED", "message": f"Pause failed: {check.get('block_reason')}", **check}
+        self.session["status"] = "PAUSED_REQUIRES_USER_RESUME"
+        self.session["paused_reason"] = "USER_PAUSED"
+        self.session["reason_stopped"] = "USER_PAUSED"
+        self.config["auto_validation_enabled"] = False
+        self.runner_state.update({"runner_active": False, "run_once_in_progress": False, "runner_next_tick_at": None})
+        self._append_event(
+            "PAUSE_STATE_UPDATED",
+            {
+                "active_session_id": self.session.get("session_id"),
+                "validation_status": self.session.get("status"),
+                "runner_active": False,
+                "scan_loop_running": False,
+                "order_sending_enabled": False,
+            },
+        )
+        response = {
+            "status": "PAUSED",
+            "message": "Validation paused. Existing MT5 trades remain open and visible.",
+            **self._control_snapshot(can_pause=True),
+        }
+        self._append_event("PAUSE_RESPONSE_SENT", {"active_session_id": self.session.get("session_id"), "status": response.get("status")})
+        self._save_state(sync_archive=False)
+        return response
+
+    def resume_check(self, *, refresh_mt5: bool = False) -> dict[str, Any]:
         if refresh_mt5:
             try:
                 self._mt5_health_check()
@@ -537,12 +637,11 @@ class AutoValidationService:
             block_reason = str(risk_diagnostics.get("message") or "validation status is HALTED_RISK")
         elif validation_status not in {"PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             block_reason = f"validation status is {validation_status}"
-        elif mt5_status == "MT5_DISCONNECTED":
-            block_reason = "MT5 disconnected"
         elif risk_status == "RISK_HALTED":
             block_reason = str(risk_diagnostics.get("message") or "risk halt is active")
         can_resume = not block_reason
         return {
+            **self._control_snapshot(can_resume=can_resume, block_reason=block_reason),
             "can_resume": can_resume,
             "block_reason": block_reason,
             "active_session_id": active_session_id,
@@ -555,8 +654,8 @@ class AutoValidationService:
         }
 
     def resume(self) -> dict[str, Any]:
-        check = self.resume_check(refresh_mt5=True)
-        self._log(
+        check = self.resume_check(refresh_mt5=False)
+        self._append_event(
             "RESUME_REQUEST_RECEIVED",
             {
                 "active_session_id": check.get("active_session_id"),
@@ -569,7 +668,7 @@ class AutoValidationService:
         )
         if not check.get("can_resume"):
             self._persist_resume_failed_event(check)
-            self._save_state()
+            self._save_state(sync_archive=False)
             return {
                 "status": "RESUME_BLOCKED",
                 "message": f"Resume failed: {check.get('block_reason') or 'unknown reason'}",
@@ -579,17 +678,46 @@ class AutoValidationService:
         if self.session["status"] == "HALTED_RISK":
             self.session["risk_halt_diagnostics"] = self._risk_halt_diagnostics()
             self._persist_risk_halt_event()
-            self._save_state()
-            return self.status()
+            self._save_state(sync_archive=False)
+            return {"status": "RESUME_BLOCKED", "message": "Resume failed: validation status is HALTED_RISK", "resume_check": check, **check}
         if self.session["status"] in {"PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
             self.session["status"] = "RUNNING"
             self.config["auto_validation_enabled"] = True
             self._ensure_adaptive_strategy_state()
+            self.session["paused_reason"] = ""
+            self.session["reason_stopped"] = ""
+            self.runner_state.update({"runner_active": True, "run_once_in_progress": False})
+            self._append_event(
+                "RESUME_STATE_UPDATED",
+                {
+                    "active_session_id": self.session.get("session_id"),
+                    "validation_status": "VALIDATION_IN_PROGRESS",
+                    "runner_active": True,
+                    "scan_loop_running": True,
+                    "order_sending_enabled": True,
+                },
+            )
+        response = {
+            "status": "RESUMED",
+            "message": "Validation resumed. Background MT5 sync and scans are starting.",
+            "resume_check": check,
+            **self._control_snapshot(can_resume=True),
+        }
+        self._append_event("RESUME_RESPONSE_SENT", {"active_session_id": self.session.get("session_id"), "status": response.get("status")})
+        self._save_state(sync_archive=False)
+        return response
+
+    def run_background_resume_sync(self) -> None:
+        self._log("BACKGROUND_SYNC_STARTED", {"active_session_id": self.session.get("session_id")})
+        try:
+            self._mt5_health_check()
             self._history_warmup_diagnostics = self._warmup_history_before_validation()
             self._apply_history_warmup_state()
-            self._log("SESSION_RESUMED")
+            self._refresh_session_metrics()
+            self._refresh_all_scan_diagnostics()
             self._save_state()
-        return self.status()
+        except Exception as exc:
+            self._log("BACKGROUND_SYNC_FAILED", {"error": str(exc), "active_session_id": self.session.get("session_id")})
 
     def stop(self, reason: str = "Stopped manually.") -> dict[str, Any]:
         if self.session["status"] in {"RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
@@ -711,6 +839,43 @@ class AutoValidationService:
             "timestamp": self._timestamp(),
         }
 
+    def open_trade_exit_diagnostics(self) -> dict[str, Any]:
+        positions = self._reconcile_open_mt5_positions()
+        trades = self.trades()
+        if self.exit_management_service is None or not hasattr(self.exit_management_service, "diagnostics"):
+            result = {
+                **self._empty_exit_management_diagnostics(),
+                "status": "NOT_CONFIGURED",
+                "message": "Exit management service is not configured.",
+                "diagnostics": [],
+                "timestamp": self._timestamp(),
+            }
+        else:
+            result = self.exit_management_service.diagnostics(session=dict(self.session), config=dict(self.config), positions=positions, trades=trades)
+        for item in result.get("diagnostics", []) if isinstance(result.get("diagnostics"), list) else []:
+            if isinstance(item, dict):
+                self._log_exit_diagnostic(item, persist_reason=False)
+        self._exit_management_diagnostics = {
+            **self._exit_management_diagnostics,
+            "latest_open_trade_exit_diagnostics": copy.deepcopy(result.get("diagnostics", [])),
+            "diagnostics_timestamp": result.get("timestamp"),
+        }
+        self._save_state(sync_archive=False)
+        return {
+            "status": result.get("status", "READY"),
+            "message": result.get("message", "Open trade exit diagnostics evaluated."),
+            "active_session_id": self.session.get("session_id"),
+            "open_trade_count": len(positions),
+            "diagnostics": copy.deepcopy(result.get("diagnostics", [])),
+            "exit_management": copy.deepcopy(self._exit_management_diagnostics),
+            "simulation_only": True,
+            "demo_execution": True,
+            "live_execution_enabled": False,
+            "broker_execution_enabled": False,
+            "execution_allowed": False,
+            "timestamp": self._timestamp(),
+        }
+
     def post_sender_execution_summary(self) -> dict[str, Any]:
         return {
             "WRAPPER_SUBMITTED": int(self.session.get("wrapper_submitted") or 0),
@@ -728,7 +893,7 @@ class AutoValidationService:
         }
 
     def run_once(self, signals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        if self.session["status"] not in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"} or self.config["auto_validation_enabled"] is not True:
+        if self.session["status"] not in {"RUNNING", "VALIDATION_IN_PROGRESS", "WAITING_FOR_OPEN_TRADES_TO_CLOSE", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"} or self.config["auto_validation_enabled"] is not True:
             return self._decision("IDLE", ["AUTO_VALIDATION_NOT_RUNNING"])
         self._sync_lifecycle_services(manual=False)
         self._refresh_session_metrics()
@@ -764,10 +929,25 @@ class AutoValidationService:
         if halt:
             return self._halt(halt)
         self._run_exit_management(manual=False)
+        if self.session.get("status") == "WAITING_FOR_OPEN_TRADES_TO_CLOSE":
+            self._refresh_session_metrics()
+            decision = self._decision(
+                "WAITING_FOR_OPEN_TRADES_TO_CLOSE",
+                [],
+                extra={
+                    "exit_management": copy.deepcopy(self._exit_management_diagnostics),
+                    "current_open_trades": self.session.get("current_open_trades"),
+                    "decision_reason": "Waiting for open MT5 trades to close while exit management continues.",
+                    "final_decision_reason": "Waiting for open MT5 trades to close while exit management continues.",
+                },
+            )
+            self._save_state()
+            return decision
         signals = [self._normalize_demo_collection_signal(signal) for signal in self._allowed_signals(signals if signals is not None else self._load_signals())]
         self._record_execution_funnel_scan(signals)
         self._record_confidence_timeline(signals)
         checked = [self._checked_symbol_result(signal) for signal in signals]
+        self._refresh_scan_diagnostics_from_checked(checked)
         best_candidate = self._best_candidate(checked)
         self._update_runtime_scan_state(best_candidate)
         immediate = self._immediate_accepted_signal(signals)
@@ -1822,6 +2002,12 @@ class AutoValidationService:
             return True
         return (now or datetime.now(timezone.utc)) - timestamp > timedelta(seconds=60)
 
+    def _scan_age_seconds(self, diagnostic: dict[str, Any], now: datetime | None = None) -> int | None:
+        timestamp = self._parse_timestamp(diagnostic.get("last_scan_timestamp") or diagnostic.get("timestamp"))
+        if timestamp is None:
+            return None
+        return max(0, int(((now or datetime.now(timezone.utc)) - timestamp).total_seconds()))
+
     def _scan_count_since(self, cutoff: datetime) -> int:
         count = 0
         for event in self.events:
@@ -2063,6 +2249,51 @@ class AutoValidationService:
         except OSError:
             pass
 
+    def _refresh_scan_diagnostics_from_checked(self, checked: list[dict[str, Any]]) -> None:
+        if not checked:
+            return
+        refreshed: list[str] = []
+        warmup = self._history_warmup_diagnostics if isinstance(self._history_warmup_diagnostics, dict) else self._empty_history_warmup_diagnostics()
+        mt5_health = copy.deepcopy(self.mt5_health_state)
+        for item in checked:
+            symbol = str(item.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            diagnostic = self._scan_diagnostic_from_checked(symbol, item, warmup, mt5_health, 1, 1, 1, 1)
+            diagnostic["source"] = "VALIDATION_SCAN_LOOP"
+            diagnostic["last_scan_timestamp"] = diagnostic.get("timestamp")
+            self._store_latest_scan_diagnostic(diagnostic)
+            refreshed.append(symbol)
+        if refreshed:
+            self._log_scan_event(
+                "SCAN_DIAGNOSTICS_REFRESHED",
+                {
+                    "symbols": sorted(set(refreshed)),
+                    "source": "VALIDATION_SCAN_LOOP",
+                    "validation_status": self.session.get("status"),
+                    "runner_active": self.runner_state.get("runner_active"),
+                },
+            )
+
+    def _refresh_all_scan_diagnostics(self) -> None:
+        refreshed: list[str] = []
+        for symbol in ["EURUSD", "XAUUSD"]:
+            if symbol not in self._allowed_symbols():
+                continue
+            result = self.read_only_scan_symbol(symbol)
+            if isinstance(result, dict) and result.get("status") == "READ_ONLY_SCAN_COMPLETE":
+                refreshed.append(symbol)
+        if refreshed:
+            self._log_scan_event(
+                "SCAN_DIAGNOSTICS_REFRESHED",
+                {
+                    "symbols": refreshed,
+                    "source": "STALE_SCAN_REFRESH",
+                    "validation_status": self.session.get("status"),
+                    "runner_active": self.runner_state.get("runner_active"),
+                },
+            )
+
     def _scan_trace_from_diagnostic(self, diagnostic: dict[str, Any]) -> dict[str, Any]:
         return {
             "timestamp": diagnostic.get("timestamp") or self._timestamp(),
@@ -2089,7 +2320,8 @@ class AutoValidationService:
         }
 
     def _closest_scan_candidate(self) -> dict[str, Any] | None:
-        diagnostics = [item for item in self._latest_scan_diagnostics.values() if isinstance(item, dict)]
+        now = datetime.now(timezone.utc)
+        diagnostics = [item for item in self._latest_scan_diagnostics.values() if isinstance(item, dict) and not self._scan_is_stale(item, now)]
         if not diagnostics:
             return None
         return copy.deepcopy(sorted(diagnostics, key=lambda item: (int(item.get("score") or 0), -int(item.get("missing_count") or 99)), reverse=True)[0])
@@ -3509,6 +3741,7 @@ class AutoValidationService:
         return self._lifecycle_sync_diagnostics
 
     def _run_exit_management(self, manual: bool = False) -> dict[str, Any]:
+        self._append_event("EXIT_LOOP_ALIVE", {"manual": manual, "status": self.session.get("status"), "active_session_id": self.session.get("session_id")})
         if self.exit_management_service is None:
             self._exit_management_diagnostics = {
                 **self._empty_exit_management_diagnostics(),
@@ -3533,13 +3766,18 @@ class AutoValidationService:
         result["manual"] = manual
         self._exit_management_diagnostics = result
         managed_positions = result.get("managed_positions", []) if isinstance(result.get("managed_positions"), list) else []
+        close_success = False
         for item in managed_positions:
-            if not isinstance(item, dict) or item.get("action") == "HOLD":
+            if not isinstance(item, dict):
+                continue
+            self._log_exit_diagnostic(item, persist_reason=True)
+            if item.get("action") == "HOLD":
                 continue
             event = "EXIT_SL_MOVED" if item.get("action") == "MODIFY_SL" else "EXIT_CLOSE_ATTEMPTED"
             execution = item.get("execution_result") if isinstance(item.get("execution_result"), dict) else {}
             if execution.get("status") in {"POSITION_CLOSED", "POSITION_PARTIALLY_CLOSED"}:
                 event = "EXIT_CLOSE_SUCCEEDED"
+                close_success = True
             elif execution.get("status") == "EXIT_FAILED":
                 event = "EXIT_CLOSE_FAILED"
             elif item.get("exit_reason") == "TRAILING_STOP":
@@ -3547,9 +3785,67 @@ class AutoValidationService:
             self._log(event, {"ticket": item.get("ticket"), "symbol": item.get("symbol"), "exit_reason": item.get("exit_reason"), "execution_result": execution})
         if int(result.get("actions_taken") or 0) > 0:
             self._log("EXIT_MANAGEMENT_ACTION", {"actions_taken": result.get("actions_taken"), "last_action": result.get("last_action")})
+            if close_success:
+                self._sync_lifecycle_services(manual=False)
+                self._refresh_session_metrics()
         elif manual:
             self._log("EXIT_MANAGEMENT_EVALUATED", {"positions_checked": result.get("positions_checked"), "status": result.get("status")})
         return self._exit_management_diagnostics
+
+    def _log_exit_diagnostic(self, item: dict[str, Any], *, persist_reason: bool) -> None:
+        ticket = item.get("ticket")
+        symbol = item.get("symbol")
+        self._append_event("EXIT_CHECK_TICKET", {"ticket": ticket, "symbol": symbol, "action": item.get("action") or item.get("exit_action"), "exit_reason": item.get("exit_reason")})
+        self._append_event("EXIT_R_MULTIPLE", {"ticket": ticket, "symbol": symbol, "r_multiple": item.get("r_multiple") if item.get("r_multiple") is not None else item.get("current_r_multiple")})
+        action = str(item.get("action") or item.get("exit_action") or "").upper()
+        execution = item.get("execution_result") if isinstance(item.get("execution_result"), dict) else {}
+        if action == "HOLD" or item.get("exit_status") == "HOLDING":
+            self._append_event("EXIT_DECISION_HOLD", {"ticket": ticket, "symbol": symbol, "reason": item.get("hold_reason") or item.get("why_still_holding") or item.get("exit_reason"), "next_exit_trigger": item.get("next_exit_trigger")})
+        elif action == "MODIFY_SL":
+            event = "EXIT_TRAIL_STOP" if item.get("exit_reason") == "TRAILING_STOP" else "EXIT_MOVE_BREAKEVEN"
+            self._append_event(event, {"ticket": ticket, "symbol": symbol, "new_stop_loss": item.get("new_stop_loss"), "execution_result": execution})
+        elif action == "CLOSE":
+            self._append_event("EXIT_CLOSE_REQUESTED", {"ticket": ticket, "symbol": symbol, "exit_reason": item.get("exit_reason"), "execution_result": execution})
+            if execution.get("status") in {"POSITION_CLOSED", "POSITION_PARTIALLY_CLOSED"}:
+                self._append_event("EXIT_CLOSE_SUCCESS", {"ticket": ticket, "symbol": symbol, "exit_reason": item.get("exit_reason"), "execution_result": execution})
+            elif execution:
+                self._append_event("EXIT_CLOSE_FAILED", {"ticket": ticket, "symbol": symbol, "exit_reason": item.get("exit_reason"), "execution_result": execution})
+        if persist_reason:
+            self._persist_exit_management_reason(item)
+
+    def _persist_exit_management_reason(self, item: dict[str, Any]) -> None:
+        if not hasattr(self.reason_panel_service, "persist_exit_management"):
+            return
+        try:
+            diagnostic = item
+            if "exit_status" not in diagnostic:
+                diagnostic = self._exit_management_item_to_diagnostic(item)
+            self.reason_panel_service.persist_exit_management(diagnostic, session_id=str(self.session.get("session_id") or ""))
+        except Exception:
+            return
+
+    def _exit_management_item_to_diagnostic(self, item: dict[str, Any]) -> dict[str, Any]:
+        action = str(item.get("action") or "HOLD").upper()
+        return {
+            "ticket": item.get("ticket"),
+            "symbol": item.get("symbol"),
+            "direction": item.get("side"),
+            "entry_time": item.get("entry_time"),
+            "age_minutes": item.get("age_minutes"),
+            "entry_price": item.get("entry_price"),
+            "current_price": item.get("current_price"),
+            "floating_pnl": item.get("unrealized_pnl"),
+            "sl": item.get("stop_loss"),
+            "tp": item.get("take_profit"),
+            "current_r_multiple": item.get("r_multiple"),
+            "exit_status": "HOLDING" if action == "HOLD" else "PROTECTION_READY" if action == "MODIFY_SL" else "CLOSE_READY",
+            "exit_action": action,
+            "exit_reason": item.get("exit_reason"),
+            "why_still_holding": item.get("hold_reason") or item.get("exit_reason"),
+            "next_exit_trigger": item.get("next_exit_trigger"),
+            "new_stop_loss": item.get("new_stop_loss"),
+            "timestamp": item.get("timestamp") or self._timestamp(),
+        }
 
     def _risk_halt_reason(self) -> str | None:
         if self.session["current_closed_trades"] >= int(self.config.get("target_validation_trades") or self.config["target_closed_trades"]):
@@ -3859,12 +4155,25 @@ class AutoValidationService:
         return any(item in halts for item in blockers)
 
     def _log(self, event: str, details: dict[str, Any] | None = None) -> None:
-        self.events.append({"event": event, "details": details or {}, "timestamp": self._timestamp()})
+        self._append_event(event, details)
         self._save_state()
 
-    def _log_scan_event(self, event: str, details: dict[str, Any] | None = None) -> None:
+    def _append_event(self, event: str, details: dict[str, Any] | None = None) -> None:
         self.events.append({"event": event, "details": details or {}, "timestamp": self._timestamp()})
         self.events = self.events[-500:]
+
+    def _log_scan_event(self, event: str, details: dict[str, Any] | None = None) -> None:
+        self._append_event(event, details)
+
+    def log_scan_loop_restarted(self, reason: str = "scan loop restarted") -> None:
+        self._log_scan_event(
+            "SCAN_LOOP_RESTARTED",
+            {
+                "reason": reason,
+                "validation_status": self.session.get("status"),
+                "runner_active": self.runner_state.get("runner_active"),
+            },
+        )
 
     def log_runner_error(self, message: str) -> None:
         self._log("RUNNER_ERROR", {"error": message})
@@ -3873,7 +4182,7 @@ class AutoValidationService:
         self.runner_state.update(updates)
 
     def should_auto_start_runner(self) -> bool:
-        return self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"} and self.config.get("auto_validation_enabled") is True
+        return self.session.get("status") in {"RUNNING", "VALIDATION_IN_PROGRESS", "WAITING_FOR_OPEN_TRADES_TO_CLOSE", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"} and self.config.get("auto_validation_enabled") is True
 
     def _has_recoverable_progress(self) -> bool:
         if self.session.get("status") not in {"PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"}:
@@ -5092,7 +5401,7 @@ class AutoValidationService:
                 self.config["auto_validation_enabled"] = True
         self._finalize_loaded_active_session("state_loaded_without_journal_recovery")
 
-    def _save_state(self) -> None:
+    def _save_state(self, *, sync_archive: bool = True) -> None:
         try:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
@@ -5119,7 +5428,8 @@ class AutoValidationService:
                 "updated_at": self._timestamp(),
             }
             self.state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-            self._sync_round_archive()
+            if sync_archive:
+                self._sync_round_archive()
         except OSError:
             pass
 

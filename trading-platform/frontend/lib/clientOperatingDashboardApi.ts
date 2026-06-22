@@ -296,7 +296,7 @@ export async function fetchAutoValidationStatus() {
 }
 
 export async function fetchAutoValidationScanDiagnostics() {
-  const result = await fetchJson<ApiRecord>("/auto-validation/scan-diagnostics", {}, 2500);
+  const result = await fetchJson<ApiRecord>("/auto-validation/scan-diagnostics", {}, 8000);
   return { errors: result.error ? [result.error] : [], ok: result.ok, diagnostics: result.ok ? result.data : null };
 }
 

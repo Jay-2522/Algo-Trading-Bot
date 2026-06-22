@@ -1273,7 +1273,25 @@ export function DashboardShell(_: {
                 ? await resetAutoValidationClosedTrades()
                 : await stopAutoValidation();
       setData((current) => {
-        const next = { ...current, autoValidation: result };
+        const currentAuto = asRecord(current.autoValidation) ?? {};
+        const currentSession = asRecord(currentAuto.session) ?? {};
+        const quickControlResponse = action === "pause" || action === "resume";
+        const sessionStatus = readText(result, ["session_status"], readText(result, ["validation_status"], ""));
+        const nextSession = quickControlResponse
+          ? {
+              ...currentSession,
+              status: sessionStatus === "VALIDATION_IN_PROGRESS" ? "RUNNING" : sessionStatus || readText(currentSession, ["status"], ""),
+              session_id: readText(result, ["active_session_id"], readText(currentSession, ["session_id"], "")),
+              current_open_trades: readNumber(result, ["open_trades"], readNumber(currentSession, ["current_open_trades"], 0)),
+              current_session_open_trades: readNumber(result, ["open_trades"], readNumber(currentSession, ["current_session_open_trades"], 0)),
+              current_closed_trades: readNumber(result, ["closed_trades"], readNumber(currentSession, ["current_closed_trades"], 0)),
+              current_session_closed: readNumber(result, ["closed_trades"], readNumber(currentSession, ["current_session_closed"], 0)),
+            }
+          : asRecord(result.session) ?? currentSession;
+        const nextAuto = quickControlResponse
+          ? { ...currentAuto, ...result, mode: nextSession.status, session: nextSession }
+          : result;
+        const next = { ...current, autoValidation: nextAuto };
         writeCachedDashboardData(next);
         return next;
       });
@@ -1288,13 +1306,13 @@ export function DashboardShell(_: {
         setTradeError(reason);
         showToast("error", reason);
       } else {
-        showToast("success", autoValidationSuccessMessage(action));
+        showToast("success", readText(result, ["message"], autoValidationSuccessMessage(action)));
       }
       if (action === "reset-closed-trades") {
         await refresh();
       }
     } catch (error) {
-      const message = action === "resume" && error instanceof Error ? `Resume failed: backend route error: ${error.message}` : autoValidationErrorMessage(action);
+      const message = (action === "resume" || action === "pause") && error instanceof Error ? `${action === "resume" ? "Resume" : "Pause"} failed: backend route error: ${error.message}` : autoValidationErrorMessage(action);
       setTradeError(message);
       showToast("error", message);
     } finally {
@@ -2872,8 +2890,8 @@ function ClientDashboardView({
             <div className="premium-control-grid mt-5">
               <ClientButton disabled={startDisabled} loading={workingAction === "auto-validation-start"} onClick={() => onAutoValidationAction("start")}>Start Validation</ClientButton>
               <ClientButton disabled={controlsDisabled || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-resume"} onClick={() => onAutoValidationAction("resume")}>Resume Validation</ClientButton>
-              <ClientButton disabled={controlsDisabled || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} loading={workingAction === "auto-validation-pause"} onClick={() => onAutoValidationAction("pause")}>Pause</ClientButton>
-              <ClientButton disabled={controlsDisabled || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-stop"} onClick={() => onAutoValidationAction("stop")}>Stop</ClientButton>
+              <ClientButton disabled={controlsDisabled || !["RUNNING", "VALIDATION_IN_PROGRESS", "WAITING_FOR_OPEN_TRADES_TO_CLOSE", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC", "PAUSED_REQUIRES_USER_RESUME"].includes(mode)} loading={workingAction === "auto-validation-pause"} onClick={() => onAutoValidationAction("pause")}>Pause</ClientButton>
+              <ClientButton disabled={controlsDisabled || !["RUNNING", "VALIDATION_IN_PROGRESS", "PAUSED", "WAITING_FOR_OPEN_TRADES_TO_CLOSE", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} loading={workingAction === "auto-validation-stop"} onClick={() => onAutoValidationAction("stop")}>Stop</ClientButton>
               <ClientButton disabled={controlsDisabled} loading={workingAction === "dashboard-refresh"} onClick={onRefresh}>Refresh</ClientButton>
               <ClientButton disabled={controlsDisabled} loading={workingAction === "auto-validation-reset-closed-trades"} onClick={() => onAutoValidationAction("reset-closed-trades")}>Reset Closed Trades</ClientButton>
             </div>
@@ -3232,7 +3250,7 @@ function scanNeeds(scan: ApiRecord): string[] {
 }
 
 function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
-  const available = scanRows.filter((scan) => readText(scan, ["timestamp"], ""));
+  const available = scanRows.filter((scan) => readText(scan, ["timestamp"], "") && !scanIsStale(scan));
   if (!available.length) return null;
   return [...available].sort((left, right) => {
     const scoreDelta = scanChecklistPassed(right) - scanChecklistPassed(left);
@@ -3263,6 +3281,8 @@ function scanTimeLabel(scan: ApiRecord): string {
 function LiveScanStatusCard({ data }: { data: DashboardData }) {
   const scans = latestScanDiagnostics(data);
   const closest = closestScan(scans);
+  const hasAnyScan = scans.some((scan) => Boolean(readText(scan, ["timestamp"], "")));
+  const allScansStale = hasAnyScan && scans.every((scan) => !readText(scan, ["timestamp"], "") || scanIsStale(scan));
   const closestNeeds = closest ? scanNeeds(closest).slice(0, 2) : [];
   return (
     <section className="premium-panel">
@@ -3278,6 +3298,10 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
               <span className="ml-2 text-slate-300">Needs: {closestNeeds.length ? closestNeeds.join(" + ") : "ready"}</span>
             </div>
           </>
+        ) : allScansStale ? (
+          <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-amber-100">
+            Scan stale — waiting for fresh scan
+          </div>
         ) : null}
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -5093,13 +5117,13 @@ function AutoValidationPanel({
           <button className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400" disabled={startDisabled} onClick={() => onAction("start")} type="button">
             Start {TARGET_TRADES}-Trade Validation
           </button>
-          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode)} onClick={() => onAction("pause")} type="button">
+          <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "VALIDATION_IN_PROGRESS", "WAITING_FOR_OPEN_TRADES_TO_CLOSE", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC", "PAUSED_REQUIRES_USER_RESUME"].includes(mode)} onClick={() => onAction("pause")} type="button">
             Pause
           </button>
           <button className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-100 disabled:text-slate-500" disabled={workingAction !== null || !["PAUSED", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("resume")} type="button">
             Resume
           </button>
-          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "PAUSED", "WAITING_FOR_MT5_RECONNECT", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("stop")} type="button">
+          <button className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-100 disabled:text-slate-500" disabled={workingAction !== null || !["RUNNING", "VALIDATION_IN_PROGRESS", "PAUSED", "WAITING_FOR_OPEN_TRADES_TO_CLOSE", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC", "PAUSED_REQUIRES_USER_RESUME", "RECOVERED_STOPPED"].includes(mode)} onClick={() => onAction("stop")} type="button">
             Stop
           </button>
         </div>

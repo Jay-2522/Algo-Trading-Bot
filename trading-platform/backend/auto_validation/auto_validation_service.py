@@ -80,6 +80,7 @@ class AutoValidationService:
         self._current_signal_watched: dict[str, Any] | None = None
         self._decision_traces: list[dict[str, Any]] = []
         self._latest_scan_diagnostics: dict[str, dict[str, Any]] = {}
+        self._canonical_scans: dict[str, dict[str, Any]] = {}
         self._runtime_order_state: dict[str, Any] = {
             "latest_scan_decision": "",
             "latest_scan_symbol": "",
@@ -97,6 +98,7 @@ class AutoValidationService:
         self._runtime_last_error = ""
         self._closure_verification_in_progress: set[str] = set()
         self._load_state()
+        self._rebuild_active_stats_from_journal("backend_startup", allow_mt5_backfill=True)
         self._apply_balanced_round3_config()
         self._sync_round_archive()
 
@@ -486,7 +488,8 @@ class AutoValidationService:
         }
 
     def runtime_snapshot(self, runner_health: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Return one fast, atomic dashboard snapshot without performing MT5 or journal I/O."""
+        """Return one atomic dashboard snapshot without performing live MT5 calls."""
+        self._rebuild_active_stats_from_journal("runtime_snapshot")
         runner = copy.deepcopy(runner_health or {})
         with self._runtime_state_lock:
             positions = copy.deepcopy(self._live_mt5_positions)
@@ -496,6 +499,7 @@ class AutoValidationService:
             runtime_error = self._runtime_last_error
         session = copy.deepcopy(self.session)
         scans = copy.deepcopy(self._latest_scan_diagnostics)
+        canonical_scans = {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")}
         scan_times = [self._parse_time(item.get("last_scan_timestamp") or item.get("timestamp")) for item in scans.values() if isinstance(item, dict)]
         scan_times = [item for item in scan_times if item is not None]
         last_scan = max(scan_times).isoformat() if scan_times else None
@@ -526,22 +530,42 @@ class AutoValidationService:
             "mt5_open_positions": positions,
             "mt5_open_count": len(positions),
             "open_position_sync": copy.deepcopy(self._open_position_sync_diagnostics),
-            "closed_trades": int(session.get("current_closed_trades") or 0),
+            "closed_trades": len(closed_records),
             "closed_trade_records": copy.deepcopy(closed_records),
             "latest_outcomes": copy.deepcopy(sorted(closed_records, key=lambda item: str(item.get("closed_at") or item.get("close_time") or ""), reverse=True)[:5]),
-            "wins": int(session.get("wins") or 0),
-            "losses": int(session.get("losses") or 0),
-            "net_pnl": float(session.get("net_pnl") or 0),
+            "wins": len([trade for trade in closed_records if str(trade.get("result") or "").upper() == "WIN"]),
+            "losses": len([trade for trade in closed_records if str(trade.get("result") or "").upper() == "LOSS"]),
+            "net_pnl": round(sum(self._trade_pnl(trade) for trade in closed_records), 2),
             "progress": float(session.get("progress_percentage") or 0),
+            "last_reset_reason": session.get("last_reset_reason", ""),
+            "last_reset_timestamp": session.get("last_reset_timestamp", ""),
+            "last_reset_by_user_action": bool(session.get("last_reset_by_user_action", False)),
             "bot_decisions_latest_3": decisions,
             "latest_scan_diagnostics": scans,
-            "closest_to_trade": {} if scan_stale else self._closest_scan_candidate(),
-            "live_scan_status": {"symbols": scans, "last_scan_timestamp": last_scan, "last_scan_age_seconds": last_scan_age, "stale": scan_stale},
+            "canonical_scans": canonical_scans,
+            "closest_to_trade": {} if scan_stale else self._closest_canonical_scan(canonical_scans),
+            "live_scan_status": {"symbols": canonical_scans, "last_scan_timestamp": last_scan, "last_scan_age_seconds": last_scan_age, "stale": scan_stale},
             "loop_health": loop_health,
             "runtime_health": {**loop_health, "validation_status": session.get("status"), "active_session_id": session.get("session_id"), "mt5_open_count": len(positions), "mt5_open_tickets": self._position_tickets(positions), "dashboard_open_count": len(positions), "dashboard_open_tickets": self._position_tickets(positions)},
             "last_error": runner.get("last_loop_error") or runtime_error,
             "timestamp": self._timestamp(),
         }
+
+    def _closest_canonical_scan(self, scans: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+        values = [item for item in (scans or self.canonical_scans().get("scans", {})).values() if isinstance(item, dict) and item and item.get("stale") is not True]
+        if not values:
+            return {}
+        return copy.deepcopy(
+            sorted(
+                values,
+                key=lambda item: (
+                    int(item.get("base_passed") or 0) - int(item.get("base_total") or 3),
+                    int(item.get("confirmations_passed") or 0) - int(item.get("required_confirmations") or 2),
+                    str(item.get("timestamp") or ""),
+                ),
+                reverse=True,
+            )[0]
+        )
 
     def runtime_status(self) -> dict[str, Any]:
         self._refresh_session_metrics()
@@ -642,8 +666,14 @@ class AutoValidationService:
                 "best_setup_type": "Unavailable",
                 "worst_setup_type": "Unavailable",
                 "closed_trades_reset_at": self._timestamp(),
+                "last_reset_reason": "user clicked Reset Closed Trades",
+                "last_reset_timestamp": self._timestamp(),
+                "last_reset_by_user_action": True,
+                "last_reset_scope": "active_session_closed_trades",
             }
         )
+        with self._runtime_state_lock:
+            self._closed_trade_records = []
         self._save_state()
         self._log("RESET_CLOSED_TRADES", {"session_id": session_id, "excluded_count": result.get("excluded_count"), "excluded_tickets": result.get("excluded_tickets", [])})
         return {
@@ -946,6 +976,189 @@ class AutoValidationService:
             for trade in self.journal_service.list_trades(limit=100000)
             if trade.get("validation_session_id") == session_id and trade.get("active_stats_excluded") is not True
         ]
+
+    def _active_closed_trade_records_from_journal(self) -> list[dict[str, Any]]:
+        closed = [
+            copy.deepcopy(trade)
+            for trade in self.trades()
+            if str(trade.get("status") or "").upper() == "CLOSED" and trade.get("mt5_closure_confirmed") is True
+        ]
+        closed.sort(key=lambda item: str(item.get("closed_at") or item.get("close_time") or item.get("timestamp") or ""))
+        return closed
+
+    def _rebuild_active_stats_from_journal(self, reason: str, *, allow_mt5_backfill: bool = False) -> list[dict[str, Any]]:
+        if not self._has_current_user_session():
+            with self._runtime_state_lock:
+                self._closed_trade_records = []
+            return []
+        if allow_mt5_backfill:
+            self._backfill_missing_closed_trades_from_mt5_history(reason)
+        closed = self._active_closed_trade_records_from_journal()
+        target_trades = int(self.config.get("target_validation_trades") or self.config.get("target_closed_trades") or 30)
+        wins = [trade for trade in closed if str(trade.get("result") or "").upper() == "WIN"]
+        losses = [trade for trade in closed if str(trade.get("result") or "").upper() == "LOSS"]
+        pnl_values = [self._trade_pnl(trade) for trade in closed]
+        rr_values = [rr for rr in (self._trade_rr(trade) for trade in closed) if rr is not None]
+        gross_profit = sum(value for value in pnl_values if value > 0)
+        gross_loss = abs(sum(value for value in pnl_values if value < 0))
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0.0)
+        open_count = int(self.session.get("current_open_trades") or self.session.get("current_session_open_trades") or len(self._live_mt5_positions) or 0)
+        setup_performance = self._setup_performance(closed)
+        previous_closed = int(self.session.get("current_closed_trades") or self.session.get("current_session_closed") or 0)
+        self.session.update(
+            {
+                "total_trades": len(closed) + open_count,
+                "current_session_total_trades": len(closed) + open_count,
+                "target_validation_trades": target_trades,
+                "current_closed_trades": len(closed),
+                "current_session_closed": len(closed),
+                "wins": len(wins),
+                "losses": len(losses),
+                "win_rate": round((len(wins) / len(closed)) * 100, 2) if closed else 0.0,
+                "net_pnl": round(sum(pnl_values), 2),
+                "avg_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
+                "average_rr": round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0,
+                "profit_factor": round(profit_factor, 2),
+                "max_drawdown": self._max_drawdown(pnl_values),
+                "best_setup_type": setup_performance["best_setup_type"],
+                "worst_setup_type": setup_performance["worst_setup_type"],
+                "remaining_trades_to_target": max(0, target_trades - len(closed)),
+                "remaining_closed_trades": max(0, target_trades - len(closed)),
+                "progress_percentage": round((len(closed) / target_trades) * 100, 2) if target_trades else 0.0,
+                "equity_curve": self._equity_curve(closed),
+            }
+        )
+        diagnostics = self.session.get("active_round_diagnostics") if isinstance(self.session.get("active_round_diagnostics"), dict) else {}
+        self.session["active_round_diagnostics"] = {
+            **diagnostics,
+            "active_session_id": self.session.get("session_id", ""),
+            "closed_trade_count": len(closed),
+            "latest_closed_tickets": [str(trade.get("mt5_ticket") or trade.get("ticket") or "") for trade in closed[-5:]],
+            "counter_source": "active_session_confirmed_mt5_closure_journal",
+            "reconciliation_action": reason,
+        }
+        with self._runtime_state_lock:
+            self._closed_trade_records = copy.deepcopy(closed)
+        if reason == "backend_startup" or previous_closed != len(closed):
+            self._append_event(
+                "ACTIVE_STATS_REBUILT_FROM_JOURNAL",
+                {
+                    "reason": reason,
+                    "active_session_id": self.session.get("session_id"),
+                    "previous_closed": previous_closed,
+                    "journal_closed": len(closed),
+                    "wins": len(wins),
+                    "losses": len(losses),
+                    "net_pnl": round(sum(pnl_values), 2),
+                },
+            )
+        if reason == "backend_startup":
+            self._save_state(sync_archive=False)
+        return closed
+
+    def consistency_check(self) -> dict[str, Any]:
+        closed = self._rebuild_active_stats_from_journal("consistency_check", allow_mt5_backfill=True)
+        latest_outcomes = sorted(closed, key=lambda item: str(item.get("closed_at") or item.get("close_time") or ""), reverse=True)[:5]
+        session_closed = int(self.session.get("current_closed_trades") or 0)
+        bot_count = len(self.reason_panel_service.latest_for_session(str(self.session.get("session_id") or ""), limit=3))
+        trade_intelligence_count = len(closed)
+        mismatch_reasons: list[str] = []
+        if session_closed != len(closed):
+            mismatch_reasons.append(f"runtime_closed_count {session_closed} != journal_closed_count {len(closed)}")
+        if len(latest_outcomes) != min(len(closed), 5):
+            mismatch_reasons.append("latest outcomes does not match active closed trade records")
+        return {
+            "active_session_id": self.session.get("session_id", ""),
+            "runtime_closed_count": session_closed,
+            "journal_closed_count": len(closed),
+            "latest_outcomes_count": len(latest_outcomes),
+            "bot_decision_count": bot_count,
+            "trade_intelligence_count": trade_intelligence_count,
+            "dashboard_closed_count": session_closed,
+            "mismatch_detected": bool(mismatch_reasons),
+            "mismatch_reason": "; ".join(mismatch_reasons),
+            "last_reset_reason": self.session.get("last_reset_reason", ""),
+            "last_reset_timestamp": self.session.get("last_reset_timestamp", ""),
+            "last_reset_by_user_action": bool(self.session.get("last_reset_by_user_action", False)),
+            "counter_source": "active_session_confirmed_mt5_closure_journal",
+            "timestamp": self._timestamp(),
+        }
+
+    def _backfill_missing_closed_trades_from_mt5_history(self, reason: str) -> dict[str, Any]:
+        if self.close_sync_service is None or self.journal_service is None or not hasattr(self.close_sync_service, "verify_ticket") or not hasattr(self.journal_service, "record_trade_closed"):
+            return {"status": "SKIPPED", "reason": "close sync or journal service unavailable", "recovered_tickets": []}
+        session_id = str(self.session.get("session_id") or "")
+        cutoff = self._parse_time(self.session.get("last_reset_timestamp") or self.session.get("closed_trades_reset_at") or self.session.get("started_at"))
+        existing = {
+            str(trade.get("mt5_ticket") or trade.get("ticket") or "")
+            for trade in self.journal_service.list_trades(limit=100000)
+            if str(trade.get("mt5_ticket") or trade.get("ticket") or "")
+        }
+        candidates: dict[str, dict[str, Any]] = {}
+        symbol_state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
+        for symbol, state in symbol_state.items():
+            history = state.get("history") if isinstance(state, dict) and isinstance(state.get("history"), list) else []
+            for event in history:
+                if not isinstance(event, dict) or str(event.get("event") or "").upper() != "ADAPTIVE_TRADE_OPENED":
+                    continue
+                ticket = str(event.get("ticket") or "").strip()
+                if not ticket or ticket in existing:
+                    continue
+                opened_at = self._parse_time(event.get("timestamp"))
+                if cutoff is not None and opened_at is not None and opened_at < cutoff:
+                    continue
+                candidates[ticket] = {
+                    "trade_id": f"mt5_demo_{ticket}",
+                    "source": "MT5_DEMO",
+                    "environment": "DEMO",
+                    "symbol": str(event.get("symbol") or symbol or "").upper(),
+                    "side": str(event.get("side") or "").upper(),
+                    "lot": 0.01,
+                    "opened_at": event.get("timestamp"),
+                    "mt5_ticket": ticket,
+                    "validation_session_id": session_id,
+                    "strategy_profile": self.config.get("strategy_profile") or "DEMO_COLLECTION",
+                    "adaptive_level": event.get("level"),
+                    "adaptive_strategy_level": event.get("level"),
+                    "notes": f"Recovered from active-session adaptive history during {reason}.",
+                }
+        recovered: list[str] = []
+        skipped: list[dict[str, Any]] = []
+        for ticket, synthetic_trade in sorted(candidates.items(), key=lambda item: str(item[1].get("opened_at") or "")):
+            self._log("MT5_CLOSURE_VERIFY_START", {"ticket": ticket, "active_session_id": session_id, "source": "missing_journal_backfill", "reason": reason})
+            try:
+                result = self.close_sync_service.verify_ticket(ticket, synthetic_trade)
+            except Exception as exc:
+                skipped.append({"ticket": ticket, "reason": str(exc)})
+                continue
+            if result.get("status") != "CLOSURE_CONFIRMED":
+                skipped.append({"ticket": ticket, "reason": result.get("reason") or result.get("status")})
+                self._log("MT5_CLOSURE_UNCONFIRMED", {"ticket": ticket, "reason": result.get("reason") or result.get("status"), "source": "missing_journal_backfill"})
+                continue
+            payload = {
+                **synthetic_trade,
+                **(result.get("close_payload") if isinstance(result.get("close_payload"), dict) else result),
+                "mt5_ticket": ticket,
+                "validation_session_id": session_id,
+                "active_stats_excluded": False,
+                "active_stats_excluded_reason": "",
+                "notes": f"{synthetic_trade.get('notes', '')} MT5 closure confirmed and backfilled into active journal.".strip(),
+            }
+            try:
+                updated = self.journal_service.record_trade_closed(payload)
+            except Exception as exc:
+                skipped.append({"ticket": ticket, "reason": str(exc)})
+                continue
+            recovered.append(ticket)
+            self._persist_closed_confirmed_reason(updated)
+            self._log("MT5_CLOSURE_CONFIRMED", {"ticket": ticket, "close_time": updated.get("closed_at"), "close_price": updated.get("close_price"), "profit": updated.get("net_pnl"), "exit_reason": updated.get("exit_reason"), "source": "missing_journal_backfill"})
+            self._log("CLOSED_TRADE_WRITTEN", {"ticket": ticket, "active_session_id": session_id, "source": "missing_journal_backfill"})
+        if recovered or skipped:
+            self._append_event(
+                "ACTIVE_CLOSED_TRADES_BACKFILLED_FROM_MT5_HISTORY",
+                {"reason": reason, "active_session_id": session_id, "recovered_tickets": recovered, "skipped": skipped},
+            )
+        return {"status": "BACKFILLED", "recovered_tickets": recovered, "skipped": skipped}
 
     def _resume_incomplete_validation_session(self, payload: dict[str, Any] | None = None, trigger: str = "backend_startup", activate: bool = False) -> dict[str, Any] | None:
         candidate = self._latest_incomplete_validation_session()
@@ -1293,6 +1506,31 @@ class AutoValidationService:
                     "open_tickets": tickets,
                 },
             )
+        canonical_scan = self._canonical_scan_for_symbol(symbol)
+        if not canonical_scan or canonical_scan.get("order_allowed") is not True:
+            final_decision = precomputed_final_decision or self._final_round3_order_decision(signal)
+            reason = str((canonical_scan or {}).get("order_block_reason") or "Canonical scan has not approved this order.")
+            self._log(
+                "BLOCKED_LEGACY_ORDER_PATH",
+                {
+                    "symbol": symbol,
+                    "active_session_id": self.session.get("session_id"),
+                    "canonical_scan": canonical_scan,
+                    "reason": reason,
+                },
+            )
+            self._runtime_order_state.update({"waiting_for_order": False, "order_block_reason": reason})
+            return self._decision(
+                "BLOCKED",
+                ["CANONICAL_SCAN_BLOCKED"],
+                {**signal, "final_decision": final_decision},
+                {
+                    "final_decision": final_decision,
+                    "decision_reason": reason,
+                    "final_decision_reason": reason,
+                },
+            )
+
         blockers = self._validate_signal(signal)
         if blockers:
             event = "RISK_HALT_TRIGGERED" if self._halt_blocker(blockers) else "SIGNAL_BLOCKED"
@@ -2504,13 +2742,102 @@ class AutoValidationService:
         symbol = str(diagnostic.get("symbol") or "").upper()
         if not symbol:
             return
+        canonical = self._canonical_scan_from_diagnostic(diagnostic)
+        diagnostic = {**diagnostic, "canonical_scan": canonical}
         self._latest_scan_diagnostics[symbol] = copy.deepcopy(diagnostic)
+        self._canonical_scans[symbol] = copy.deepcopy(canonical)
         self.session["latest_scan_diagnostics"] = copy.deepcopy(self._latest_scan_diagnostics)
+        self.session["canonical_scans"] = copy.deepcopy(self._canonical_scans)
+        try:
+            self.reason_panel_service.persist_scan_result(canonical, session_id=str(self.session.get("session_id") or ""))
+        except Exception:
+            pass
         try:
             DEFAULT_SCAN_DIAGNOSTICS_PATH.parent.mkdir(parents=True, exist_ok=True)
             DEFAULT_SCAN_DIAGNOSTICS_PATH.write_text(json.dumps(self._latest_scan_diagnostics, indent=2, sort_keys=True), encoding="utf-8")
         except OSError:
             pass
+
+    def _canonical_scan_from_diagnostic(self, diagnostic: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(diagnostic.get("symbol") or "").upper()
+        base_states = diagnostic.get("base_gate_states") if isinstance(diagnostic.get("base_gate_states"), dict) else {}
+        confirmation_states = diagnostic.get("confirmation_groups") if isinstance(diagnostic.get("confirmation_groups"), dict) else {}
+        base_specs = [
+            ("rr", "RR >= 2", bool(base_states.get("RR >= 2")), "Risk/reward must be at least 2.0."),
+            ("spread", "Spread clean", bool(base_states.get("Spread clean")), "Current spread must be within the symbol limit."),
+            ("risk", "Risk approved", bool(base_states.get("Risk approved")), "Risk validation must approve the trade."),
+        ]
+        confirmation_specs = [
+            ("htf_bias", "HTF bias", bool(confirmation_states.get("HTF bias")), "H1/H4 bias supports the candidate direction."),
+            ("momentum", "Momentum", bool(confirmation_states.get("Momentum")), "A momentum or displacement signal is present."),
+            ("bos_or_liquidity", "BOS or liquidity sweep", bool(confirmation_states.get("BOS/liquidity sweep")), "BOS or a liquidity sweep is present."),
+            ("pullback_retest", "Pullback/retest", bool(confirmation_states.get("Pullback/retest")), "A valid pullback or retest is present."),
+            ("fvg_imbalance", "FVG/imbalance", bool(confirmation_states.get("FVG/imbalance")), "An FVG or imbalance is present."),
+        ]
+        base_gates = [{"key": key, "label": label, "passed": passed, "reason": reason} for key, label, passed, reason in base_specs]
+        confirmations = [{"key": key, "label": label, "passed": passed, "reason": reason} for key, label, passed, reason in confirmation_specs]
+        base_passed = len([item for item in base_gates if item["passed"]])
+        confirmations_passed = len([item for item in confirmations if item["passed"]])
+        required = int(diagnostic.get("confirmations_required") or 2)
+        history_ready = diagnostic.get("history_ready") is True
+        sl_tp_valid = diagnostic.get("sl_tp_valid") is True
+        missing_base = [str(item["label"]) for item in base_gates if not item["passed"]]
+        missing_confirmations = [str(item["label"]) for item in confirmations if not item["passed"]]
+        order_allowed = base_passed == len(base_gates) and confirmations_passed >= required and history_ready and sl_tp_valid
+        if missing_base:
+            block_reason = f"{missing_base[0]} is required."
+        elif not history_ready:
+            block_reason = "MT5 history is not ready."
+        elif not sl_tp_valid:
+            block_reason = "Stop-loss or take-profit is invalid."
+        elif confirmations_passed < required:
+            block_reason = f"Confirmations {confirmations_passed}/{len(confirmations)}; Level 3 requires {required}."
+        else:
+            block_reason = "" if order_allowed else str(diagnostic.get("reject_reason") or "Current execution safety checks blocked the order.")
+        return {
+            "symbol": symbol,
+            "adaptive_level": int(diagnostic.get("adaptive_level") or 0),
+            "timestamp": diagnostic.get("timestamp") or self._timestamp(),
+            "stale": False,
+            "decision": "READY" if order_allowed else "BLOCKED",
+            "base_gates": base_gates,
+            "confirmations": confirmations,
+            "base_passed": base_passed,
+            "base_total": len(base_gates),
+            "confirmations_passed": confirmations_passed,
+            "confirmations_total": len(confirmations),
+            "required_confirmations": required,
+            "missing_base_gates": missing_base,
+            "missing_confirmations": missing_confirmations,
+            "history_ready": history_ready,
+            "sl_tp_valid": sl_tp_valid,
+            "order_allowed": order_allowed,
+            "order_block_reason": block_reason,
+            "active_session_id": self.session.get("session_id"),
+            "total_scan_ms": diagnostic.get("total_scan_ms"),
+        }
+
+    def _canonical_scan_for_symbol(self, symbol: str) -> dict[str, Any]:
+        normalized = str(symbol or "").upper()
+        scan = copy.deepcopy(self._canonical_scans.get(normalized) or {})
+        if not scan:
+            return {}
+        parsed = self._parse_time(scan.get("timestamp"))
+        stale = parsed is None or datetime.now(timezone.utc) - parsed > timedelta(seconds=60)
+        scan["stale"] = stale
+        if stale:
+            scan["decision"] = "BLOCKED"
+            scan["order_allowed"] = False
+            scan["order_block_reason"] = "Scan is stale; waiting for fresh diagnostics."
+        return scan
+
+    def canonical_scans(self) -> dict[str, Any]:
+        return {
+            "active_session_id": self.session.get("session_id"),
+            "validation_status": self.session.get("status"),
+            "scans": {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")},
+            "timestamp": self._timestamp(),
+        }
 
     def _refresh_scan_diagnostics_from_checked(self, checked: list[dict[str, Any]]) -> None:
         if not checked:
@@ -2868,18 +3195,10 @@ class AutoValidationService:
             self.session["decision_traces"] = self._decision_traces[-200:]
 
     def _persist_scan_trace(self, trace: dict[str, Any]) -> None:
-        try:
-            timestamp = str(trace.get("timestamp") or self._timestamp())
-            symbol = str(trace.get("symbol") or "").upper()
-            trace = {
-                **trace,
-                "event_id": f"scan-result-{symbol.lower()}-{timestamp}",
-                "active_session_id": self.session.get("session_id"),
-                "decision": trace.get("execution_decision"),
-            }
-            self.reason_panel_service.persist_scan_result(trace, session_id=str(self.session.get("session_id") or ""))
-        except Exception:
-            pass
+        # Active Bot Decisions are written from the canonical scan model in
+        # _store_latest_scan_diagnostic. Keep legacy traces internal so older
+        # H4/M15/Score 2/2 formats cannot disagree with Live Scan Status.
+        return None
 
     def _profile_blockers(self, signal: dict[str, Any], profile: str) -> list[str]:
         blockers: list[str] = []
@@ -2892,8 +3211,10 @@ class AutoValidationService:
             if not components.get("session_valid"):
                 blockers.append("SESSION_VALID_REQUIRED")
         if profile == "DEMO_COLLECTION":
-            round3 = self._round3_signal_diagnostics(signal)
-            blockers.extend(round3.get("failed_rules", []))
+            # Round 3 approval is governed by the canonical scan object and
+            # final order decision. Do not reintroduce legacy confirmation
+            # blockers such as mandatory BOS/FVG/session from profile checks.
+            pass
         if str(signal.get("signal") or "").upper() not in {"BUY", "SELL"}:
             blockers.append("BUY_OR_SELL_REQUIRED")
         if self._number(signal.get("risk_reward"), 0) < float(self.config.get("min_rr", 1.5)):
@@ -3200,27 +3521,33 @@ class AutoValidationService:
     def _final_round3_order_decision(self, signal: dict[str, Any]) -> dict[str, Any]:
         symbol = str(signal.get("symbol") or "").upper()
         round3 = self._round3_signal_diagnostics(signal)
-        threshold = int(self._adaptive_level_config(symbol=symbol).get("required_score") or round3.get("confirmation_required") or 5)
-        score = int(self._number(round3.get("confirmation_score"), 0))
+        canonical_scan = self._canonical_scan_for_symbol(symbol)
+        if canonical_scan:
+            threshold = int(canonical_scan.get("required_confirmations") or 0)
+            score = int(canonical_scan.get("confirmations_passed") or 0)
+        else:
+            threshold = int(self._adaptive_level_config(symbol=symbol).get("required_score") or round3.get("confirmation_required") or 5)
+            score = int(self._number(round3.get("confirmation_score"), 0))
         failed_rules = [str(item) for item in round3.get("failed_rules", []) if str(item or "").strip()]
         status = str(round3.get("final_decision") or "").upper()
-        hard_gates_passed = status == "ACCEPTED" and not failed_rules and score >= threshold
+        hard_gates_passed = bool(canonical_scan) and canonical_scan.get("order_allowed") is True
         return {
             "status": "ACCEPTED" if hard_gates_passed else "REJECTED",
             "raw_status": status or "UNKNOWN",
             "round": self._active_round_label(),
             "session_id": self.session.get("session_id"),
             "symbol": symbol,
-            "adaptive_level": round3.get("adaptive_level"),
+            "adaptive_level": canonical_scan.get("adaptive_level") if canonical_scan else round3.get("adaptive_level"),
             "score": score,
             "required_score": threshold,
             "hard_gates_passed": hard_gates_passed,
             "passed_rules": list(round3.get("passed_rules") or []),
-            "failed_rules": failed_rules,
+            "failed_rules": [] if hard_gates_passed else failed_rules,
             "advisory_warnings": list(round3.get("advisory_warnings") or []),
             "score_components": self._score_components_snapshot(round3),
-            "final_decision_reason": round3.get("final_decision_reason") or round3.get("rejection_reason") or "",
+            "final_decision_reason": (canonical_scan or {}).get("order_block_reason") or round3.get("final_decision_reason") or round3.get("rejection_reason") or "",
             "round3_diagnostics": copy.deepcopy(round3),
+            "canonical_scan": copy.deepcopy(canonical_scan),
             "timestamp": self._timestamp(),
         }
 
@@ -3228,7 +3555,12 @@ class AutoValidationService:
         blockers: list[str] = []
         symbol = str(signal.get("symbol") or "").upper()
         session_id = str(self.session.get("session_id") or "")
-        threshold = int(self._adaptive_level_config(symbol=symbol).get("required_score") or final_decision.get("required_score") or 5)
+        canonical_scan = final_decision.get("canonical_scan") if isinstance(final_decision.get("canonical_scan"), dict) else self._canonical_scan_for_symbol(symbol)
+        threshold = int((canonical_scan or {}).get("required_confirmations") or final_decision.get("required_score") or 5)
+        if not canonical_scan:
+            blockers.append("CANONICAL_SCAN_MISSING")
+        elif canonical_scan.get("order_allowed") is not True:
+            blockers.append("CANONICAL_SCAN_BLOCKED")
         if str(final_decision.get("status") or "").upper() != "ACCEPTED":
             blockers.append("FINAL_DECISION_REJECTED")
         if str(final_decision.get("round") or "").upper() != self._active_round_label():
@@ -5562,6 +5894,10 @@ class AutoValidationService:
             "adaptive_strategy_levels": self._empty_adaptive_strategy_levels(None),
             "adaptive_strategy_history": [],
             "symbol_adaptive_state": {},
+            "last_reset_reason": "",
+            "last_reset_timestamp": "",
+            "last_reset_by_user_action": False,
+            "last_reset_scope": "",
         }
 
     def _fresh_empty_active_session(self, reason: str) -> None:
@@ -5584,6 +5920,10 @@ class AutoValidationService:
             "remaining_trades_to_target": target,
             "remaining_closed_trades": target,
             "progress_percentage": 0.0,
+            "last_reset_reason": "new active session created",
+            "last_reset_timestamp": started_at,
+            "last_reset_by_user_action": False,
+            "last_reset_scope": "new_session",
         }
         self._ensure_adaptive_strategy_state()
         self._startup_session_diagnostics = {
@@ -5734,6 +6074,16 @@ class AutoValidationService:
                     self._latest_scan_diagnostics = {str(key).upper(): value for key, value in raw_scans.items() if isinstance(value, dict)}
             except (OSError, json.JSONDecodeError):
                 self._latest_scan_diagnostics = {}
+        if isinstance(data.get("canonical_scans"), dict):
+            self._canonical_scans = {str(key).upper(): value for key, value in data["canonical_scans"].items() if isinstance(value, dict)}
+        elif isinstance(self.session.get("canonical_scans"), dict):
+            self._canonical_scans = {str(key).upper(): value for key, value in self.session["canonical_scans"].items() if isinstance(value, dict)}
+        else:
+            self._canonical_scans = {
+                symbol: self._canonical_scan_from_diagnostic(diagnostic)
+                for symbol, diagnostic in self._latest_scan_diagnostics.items()
+                if isinstance(diagnostic, dict)
+            }
         if isinstance(data.get("runtime_order_state"), dict):
             self._runtime_order_state.update(data["runtime_order_state"])
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
@@ -5777,6 +6127,7 @@ class AutoValidationService:
                 "confidence_timeline": self._confidence_timeline,
                 "decision_traces": self._decision_traces[-200:],
                 "latest_scan_diagnostics": self._latest_scan_diagnostics,
+                "canonical_scans": self._canonical_scans,
                 "runtime_order_state": self._runtime_order_state,
                 "sent_signal_keys": sorted(self._sent_signal_keys),
                 "updated_at": self._timestamp(),

@@ -133,6 +133,20 @@ async def get_auto_validation_runtime_snapshot() -> dict:
     return auto_validation_service.runtime_snapshot(auto_validation_runner.support_status())
 
 
+@router.get("/canonical-scan")
+async def get_auto_validation_canonical_scan() -> dict:
+    """Return the single scan model used by dashboard, chat, and execution gating."""
+    auto_validation_runner.start_support_loops()
+    return auto_validation_service.canonical_scans()
+
+
+@router.get("/consistency-check")
+async def get_auto_validation_consistency_check() -> dict:
+    """Compare active-session runtime counters with confirmed journal records."""
+    auto_validation_runner.start_support_loops()
+    return await asyncio.to_thread(auto_validation_service.consistency_check)
+
+
 @router.post("/stop")
 async def stop_auto_validation(payload: dict[str, Any] = Body(default_factory=dict)) -> dict:
     result = await asyncio.to_thread(auto_validation_service.stop, str(payload.get("reason") or "Stopped manually."))

@@ -442,9 +442,18 @@ function closedTradesOnly(trades: ApiRecord[]): ApiRecord[] {
   return trades.filter((trade) => readText(trade, ["status"], "").toUpperCase() === "CLOSED" && !activeStatsExcluded(trade));
 }
 
+function snapshotClosedTradeRecords(data: DashboardData): ApiRecord[] {
+  const autoStatus = asRecord(data.autoValidation);
+  const snapshotClosed = Array.isArray(autoStatus?.closed_trade_records) ? (autoStatus.closed_trade_records.filter((trade) => asRecord(trade)) as ApiRecord[]) : [];
+  const latestOutcomes = Array.isArray(autoStatus?.latest_outcomes) ? (autoStatus.latest_outcomes.filter((trade) => asRecord(trade)) as ApiRecord[]) : [];
+  return snapshotClosed.length ? snapshotClosed : latestOutcomes;
+}
+
 function round3ClosedTrades(data: DashboardData, trades: ApiRecord[]): ApiRecord[] {
   const sessionId = validationSessionId(data);
   if (!sessionId || !isRound3ValidationSession(data)) return [];
+  const snapshotTrades = snapshotClosedTradeRecords(data);
+  if (snapshotTrades.length) return closedTradesOnly(snapshotTrades).filter((trade) => !tradeSessionId(trade) || tradeSessionId(trade) === sessionId);
   return closedTradesOnly(trades).filter((trade) => tradeSessionId(trade) === sessionId);
 }
 
@@ -3134,28 +3143,22 @@ function AdaptiveStrategyEvolutionCard({ data }: { data: DashboardData }) {
 
 function latestScanDiagnostics(data: DashboardData): ApiRecord[] {
   const autoStatus = asRecord(data.autoValidation);
-  const root = asRecord(autoStatus?.latest_scan_diagnostics) ?? asRecord(asRecord(autoStatus?.session)?.latest_scan_diagnostics) ?? {};
+  const live = asRecord(autoStatus?.live_scan_status);
+  const liveSymbols = asRecord(live?.symbols);
+  const root = asRecord(autoStatus?.canonical_scans) ?? liveSymbols ?? asRecord(asRecord(autoStatus?.session)?.canonical_scans) ?? {};
   return ["EURUSD", "XAUUSD"].map((symbol) => ({ symbol, ...(asRecord(root[symbol]) ?? {}) }));
 }
 
 function scanMissingList(scan: ApiRecord): string[] {
-  const raw = Array.isArray(scan.missing_confirmations) ? scan.missing_confirmations : [];
-  return raw.map((item) => String(item)).filter(Boolean).slice(0, 4);
+  const base = Array.isArray(scan.missing_base_gates) ? scan.missing_base_gates : [];
+  const confirmations = Array.isArray(scan.missing_confirmations) ? scan.missing_confirmations : [];
+  return [...base, ...confirmations].map((item) => String(item)).filter(Boolean).slice(0, 5);
 }
 
 type ScanChecklistItem = { label: string; passed: boolean };
 
-function scanBoolean(scan: ApiRecord, keys: string[]): boolean {
-  return keys.some((key) => {
-    const value = scan[key];
-    if (value === true) return true;
-    const textValue = String(value ?? "").trim().toUpperCase();
-    return ["TRUE", "YES", "OK", "READY", "CLEAN", "PASSED", "ALIGNED", "PRESENT"].includes(textValue);
-  });
-}
-
-function scanChecklist(scan: ApiRecord): ScanChecklistItem[] {
-  const rawChecklist = Array.isArray(scan.checklist_items) ? scan.checklist_items : [];
+function scanItems(raw: unknown): ScanChecklistItem[] {
+  const rawChecklist = Array.isArray(raw) ? raw : [];
   if (rawChecklist.length) {
     return rawChecklist
       .map((item) => {
@@ -3167,42 +3170,30 @@ function scanChecklist(scan: ApiRecord): ScanChecklistItem[] {
       })
       .filter((item) => item.label);
   }
-  const htfText = readText(scan, ["htf_alignment", "htf_bias"], "").toUpperCase();
-  const htfPassed = scanBoolean(scan, ["htf_alignment", "trend_alignment"]) || (Boolean(htfText) && !["NOT_ALIGNED", "UNCLEAR", "WAIT", "NONE", "FALSE"].includes(htfText));
-  const momentumPassed = scanBoolean(scan, ["momentum", "pullback_retest"]);
-  const structurePassed = scanBoolean(scan, ["bos", "liquidity_sweep", "fvg", "fvg_retest", "structure_confirmation"]);
-  return [
-    { label: "HTF alignment", passed: htfPassed },
-    { label: "Momentum / Pullback", passed: momentumPassed },
-    { label: "Structure confirmation", passed: structurePassed },
-    { label: "RR >= 2", passed: scanBoolean(scan, ["rr_ok"]) },
-    { label: "Spread clean", passed: scanBoolean(scan, ["spread_ok"]) },
-  ];
+  return [];
 }
 
-function scanChecklistPassed(scan: ApiRecord): number {
-  const checklist = scanChecklist(scan);
-  return readNumber(scan, ["checklist_passed"], checklist.filter((item) => item.passed).length);
+function scanBaseGates(scan: ApiRecord): ScanChecklistItem[] {
+  return scanItems(scan.base_gates);
 }
 
-function scanChecklistTotal(scan: ApiRecord): number {
-  const checklist = scanChecklist(scan);
-  return readNumber(scan, ["checklist_total"], checklist.length || 5);
+function scanConfirmations(scan: ApiRecord): ScanChecklistItem[] {
+  return scanItems(scan.confirmations);
 }
 
 function scanNeeds(scan: ApiRecord): string[] {
-  return scanChecklist(scan)
-    .filter((item) => !item.passed)
-    .map((item) => item.label);
+  return scanMissingList(scan);
 }
 
 function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
   const available = scanRows.filter((scan) => readText(scan, ["timestamp"], "") && !scanIsStale(scan));
   if (!available.length) return null;
   return [...available].sort((left, right) => {
-    const scoreDelta = scanChecklistPassed(right) - scanChecklistPassed(left);
-    if (scoreDelta !== 0) return scoreDelta;
-    return readNumber(left, ["missing_count"], 99) - readNumber(right, ["missing_count"], 99);
+    const baseDelta = (readNumber(right, ["base_passed"], 0) - readNumber(right, ["base_total"], 3)) - (readNumber(left, ["base_passed"], 0) - readNumber(left, ["base_total"], 3));
+    if (baseDelta !== 0) return baseDelta;
+    const confirmationDelta = (readNumber(right, ["confirmations_passed"], 0) - readNumber(right, ["required_confirmations"], 1)) - (readNumber(left, ["confirmations_passed"], 0) - readNumber(left, ["required_confirmations"], 1));
+    if (confirmationDelta !== 0) return confirmationDelta;
+    return readText(right, ["timestamp"], "").localeCompare(readText(left, ["timestamp"], ""));
   })[0];
 }
 
@@ -3226,10 +3217,7 @@ function scanTimeLabel(scan: ApiRecord): string {
 }
 
 function scanScoreLabel(scan: ApiRecord): string {
-  if (readNumber(scan, ["adaptive_level"], 0) === 3) {
-    return `Base gates: ${readNumber(scan, ["base_gates_passed"], 0)}/${readNumber(scan, ["base_gates_total"], 3)} • Confirmations: ${readNumber(scan, ["confirmations_passed"], 0)}/${readNumber(scan, ["confirmations_total"], 5)}`;
-  }
-  return `${readNumber(scan, ["score"], 0)}/${readNumber(scan, ["required_score"], 5)}`;
+  return `Base gates: ${readNumber(scan, ["base_passed"], 0)}/${readNumber(scan, ["base_total"], 3)} • Confirmations: ${readNumber(scan, ["confirmations_passed"], 0)}/${readNumber(scan, ["confirmations_total"], 5)}`;
 }
 
 function LiveScanStatusCard({ data }: { data: DashboardData }) {
@@ -3269,7 +3257,8 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
           const hasScan = Boolean(readText(scan, ["timestamp"], ""));
           const missing = scanMissingList(scan);
           const stale = hasScan && scanIsStale(scan);
-          const checklist = scanChecklist(scan);
+          const baseGates = scanBaseGates(scan);
+          const confirmations = scanConfirmations(scan);
           return (
             <div className="rounded-xl border border-slate-800/80 bg-[#08111F] p-4" key={symbol}>
               <div className="flex items-start justify-between gap-3">
@@ -3287,9 +3276,10 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
                     <span className="scan-status-pill">Last scan: {scanTimeLabel(scan)}</span>
                     <span className="scan-status-pill">Duration: {Math.max(1, readNumber(scan, ["total_scan_ms"], 1))}ms</span>
                     <span className={`scan-status-pill ${stale ? "warning" : "good"}`}>Status: {stale ? "Stale data" : "Fresh"}</span>
+                    <span className="scan-status-pill">Required confirmations: {readNumber(scan, ["required_confirmations"], 1)}</span>
                   </div>
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {checklist.map((item) => (
+                    {[...baseGates, ...confirmations].map((item) => (
                       <div className={`scan-check-row ${item.passed ? "passed" : "missing"}`} key={`${symbol}-${item.label}`}>
                         <span>{item.passed ? "✓" : "✕"}</span>
                         <strong>{item.label}</strong>
@@ -3307,7 +3297,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
                   <div className="hidden">
                     <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-500">Missing</p>
                     <p className="mt-1 text-sm font-bold text-slate-200">{missing.length ? missing.join(", ") : "—"}</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">{readText(scan, ["estimated_readiness"], readText(scan, ["reject_reason"], ""))}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">{readText(scan, ["order_block_reason"], "")}</p>
                   </div>
                 </>
               ) : (
@@ -3487,7 +3477,7 @@ function WinningDnaSummaryTable({ rows }: { rows: WinningDnaSummaryRow[] }) {
 }
 
 function isDash(value: string): boolean {
-  return value === "—" || value === "â€”";
+  return value === "—";
 }
 
 function conclusionRowClass(type: StrategyConclusionRow["type"]): string {
@@ -3881,7 +3871,7 @@ function aiConclusionRow(label: string, observation: string, source?: FeatureImp
     losses: featureSource ? String(featureSource.losses) : "—",
     netPnl: featureSource ? money(featureSource.netPnl) : "—",
     netPnlTone: featureSource ? featureSource.netPnl : null,
-    observation: observation || "â€”",
+    observation: observation || "—",
     trades: featureSource ? String(featureSource.trades) : "—",
     type: "AI",
     winRate: featureSource ? `${featureSource.winRate.toFixed(1)}%` : "—",
@@ -4494,6 +4484,12 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
       timestamp: readText(runtimeHealth, ["timestamp"], new Date().toISOString()),
       reason: runtimeHealth.mt5_sync_loop_alive === true ? "Scan is stale; waiting for fresh diagnostics. MT5 sync is still live." : "Scan is stale; waiting for fresh diagnostics.",
     });
+  }
+  if (messages.length) {
+    return messages
+      .filter((item) => !/outside london\/?new york|confidence threshold|threshold 75|watchlist|old round 3 rule failed|score\s+\d+\/2/i.test(readText(item, ["reason"], "")))
+      .sort((left, right) => new Date(readText(right, ["timestamp"], "1970-01-01T00:00:00.000Z")).getTime() - new Date(readText(left, ["timestamp"], "1970-01-01T00:00:00.000Z")).getTime())
+      .slice(0, 3);
   }
   const historyWarmup = asRecord(autoStatus?.history_warmup ?? asRecord(autoStatus?.last_execution_decision)?.history_warmup);
   const currentHistoryReady = historyWarmup?.history_ready === true || autoStatus?.history_ready === true;

@@ -23,6 +23,7 @@ class ExecutionReasonPanelService:
             for item in self._read()
             if self._text(item.get("validation_session_id") or item.get("active_session_id")) == self._text(session_id)
             and self._text(item.get("status")).upper() in meaningful
+            and not self._is_legacy_scan_message(item)
         ]
         records.sort(
             key=lambda item: (self._timestamp_value(self._text(item.get("timestamp"))), self._text(item.get("event_id") or item.get("id"))),
@@ -39,6 +40,28 @@ class ExecutionReasonPanelService:
             if len(result) >= max(1, limit):
                 break
         return result
+
+    def _is_legacy_scan_message(self, item: dict[str, Any]) -> bool:
+        if self._text(item.get("status")).upper() != "SCAN_RESULT":
+            return False
+        if isinstance(item.get("canonical_scan"), dict):
+            return False
+        reason = self._text(item.get("reason") or item.get("final_decision_reason"))
+        return bool(reason) and any(
+            marker in reason.lower()
+            for marker in [
+                "score 2/2",
+                "h4 history",
+                "m15 history",
+                "bos",
+                "fvg",
+                "outside london",
+                "confidence threshold",
+                "threshold 75",
+                "watchlist",
+                "required round 3 rule failed",
+            ]
+        )
 
     def persist_order_sent(
         self,
@@ -242,8 +265,18 @@ class ExecutionReasonPanelService:
             "decision": self._text(scan.get("decision") or scan.get("execution_decision")),
             "order_opened": False,
             "adaptive_level": scan.get("adaptive_level"),
-            "confirmation_score": scan.get("score"),
-            "confirmation_required": scan.get("required_score"),
+            "confirmation_score": scan.get("confirmations_passed"),
+            "confirmation_required": scan.get("required_confirmations"),
+            "canonical_scan": scan,
+            "base_passed": scan.get("base_passed"),
+            "base_total": scan.get("base_total"),
+            "confirmations_passed": scan.get("confirmations_passed"),
+            "confirmations_total": scan.get("confirmations_total"),
+            "required_confirmations": scan.get("required_confirmations"),
+            "missing_base_gates": scan.get("missing_base_gates") if isinstance(scan.get("missing_base_gates"), list) else [],
+            "missing_confirmations": scan.get("missing_confirmations") if isinstance(scan.get("missing_confirmations"), list) else [],
+            "order_allowed": scan.get("order_allowed"),
+            "order_block_reason": scan.get("order_block_reason"),
             "htf_bias": scan.get("htf_bias"),
             "momentum": scan.get("momentum"),
             "pullback_retest": scan.get("pullback_retest"),
@@ -552,6 +585,25 @@ class ExecutionReasonPanelService:
 
     def _scan_reason(self, scan: dict[str, Any]) -> str:
         symbol = self._text(scan.get("symbol")).upper() or "Signal"
+        if isinstance(scan.get("base_gates"), list) and isinstance(scan.get("confirmations"), list):
+            base_passed = int(self._number(scan.get("base_passed")))
+            base_total = int(self._number(scan.get("base_total"))) or len(scan.get("base_gates") or [])
+            confirmations_passed = int(self._number(scan.get("confirmations_passed")))
+            confirmations_total = int(self._number(scan.get("confirmations_total"))) or len(scan.get("confirmations") or [])
+            required = int(self._number(scan.get("required_confirmations")))
+            level = self._text(scan.get("adaptive_level")) or "0"
+            missing_base = [self._text(item) for item in scan.get("missing_base_gates", []) if self._text(item)] if isinstance(scan.get("missing_base_gates"), list) else []
+            missing_confirmations = [self._text(item) for item in scan.get("missing_confirmations", []) if self._text(item)] if isinstance(scan.get("missing_confirmations"), list) else []
+            if scan.get("order_allowed") is True:
+                return f"{symbol} is ready. Base gates {base_passed}/{base_total} and confirmations {confirmations_passed}/{confirmations_total} meet Level {level} rules."
+            if missing_base:
+                return f"{symbol} is blocked because {missing_base[0].lower()} is not passing. Base gates {base_passed}/{base_total}, confirmations {confirmations_passed}/{confirmations_total}."
+            if confirmations_passed < required:
+                needs = self._join_text(missing_confirmations[:2]) if missing_confirmations else "one more confirmation"
+                return f"{symbol} is blocked with confirmations {confirmations_passed}/{confirmations_total}. Level {level} needs {required}; missing {needs}."
+            reason = self._text(scan.get("order_block_reason")) or "the current safety checks have not approved the trade"
+            return f"{symbol} is blocked because {reason[0].lower() + reason[1:] if reason else reason}"
+
         direction = self._text(scan.get("direction") or scan.get("direction_candidate")).upper()
         bias = "bearish" if direction == "SELL" else "bullish" if direction == "BUY" else "unclear"
         score = self._text(scan.get("score") or 0)

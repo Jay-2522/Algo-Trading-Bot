@@ -933,48 +933,44 @@ function scanRecordSummary(record: ReasonRecord): string {
 }
 
 function latestScanDiagnosticsFromStatus(status: Record<string, unknown> | null): Record<string, Record<string, unknown>> {
-  const root = asRecord(status?.latest_scan_diagnostics) ?? asRecord(asRecord(status?.session)?.latest_scan_diagnostics) ?? {};
+  const root = asRecord(status?.scans) ?? asRecord(status?.canonical_scans) ?? asRecord(asRecord(status?.live_scan_status)?.symbols) ?? asRecord(asRecord(status?.session)?.canonical_scans) ?? {};
   return Object.fromEntries(Object.entries(root).filter((entry): entry is [string, Record<string, unknown>] => Boolean(asRecord(entry[1]))).map(([symbol, value]) => [symbol.toUpperCase(), value as Record<string, unknown>]));
 }
 
 function scanDiagnosticSummary(symbol: string, diagnostic: Record<string, unknown>): string {
-  const score = numberValue(diagnostic.score) ?? 0;
-  const required = numberValue(diagnostic.required_score) ?? 5;
+  const basePassed = numberValue(diagnostic.base_passed) ?? 0;
+  const baseTotal = numberValue(diagnostic.base_total) ?? 3;
+  const confirmationsPassed = numberValue(diagnostic.confirmations_passed) ?? 0;
+  const confirmationsTotal = numberValue(diagnostic.confirmations_total) ?? 5;
+  const required = numberValue(diagnostic.required_confirmations) ?? 1;
   const level = numberValue(diagnostic.adaptive_level) ?? 0;
   const decision = cleanText(diagnostic.decision) || "PENDING";
-  const missing = Array.isArray(diagnostic.missing_confirmations) ? diagnostic.missing_confirmations.map(cleanText).filter(Boolean) : [];
-  const reason = cleanText(diagnostic.reject_reason);
+  const missingBase = Array.isArray(diagnostic.missing_base_gates) ? diagnostic.missing_base_gates.map(cleanText).filter(Boolean) : [];
+  const missingConfirmations = Array.isArray(diagnostic.missing_confirmations) ? diagnostic.missing_confirmations.map(cleanText).filter(Boolean) : [];
+  const missing = [...missingBase, ...missingConfirmations];
+  const reason = cleanText(diagnostic.order_block_reason);
   const timing = numberValue(diagnostic.total_scan_ms);
-  const components = [
-    `HTF ${diagnostic.htf_alignment === true ? "yes" : "no"}`,
-    `momentum ${diagnostic.momentum === true ? "yes" : "no"}`,
-    `pullback ${diagnostic.pullback_retest === true ? "yes" : "no"}`,
-    `BOS ${diagnostic.bos === true ? "yes" : "no"}`,
-    `liquidity sweep ${diagnostic.liquidity_sweep === true ? "yes" : "no"}`,
-    `FVG ${diagnostic.fvg === true ? "yes" : "no"}`,
-    `RR ${diagnostic.rr_ok === true ? "ok" : "blocked"}`,
-    `spread ${diagnostic.spread_ok === true ? "clean" : "blocked"}`,
-  ];
-  return `${symbol} latest scan: Level ${level}, score ${score}/${required}, decision ${decision}. Missing: ${missing.length ? missing.join(", ") : "none"}. ${reason ? `Reason: ${reason}. ` : ""}Components: ${components.join("; ")}.${timing !== null ? ` Scan time ${timing} ms.` : ""}`;
+  return `${symbol} latest scan: Level ${level}, base gates ${basePassed}/${baseTotal}, confirmations ${confirmationsPassed}/${confirmationsTotal}, requires ${required}, decision ${decision}. Missing: ${missing.length ? missing.join(", ") : "none"}. ${reason ? `Reason: ${reason}. ` : ""}${timing !== null ? `Scan time ${timing} ms.` : ""}`;
 }
 
 async function answerSymbolScanQuestion(question: string): Promise<string | null> {
   if (!isSymbolNoTradeQuestion(question) && !isCloserToQualifyingQuestion(question) && !isLatestScanQuestion(question)) return null;
-  const status = await readBackendRecord("/auto-validation/status");
+  const status = await readBackendRecord("/auto-validation/canonical-scan");
   const diagnostics = latestScanDiagnosticsFromStatus(status);
-  const records = await readReasonRecords();
   if (isCloserToQualifyingQuestion(question)) {
     const scanDiagnostics = ["EURUSD", "XAUUSD"].map((symbol) => ({ symbol, diagnostic: diagnostics[symbol] })).filter((item) => item.diagnostic);
     if (scanDiagnostics.length) {
-      const ranked = scanDiagnostics.sort((left, right) => (numberValue(right.diagnostic?.score) ?? 0) - (numberValue(left.diagnostic?.score) ?? 0));
-      return `${ranked[0].symbol} is closest based on latest scan diagnostics. ${ranked.map((item) => scanDiagnosticSummary(item.symbol, item.diagnostic as Record<string, unknown>)).join(" ")}`;
+      const ranked = scanDiagnostics.sort((left, right) => {
+        const leftBase = (numberValue(left.diagnostic?.base_passed) ?? 0) - (numberValue(left.diagnostic?.base_total) ?? 3);
+        const rightBase = (numberValue(right.diagnostic?.base_passed) ?? 0) - (numberValue(right.diagnostic?.base_total) ?? 3);
+        if (rightBase !== leftBase) return rightBase - leftBase;
+        const leftConfirmations = (numberValue(left.diagnostic?.confirmations_passed) ?? 0) - (numberValue(left.diagnostic?.required_confirmations) ?? 1);
+        const rightConfirmations = (numberValue(right.diagnostic?.confirmations_passed) ?? 0) - (numberValue(right.diagnostic?.required_confirmations) ?? 1);
+        return rightConfirmations - leftConfirmations;
+      });
+      return `${ranked[0].symbol} is closest based on canonical scan diagnostics. ${ranked.map((item) => scanDiagnosticSummary(item.symbol, item.diagnostic as Record<string, unknown>)).join(" ")}`;
     }
-    const scans = ["EURUSD", "XAUUSD"].map((symbol) => latestScanRecord(records, symbol)).filter(Boolean) as ReasonRecord[];
-    if (!scans.length) return "No EURUSD/XAUUSD scan records are available yet.";
-    const ranked = scans.sort((left, right) => (right.confirmation_score ?? 0) - (left.confirmation_score ?? 0));
-    const best = ranked[0];
-    const summaries = ranked.map(scanRecordSummary).join(" ");
-    return `${best.symbol} is closer to qualifying based on the latest scan score. ${summaries}`;
+    return "No canonical EURUSD/XAUUSD scan diagnostics are available yet.";
   }
   const symbol = questionSymbol(question);
   if (!symbol || !["EURUSD", "XAUUSD"].includes(symbol)) {
@@ -984,9 +980,7 @@ async function answerSymbolScanQuestion(question: string): Promise<string | null
     return null;
   }
   if (diagnostics[symbol]) return scanDiagnosticSummary(symbol, diagnostics[symbol]);
-  const scan = latestScanRecord(records, symbol);
-  if (!scan) return `${symbol} has no scan record yet in the active Bot Decisions store.`;
-  return scanRecordSummary(scan);
+  return `${symbol} has no canonical scan diagnostic yet.`;
 }
 
 function historyWarmupFromStatus(status: Record<string, unknown> | null): Record<string, unknown> | null {

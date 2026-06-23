@@ -3145,7 +3145,7 @@ function latestScanDiagnostics(data: DashboardData): ApiRecord[] {
   const autoStatus = asRecord(data.autoValidation);
   const live = asRecord(autoStatus?.live_scan_status);
   const liveSymbols = asRecord(live?.symbols);
-  const root = asRecord(autoStatus?.canonical_scans) ?? liveSymbols ?? asRecord(asRecord(autoStatus?.session)?.canonical_scans) ?? {};
+  const root = asRecord(autoStatus?.decision_states) ?? asRecord(autoStatus?.canonical_scans) ?? liveSymbols ?? asRecord(asRecord(autoStatus?.session)?.decision_states) ?? asRecord(asRecord(autoStatus?.session)?.canonical_scans) ?? {};
   return ["EURUSD", "XAUUSD"].map((symbol) => ({ symbol, ...(asRecord(root[symbol]) ?? {}) }));
 }
 
@@ -3162,6 +3162,18 @@ function scanMissingList(scan: ApiRecord): string[] {
 type ScanChecklistItem = { label: string; passed: boolean };
 
 function scanItems(raw: unknown): ScanChecklistItem[] {
+  const stateRecord = asRecord(raw);
+  if (stateRecord && Array.isArray(stateRecord.items)) {
+    return stateRecord.items
+      .map((item) => {
+        const record = asRecord(item);
+        return {
+          label: readText(record, ["label"], ""),
+          passed: record?.passed === true,
+        };
+      })
+      .filter((item) => item.label);
+  }
   const rawChecklist = Array.isArray(raw) ? raw : [];
   if (rawChecklist.length) {
     return rawChecklist

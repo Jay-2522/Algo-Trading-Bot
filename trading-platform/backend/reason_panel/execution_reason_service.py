@@ -251,6 +251,9 @@ class ExecutionReasonPanelService:
         timestamp = self._text(scan.get("timestamp")) or self._timestamp()
         event_id = self._text(scan.get("event_id")) or f"scan-result-{symbol.lower()}-{timestamp}"
         reason = self._text(scan.get("reason")) or self._scan_reason(scan)
+        base_state = scan.get("base_gates") if isinstance(scan.get("base_gates"), dict) else {}
+        core_state = scan.get("core_confirmations") if isinstance(scan.get("core_confirmations"), dict) else {}
+        bonus_state = scan.get("bonus_confirmations") if isinstance(scan.get("bonus_confirmations"), dict) else {}
         message = {
             "id": event_id,
             "event_id": event_id,
@@ -267,13 +270,14 @@ class ExecutionReasonPanelService:
             "adaptive_level": scan.get("adaptive_level"),
             "confirmation_score": scan.get("core_passed"),
             "confirmation_required": scan.get("required_core_confirmations"),
+            "decision_state": scan,
             "canonical_scan": scan,
-            "base_passed": scan.get("base_passed"),
-            "base_total": scan.get("base_total"),
-            "core_passed": scan.get("core_passed"),
-            "core_total": scan.get("core_total"),
-            "bonus_passed": scan.get("bonus_passed"),
-            "bonus_total": scan.get("bonus_total"),
+            "base_passed": scan.get("base_passed", base_state.get("passed")),
+            "base_total": scan.get("base_total", base_state.get("total")),
+            "core_passed": scan.get("core_passed", core_state.get("passed")),
+            "core_total": scan.get("core_total", core_state.get("total")),
+            "bonus_passed": scan.get("bonus_passed", bonus_state.get("passed")),
+            "bonus_total": scan.get("bonus_total", bonus_state.get("total")),
             "confirmations_passed": scan.get("confirmations_passed"),
             "confirmations_total": scan.get("confirmations_total"),
             "required_confirmations": scan.get("required_confirmations"),
@@ -283,7 +287,7 @@ class ExecutionReasonPanelService:
             "missing_core_confirmations": scan.get("missing_core_confirmations") if isinstance(scan.get("missing_core_confirmations"), list) else [],
             "missing_bonus_confirmations": scan.get("missing_bonus_confirmations") if isinstance(scan.get("missing_bonus_confirmations"), list) else [],
             "missing_confirmations": scan.get("missing_confirmations") if isinstance(scan.get("missing_confirmations"), list) else [],
-            "order_allowed": scan.get("order_allowed"),
+            "order_allowed": scan.get("order_allowed") if scan.get("order_allowed") is not None else self._text(scan.get("decision")).upper() == "READY",
             "order_block_reason": scan.get("order_block_reason"),
             "htf_bias": scan.get("htf_bias"),
             "momentum": scan.get("momentum"),
@@ -590,6 +594,15 @@ class ExecutionReasonPanelService:
 
     def _scan_reason(self, scan: dict[str, Any]) -> str:
         symbol = self._text(scan.get("symbol")).upper() or "Signal"
+        if isinstance(scan.get("base_gates"), dict) and isinstance(scan.get("core_confirmations"), dict) and isinstance(scan.get("bonus_confirmations"), dict):
+            base = scan.get("base_gates") or {}
+            core = scan.get("core_confirmations") or {}
+            bonus = scan.get("bonus_confirmations") or {}
+            decision = self._text(scan.get("decision")).upper() or "WAITING"
+            reason = self._text(scan.get("reason"))
+            if reason:
+                return reason
+            return f"{symbol} is {decision}: base gates {base.get('passed', 0)}/{base.get('total', 4)}, core confirmations {core.get('passed', 0)}/{core.get('total', 3)}, bonus confirmations {bonus.get('passed', 0)}/{bonus.get('total', 2)}."
         if isinstance(scan.get("base_gates"), list) and isinstance(scan.get("confirmations"), list):
             base_passed = int(self._number(scan.get("base_passed")))
             base_total = int(self._number(scan.get("base_total"))) or len(scan.get("base_gates") or [])

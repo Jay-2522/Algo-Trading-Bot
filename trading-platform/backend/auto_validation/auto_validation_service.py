@@ -81,6 +81,7 @@ class AutoValidationService:
         self._decision_traces: list[dict[str, Any]] = []
         self._latest_scan_diagnostics: dict[str, dict[str, Any]] = {}
         self._canonical_scans: dict[str, dict[str, Any]] = {}
+        self._decision_states: dict[str, dict[str, Any]] = {}
         self._runtime_order_state: dict[str, Any] = {
             "latest_scan_decision": "",
             "latest_scan_symbol": "",
@@ -438,10 +439,74 @@ class AutoValidationService:
 
     def bot_decision_loop_tick(self) -> dict[str, Any]:
         session_id = str(self.session.get("session_id") or "")
-        messages = self.reason_panel_service.latest_for_session(session_id, limit=3)
+        messages = self._latest_decision_state_messages(limit=3)
+        if len(messages) < 3:
+            existing_keys = {self._bot_decision_dedupe_key(item) for item in messages}
+            for item in self.reason_panel_service.latest_for_session(session_id, limit=3):
+                key = self._bot_decision_dedupe_key(item)
+                if key not in existing_keys:
+                    messages.append(item)
+                    existing_keys.add(key)
+                if len(messages) >= 3:
+                    break
         with self._runtime_state_lock:
             self._latest_bot_decisions = copy.deepcopy(messages)
         return {"status": "BOT_DECISIONS_REFRESHED", "latest_reason_count": len(messages), "timestamp": self._timestamp()}
+
+    def _bot_decision_dedupe_key(self, item: dict[str, Any]) -> str:
+        symbol = str(item.get("symbol") or "").upper()
+        decision = str(item.get("decision") or item.get("status") or "").upper()
+        status = str(item.get("status") or "").upper()
+        reason = str(item.get("reason") or item.get("final_decision_reason") or "")
+        ticket = str(item.get("ticket") or item.get("mt5_ticket") or "")
+        if ticket:
+            return "|".join([ticket, status or decision])
+        if symbol or decision or reason:
+            return "|".join([symbol, decision, reason])
+        return str(item.get("event_id") or item.get("id") or id(item))
+
+    def _decision_state_message(self, state: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(state.get("symbol") or "").upper()
+        timestamp = str(state.get("timestamp") or self._timestamp())
+        decision = str(state.get("decision") or "WAITING").upper()
+        reason = str(state.get("reason") or "")
+        base = state.get("base_gates") if isinstance(state.get("base_gates"), dict) else {}
+        core = state.get("core_confirmations") if isinstance(state.get("core_confirmations"), dict) else {}
+        bonus = state.get("bonus_confirmations") if isinstance(state.get("bonus_confirmations"), dict) else {}
+        if not reason:
+            reason = (
+                f"{symbol} is {decision}: Base {base.get('passed', 0)}/{base.get('total', 4)}, "
+                f"Core {core.get('passed', 0)}/{core.get('total', 3)}, Bonus {bonus.get('passed', 0)}/{bonus.get('total', 2)}."
+            )
+        event_id = f"decision-state-{symbol.lower()}-{timestamp}"
+        return {
+            "id": event_id,
+            "event_id": event_id,
+            "status": "SCAN_RESULT",
+            "decision": decision,
+            "symbol": symbol,
+            "reason": reason,
+            "final_decision_reason": reason,
+            "validation_session_id": self.session.get("session_id"),
+            "active_session_id": self.session.get("session_id"),
+            "timestamp": timestamp,
+            "decision_state": copy.deepcopy(state),
+            "canonical_scan": copy.deepcopy(state),
+            "base_passed": base.get("passed"),
+            "base_total": base.get("total"),
+            "core_passed": core.get("passed"),
+            "core_total": core.get("total"),
+            "bonus_passed": bonus.get("passed"),
+            "bonus_total": bonus.get("total"),
+            "order_allowed": decision == "READY",
+            "order_block_reason": "" if decision == "READY" else reason,
+            "data_source": "CANONICAL_DECISION_STATE",
+        }
+
+    def _latest_decision_state_messages(self, limit: int = 3) -> list[dict[str, Any]]:
+        states = [copy.deepcopy(item) for item in self._decision_states.values() if isinstance(item, dict) and item]
+        states.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
+        return [self._decision_state_message(item) for item in states[: max(0, limit)]]
 
     def log_loop_event(self, event: str, details: dict[str, Any] | None = None) -> None:
         self._append_event(event, details)
@@ -488,7 +553,7 @@ class AutoValidationService:
         }
 
     def runtime_snapshot(self, runner_health: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Return one atomic dashboard snapshot without performing live MT5 calls."""
+        """Return one atomic dashboard snapshot with MT5 open positions as the open-trade source."""
         self._rebuild_active_stats_from_journal("runtime_snapshot")
         runner = copy.deepcopy(runner_health or {})
         with self._runtime_state_lock:
@@ -497,9 +562,34 @@ class AutoValidationService:
             closed_records = copy.deepcopy(self._closed_trade_records)
             last_sync = self._last_mt5_sync_at
             runtime_error = self._runtime_last_error
+        if not positions:
+            try:
+                live_positions = self._open_positions()
+                if live_positions:
+                    positions = copy.deepcopy(live_positions)
+                    last_sync = self._timestamp()
+                    with self._runtime_state_lock:
+                        self._live_mt5_positions = copy.deepcopy(positions)
+                        self._last_mt5_sync_at = last_sync
+                    self._refresh_session_metrics(mt5_open_positions=positions)
+            except Exception as exc:
+                runtime_error = str(exc)
         session = copy.deepcopy(self.session)
         scans = copy.deepcopy(self._latest_scan_diagnostics)
         canonical_scans = {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")}
+        decision_states = {symbol: self._decision_state_from_canonical(scan) for symbol, scan in canonical_scans.items() if isinstance(scan, dict) and scan}
+        self._decision_states = copy.deepcopy(decision_states)
+        self.session["decision_states"] = copy.deepcopy(decision_states)
+        decision_state_messages = [self._decision_state_message(item) for item in sorted(decision_states.values(), key=lambda item: str(item.get("timestamp") or ""), reverse=True)]
+        merged_decisions: list[dict[str, Any]] = []
+        seen_decisions: set[str] = set()
+        for item in [*decision_state_messages, *decisions]:
+            key = self._bot_decision_dedupe_key(item)
+            if key and key not in seen_decisions:
+                merged_decisions.append(item)
+                seen_decisions.add(key)
+            if len(merged_decisions) >= 3:
+                break
         scan_times = [self._parse_time(item.get("last_scan_timestamp") or item.get("timestamp")) for item in scans.values() if isinstance(item, dict)]
         scan_times = [item for item in scan_times if item is not None]
         last_scan = max(scan_times).isoformat() if scan_times else None
@@ -540,11 +630,12 @@ class AutoValidationService:
             "last_reset_reason": session.get("last_reset_reason", ""),
             "last_reset_timestamp": session.get("last_reset_timestamp", ""),
             "last_reset_by_user_action": bool(session.get("last_reset_by_user_action", False)),
-            "bot_decisions_latest_3": decisions,
+            "bot_decisions_latest_3": merged_decisions,
             "latest_scan_diagnostics": scans,
             "canonical_scans": canonical_scans,
-            "closest_to_trade": {} if scan_stale else self._closest_canonical_scan(canonical_scans),
-            "live_scan_status": {"symbols": canonical_scans, "last_scan_timestamp": last_scan, "last_scan_age_seconds": last_scan_age, "stale": scan_stale},
+            "decision_states": decision_states,
+            "closest_to_trade": {} if scan_stale else self._closest_canonical_scan(decision_states),
+            "live_scan_status": {"symbols": decision_states, "last_scan_timestamp": last_scan, "last_scan_age_seconds": last_scan_age, "stale": scan_stale},
             "loop_health": loop_health,
             "runtime_health": {**loop_health, "validation_status": session.get("status"), "active_session_id": session.get("session_id"), "mt5_open_count": len(positions), "mt5_open_tickets": self._position_tickets(positions), "dashboard_open_count": len(positions), "dashboard_open_tickets": self._position_tickets(positions)},
             "last_error": runner.get("last_loop_error") or runtime_error,
@@ -577,18 +668,38 @@ class AutoValidationService:
         latest_trace = copy.deepcopy(self.session.get("latest_decision_trace") if isinstance(self.session.get("latest_decision_trace"), dict) else {})
         if self._decision_traces:
             latest_trace = copy.deepcopy(self._decision_traces[-1])
+        latest_state = {}
+        rebuilt_states = {
+            symbol: self._decision_state_from_canonical(scan)
+            for symbol, scan in {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")}.items()
+            if isinstance(scan, dict) and scan
+        }
+        if rebuilt_states:
+            self._decision_states = copy.deepcopy(rebuilt_states)
+            self.session["decision_states"] = copy.deepcopy(rebuilt_states)
+            latest_state = sorted(
+                [copy.deepcopy(item) for item in rebuilt_states.values() if isinstance(item, dict)],
+                key=lambda item: str(item.get("timestamp") or ""),
+                reverse=True,
+            )[0]
         latest_scan_decision = (
+            latest_state.get("decision")
+            or
             self._runtime_order_state.get("latest_scan_decision")
             or latest_trace.get("execution_decision")
             or latest_trace.get("decision")
             or ""
         )
         latest_scan_symbol = (
+            latest_state.get("symbol")
+            or
             self._runtime_order_state.get("latest_scan_symbol")
             or latest_trace.get("symbol")
             or ""
         )
         latest_scan_time = (
+            latest_state.get("timestamp")
+            or
             self._runtime_order_state.get("latest_scan_time")
             or latest_trace.get("timestamp")
             or ""
@@ -599,17 +710,26 @@ class AutoValidationService:
                 if event.get("event") in {"ORDER_SENT", "ORDER_SUCCESS"}:
                     latest_order_time = str(event.get("timestamp") or "")
                     break
+        runtime_block_reason = str(self._runtime_order_state.get("order_block_reason") or "")
+        if latest_state:
+            latest_decision = str(latest_state.get("decision") or "").upper()
+            latest_reason = str(latest_state.get("reason") or "")
+            if latest_decision != "READY":
+                runtime_block_reason = latest_reason
+            elif runtime_block_reason not in {"POSITION_ALREADY_OPEN", "MAX_OPEN_TRADES_PER_SYMBOL_REACHED", "MAX_OPEN_TRADES_TOTAL_REACHED"}:
+                runtime_block_reason = ""
         return {
             "mt5_open_count": len(mt5_open_tickets),
             "mt5_open_tickets": mt5_open_tickets,
-            "dashboard_open_count": int(self.session.get("current_open_trades") or 0),
-            "dashboard_open_tickets": diagnostics.get("latest_open_tickets", []),
+            "dashboard_open_count": len(mt5_open_tickets),
+            "dashboard_open_tickets": mt5_open_tickets,
             "latest_scan_decision": latest_scan_decision,
             "latest_scan_symbol": latest_scan_symbol,
             "latest_scan_time": latest_scan_time,
             "latest_order_sent_time": latest_order_time,
             "waiting_for_order": bool(self._runtime_order_state.get("waiting_for_order")),
-            "order_block_reason": self._runtime_order_state.get("order_block_reason") or "",
+            "order_block_reason": runtime_block_reason,
+            "latest_decision_state": latest_state,
             "time_between_ACCEPTED_and_ORDER_ms": self._runtime_order_state.get("time_between_accepted_and_order_ms"),
             "active_session_id": self.session.get("session_id"),
             "counter_source": diagnostics.get("counter_source") or "live_mt5_open_positions",
@@ -1377,7 +1497,7 @@ class AutoValidationService:
             self._current_signal_watched = signal
             self._runtime_order_state.update(
                 {
-                    "latest_scan_decision": "ACCEPTED",
+                    "latest_scan_decision": "READY",
                     "latest_scan_symbol": str(signal.get("symbol") or "").upper(),
                     "latest_scan_time": final_decision.get("timestamp") or self._timestamp(),
                     "waiting_for_order": True,
@@ -1390,9 +1510,7 @@ class AutoValidationService:
                 {
                     "symbol": signal.get("symbol"),
                     "signal_hash": signal.get("signal_hash"),
-                    "score": final_decision.get("score"),
-                    "required_score": final_decision.get("required_score"),
-                    "adaptive_level": final_decision.get("adaptive_level"),
+                    "decision_state": copy.deepcopy(final_decision.get("decision_state") if isinstance(final_decision.get("decision_state"), dict) else {}),
                     "active_session_id": self.session.get("session_id"),
                     "timestamp": final_decision.get("timestamp"),
                 },
@@ -1440,18 +1558,29 @@ class AutoValidationService:
         return decision
 
     def _immediate_accepted_signal(self, signals: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]] | None:
-        accepted: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
+        accepted: list[tuple[int, int, str, dict[str, Any], dict[str, Any]]] = []
         for signal in signals:
-            if not self._ready(signal):
+            if str(signal.get("signal") or "").upper() not in {"BUY", "SELL"}:
                 continue
             final_decision = self._final_round3_order_decision(signal)
             final_blockers = self._final_round3_order_blockers(final_decision, signal)
             if final_blockers:
                 continue
-            accepted.append((int(self._number(final_decision.get("score"), 0)), signal, final_decision))
+            decision_state = final_decision.get("decision_state") if isinstance(final_decision.get("decision_state"), dict) else {}
+            core = decision_state.get("core_confirmations") if isinstance(decision_state.get("core_confirmations"), dict) else {}
+            bonus = decision_state.get("bonus_confirmations") if isinstance(decision_state.get("bonus_confirmations"), dict) else {}
+            accepted.append(
+                (
+                    int(core.get("passed") or final_decision.get("core_passed") or 0),
+                    int(bonus.get("passed") or final_decision.get("bonus_passed") or 0),
+                    str(decision_state.get("timestamp") or final_decision.get("timestamp") or ""),
+                    signal,
+                    final_decision,
+                )
+            )
         if not accepted:
             return None
-        _, signal, final_decision = sorted(accepted, key=lambda item: item[0], reverse=True)[0]
+        _, _, _, signal, final_decision = sorted(accepted, key=lambda item: (item[0], item[1], item[2]), reverse=True)[0]
         return signal, final_decision
 
     def _update_runtime_scan_state(self, checked: dict[str, Any] | None) -> None:
@@ -1491,6 +1620,7 @@ class AutoValidationService:
                     "active_session_id": self.session.get("session_id"),
                 },
             )
+            self._log("ORDER_REJECTED", {"symbol": symbol, "reason": "POSITION_ALREADY_OPEN", "tickets": tickets, "active_session_id": self.session.get("session_id")})
             self._runtime_order_state.update(
                 {
                     "waiting_for_order": False,
@@ -1508,16 +1638,16 @@ class AutoValidationService:
                     "open_tickets": tickets,
                 },
             )
-        canonical_scan = self._canonical_scan_for_symbol(symbol)
-        if not canonical_scan or canonical_scan.get("order_allowed") is not True:
+        decision_state = self._decision_state_for_symbol(symbol)
+        if not decision_state or str(decision_state.get("decision") or "").upper() != "READY":
             final_decision = precomputed_final_decision or self._final_round3_order_decision(signal)
-            reason = str((canonical_scan or {}).get("order_block_reason") or "Canonical scan has not approved this order.")
+            reason = str((decision_state or {}).get("reason") or "Canonical decision_state has not approved this order.")
             self._log(
-                "BLOCKED_LEGACY_ORDER_PATH",
+                "ORDER_REJECTED",
                 {
                     "symbol": symbol,
                     "active_session_id": self.session.get("session_id"),
-                    "canonical_scan": canonical_scan,
+                    "decision_state": decision_state,
                     "reason": reason,
                 },
             )
@@ -1552,6 +1682,7 @@ class AutoValidationService:
         if final_blockers:
             legacy_audit = self._legacy_order_path_audit(signal, final_decision, final_blockers)
             self._log("BLOCKED_LEGACY_ORDER_PATH", legacy_audit)
+            self._log("ORDER_REJECTED", {"symbol": symbol, "decision_state": decision_state, "blockers": final_blockers, "active_session_id": self.session.get("session_id")})
             self._runtime_order_state.update(
                 {
                     "waiting_for_order": False,
@@ -1577,13 +1708,13 @@ class AutoValidationService:
         payload = self._guarded_payload(signal)
         self._increment_funnel("wrapper_submitted")
         order_triggered_at = time.perf_counter()
+        self._log("ORDER_ELIGIBLE", {"symbol": symbol, "decision_state": decision_state, "active_session_id": self.session.get("session_id")})
         self._log(
             "ORDER_TRIGGERED",
             {
                 "symbol": symbol,
                 "signal_hash": signal.get("signal_hash"),
-                "score": final_decision.get("score"),
-                "required_score": final_decision.get("required_score"),
+                "decision_state": decision_state,
                 "accepted_timestamp": final_decision.get("timestamp"),
                 "active_session_id": self.session.get("session_id"),
             },
@@ -1597,6 +1728,7 @@ class AutoValidationService:
             rejection = self._sender_rejection(result, payload)
             self._last_sender_rejection = rejection
             self._log("GUARDED_SENDER_REJECTED", rejection)
+            self._log("ORDER_REJECTED", {"symbol": symbol, "decision_state": decision_state, "rejection": rejection, "active_session_id": self.session.get("session_id")})
             self._runtime_order_state.update(
                 {
                     "waiting_for_order": False,
@@ -2768,20 +2900,85 @@ class AutoValidationService:
         if not symbol:
             return
         canonical = self._canonical_scan_from_diagnostic(diagnostic)
-        diagnostic = {**diagnostic, "canonical_scan": canonical}
+        decision_state = self._decision_state_from_canonical(canonical)
+        diagnostic = {**diagnostic, "canonical_scan": canonical, "decision_state": decision_state}
         self._latest_scan_diagnostics[symbol] = copy.deepcopy(diagnostic)
         self._canonical_scans[symbol] = copy.deepcopy(canonical)
+        self._decision_states[symbol] = copy.deepcopy(decision_state)
         self.session["latest_scan_diagnostics"] = copy.deepcopy(self._latest_scan_diagnostics)
         self.session["canonical_scans"] = copy.deepcopy(self._canonical_scans)
+        self.session["decision_states"] = copy.deepcopy(self._decision_states)
         try:
-            self.reason_panel_service.persist_scan_result(canonical, session_id=str(self.session.get("session_id") or ""))
+            self.reason_panel_service.persist_scan_result(decision_state, session_id=str(self.session.get("session_id") or ""))
         except Exception:
             pass
+        self._log("SCAN_RESULT", {"symbol": symbol, "decision_state": copy.deepcopy(decision_state), "active_session_id": self.session.get("session_id")})
         try:
             DEFAULT_SCAN_DIAGNOSTICS_PATH.parent.mkdir(parents=True, exist_ok=True)
             DEFAULT_SCAN_DIAGNOSTICS_PATH.write_text(json.dumps(self._latest_scan_diagnostics, indent=2, sort_keys=True), encoding="utf-8")
         except OSError:
             pass
+
+    def _decision_state_from_canonical(self, canonical: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(canonical.get("symbol") or "").upper()
+        base_items = canonical.get("base_gates") if isinstance(canonical.get("base_gates"), list) else []
+        core_items = canonical.get("core_confirmations") if isinstance(canonical.get("core_confirmations"), list) else []
+        bonus_items = canonical.get("bonus_confirmations") if isinstance(canonical.get("bonus_confirmations"), list) else []
+
+        def pack(items: list[dict[str, Any]], required: int | None = None) -> dict[str, Any]:
+            passed = len([item for item in items if isinstance(item, dict) and item.get("passed") is True])
+            total = len(items)
+            return {
+                "passed": passed,
+                "total": total,
+                "required": required if required is not None else total,
+                "items": copy.deepcopy(items),
+                "missing": [str(item.get("label")) for item in items if isinstance(item, dict) and item.get("passed") is not True],
+            }
+
+        base = pack(base_items, len(base_items))
+        core = pack(core_items, int(canonical.get("required_core_confirmations") or 1))
+        bonus = pack(bonus_items, int(canonical.get("required_bonus_confirmations") or 1))
+        hard_blocked = canonical.get("history_ready") is not True or base["passed"] < base["required"]
+        ready = canonical.get("order_allowed") is True
+        decision = "READY" if ready else "BLOCKED" if hard_blocked else "WAITING"
+        reason = str(canonical.get("order_block_reason") or "")
+        if not reason:
+            if ready:
+                reason = f"{symbol} READY: Base {base['passed']}/{base['total']}, Core {core['passed']}/{core['total']}, Bonus {bonus['passed']}/{bonus['total']}."
+            elif hard_blocked:
+                missing = base["missing"][0] if base["missing"] else "MT5 history"
+                reason = f"{symbol} BLOCKED: {missing} is not ready."
+            elif core["passed"] < core["required"]:
+                reason = f"{symbol} WAITING: needs ONE of Momentum OR BOS/liquidity sweep."
+            elif bonus["passed"] < bonus["required"]:
+                reason = f"{symbol} WAITING: needs ONE bonus confirmation from Pullback/retest OR FVG/imbalance."
+            else:
+                reason = f"{symbol} WAITING: canonical tier rule is not ready."
+        return {
+            "symbol": symbol,
+            "base_gates": base,
+            "core_confirmations": core,
+            "bonus_confirmations": bonus,
+            "base_passed": base["passed"],
+            "base_total": base["total"],
+            "core_passed": core["passed"],
+            "core_total": core["total"],
+            "bonus_passed": bonus["passed"],
+            "bonus_total": bonus["total"],
+            "required_core_confirmations": core["required"],
+            "required_bonus_confirmations": bonus["required"],
+            "missing_base_gates": base["missing"],
+            "missing_core_confirmations": core["missing"],
+            "missing_bonus_confirmations": bonus["missing"],
+            "decision": decision,
+            "reason": reason,
+            "timestamp": canonical.get("timestamp") or self._timestamp(),
+            "active_session_id": self.session.get("session_id"),
+            "order_allowed": ready,
+            "stale": bool(canonical.get("stale")),
+            "source": "CANONICAL_DECISION_STATE",
+        }
 
     def _canonical_scan_from_diagnostic(self, diagnostic: dict[str, Any]) -> dict[str, Any]:
         symbol = str(diagnostic.get("symbol") or "").upper()
@@ -2890,11 +3087,25 @@ class AutoValidationService:
             scan["order_block_reason"] = "Scan is stale; waiting for fresh diagnostics."
         return scan
 
+    def _decision_state_for_symbol(self, symbol: str) -> dict[str, Any]:
+        normalized = str(symbol or "").upper()
+        canonical = self._canonical_scan_for_symbol(normalized)
+        if not canonical:
+            return {}
+        state = self._decision_state_from_canonical(canonical)
+        self._decision_states[normalized] = copy.deepcopy(state)
+        self.session["decision_states"] = copy.deepcopy(self._decision_states)
+        return state
+
     def canonical_scans(self) -> dict[str, Any]:
+        canonical = {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")}
+        decision_states = {symbol: self._decision_state_from_canonical(scan) for symbol, scan in canonical.items() if isinstance(scan, dict) and scan}
         return {
             "active_session_id": self.session.get("session_id"),
             "validation_status": self.session.get("status"),
-            "scans": {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")},
+            "scans": decision_states,
+            "decision_states": decision_states,
+            "canonical_scans": canonical,
             "timestamp": self._timestamp(),
         }
 
@@ -3592,6 +3803,7 @@ class AutoValidationService:
         symbol = str(signal.get("symbol") or "").upper()
         round3 = self._round3_signal_diagnostics(signal)
         canonical_scan = self._canonical_scan_for_symbol(symbol)
+        decision_state = self._decision_state_for_symbol(symbol)
         if canonical_scan:
             threshold = int(canonical_scan.get("required_core_confirmations") or 1)
             score = int(canonical_scan.get("core_passed") if canonical_scan.get("core_passed") is not None else 0)
@@ -3600,7 +3812,7 @@ class AutoValidationService:
             score = 0
         failed_rules = [str(item) for item in round3.get("failed_rules", []) if str(item or "").strip()]
         status = str(round3.get("final_decision") or "").upper()
-        hard_gates_passed = bool(canonical_scan) and canonical_scan.get("order_allowed") is True
+        hard_gates_passed = bool(decision_state) and str(decision_state.get("decision") or "").upper() == "READY"
         return {
             "status": "ACCEPTED" if hard_gates_passed else "REJECTED",
             "raw_status": status or "UNKNOWN",
@@ -3618,6 +3830,7 @@ class AutoValidationService:
             "final_decision_reason": (canonical_scan or {}).get("order_block_reason") or round3.get("final_decision_reason") or round3.get("rejection_reason") or "",
             "round3_diagnostics": copy.deepcopy(round3),
             "canonical_scan": copy.deepcopy(canonical_scan),
+            "decision_state": copy.deepcopy(decision_state),
             "timestamp": self._timestamp(),
         }
 
@@ -3626,9 +3839,10 @@ class AutoValidationService:
         symbol = str(signal.get("symbol") or "").upper()
         session_id = str(self.session.get("session_id") or "")
         canonical_scan = final_decision.get("canonical_scan") if isinstance(final_decision.get("canonical_scan"), dict) else self._canonical_scan_for_symbol(symbol)
+        decision_state = final_decision.get("decision_state") if isinstance(final_decision.get("decision_state"), dict) else self._decision_state_for_symbol(symbol)
         if not canonical_scan:
             blockers.append("CANONICAL_SCAN_MISSING")
-        elif canonical_scan.get("order_allowed") is not True:
+        elif not decision_state or str(decision_state.get("decision") or "").upper() != "READY":
             blockers.append("CANONICAL_SCAN_BLOCKED")
         if str(final_decision.get("status") or "").upper() != "ACCEPTED":
             blockers.append("FINAL_DECISION_REJECTED")
@@ -3643,6 +3857,10 @@ class AutoValidationService:
         return sorted(set(blockers))
 
     def _final_order_block_reason(self, final_decision: dict[str, Any], blockers: list[str]) -> str:
+        state = final_decision.get("decision_state") if isinstance(final_decision.get("decision_state"), dict) else {}
+        state_reason = str(state.get("reason") or "").strip()
+        if state_reason:
+            return state_reason
         reason = str(final_decision.get("final_decision_reason") or "").strip()
         if reason:
             return reason
@@ -6063,14 +6281,16 @@ class AutoValidationService:
                 for timeframe in self.config.get("history_warmup_timeframes", ["M15", "H1", "H4"])
                 if str(timeframe).upper() in {"M15", "H1", "H4"}
             ] or ["M15", "H1", "H4"]
+        persisted_session_id = ""
         if isinstance(data.get("session"), dict):
             self.session = {**self._empty_session(), **data["session"]}
+            persisted_session_id = str(self.session.get("session_id") or "")
             self._ensure_adaptive_strategy_state()
         active_round = self.round_archive_service.load_active()
         if isinstance(active_round, dict):
             active_session = active_round.get("session") if isinstance(active_round.get("session"), dict) else {}
             active_session_id = str(active_round.get("session_id") or active_session.get("session_id") or "")
-            if active_session_id:
+            if active_session_id and (not persisted_session_id or active_session_id == persisted_session_id):
                 self.session = {**self._empty_session(), **active_session, "session_id": active_session_id}
                 self._ensure_adaptive_strategy_state()
                 self.session["round_number"] = int(active_round.get("round_number") or self.session.get("round_number") or 0)
@@ -6079,6 +6299,23 @@ class AutoValidationService:
                     self.session["status"] = "COMPLETED"
                     self.config["auto_validation_enabled"] = False
                     self.runner_state = self._empty_runner_state()
+            elif active_session_id and persisted_session_id and active_session_id != persisted_session_id:
+                self._startup_session_diagnostics = {
+                    "active_session_id": persisted_session_id,
+                    "recovered_session_id": "",
+                    "dashboard_session_id": persisted_session_id,
+                    "ignored_active_round_session_id": active_session_id,
+                    "startup_recovery_action": "IGNORED_MISMATCHED_ACTIVE_ROUND",
+                    "startup_recovery_reason": "state_file_session_is_authoritative",
+                    "timestamp": self._timestamp(),
+                }
+                self._append_event(
+                    "IGNORED_MISMATCHED_ACTIVE_ROUND",
+                    {
+                        "state_session_id": persisted_session_id,
+                        "active_round_session_id": active_session_id,
+                    },
+                )
         if isinstance(data.get("events"), list):
             self.events = [event for event in data["events"] if isinstance(event, dict)][-500:]
         if isinstance(data.get("last_execution_decision"), dict):
@@ -6135,6 +6372,16 @@ class AutoValidationService:
                 for symbol, diagnostic in self._latest_scan_diagnostics.items()
                 if isinstance(diagnostic, dict)
             }
+        if isinstance(data.get("decision_states"), dict):
+            self._decision_states = {str(key).upper(): value for key, value in data["decision_states"].items() if isinstance(value, dict)}
+        elif isinstance(self.session.get("decision_states"), dict):
+            self._decision_states = {str(key).upper(): value for key, value in self.session["decision_states"].items() if isinstance(value, dict)}
+        else:
+            self._decision_states = {
+                symbol: self._decision_state_from_canonical(canonical)
+                for symbol, canonical in self._canonical_scans.items()
+                if isinstance(canonical, dict)
+            }
         if isinstance(data.get("runtime_order_state"), dict):
             self._runtime_order_state.update(data["runtime_order_state"])
         if self.session.get("status") in {"RUNNING", "WAITING_FOR_MT5_RECONNECT", "WAITING_FOR_MT5_HISTORY_SYNC"}:
@@ -6179,6 +6426,7 @@ class AutoValidationService:
                 "decision_traces": self._decision_traces[-200:],
                 "latest_scan_diagnostics": self._latest_scan_diagnostics,
                 "canonical_scans": self._canonical_scans,
+                "decision_states": self._decision_states,
                 "runtime_order_state": self._runtime_order_state,
                 "sent_signal_keys": sorted(self._sent_signal_keys),
                 "updated_at": self._timestamp(),

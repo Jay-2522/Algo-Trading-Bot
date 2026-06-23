@@ -1,33 +1,33 @@
 [
   {
-    "id": "exit-management-1474644413-holding-hold",
-    "event_id": "exit-management-1474644413-holding-hold",
+    "id": "exit-management-1476295022-holding-hold",
+    "event_id": "exit-management-1476295022-holding-hold",
     "groqGenerated": false,
-    "reason": "Still held because current profit is -0.598R, below the +0.8R breakeven trigger.",
+    "reason": "Still held because current profit is 0.049R, below the +0.8R breakeven trigger.",
     "source": "execution",
     "status": "POSITION_MONITOR",
     "symbol": "EURUSD",
     "side": "SELL",
-    "ticket": "1474644413",
+    "ticket": "1476295022",
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "HOLDING",
     "order_opened": false,
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "current_r_multiple": -0.598,
-    "floating_pnl": -0.67,
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "current_r_multiple": 0.049,
+    "floating_pnl": 0.14,
     "exit_action": "HOLD",
     "exit_reason": "HOLD_BELOW_BREAKEVEN_TRIGGER",
     "next_exit_trigger": "Move SL to breakeven at +0.8R.",
-    "final_decision_reason": "Still held because current profit is -0.598R, below the +0.8R breakeven trigger.",
-    "timestamp": "2026-06-23T03:42:55.973044+00:00",
+    "final_decision_reason": "Still held because current profit is 0.049R, below the +0.8R breakeven trigger.",
+    "timestamp": "2026-06-23T10:13:10.039198+00:00",
     "data_source": "EXIT_MANAGEMENT_LOOP"
   },
   {
     "id": "exit-management-1474595343-holding-hold",
     "event_id": "exit-management-1474595343-holding-hold",
     "groqGenerated": false,
-    "reason": "Still held because current profit is 0.057R, below the +0.8R breakeven trigger.",
+    "reason": "Still held because current profit is 0.194R, below the +0.8R breakeven trigger.",
     "source": "execution",
     "status": "POSITION_MONITOR",
     "symbol": "XAUUSD",
@@ -36,39 +36,40 @@
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "HOLDING",
     "order_opened": false,
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "current_r_multiple": 0.057,
-    "floating_pnl": 3.3,
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "current_r_multiple": 0.194,
+    "floating_pnl": 11.28,
     "exit_action": "HOLD",
     "exit_reason": "HOLD_BELOW_BREAKEVEN_TRIGGER",
     "next_exit_trigger": "Move SL to breakeven at +0.8R.",
-    "final_decision_reason": "Still held because current profit is 0.057R, below the +0.8R breakeven trigger.",
-    "timestamp": "2026-06-23T03:42:55.674124+00:00",
+    "final_decision_reason": "Still held because current profit is 0.194R, below the +0.8R breakeven trigger.",
+    "timestamp": "2026-06-23T10:13:09.771540+00:00",
     "data_source": "EXIT_MANAGEMENT_LOOP"
   },
   {
-    "id": "scan-result-xauusd-2026-06-23T03:34:03.944308+00:00",
-    "event_id": "scan-result-xauusd-2026-06-23T03:34:03.944308+00:00",
+    "id": "scan-result-xauusd-2026-06-23T09:49:16.537087+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:49:16.537087+00:00",
     "groqGenerated": false,
-    "reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
+    "reason": "XAUUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
     "source": "execution",
     "status": "SCAN_RESULT",
     "symbol": "XAUUSD",
     "side": "",
     "ticket": "",
     "strategy_profile": "DEMO_COLLECTION",
-    "decision": "BLOCKED",
+    "decision": "READY",
     "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 2,
-    "confirmation_required": 2,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 1,
     "canonical_scan": {
       "symbol": "XAUUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:34:03.944308+00:00",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:49:16.537087+00:00",
       "stale": false,
-      "decision": "BLOCKED",
+      "decision": "READY",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
       "base_gates": [
         {
           "key": "rr",
@@ -85,8 +86,48 @@
         {
           "key": "risk",
           "label": "Risk approved",
-          "passed": false,
+          "passed": true,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
         }
       ],
       "confirmations": [
@@ -121,38 +162,802 @@
           "reason": "An FVG or imbalance is present."
         }
       ],
-      "base_passed": 2,
-      "base_total": 3,
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
       "confirmations_passed": 2,
       "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "Risk approved"
+      "required_confirmations": 1,
+      "required_core_confirmations": 1,
+      "required_bonus_confirmations": 1,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest"
+        "BOS or liquidity sweep"
       ],
       "history_ready": true,
       "sl_tp_valid": true,
-      "order_allowed": false,
-      "order_block_reason": "Risk approved is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 634
+      "order_allowed": true,
+      "order_block_reason": "",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1575
     },
-    "base_passed": 2,
-    "base_total": 3,
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
     "confirmations_passed": 2,
     "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "Risk approved"
+    "required_confirmations": 1,
+    "required_core_confirmations": 1,
+    "required_bonus_confirmations": 1,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
     ],
     "missing_confirmations": [
       "Momentum",
-      "BOS or liquidity sweep",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": true,
+    "order_block_reason": "",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "timestamp": "2026-06-23T09:49:16.537087+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:49:16.150172+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:49:16.150172+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "READY",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 1,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:49:16.150172+00:00",
+      "stale": false,
+      "decision": "READY",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 1,
+      "required_core_confirmations": 1,
+      "required_bonus_confirmations": 1,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": true,
+      "order_block_reason": "",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1353
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 1,
+    "required_core_confirmations": 1,
+    "required_bonus_confirmations": 1,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
       "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": true,
+    "order_block_reason": "",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "timestamp": "2026-06-23T09:49:16.150172+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:47:26.443969+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:47:26.443969+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "READY",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 1,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:47:26.443969+00:00",
+      "stale": false,
+      "decision": "READY",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 1,
+      "required_core_confirmations": 1,
+      "required_bonus_confirmations": 1,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": true,
+      "order_block_reason": "",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1889
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 1,
+    "required_core_confirmations": 1,
+    "required_bonus_confirmations": 1,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": true,
+    "order_block_reason": "",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "timestamp": "2026-06-23T09:47:26.443969+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:47:26.271362+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:47:26.271362+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "READY",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 1,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:47:26.271362+00:00",
+      "stale": false,
+      "decision": "READY",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 1,
+      "required_core_confirmations": 1,
+      "required_bonus_confirmations": 1,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": true,
+      "order_block_reason": "",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1707
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 1,
+    "required_core_confirmations": 1,
+    "required_bonus_confirmations": 1,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": true,
+    "order_block_reason": "",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is READY: base gates are 4/4, core confirmations are 1/3, and bonus confirmations are 1/2.",
+    "timestamp": "2026-06-23T09:47:26.271362+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:47:03.182969+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:47:03.182969+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 0,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:47:03.182969+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": false,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": false,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": false,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": false,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 2,
+      "base_total": 4,
+      "core_passed": 0,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 1,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [
+        "Risk approved",
+        "Valid SL/TP"
+      ],
+      "missing_core_confirmations": [
+        "HTF bias",
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "HTF bias",
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": false,
+      "order_allowed": false,
+      "order_block_reason": "Risk approved is required.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 578
+    },
+    "base_passed": 2,
+    "base_total": 4,
+    "core_passed": 0,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 1,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [
+      "Risk approved",
+      "Valid SL/TP"
+    ],
+    "missing_core_confirmations": [
+      "HTF bias",
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "HTF bias",
+      "Momentum",
+      "BOS or liquidity sweep"
     ],
     "order_allowed": false,
     "order_block_reason": "Risk approved is required.",
@@ -165,16 +970,16 @@
     "fvg_retest": null,
     "session_bonus": null,
     "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "timestamp": "2026-06-23T03:34:03.944308+00:00",
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "timestamp": "2026-06-23T09:47:03.182969+00:00",
     "data_source": "ROUND_SCAN_TRACE"
   },
   {
-    "id": "scan-result-eurusd-2026-06-23T03:34:03.286700+00:00",
-    "event_id": "scan-result-eurusd-2026-06-23T03:34:03.286700+00:00",
+    "id": "scan-result-eurusd-2026-06-23T09:47:02.593895+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:47:02.593895+00:00",
     "groqGenerated": false,
-    "reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
     "source": "execution",
     "status": "SCAN_RESULT",
     "symbol": "EURUSD",
@@ -183,20 +988,21 @@
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "BLOCKED",
     "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 0,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
     "confirmation_required": 2,
     "canonical_scan": {
       "symbol": "EURUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:34:03.286700+00:00",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:47:02.593895+00:00",
       "stale": false,
       "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
       "base_gates": [
         {
           "key": "rr",
           "label": "RR >= 2",
-          "passed": false,
+          "passed": true,
           "reason": "Risk/reward must be at least 2.0."
         },
         {
@@ -208,15 +1014,55 @@
         {
           "key": "risk",
           "label": "Risk approved",
-          "passed": false,
+          "passed": true,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
         }
       ],
       "confirmations": [
         {
           "key": "htf_bias",
           "label": "HTF bias",
-          "passed": false,
+          "passed": true,
           "reason": "H1/H4 bias supports the candidate direction."
         },
         {
@@ -240,51 +1086,63 @@
         {
           "key": "fvg_imbalance",
           "label": "FVG/imbalance",
-          "passed": false,
+          "passed": true,
           "reason": "An FVG or imbalance is present."
         }
       ],
-      "base_passed": 1,
-      "base_total": 3,
-      "confirmations_passed": 0,
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
       "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "RR >= 2",
-        "Risk approved"
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
-        "HTF bias",
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest",
-        "FVG/imbalance"
+        "BOS or liquidity sweep"
       ],
       "history_ready": true,
-      "sl_tp_valid": false,
+      "sl_tp_valid": true,
       "order_allowed": false,
-      "order_block_reason": "RR >= 2 is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 699
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1080
     },
-    "base_passed": 1,
-    "base_total": 3,
-    "confirmations_passed": 0,
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
     "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "RR >= 2",
-      "Risk approved"
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
     ],
     "missing_confirmations": [
-      "HTF bias",
       "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest",
-      "FVG/imbalance"
+      "BOS or liquidity sweep"
     ],
     "order_allowed": false,
-    "order_block_reason": "RR >= 2 is required.",
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
     "htf_bias": null,
     "momentum": null,
     "pullback_retest": null,
@@ -294,16 +1152,16 @@
     "fvg_retest": null,
     "session_bonus": null,
     "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
-    "timestamp": "2026-06-23T03:34:03.286700+00:00",
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:47:02.593895+00:00",
     "data_source": "ROUND_SCAN_TRACE"
   },
   {
-    "id": "scan-result-xauusd-2026-06-23T03:34:01.962619+00:00",
-    "event_id": "scan-result-xauusd-2026-06-23T03:34:01.962619+00:00",
+    "id": "scan-result-xauusd-2026-06-23T09:46:58.480103+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:58.480103+00:00",
     "groqGenerated": false,
-    "reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
+    "reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
     "source": "execution",
     "status": "SCAN_RESULT",
     "symbol": "XAUUSD",
@@ -312,15 +1170,16 @@
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "BLOCKED",
     "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 2,
+    "adaptive_level": 2,
+    "confirmation_score": 0,
     "confirmation_required": 2,
     "canonical_scan": {
       "symbol": "XAUUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:34:01.962619+00:00",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:58.480103+00:00",
       "stale": false,
       "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
       "base_gates": [
         {
           "key": "rr",
@@ -339,13 +1198,53 @@
           "label": "Risk approved",
           "passed": false,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": false,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": false,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
         }
       ],
       "confirmations": [
         {
           "key": "htf_bias",
           "label": "HTF bias",
-          "passed": true,
+          "passed": false,
           "reason": "H1/H4 bias supports the candidate direction."
         },
         {
@@ -374,40 +1273,432 @@
         }
       ],
       "base_passed": 2,
-      "base_total": 3,
+      "base_total": 4,
+      "core_passed": 0,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 1,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [
+        "Risk approved",
+        "Valid SL/TP"
+      ],
+      "missing_core_confirmations": [
+        "HTF bias",
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "HTF bias",
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": false,
+      "order_allowed": false,
+      "order_block_reason": "Risk approved is required.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 655
+    },
+    "base_passed": 2,
+    "base_total": 4,
+    "core_passed": 0,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 1,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [
+      "Risk approved",
+      "Valid SL/TP"
+    ],
+    "missing_core_confirmations": [
+      "HTF bias",
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "HTF bias",
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Risk approved is required.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "timestamp": "2026-06-23T09:46:58.480103+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:57.293362+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:57.293362+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:57.293362+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
       "confirmations_passed": 2,
       "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "Risk approved"
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest"
+        "BOS or liquidity sweep"
       ],
       "history_ready": true,
       "sl_tp_valid": true,
       "order_allowed": false,
-      "order_block_reason": "Risk approved is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1827
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:57.293362+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:55.198765+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:55.198765+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:55.198765+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
       "total_scan_ms": 1
     },
-    "base_passed": 2,
-    "base_total": 3,
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
     "confirmations_passed": 2,
     "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "Risk approved"
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
     ],
     "missing_confirmations": [
       "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest"
+      "BOS or liquidity sweep"
     ],
     "order_allowed": false,
-    "order_block_reason": "Risk approved is required.",
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
     "htf_bias": null,
     "momentum": null,
     "pullback_retest": null,
@@ -417,16 +1708,16 @@
     "fvg_retest": null,
     "session_bonus": null,
     "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "timestamp": "2026-06-23T03:34:01.962619+00:00",
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:55.198765+00:00",
     "data_source": "ROUND_SCAN_TRACE"
   },
   {
-    "id": "scan-result-eurusd-2026-06-23T03:34:01.931246+00:00",
-    "event_id": "scan-result-eurusd-2026-06-23T03:34:01.931246+00:00",
+    "id": "scan-result-eurusd-2026-06-23T09:46:55.188765+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:55.188765+00:00",
     "groqGenerated": false,
-    "reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
     "source": "execution",
     "status": "SCAN_RESULT",
     "symbol": "EURUSD",
@@ -435,20 +1726,21 @@
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "BLOCKED",
     "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 0,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
     "confirmation_required": 2,
     "canonical_scan": {
       "symbol": "EURUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:34:01.931246+00:00",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:55.188765+00:00",
       "stale": false,
       "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
       "base_gates": [
         {
           "key": "rr",
           "label": "RR >= 2",
-          "passed": false,
+          "passed": true,
           "reason": "Risk/reward must be at least 2.0."
         },
         {
@@ -460,15 +1752,55 @@
         {
           "key": "risk",
           "label": "Risk approved",
-          "passed": false,
+          "passed": true,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
         }
       ],
       "confirmations": [
         {
           "key": "htf_bias",
           "label": "HTF bias",
-          "passed": false,
+          "passed": true,
           "reason": "H1/H4 bias supports the candidate direction."
         },
         {
@@ -492,51 +1824,63 @@
         {
           "key": "fvg_imbalance",
           "label": "FVG/imbalance",
-          "passed": false,
+          "passed": true,
           "reason": "An FVG or imbalance is present."
         }
       ],
-      "base_passed": 1,
-      "base_total": 3,
-      "confirmations_passed": 0,
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
       "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "RR >= 2",
-        "Risk approved"
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
-        "HTF bias",
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest",
-        "FVG/imbalance"
+        "BOS or liquidity sweep"
       ],
       "history_ready": true,
-      "sl_tp_valid": false,
+      "sl_tp_valid": true,
       "order_allowed": false,
-      "order_block_reason": "RR >= 2 is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
       "total_scan_ms": 1
     },
-    "base_passed": 1,
-    "base_total": 3,
-    "confirmations_passed": 0,
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
     "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "RR >= 2",
-      "Risk approved"
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
     ],
     "missing_confirmations": [
-      "HTF bias",
       "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest",
-      "FVG/imbalance"
+      "BOS or liquidity sweep"
     ],
     "order_allowed": false,
-    "order_block_reason": "RR >= 2 is required.",
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
     "htf_bias": null,
     "momentum": null,
     "pullback_retest": null,
@@ -546,16 +1890,16 @@
     "fvg_retest": null,
     "session_bonus": null,
     "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
-    "timestamp": "2026-06-23T03:34:01.931246+00:00",
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:55.188765+00:00",
     "data_source": "ROUND_SCAN_TRACE"
   },
   {
-    "id": "scan-result-xauusd-2026-06-23T03:33:54.600638+00:00",
-    "event_id": "scan-result-xauusd-2026-06-23T03:33:54.600638+00:00",
+    "id": "scan-result-xauusd-2026-06-23T09:46:52.337642+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:52.337642+00:00",
     "groqGenerated": false,
-    "reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
     "source": "execution",
     "status": "SCAN_RESULT",
     "symbol": "XAUUSD",
@@ -564,15 +1908,1472 @@
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "BLOCKED",
     "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 2,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
     "confirmation_required": 2,
     "canonical_scan": {
       "symbol": "XAUUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:33:54.600638+00:00",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:52.337642+00:00",
       "stale": false,
       "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 2600
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:52.337642+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:49.384334+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:49.384334+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:49.384334+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 2279
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:49.384334+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:44.057875+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:44.057875+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:44.057875+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 2176
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:44.057875+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:41.240246+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:41.240246+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:41.240246+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 2669
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:41.240246+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:36.876275+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:36.876275+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:36.876275+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:36.876275+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:36.763036+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:36.763036+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:36.763036+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:36.763036+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:34.511410+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:34.511410+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:34.511410+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 2397
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:34.511410+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:32.107382+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:32.107382+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:32.107382+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1433
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:32.107382+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:27.574800+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:27.574800+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 0,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:27.574800+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
       "base_gates": [
         {
           "key": "rr",
@@ -591,13 +3392,53 @@
           "label": "Risk approved",
           "passed": false,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": false,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": false,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
         }
       ],
       "confirmations": [
         {
           "key": "htf_bias",
           "label": "HTF bias",
-          "passed": true,
+          "passed": false,
           "reason": "H1/H4 bias supports the candidate direction."
         },
         {
@@ -626,37 +3467,65 @@
         }
       ],
       "base_passed": 2,
-      "base_total": 3,
-      "confirmations_passed": 2,
+      "base_total": 4,
+      "core_passed": 0,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 1,
       "confirmations_total": 5,
-      "required_confirmations": 2,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
       "missing_base_gates": [
-        "Risk approved"
+        "Risk approved",
+        "Valid SL/TP"
       ],
-      "missing_confirmations": [
+      "missing_core_confirmations": [
+        "HTF bias",
         "Momentum",
-        "BOS or liquidity sweep",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
         "Pullback/retest"
       ],
+      "missing_confirmations": [
+        "HTF bias",
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
       "history_ready": true,
-      "sl_tp_valid": true,
+      "sl_tp_valid": false,
       "order_allowed": false,
       "order_block_reason": "Risk approved is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 643
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 651
     },
     "base_passed": 2,
-    "base_total": 3,
-    "confirmations_passed": 2,
+    "base_total": 4,
+    "core_passed": 0,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 1,
     "confirmations_total": 5,
-    "required_confirmations": 2,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
     "missing_base_gates": [
-      "Risk approved"
+      "Risk approved",
+      "Valid SL/TP"
+    ],
+    "missing_core_confirmations": [
+      "HTF bias",
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
     ],
     "missing_confirmations": [
+      "HTF bias",
       "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest"
+      "BOS or liquidity sweep"
     ],
     "order_allowed": false,
     "order_block_reason": "Risk approved is required.",
@@ -669,16 +3538,16 @@
     "fvg_retest": null,
     "session_bonus": null,
     "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "timestamp": "2026-06-23T03:33:54.600638+00:00",
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "timestamp": "2026-06-23T09:46:27.574800+00:00",
     "data_source": "ROUND_SCAN_TRACE"
   },
   {
-    "id": "scan-result-eurusd-2026-06-23T03:33:53.694237+00:00",
-    "event_id": "scan-result-eurusd-2026-06-23T03:33:53.694237+00:00",
+    "id": "scan-result-eurusd-2026-06-23T09:46:26.917556+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:26.917556+00:00",
     "groqGenerated": false,
-    "reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
     "source": "execution",
     "status": "SCAN_RESULT",
     "symbol": "EURUSD",
@@ -687,20 +3556,931 @@
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "BLOCKED",
     "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 0,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
     "confirmation_required": 2,
     "canonical_scan": {
       "symbol": "EURUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:33:53.694237+00:00",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:26.917556+00:00",
       "stale": false,
       "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
       "base_gates": [
         {
           "key": "rr",
           "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
           "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1369
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:26.917556+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:22.538025+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:22.538025+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:22.538025+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1827
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:22.538025+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:22.195859+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:22.195859+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:22.195859+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:22.195859+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:22.154279+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:22.154279+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:22.154279+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:22.154279+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-eurusd-2026-06-23T09:46:20.501759+00:00",
+    "event_id": "scan-result-eurusd-2026-06-23T09:46:20.501759+00:00",
+    "groqGenerated": false,
+    "reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "EURUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 1,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "EURUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:20.501759+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
+          "reason": "Risk/reward must be at least 2.0."
+        },
+        {
+          "key": "spread",
+          "label": "Spread clean",
+          "passed": true,
+          "reason": "Current spread must be within the symbol limit."
+        },
+        {
+          "key": "risk",
+          "label": "Risk approved",
+          "passed": true,
+          "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        },
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "base_passed": 4,
+      "base_total": 4,
+      "core_passed": 1,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 2,
+      "confirmations_total": 5,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
+      "missing_base_gates": [],
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
+      ],
+      "missing_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "history_ready": true,
+      "sl_tp_valid": true,
+      "order_allowed": false,
+      "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 1201
+    },
+    "base_passed": 4,
+    "base_total": 4,
+    "core_passed": 1,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 2,
+    "confirmations_total": 5,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
+    "missing_base_gates": [],
+    "missing_core_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
+    ],
+    "missing_confirmations": [
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "order_allowed": false,
+    "order_block_reason": "Confirmations 2/5; Level 2 requires 5.",
+    "htf_bias": null,
+    "momentum": null,
+    "pullback_retest": null,
+    "bos": null,
+    "liquidity_sweep": null,
+    "fvg": null,
+    "fvg_retest": null,
+    "session_bonus": null,
+    "conditions": {},
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "EURUSD is blocked with core confirmations 1/3. Level 2 needs 2; missing Momentum and BOS or liquidity sweep.",
+    "timestamp": "2026-06-23T09:46:20.501759+00:00",
+    "data_source": "ROUND_SCAN_TRACE"
+  },
+  {
+    "id": "scan-result-xauusd-2026-06-23T09:46:16.043183+00:00",
+    "event_id": "scan-result-xauusd-2026-06-23T09:46:16.043183+00:00",
+    "groqGenerated": false,
+    "reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "source": "execution",
+    "status": "SCAN_RESULT",
+    "symbol": "XAUUSD",
+    "side": "",
+    "ticket": "",
+    "strategy_profile": "DEMO_COLLECTION",
+    "decision": "BLOCKED",
+    "order_opened": false,
+    "adaptive_level": 2,
+    "confirmation_score": 0,
+    "confirmation_required": 2,
+    "canonical_scan": {
+      "symbol": "XAUUSD",
+      "adaptive_level": 2,
+      "timestamp": "2026-06-23T09:46:16.043183+00:00",
+      "stale": false,
+      "decision": "BLOCKED",
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "base_gates": [
+        {
+          "key": "rr",
+          "label": "RR >= 2",
+          "passed": true,
           "reason": "Risk/reward must be at least 2.0."
         },
         {
@@ -714,6 +4494,46 @@
           "label": "Risk approved",
           "passed": false,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": false,
+          "reason": "Stop-loss and take-profit must be valid."
+        }
+      ],
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": false,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
         }
       ],
       "confirmations": [
@@ -744,51 +4564,73 @@
         {
           "key": "fvg_imbalance",
           "label": "FVG/imbalance",
-          "passed": false,
+          "passed": true,
           "reason": "An FVG or imbalance is present."
         }
       ],
-      "base_passed": 1,
-      "base_total": 3,
-      "confirmations_passed": 0,
+      "base_passed": 2,
+      "base_total": 4,
+      "core_passed": 0,
+      "core_total": 3,
+      "bonus_passed": 1,
+      "bonus_total": 2,
+      "confirmations_passed": 1,
       "confirmations_total": 5,
-      "required_confirmations": 2,
+      "required_confirmations": 5,
+      "required_core_confirmations": 2,
       "missing_base_gates": [
-        "RR >= 2",
-        "Risk approved"
+        "Risk approved",
+        "Valid SL/TP"
+      ],
+      "missing_core_confirmations": [
+        "HTF bias",
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
         "HTF bias",
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest",
-        "FVG/imbalance"
+        "BOS or liquidity sweep"
       ],
       "history_ready": true,
       "sl_tp_valid": false,
       "order_allowed": false,
-      "order_block_reason": "RR >= 2 is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 682
+      "order_block_reason": "Risk approved is required.",
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "total_scan_ms": 583
     },
-    "base_passed": 1,
-    "base_total": 3,
-    "confirmations_passed": 0,
+    "base_passed": 2,
+    "base_total": 4,
+    "core_passed": 0,
+    "core_total": 3,
+    "bonus_passed": 1,
+    "bonus_total": 2,
+    "confirmations_passed": 1,
     "confirmations_total": 5,
-    "required_confirmations": 2,
+    "required_confirmations": 5,
+    "required_core_confirmations": 2,
     "missing_base_gates": [
-      "RR >= 2",
-      "Risk approved"
+      "Risk approved",
+      "Valid SL/TP"
+    ],
+    "missing_core_confirmations": [
+      "HTF bias",
+      "Momentum",
+      "BOS or liquidity sweep"
+    ],
+    "missing_bonus_confirmations": [
+      "Pullback/retest"
     ],
     "missing_confirmations": [
       "HTF bias",
       "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest",
-      "FVG/imbalance"
+      "BOS or liquidity sweep"
     ],
     "order_allowed": false,
-    "order_block_reason": "RR >= 2 is required.",
+    "order_block_reason": "Risk approved is required.",
     "htf_bias": null,
     "momentum": null,
     "pullback_retest": null,
@@ -798,1036 +4640,33 @@
     "fvg_retest": null,
     "session_bonus": null,
     "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
-    "timestamp": "2026-06-23T03:33:53.694237+00:00",
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. It still needs 2 core confirmations.",
+    "timestamp": "2026-06-23T09:46:16.043183+00:00",
     "data_source": "ROUND_SCAN_TRACE"
   },
   {
-    "id": "execution-open-confirmed-1474644413",
-    "event_id": "execution-open-confirmed-1474644413",
+    "id": "execution-open-confirmed-1476295022",
+    "event_id": "execution-open-confirmed-1476295022",
     "groqGenerated": false,
-    "reason": "OPEN_CONFIRMED\nSymbol: EURUSD\nDirection: SELL\nTicket: 1474644413\nEntry: 1.14201\nCurrent price: 1.14255\nSL: 1.14313\nTP: 1.13986\nFloating P&L: -0.54\nAdaptive level: 3",
+    "reason": "OPEN_CONFIRMED\nSymbol: EURUSD\nDirection: SELL\nTicket: 1476295022\nEntry: 1.1409799999999999\nCurrent price: 1.1409799999999999\nSL: 1.14385\nTP: 1.1353\nFloating P&L: 0.0\nAdaptive level: 2",
     "source": "execution",
     "status": "OPEN_CONFIRMED",
     "symbol": "EURUSD",
     "side": "SELL",
-    "ticket": "1474644413",
+    "ticket": "1476295022",
     "strategy_profile": "DEMO_COLLECTION",
     "decision": "OPEN_CONFIRMED",
     "order_opened": true,
-    "entry": 1.14201,
-    "current_price": 1.14255,
-    "sl": 1.14313,
-    "tp": 1.13986,
-    "floating_pnl": -0.54,
-    "adaptive_level": 3,
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+    "entry": 1.1409799999999999,
+    "current_price": 1.1409799999999999,
+    "sl": 1.14385,
+    "tp": 1.1353,
+    "floating_pnl": 0.0,
+    "adaptive_level": 2,
+    "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
     "final_decision_reason": "OPEN_CONFIRMED",
-    "timestamp": "2026-06-23T03:33:51.067668+00:00",
+    "timestamp": "2026-06-23T09:46:15.445175+00:00",
     "data_source": "MT5_LIVE_POSITION_SYNC"
-  },
-  {
-    "id": "execution-open-confirmed-1474595343",
-    "event_id": "execution-open-confirmed-1474595343",
-    "groqGenerated": false,
-    "reason": "OPEN_CONFIRMED\nSymbol: XAUUSD\nDirection: SELL\nTicket: 1474595343\nEntry: 4140.23\nCurrent price: 4140.07\nSL: 4198.33\nTP: 4025.41\nFloating P&L: 0.16\nAdaptive level: 3",
-    "source": "execution",
-    "status": "OPEN_CONFIRMED",
-    "symbol": "XAUUSD",
-    "side": "SELL",
-    "ticket": "1474595343",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "OPEN_CONFIRMED",
-    "order_opened": true,
-    "entry": 4140.23,
-    "current_price": 4140.07,
-    "sl": 4198.33,
-    "tp": 4025.41,
-    "floating_pnl": 0.16,
-    "adaptive_level": 3,
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "OPEN_CONFIRMED",
-    "timestamp": "2026-06-23T03:33:51.053668+00:00",
-    "data_source": "MT5_LIVE_POSITION_SYNC"
-  },
-  {
-    "id": "scan-result-xauusd-2026-06-23T03:33:48.813262+00:00",
-    "event_id": "scan-result-xauusd-2026-06-23T03:33:48.813262+00:00",
-    "groqGenerated": false,
-    "reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "source": "execution",
-    "status": "SCAN_RESULT",
-    "symbol": "XAUUSD",
-    "side": "",
-    "ticket": "",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "BLOCKED",
-    "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 2,
-    "confirmation_required": 2,
-    "canonical_scan": {
-      "symbol": "XAUUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:33:48.813262+00:00",
-      "stale": false,
-      "decision": "BLOCKED",
-      "base_gates": [
-        {
-          "key": "rr",
-          "label": "RR >= 2",
-          "passed": true,
-          "reason": "Risk/reward must be at least 2.0."
-        },
-        {
-          "key": "spread",
-          "label": "Spread clean",
-          "passed": true,
-          "reason": "Current spread must be within the symbol limit."
-        },
-        {
-          "key": "risk",
-          "label": "Risk approved",
-          "passed": false,
-          "reason": "Risk validation must approve the trade."
-        }
-      ],
-      "confirmations": [
-        {
-          "key": "htf_bias",
-          "label": "HTF bias",
-          "passed": true,
-          "reason": "H1/H4 bias supports the candidate direction."
-        },
-        {
-          "key": "momentum",
-          "label": "Momentum",
-          "passed": false,
-          "reason": "A momentum or displacement signal is present."
-        },
-        {
-          "key": "bos_or_liquidity",
-          "label": "BOS or liquidity sweep",
-          "passed": false,
-          "reason": "BOS or a liquidity sweep is present."
-        },
-        {
-          "key": "pullback_retest",
-          "label": "Pullback/retest",
-          "passed": false,
-          "reason": "A valid pullback or retest is present."
-        },
-        {
-          "key": "fvg_imbalance",
-          "label": "FVG/imbalance",
-          "passed": true,
-          "reason": "An FVG or imbalance is present."
-        }
-      ],
-      "base_passed": 2,
-      "base_total": 3,
-      "confirmations_passed": 2,
-      "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "Risk approved"
-      ],
-      "missing_confirmations": [
-        "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest"
-      ],
-      "history_ready": true,
-      "sl_tp_valid": true,
-      "order_allowed": false,
-      "order_block_reason": "Risk approved is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 627
-    },
-    "base_passed": 2,
-    "base_total": 3,
-    "confirmations_passed": 2,
-    "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "Risk approved"
-    ],
-    "missing_confirmations": [
-      "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest"
-    ],
-    "order_allowed": false,
-    "order_block_reason": "Risk approved is required.",
-    "htf_bias": null,
-    "momentum": null,
-    "pullback_retest": null,
-    "bos": null,
-    "liquidity_sweep": null,
-    "fvg": null,
-    "fvg_retest": null,
-    "session_bonus": null,
-    "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "timestamp": "2026-06-23T03:33:48.813262+00:00",
-    "data_source": "ROUND_SCAN_TRACE"
-  },
-  {
-    "id": "scan-result-xauusd-2026-06-23T03:33:46.754836+00:00",
-    "event_id": "scan-result-xauusd-2026-06-23T03:33:46.754836+00:00",
-    "groqGenerated": false,
-    "reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "source": "execution",
-    "status": "SCAN_RESULT",
-    "symbol": "XAUUSD",
-    "side": "",
-    "ticket": "",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "BLOCKED",
-    "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 2,
-    "confirmation_required": 2,
-    "canonical_scan": {
-      "symbol": "XAUUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:33:46.754836+00:00",
-      "stale": false,
-      "decision": "BLOCKED",
-      "base_gates": [
-        {
-          "key": "rr",
-          "label": "RR >= 2",
-          "passed": true,
-          "reason": "Risk/reward must be at least 2.0."
-        },
-        {
-          "key": "spread",
-          "label": "Spread clean",
-          "passed": true,
-          "reason": "Current spread must be within the symbol limit."
-        },
-        {
-          "key": "risk",
-          "label": "Risk approved",
-          "passed": false,
-          "reason": "Risk validation must approve the trade."
-        }
-      ],
-      "confirmations": [
-        {
-          "key": "htf_bias",
-          "label": "HTF bias",
-          "passed": true,
-          "reason": "H1/H4 bias supports the candidate direction."
-        },
-        {
-          "key": "momentum",
-          "label": "Momentum",
-          "passed": false,
-          "reason": "A momentum or displacement signal is present."
-        },
-        {
-          "key": "bos_or_liquidity",
-          "label": "BOS or liquidity sweep",
-          "passed": false,
-          "reason": "BOS or a liquidity sweep is present."
-        },
-        {
-          "key": "pullback_retest",
-          "label": "Pullback/retest",
-          "passed": false,
-          "reason": "A valid pullback or retest is present."
-        },
-        {
-          "key": "fvg_imbalance",
-          "label": "FVG/imbalance",
-          "passed": true,
-          "reason": "An FVG or imbalance is present."
-        }
-      ],
-      "base_passed": 2,
-      "base_total": 3,
-      "confirmations_passed": 2,
-      "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "Risk approved"
-      ],
-      "missing_confirmations": [
-        "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest"
-      ],
-      "history_ready": true,
-      "sl_tp_valid": true,
-      "order_allowed": false,
-      "order_block_reason": "Risk approved is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 1
-    },
-    "base_passed": 2,
-    "base_total": 3,
-    "confirmations_passed": 2,
-    "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "Risk approved"
-    ],
-    "missing_confirmations": [
-      "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest"
-    ],
-    "order_allowed": false,
-    "order_block_reason": "Risk approved is required.",
-    "htf_bias": null,
-    "momentum": null,
-    "pullback_retest": null,
-    "bos": null,
-    "liquidity_sweep": null,
-    "fvg": null,
-    "fvg_retest": null,
-    "session_bonus": null,
-    "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "XAUUSD is blocked because risk approved is not passing. Base gates 2/3, confirmations 2/5.",
-    "timestamp": "2026-06-23T03:33:46.754836+00:00",
-    "data_source": "ROUND_SCAN_TRACE"
-  },
-  {
-    "id": "scan-result-eurusd-2026-06-23T03:33:46.727804+00:00",
-    "event_id": "scan-result-eurusd-2026-06-23T03:33:46.727804+00:00",
-    "groqGenerated": false,
-    "reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
-    "source": "execution",
-    "status": "SCAN_RESULT",
-    "symbol": "EURUSD",
-    "side": "",
-    "ticket": "",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "BLOCKED",
-    "order_opened": false,
-    "adaptive_level": 3,
-    "confirmation_score": 0,
-    "confirmation_required": 2,
-    "canonical_scan": {
-      "symbol": "EURUSD",
-      "adaptive_level": 3,
-      "timestamp": "2026-06-23T03:33:46.727804+00:00",
-      "stale": false,
-      "decision": "BLOCKED",
-      "base_gates": [
-        {
-          "key": "rr",
-          "label": "RR >= 2",
-          "passed": false,
-          "reason": "Risk/reward must be at least 2.0."
-        },
-        {
-          "key": "spread",
-          "label": "Spread clean",
-          "passed": true,
-          "reason": "Current spread must be within the symbol limit."
-        },
-        {
-          "key": "risk",
-          "label": "Risk approved",
-          "passed": false,
-          "reason": "Risk validation must approve the trade."
-        }
-      ],
-      "confirmations": [
-        {
-          "key": "htf_bias",
-          "label": "HTF bias",
-          "passed": false,
-          "reason": "H1/H4 bias supports the candidate direction."
-        },
-        {
-          "key": "momentum",
-          "label": "Momentum",
-          "passed": false,
-          "reason": "A momentum or displacement signal is present."
-        },
-        {
-          "key": "bos_or_liquidity",
-          "label": "BOS or liquidity sweep",
-          "passed": false,
-          "reason": "BOS or a liquidity sweep is present."
-        },
-        {
-          "key": "pullback_retest",
-          "label": "Pullback/retest",
-          "passed": false,
-          "reason": "A valid pullback or retest is present."
-        },
-        {
-          "key": "fvg_imbalance",
-          "label": "FVG/imbalance",
-          "passed": false,
-          "reason": "An FVG or imbalance is present."
-        }
-      ],
-      "base_passed": 1,
-      "base_total": 3,
-      "confirmations_passed": 0,
-      "confirmations_total": 5,
-      "required_confirmations": 2,
-      "missing_base_gates": [
-        "RR >= 2",
-        "Risk approved"
-      ],
-      "missing_confirmations": [
-        "HTF bias",
-        "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest",
-        "FVG/imbalance"
-      ],
-      "history_ready": true,
-      "sl_tp_valid": false,
-      "order_allowed": false,
-      "order_block_reason": "RR >= 2 is required.",
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "total_scan_ms": 1
-    },
-    "base_passed": 1,
-    "base_total": 3,
-    "confirmations_passed": 0,
-    "confirmations_total": 5,
-    "required_confirmations": 2,
-    "missing_base_gates": [
-      "RR >= 2",
-      "Risk approved"
-    ],
-    "missing_confirmations": [
-      "HTF bias",
-      "Momentum",
-      "BOS or liquidity sweep",
-      "Pullback/retest",
-      "FVG/imbalance"
-    ],
-    "order_allowed": false,
-    "order_block_reason": "RR >= 2 is required.",
-    "htf_bias": null,
-    "momentum": null,
-    "pullback_retest": null,
-    "bos": null,
-    "liquidity_sweep": null,
-    "fvg": null,
-    "fvg_retest": null,
-    "session_bonus": null,
-    "conditions": {},
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "EURUSD is blocked because rr >= 2 is not passing. Base gates 1/3, confirmations 0/5.",
-    "timestamp": "2026-06-23T03:33:46.727804+00:00",
-    "data_source": "ROUND_SCAN_TRACE"
-  },
-  {
-    "id": "execution-closed_loss-1473269566",
-    "event_id": "execution-closed_loss-1473269566",
-    "groqGenerated": false,
-    "reason": "Trade failed after 215.02 minutes. SL was hit after entry without H1/H4 HTF alignment and momentum/displacement. Suggested fix: Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-    "source": "execution",
-    "status": "CLOSED_LOSS",
-    "symbol": "EURUSD",
-    "side": "",
-    "ticket": "1473269566",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "CLOSED_LOSS",
-    "order_closed": true,
-    "pnl": -0.28,
-    "exit_reason": "STOP_LOSS",
-    "autopsy": {
-      "ticket": "1473269566",
-      "symbol": "EURUSD",
-      "direction": "",
-      "entry_time": "2026-06-22T22:25:22.772671+00:00",
-      "close_time": "2026-06-23T02:00:24+00:00",
-      "entry_price": null,
-      "sl": null,
-      "tp": null,
-      "close_price": 1.14289,
-      "pnl": -0.28,
-      "adaptive_level": 3,
-      "score_at_entry": null,
-      "confirmations_present": [],
-      "confirmations_missing": [
-        "H1/H4 HTF alignment",
-        "momentum/displacement",
-        "pullback/retest",
-        "BOS",
-        "liquidity sweep",
-        "FVG retest",
-        "clean spread",
-        "RR >= 2.0"
-      ],
-      "candles_before_entry": [
-        {
-          "time": "2026-06-22T21:15:00+00:00",
-          "open": 1.14298,
-          "high": 1.143,
-          "low": 1.14263,
-          "close": 1.14269,
-          "tick_volume": 746,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T21:30:00+00:00",
-          "open": 1.14269,
-          "high": 1.14272,
-          "low": 1.14241,
-          "close": 1.14254,
-          "tick_volume": 726,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T21:45:00+00:00",
-          "open": 1.14254,
-          "high": 1.14261,
-          "low": 1.14216,
-          "close": 1.14237,
-          "tick_volume": 939,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T22:00:00+00:00",
-          "open": 1.14238,
-          "high": 1.14249,
-          "low": 1.14224,
-          "close": 1.14229,
-          "tick_volume": 888,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T22:15:00+00:00",
-          "open": 1.14229,
-          "high": 1.1423,
-          "low": 1.14205,
-          "close": 1.14206,
-          "tick_volume": 711,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "candles_after_entry": [
-        {
-          "time": "2026-06-22T22:30:00+00:00",
-          "open": 1.14206,
-          "high": 1.14209,
-          "low": 1.14184,
-          "close": 1.14189,
-          "tick_volume": 681,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T22:45:00+00:00",
-          "open": 1.1419,
-          "high": 1.1425,
-          "low": 1.14184,
-          "close": 1.14243,
-          "tick_volume": 902,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T23:00:00+00:00",
-          "open": 1.14245,
-          "high": 1.14288,
-          "low": 1.14241,
-          "close": 1.1428099999999999,
-          "tick_volume": 548,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T23:15:00+00:00",
-          "open": 1.1428099999999999,
-          "high": 1.14287,
-          "low": 1.1426,
-          "close": 1.14269,
-          "tick_volume": 317,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T23:30:00+00:00",
-          "open": 1.1427,
-          "high": 1.1427,
-          "low": 1.14258,
-          "close": 1.14265,
-          "tick_volume": 230,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "did_price_move_in_favor_first": null,
-      "max_favorable_excursion": null,
-      "max_adverse_excursion": null,
-      "reason_for_loss": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "was_entry_early": true,
-      "should_have_waited": true,
-      "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-      "entry_quality": "Weak",
-      "missing_confirmation": "H1/H4 HTF alignment, momentum/displacement, pullback/retest, BOS, liquidity sweep, FVG retest, clean spread, and RR >= 2.0",
-      "why_sl_was_hit": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "data_source": "VANTAGE_DEMO",
-      "generated_at": "2026-06-23T03:41:03.469340+00:00"
-    },
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "CLOSED_LOSS",
-    "timestamp": "2026-06-23T02:00:24+00:00",
-    "data_source": "MT5_HISTORY_CLOSE_SYNC"
-  },
-  {
-    "id": "execution-closed_loss-1472866181",
-    "event_id": "execution-closed_loss-1472866181",
-    "groqGenerated": false,
-    "reason": "Trade failed after 341.65 minutes. SL was hit after entry without H1/H4 HTF alignment and momentum/displacement. Suggested fix: Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-    "source": "execution",
-    "status": "CLOSED_LOSS",
-    "symbol": "EURUSD",
-    "side": "",
-    "ticket": "1472866181",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "CLOSED_LOSS",
-    "order_closed": true,
-    "pnl": -0.78,
-    "exit_reason": "STOP_LOSS",
-    "autopsy": {
-      "ticket": "1472866181",
-      "symbol": "EURUSD",
-      "direction": "",
-      "entry_time": "2026-06-22T18:33:20.985241+00:00",
-      "close_time": "2026-06-23T00:15:00+00:00",
-      "entry_price": null,
-      "sl": null,
-      "tp": null,
-      "close_price": 1.14327,
-      "pnl": -0.78,
-      "adaptive_level": 3,
-      "score_at_entry": null,
-      "confirmations_present": [],
-      "confirmations_missing": [
-        "H1/H4 HTF alignment",
-        "momentum/displacement",
-        "pullback/retest",
-        "BOS",
-        "liquidity sweep",
-        "FVG retest",
-        "clean spread",
-        "RR >= 2.0"
-      ],
-      "candles_before_entry": [
-        {
-          "time": "2026-06-22T17:30:00+00:00",
-          "open": 1.14364,
-          "high": 1.14379,
-          "low": 1.14304,
-          "close": 1.14354,
-          "tick_volume": 2167,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T17:45:00+00:00",
-          "open": 1.14354,
-          "high": 1.145,
-          "low": 1.14354,
-          "close": 1.14442,
-          "tick_volume": 2792,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:00:00+00:00",
-          "open": 1.14442,
-          "high": 1.14497,
-          "low": 1.14436,
-          "close": 1.14462,
-          "tick_volume": 1850,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:15:00+00:00",
-          "open": 1.14462,
-          "high": 1.14474,
-          "low": 1.144,
-          "close": 1.14408,
-          "tick_volume": 1487,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:30:00+00:00",
-          "open": 1.14407,
-          "high": 1.14414,
-          "low": 1.14371,
-          "close": 1.14374,
-          "tick_volume": 1323,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "candles_after_entry": [
-        {
-          "time": "2026-06-22T18:45:00+00:00",
-          "open": 1.14374,
-          "high": 1.14374,
-          "low": 1.14299,
-          "close": 1.14312,
-          "tick_volume": 1346,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:00:00+00:00",
-          "open": 1.14311,
-          "high": 1.14318,
-          "low": 1.14259,
-          "close": 1.14275,
-          "tick_volume": 1295,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:15:00+00:00",
-          "open": 1.14276,
-          "high": 1.14297,
-          "low": 1.1426,
-          "close": 1.14264,
-          "tick_volume": 1039,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:30:00+00:00",
-          "open": 1.14263,
-          "high": 1.14301,
-          "low": 1.14247,
-          "close": 1.14262,
-          "tick_volume": 939,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:45:00+00:00",
-          "open": 1.14262,
-          "high": 1.14314,
-          "low": 1.14252,
-          "close": 1.14304,
-          "tick_volume": 788,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "did_price_move_in_favor_first": null,
-      "max_favorable_excursion": null,
-      "max_adverse_excursion": null,
-      "reason_for_loss": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "was_entry_early": true,
-      "should_have_waited": true,
-      "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-      "entry_quality": "Weak",
-      "missing_confirmation": "H1/H4 HTF alignment, momentum/displacement, pullback/retest, BOS, liquidity sweep, FVG retest, clean spread, and RR >= 2.0",
-      "why_sl_was_hit": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "data_source": "VANTAGE_DEMO",
-      "generated_at": "2026-06-23T03:41:03.754977+00:00"
-    },
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "CLOSED_LOSS",
-    "timestamp": "2026-06-23T00:15:00+00:00",
-    "data_source": "MT5_HISTORY_CLOSE_SYNC"
-  },
-  {
-    "id": "execution-closed_loss-1472883577",
-    "event_id": "execution-closed_loss-1472883577",
-    "groqGenerated": false,
-    "reason": "Trade failed after 333.87 minutes. SL was hit after entry without H1/H4 HTF alignment and momentum/displacement. Suggested fix: Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-    "source": "execution",
-    "status": "CLOSED_LOSS",
-    "symbol": "EURUSD",
-    "side": "",
-    "ticket": "1472883577",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "CLOSED_LOSS",
-    "order_closed": true,
-    "pnl": -0.8,
-    "exit_reason": "STOP_LOSS",
-    "autopsy": {
-      "ticket": "1472883577",
-      "symbol": "EURUSD",
-      "direction": "",
-      "entry_time": "2026-06-22T18:41:08.083862+00:00",
-      "close_time": "2026-06-23T00:15:00+00:00",
-      "entry_price": null,
-      "sl": null,
-      "tp": null,
-      "close_price": 1.14327,
-      "pnl": -0.8,
-      "adaptive_level": 3,
-      "score_at_entry": null,
-      "confirmations_present": [],
-      "confirmations_missing": [
-        "H1/H4 HTF alignment",
-        "momentum/displacement",
-        "pullback/retest",
-        "BOS",
-        "liquidity sweep",
-        "FVG retest",
-        "clean spread",
-        "RR >= 2.0"
-      ],
-      "candles_before_entry": [
-        {
-          "time": "2026-06-22T17:30:00+00:00",
-          "open": 1.14364,
-          "high": 1.14379,
-          "low": 1.14304,
-          "close": 1.14354,
-          "tick_volume": 2167,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T17:45:00+00:00",
-          "open": 1.14354,
-          "high": 1.145,
-          "low": 1.14354,
-          "close": 1.14442,
-          "tick_volume": 2792,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:00:00+00:00",
-          "open": 1.14442,
-          "high": 1.14497,
-          "low": 1.14436,
-          "close": 1.14462,
-          "tick_volume": 1850,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:15:00+00:00",
-          "open": 1.14462,
-          "high": 1.14474,
-          "low": 1.144,
-          "close": 1.14408,
-          "tick_volume": 1487,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:30:00+00:00",
-          "open": 1.14407,
-          "high": 1.14414,
-          "low": 1.14371,
-          "close": 1.14374,
-          "tick_volume": 1323,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "candles_after_entry": [
-        {
-          "time": "2026-06-22T18:45:00+00:00",
-          "open": 1.14374,
-          "high": 1.14374,
-          "low": 1.14299,
-          "close": 1.14312,
-          "tick_volume": 1346,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:00:00+00:00",
-          "open": 1.14311,
-          "high": 1.14318,
-          "low": 1.14259,
-          "close": 1.14275,
-          "tick_volume": 1295,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:15:00+00:00",
-          "open": 1.14276,
-          "high": 1.14297,
-          "low": 1.1426,
-          "close": 1.14264,
-          "tick_volume": 1039,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:30:00+00:00",
-          "open": 1.14263,
-          "high": 1.14301,
-          "low": 1.14247,
-          "close": 1.14262,
-          "tick_volume": 939,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:45:00+00:00",
-          "open": 1.14262,
-          "high": 1.14314,
-          "low": 1.14252,
-          "close": 1.14304,
-          "tick_volume": 788,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "did_price_move_in_favor_first": null,
-      "max_favorable_excursion": null,
-      "max_adverse_excursion": null,
-      "reason_for_loss": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "was_entry_early": true,
-      "should_have_waited": true,
-      "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-      "entry_quality": "Weak",
-      "missing_confirmation": "H1/H4 HTF alignment, momentum/displacement, pullback/retest, BOS, liquidity sweep, FVG retest, clean spread, and RR >= 2.0",
-      "why_sl_was_hit": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "data_source": "VANTAGE_DEMO",
-      "generated_at": "2026-06-23T03:41:03.634913+00:00"
-    },
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "CLOSED_LOSS",
-    "timestamp": "2026-06-23T00:15:00+00:00",
-    "data_source": "MT5_HISTORY_CLOSE_SYNC"
-  },
-  {
-    "id": "execution-closed_loss-1472887583",
-    "event_id": "execution-closed_loss-1472887583",
-    "groqGenerated": false,
-    "reason": "Trade failed after 332.56 minutes. SL was hit after entry without H1/H4 HTF alignment and momentum/displacement. Suggested fix: Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-    "source": "execution",
-    "status": "CLOSED_LOSS",
-    "symbol": "EURUSD",
-    "side": "",
-    "ticket": "1472887583",
-    "strategy_profile": "DEMO_COLLECTION",
-    "decision": "CLOSED_LOSS",
-    "order_closed": true,
-    "pnl": -0.79,
-    "exit_reason": "STOP_LOSS",
-    "autopsy": {
-      "ticket": "1472887583",
-      "symbol": "EURUSD",
-      "direction": "",
-      "entry_time": "2026-06-22T18:42:26.477005+00:00",
-      "close_time": "2026-06-23T00:15:00+00:00",
-      "entry_price": null,
-      "sl": null,
-      "tp": null,
-      "close_price": 1.14327,
-      "pnl": -0.79,
-      "adaptive_level": 3,
-      "score_at_entry": null,
-      "confirmations_present": [],
-      "confirmations_missing": [
-        "H1/H4 HTF alignment",
-        "momentum/displacement",
-        "pullback/retest",
-        "BOS",
-        "liquidity sweep",
-        "FVG retest",
-        "clean spread",
-        "RR >= 2.0"
-      ],
-      "candles_before_entry": [
-        {
-          "time": "2026-06-22T17:30:00+00:00",
-          "open": 1.14364,
-          "high": 1.14379,
-          "low": 1.14304,
-          "close": 1.14354,
-          "tick_volume": 2167,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T17:45:00+00:00",
-          "open": 1.14354,
-          "high": 1.145,
-          "low": 1.14354,
-          "close": 1.14442,
-          "tick_volume": 2792,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:00:00+00:00",
-          "open": 1.14442,
-          "high": 1.14497,
-          "low": 1.14436,
-          "close": 1.14462,
-          "tick_volume": 1850,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:15:00+00:00",
-          "open": 1.14462,
-          "high": 1.14474,
-          "low": 1.144,
-          "close": 1.14408,
-          "tick_volume": 1487,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T18:30:00+00:00",
-          "open": 1.14407,
-          "high": 1.14414,
-          "low": 1.14371,
-          "close": 1.14374,
-          "tick_volume": 1323,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "candles_after_entry": [
-        {
-          "time": "2026-06-22T18:45:00+00:00",
-          "open": 1.14374,
-          "high": 1.14374,
-          "low": 1.14299,
-          "close": 1.14312,
-          "tick_volume": 1346,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:00:00+00:00",
-          "open": 1.14311,
-          "high": 1.14318,
-          "low": 1.14259,
-          "close": 1.14275,
-          "tick_volume": 1295,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:15:00+00:00",
-          "open": 1.14276,
-          "high": 1.14297,
-          "low": 1.1426,
-          "close": 1.14264,
-          "tick_volume": 1039,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:30:00+00:00",
-          "open": 1.14263,
-          "high": 1.14301,
-          "low": 1.14247,
-          "close": 1.14262,
-          "tick_volume": 939,
-          "source": "MT5_DEMO"
-        },
-        {
-          "time": "2026-06-22T19:45:00+00:00",
-          "open": 1.14262,
-          "high": 1.14314,
-          "low": 1.14252,
-          "close": 1.14304,
-          "tick_volume": 788,
-          "source": "MT5_DEMO"
-        }
-      ],
-      "did_price_move_in_favor_first": null,
-      "max_favorable_excursion": null,
-      "max_adverse_excursion": null,
-      "reason_for_loss": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "was_entry_early": true,
-      "should_have_waited": true,
-      "suggested_rule_fix": "Require BOS or a clear liquidity sweep before accepting score-5 entries.",
-      "entry_quality": "Weak",
-      "missing_confirmation": "H1/H4 HTF alignment, momentum/displacement, pullback/retest, BOS, liquidity sweep, FVG retest, clean spread, and RR >= 2.0",
-      "why_sl_was_hit": "SL was hit after entry without H1/H4 HTF alignment and momentum/displacement.",
-      "data_source": "VANTAGE_DEMO",
-      "generated_at": "2026-06-23T03:41:03.536356+00:00"
-    },
-    "validation_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "final_decision_reason": "CLOSED_LOSS",
-    "timestamp": "2026-06-23T00:15:00+00:00",
-    "data_source": "MT5_HISTORY_CLOSE_SYNC"
   }
 ]

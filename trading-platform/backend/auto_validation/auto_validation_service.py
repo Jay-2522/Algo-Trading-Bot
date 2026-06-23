@@ -560,7 +560,9 @@ class AutoValidationService:
                 values,
                 key=lambda item: (
                     int(item.get("base_passed") or 0) - int(item.get("base_total") or 3),
-                    int(item.get("confirmations_passed") or 0) - int(item.get("required_confirmations") or 2),
+                    int(item.get("core_passed") if item.get("core_passed") is not None else item.get("confirmations_passed") or 0)
+                    - int(item.get("required_core_confirmations") or item.get("required_confirmations") or 2),
+                    int(item.get("bonus_passed") or 0),
                     str(item.get("timestamp") or ""),
                 ),
                 reverse=True,
@@ -2570,21 +2572,29 @@ class AutoValidationService:
         checklist_passed = len([item for item in checklist_items if item.get("passed") is True])
         checklist_total = len(checklist_items)
         level = int(checked.get("adaptive_level") or self._current_adaptive_strategy_level(symbol))
-        confirmation_groups = {
+        core_confirmation_groups = {
             "HTF bias": bool(conditions.get("htf_bias") in {"ALIGNED", True} or conditions.get("htf_bias") is True),
             "Momentum": bool(conditions.get("momentum")),
             "BOS/liquidity sweep": bool(conditions.get("bos") or conditions.get("liquidity_sweep")),
+        }
+        bonus_confirmation_groups = {
             "Pullback/retest": bool(conditions.get("pullback_retest")),
             "FVG/imbalance": bool(conditions.get("fvg") or conditions.get("fvg_retest")),
         }
-        confirmation_passed = len([value for value in confirmation_groups.values() if value])
-        required_confirmations = self._level3_confirmation_required(symbol) if level == 3 else checklist_total
-        score = confirmation_passed if level == 3 else checklist_passed
-        required = required_confirmations if level == 3 else checklist_total
+        confirmation_groups = {**core_confirmation_groups, **bonus_confirmation_groups}
+        core_confirmation_passed = len([value for value in core_confirmation_groups.values() if value])
+        bonus_confirmation_passed = len([value for value in bonus_confirmation_groups.values() if value])
+        confirmation_passed = core_confirmation_passed + bonus_confirmation_passed
+        required_confirmations = self._level3_confirmation_required(symbol)
+        required_bonus_confirmations = 1
+        score = core_confirmation_passed
+        required = required_confirmations
+        sl_tp_valid = self._signal_sl_tp_valid(checked) or "SL_TP_INVALID" not in {str(item) for item in blockers}
         base_gate_states = {
             "RR >= 2": bool((conditions.get("RR_2_0") is True) or self._number(checked.get("risk_reward"), 0) >= 2.0 or "RR_BELOW_2_0" not in {str(item) for item in blockers}),
             "Spread clean": bool(conditions.get("spread_clean") is True or "SPREAD_TOO_HIGH" not in {str(item) for item in blockers}),
             "Risk approved": str(checked.get("risk_status") or "").upper() == "APPROVED" or "RISK_REJECTED" not in {str(item) for item in blockers},
+            "Valid SL/TP": bool(sl_tp_valid),
         }
         decision = str(checked.get("execution_decision") or "REJECTED").upper()
         if decision == "READY_FOR_ORDER":
@@ -2609,10 +2619,17 @@ class AutoValidationService:
             "base_gates_total": len(base_gate_states),
             "base_gate_states": base_gate_states,
             "confirmation_groups": confirmation_groups,
+            "core_confirmation_groups": core_confirmation_groups,
+            "bonus_confirmation_groups": bonus_confirmation_groups,
             "confirmations_passed": confirmation_passed,
             "confirmations_total": 5,
             "confirmations_required": required_confirmations,
-            "sl_tp_valid": self._signal_sl_tp_valid(checked) or "SL_TP_INVALID" not in {str(item) for item in blockers},
+            "core_confirmations_passed": core_confirmation_passed,
+            "core_confirmations_total": len(core_confirmation_groups),
+            "bonus_confirmations_passed": bonus_confirmation_passed,
+            "bonus_confirmations_total": len(bonus_confirmation_groups),
+            "bonus_confirmations_required": required_bonus_confirmations,
+            "sl_tp_valid": sl_tp_valid,
             "decision": decision,
             "reject_reason": reject_reason or "No blocker recorded.",
             "missing_confirmations": missing,
@@ -2660,12 +2677,16 @@ class AutoValidationService:
         if level == 3:
             confirmation_count = sum([htf_passed, momentum, bos or liquidity, pullback, fvg])
             required = self._level3_confirmation_required(symbol)
+            bonus_required = 1
             risk_ok = str(checked.get("risk_status") or "").upper() == "APPROVED" or "RISK_REJECTED" not in blocker_set
+            sl_tp_valid = self._signal_sl_tp_valid(checked) or "SL_TP_INVALID" not in blocker_set
             rows = [
                 ("RR >= 2", rr_ok, "Risk/reward meets the minimum."),
                 ("Spread clean", spread_ok, "Spread is acceptable for execution."),
                 ("Risk approved", risk_ok, "Risk validation approved the setup."),
-                (f"{required} of 5 confirmations", confirmation_count >= required, "HTF bias, momentum, BOS/liquidity sweep, pullback/retest, and FVG/imbalance are evaluated."),
+                ("Valid SL/TP", sl_tp_valid, "Stop-loss and take-profit are valid."),
+                (f"{required} of 3 core confirmations", sum([htf_passed, momentum, bos or liquidity]) >= required, "HTF bias, momentum, and BOS/liquidity sweep are evaluated."),
+                (f"{bonus_required} of 2 bonus confirmations", sum([pullback, fvg]) >= bonus_required, "Pullback/retest and FVG/imbalance are evaluated as bonus confirmations."),
             ]
         else:
             rows = [
@@ -2696,13 +2717,17 @@ class AutoValidationService:
                 conditions.get("htf_bias") is True or str(conditions.get("htf_bias")).upper() == "ALIGNED",
                 bool(conditions.get("momentum")),
                 bool(conditions.get("bos") or conditions.get("liquidity_sweep")),
-                bool(conditions.get("pullback_retest")),
-                bool(conditions.get("fvg") or conditions.get("fvg_retest")),
             ]
             required = self._level3_confirmation_required(str(checked.get("symbol") or "EURUSD").upper())
             deficit = max(0, required - len([value for value in groups if value]))
             if deficit:
-                missing.append(f"{deficit} more Level 3 confirmation{'s' if deficit != 1 else ''}")
+                missing.append(f"{deficit} more core confirmation{'s' if deficit != 1 else ''}")
+            bonus_groups = [
+                bool(conditions.get("pullback_retest")),
+                bool(conditions.get("fvg") or conditions.get("fvg_retest")),
+            ]
+            if len([value for value in bonus_groups if value]) < 1:
+                missing.append("one bonus confirmation")
             return self._dedupe_labels(missing)
         htf = conditions.get("htf_bias")
         if not (htf is True or str(htf).upper() == "ALIGNED"):
@@ -2762,53 +2787,87 @@ class AutoValidationService:
         symbol = str(diagnostic.get("symbol") or "").upper()
         base_states = diagnostic.get("base_gate_states") if isinstance(diagnostic.get("base_gate_states"), dict) else {}
         confirmation_states = diagnostic.get("confirmation_groups") if isinstance(diagnostic.get("confirmation_groups"), dict) else {}
+        core_states = diagnostic.get("core_confirmation_groups") if isinstance(diagnostic.get("core_confirmation_groups"), dict) else {}
+        bonus_states = diagnostic.get("bonus_confirmation_groups") if isinstance(diagnostic.get("bonus_confirmation_groups"), dict) else {}
+        if not core_states:
+            core_states = {
+                "HTF bias": bool(confirmation_states.get("HTF bias")),
+                "Momentum": bool(confirmation_states.get("Momentum")),
+                "BOS/liquidity sweep": bool(confirmation_states.get("BOS/liquidity sweep")),
+            }
+        if not bonus_states:
+            bonus_states = {
+                "Pullback/retest": bool(confirmation_states.get("Pullback/retest")),
+                "FVG/imbalance": bool(confirmation_states.get("FVG/imbalance")),
+            }
         base_specs = [
             ("rr", "RR >= 2", bool(base_states.get("RR >= 2")), "Risk/reward must be at least 2.0."),
             ("spread", "Spread clean", bool(base_states.get("Spread clean")), "Current spread must be within the symbol limit."),
             ("risk", "Risk approved", bool(base_states.get("Risk approved")), "Risk validation must approve the trade."),
+            ("sl_tp", "Valid SL/TP", bool(base_states.get("Valid SL/TP") or diagnostic.get("sl_tp_valid") is True), "Stop-loss and take-profit must be valid."),
         ]
-        confirmation_specs = [
-            ("htf_bias", "HTF bias", bool(confirmation_states.get("HTF bias")), "H1/H4 bias supports the candidate direction."),
-            ("momentum", "Momentum", bool(confirmation_states.get("Momentum")), "A momentum or displacement signal is present."),
-            ("bos_or_liquidity", "BOS or liquidity sweep", bool(confirmation_states.get("BOS/liquidity sweep")), "BOS or a liquidity sweep is present."),
-            ("pullback_retest", "Pullback/retest", bool(confirmation_states.get("Pullback/retest")), "A valid pullback or retest is present."),
-            ("fvg_imbalance", "FVG/imbalance", bool(confirmation_states.get("FVG/imbalance")), "An FVG or imbalance is present."),
+        core_specs = [
+            ("htf_bias", "HTF bias", bool(core_states.get("HTF bias")), "H1/H4 bias supports the candidate direction."),
+            ("momentum", "Momentum", bool(core_states.get("Momentum")), "A momentum or displacement signal is present."),
+            ("bos_or_liquidity", "BOS or liquidity sweep", bool(core_states.get("BOS/liquidity sweep")), "BOS or a liquidity sweep is present."),
+        ]
+        bonus_specs = [
+            ("pullback_retest", "Pullback/retest", bool(bonus_states.get("Pullback/retest")), "A valid pullback or retest is present."),
+            ("fvg_imbalance", "FVG/imbalance", bool(bonus_states.get("FVG/imbalance")), "An FVG or imbalance is present."),
         ]
         base_gates = [{"key": key, "label": label, "passed": passed, "reason": reason} for key, label, passed, reason in base_specs]
-        confirmations = [{"key": key, "label": label, "passed": passed, "reason": reason} for key, label, passed, reason in confirmation_specs]
+        core_confirmations = [{"key": key, "label": label, "passed": passed, "reason": reason} for key, label, passed, reason in core_specs]
+        bonus_confirmations = [{"key": key, "label": label, "passed": passed, "reason": reason} for key, label, passed, reason in bonus_specs]
+        confirmations = core_confirmations + bonus_confirmations
         base_passed = len([item for item in base_gates if item["passed"]])
-        confirmations_passed = len([item for item in confirmations if item["passed"]])
-        required = int(diagnostic.get("confirmations_required") or 2)
+        core_passed = len([item for item in core_confirmations if item["passed"]])
+        bonus_passed = len([item for item in bonus_confirmations if item["passed"]])
+        confirmations_passed = core_passed + bonus_passed
+        level = int(diagnostic.get("adaptive_level") or 0)
+        required = self._level3_confirmation_required(symbol)
+        required_bonus = 1
         history_ready = diagnostic.get("history_ready") is True
         sl_tp_valid = diagnostic.get("sl_tp_valid") is True
         missing_base = [str(item["label"]) for item in base_gates if not item["passed"]]
-        missing_confirmations = [str(item["label"]) for item in confirmations if not item["passed"]]
-        order_allowed = base_passed == len(base_gates) and confirmations_passed >= required and history_ready and sl_tp_valid
-        if missing_base:
-            block_reason = f"{missing_base[0]} is required."
-        elif not history_ready:
+        missing_core = [str(item["label"]) for item in core_confirmations if not item["passed"]]
+        missing_bonus = [str(item["label"]) for item in bonus_confirmations if not item["passed"]]
+        order_allowed = base_passed == len(base_gates) and core_passed >= required and bonus_passed >= required_bonus and history_ready
+        if not history_ready:
             block_reason = "MT5 history is not ready."
-        elif not sl_tp_valid:
-            block_reason = "Stop-loss or take-profit is invalid."
-        elif confirmations_passed < required:
-            block_reason = f"Confirmations {confirmations_passed}/{len(confirmations)}; Level 3 requires {required}."
+        elif missing_base:
+            block_reason = f"{missing_base[0]} is required."
+        elif core_passed < required:
+            block_reason = f"Waiting for one core confirmation from HTF bias, momentum, or BOS/liquidity sweep."
+        elif bonus_passed < required_bonus:
+            block_reason = "Waiting for one bonus confirmation from pullback/retest or FVG/imbalance."
         else:
             block_reason = "" if order_allowed else str(diagnostic.get("reject_reason") or "Current execution safety checks blocked the order.")
         return {
             "symbol": symbol,
-            "adaptive_level": int(diagnostic.get("adaptive_level") or 0),
+            "adaptive_level": level,
             "timestamp": diagnostic.get("timestamp") or self._timestamp(),
             "stale": False,
-            "decision": "READY" if order_allowed else "BLOCKED",
+            "decision": "READY" if order_allowed else "BLOCKED" if (not history_ready or missing_base) else "WAITING",
+            "tier_model": "LEVEL_3_BALANCED_ACTIVE",
             "base_gates": base_gates,
+            "core_confirmations": core_confirmations,
+            "bonus_confirmations": bonus_confirmations,
             "confirmations": confirmations,
             "base_passed": base_passed,
             "base_total": len(base_gates),
+            "core_passed": core_passed,
+            "core_total": len(core_confirmations),
+            "bonus_passed": bonus_passed,
+            "bonus_total": len(bonus_confirmations),
             "confirmations_passed": confirmations_passed,
             "confirmations_total": len(confirmations),
             "required_confirmations": required,
+            "required_core_confirmations": self._level3_confirmation_required(symbol),
+            "required_bonus_confirmations": required_bonus,
             "missing_base_gates": missing_base,
-            "missing_confirmations": missing_confirmations,
+            "missing_core_confirmations": missing_core,
+            "missing_bonus_confirmations": missing_bonus,
+            "missing_confirmations": missing_core,
             "history_ready": history_ready,
             "sl_tp_valid": sl_tp_valid,
             "order_allowed": order_allowed,
@@ -3082,16 +3141,18 @@ class AutoValidationService:
             "FINAL_DECISION_ROUND_MISMATCH": "final decision round does not match the active round",
             "FINAL_DECISION_SESSION_MISMATCH": "final decision session does not match the active session",
             "FINAL_DECISION_SYMBOL_MISMATCH": "final decision symbol does not match the signal",
-            "FINAL_DECISION_SCORE_BELOW_THRESHOLD": "final decision score is below the current adaptive threshold",
+            "FINAL_DECISION_SCORE_BELOW_THRESHOLD": "canonical tier decision is not ready",
             "FINAL_DECISION_HARD_GATES_FAILED": "current Round 3 hard gates did not pass",
             "BALANCED_ENTRY_REQUIREMENT_MISSING": "balanced entry gates are incomplete",
             "MOMENTUM_OR_PULLBACK_MISSING": "momentum or pullback/retest is missing",
             "STRUCTURE_CONFIRMATION_MISSING": "BOS, liquidity sweep, or FVG retest is missing",
-            "ROUND_3_SCORE_BELOW_THRESHOLD": "score is below the balanced threshold",
-            "SCORE_5_NEEDS_CLEAN_MOMENTUM": "score 5 needs clean momentum",
-            "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP": "Level 3 needs momentum plus BOS or liquidity sweep",
-            "LEVEL_3_FAST_TRIGGER_MISSING": "Level 3 needs one trigger such as momentum, BOS, liquidity sweep, or pullback/retest",
-            "LEVEL_3_NEEDS_ONE_FAST_TRIGGER": "Level 3 needs one trigger such as momentum, BOS, liquidity sweep, or pullback/retest",
+            "ROUND_3_SCORE_BELOW_THRESHOLD": "canonical tier decision is not ready",
+            "SCORE_5_NEEDS_CLEAN_MOMENTUM": "canonical tier decision is not ready",
+            "LEVEL_3_CORE_CONFIRMATION_MISSING": "Level 3 needs one core confirmation",
+            "LEVEL_3_BONUS_CONFIRMATION_MISSING": "Level 3 needs one bonus confirmation",
+            "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP": "Level 3 needs one core confirmation",
+            "LEVEL_3_FAST_TRIGGER_MISSING": "Level 3 needs one core confirmation",
+            "LEVEL_3_NEEDS_ONE_FAST_TRIGGER": "Level 3 needs one core confirmation",
             "RR_BELOW_2_0": "RR is below required 2.0",
             "SPREAD_TOO_HIGH": "spread is too high",
             "SL_TP_REQUIRED": "valid SL/TP is missing",
@@ -3274,6 +3335,10 @@ class AutoValidationService:
         structure_confirmed = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP") or states.get("FVG_RETEST"))
         score_threshold_passed = confirmations["score"] >= confirmations["required_score"]
         clean_score_five = level == 3 or confirmations["score"] > 5 or bool(states.get("MOMENTUM_DISPLACEMENT"))
+        level3_core_count = len([value for value in [states.get("HTF_ALIGNMENT"), states.get("MOMENTUM_DISPLACEMENT"), states.get("BOS") or states.get("LIQUIDITY_SWEEP")] if value])
+        level3_bonus_count = len([value for value in [states.get("PULLBACK_RETEST"), states.get("FVG_RETEST")] if value])
+        level3_core_passed = level3_core_count >= self._level3_confirmation_required(symbol)
+        level3_bonus_passed = level3_bonus_count >= 1
         level3_structure = bool(states.get("BOS") or states.get("LIQUIDITY_SWEEP"))
         risk_approved = str(signal.get("risk_status") or "").upper() == "APPROVED"
         sl_tp_valid = self._signal_sl_tp_valid(signal)
@@ -3286,10 +3351,11 @@ class AutoValidationService:
             ("RISK_APPROVED", "RISK_REJECTED", risk_approved),
             ("SL_TP_VALID", "SL_TP_INVALID", sl_tp_valid),
             ("LEVEL_3_DIRECTION_CANDIDATE_PRESENT" if level == 3 else "DIRECTION_MATCHES_HIGHER_TIMEFRAME_BIAS", "NO_BUY_SELL_SIGNAL" if level == 3 else "DIRECTION_BIAS_MISMATCH", confirmations["direction_valid"]),
-            ("LEVEL_3_CONFIRMATION_COUNT_MET" if level == 3 else "MOMENTUM_OR_PULLBACK_PRESENT", "LEVEL_3_CONFIRMATIONS_MISSING" if level == 3 else "MOMENTUM_OR_PULLBACK_MISSING", score_threshold_passed if level == 3 else momentum_or_pullback),
+            ("LEVEL_3_CORE_CONFIRMATION_MET" if level == 3 else "MOMENTUM_OR_PULLBACK_PRESENT", "LEVEL_3_CORE_CONFIRMATION_MISSING" if level == 3 else "MOMENTUM_OR_PULLBACK_MISSING", level3_core_passed if level == 3 else momentum_or_pullback),
+            ("LEVEL_3_BONUS_CONFIRMATION_MET" if level == 3 else "BONUS_CONFIRMATION_OPTIONAL", "LEVEL_3_BONUS_CONFIRMATION_MISSING" if level == 3 else "BONUS_CONFIRMATION_OPTIONAL", level3_bonus_passed if level == 3 else True),
             ("LEVEL_3_STRUCTURE_OPTIONAL" if level == 3 else "STRUCTURE_CONFIRMATION_PRESENT", "LEVEL_3_STRUCTURE_OPTIONAL" if level == 3 else "STRUCTURE_CONFIRMATION_MISSING", True if level == 3 else structure_confirmed),
-            ("ROUND_3_SCORE_THRESHOLD", "ROUND_3_SCORE_BELOW_THRESHOLD", score_threshold_passed),
-            ("SCORE_5_HAS_CLEAN_MOMENTUM", "SCORE_5_NEEDS_CLEAN_MOMENTUM", clean_score_five),
+            ("ROUND_3_TIER_REQUIREMENT", "ROUND_3_TIER_REQUIREMENT_MISSING", True if level == 3 else score_threshold_passed),
+            ("TIER_MOMENTUM_RULE", "TIER_MOMENTUM_RULE_WAITING", True if level == 3 else clean_score_five),
             (level_config.get("passed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MET"), level_config.get("failed_rule", "ADAPTIVE_LEVEL_REQUIREMENT_MISSING"), level_specific_passed),
         ]
         for passed_code, failed_code, passed in checks:
@@ -3452,12 +3518,11 @@ class AutoValidationService:
     def _round3_decision_reason(self, symbol: str, decision: str, failed_rules: list[str], rr: float | None, confirmations: dict[str, Any] | None = None) -> str:
         confirmations = confirmations or {"score": 0, "required_score": 5, "strong_count": 0, "passed_labels": [], "missing_labels": ["HTF alignment", "momentum/pullback", "structure confirmation"]}
         first_failure = failed_rules[0] if failed_rules else ""
-        level = self._current_adaptive_strategy_level(symbol)
-        prefix = f"{symbol} Adaptive Level {level} active. "
+        prefix = f"{symbol} "
         if decision == "ACCEPTED":
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
-            passed = self._join_labels(list(confirmations.get("passed_labels") or [])) or "score"
-            return f"{prefix}Accepted: Balanced Round 3 score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {passed}. Direction {confirmations.get('direction')}. HTF bias {confirmations.get('trend_bias')}. RR {rr_text}. Risk approved."
+            passed = self._join_labels(list(confirmations.get("passed_labels") or [])) or "tier confirmations"
+            return f"{prefix}Accepted: Base/Core/Bonus entry rule is READY with {passed}. Direction {confirmations.get('direction')}. RR {rr_text}. Risk approved."
         if first_failure == "H4_HISTORY_INSUFFICIENT":
             return f"{symbol} rejected because H4 history was insufficient."
         if first_failure == "H1_HISTORY_INSUFFICIENT":
@@ -3476,20 +3541,25 @@ class AutoValidationService:
         if first_failure == "ROUND_3_SCORE_BELOW_THRESHOLD":
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "more confluence"
-            return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. Missing {missing_text}."
+            return f"{prefix}Waiting: tier confirmations are incomplete. Missing {missing_text}."
         if first_failure == "MOMENTUM_OR_PULLBACK_MISSING":
             return f"{prefix}Waiting: momentum or pullback/retest is needed next."
         if first_failure == "STRUCTURE_CONFIRMATION_MISSING":
             return f"{prefix}Waiting: need one structure confirmation from BOS, liquidity sweep, or FVG retest."
         if first_failure == "SCORE_5_NEEDS_CLEAN_MOMENTUM":
-            return f"{prefix}Waiting: score 5 setups need clean momentum."
-        if first_failure in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"}:
-            return f"{prefix}Waiting: trend bias, RR, and spread are ready, but Level 3 still needs one trigger from momentum, BOS, liquidity sweep, or pullback/retest."
+            return f"{prefix}Waiting: Level 3 needs one core confirmation from momentum or BOS/liquidity sweep."
+        if first_failure in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER", "LEVEL_3_CORE_CONFIRMATION_MISSING"}:
+            return f"{prefix}Waiting: needs ONE of Momentum OR BOS/liquidity sweep."
+        if first_failure == "LEVEL_3_BONUS_CONFIRMATION_MISSING":
+            return f"{prefix}Waiting: needs ONE bonus confirmation from pullback/retest OR FVG/imbalance."
         if first_failure == "LEVEL_3_CONFIRMATIONS_MISSING":
-            groups = confirmations.get("confirmation_groups") if isinstance(confirmations.get("confirmation_groups"), dict) else {}
+            groups = confirmations.get("core_confirmation_groups") if isinstance(confirmations.get("core_confirmation_groups"), dict) else {}
+            if not groups:
+                all_groups = confirmations.get("confirmation_groups") if isinstance(confirmations.get("confirmation_groups"), dict) else {}
+                groups = {key: all_groups.get(key) for key in ("HTF bias", "Momentum", "BOS/liquidity sweep")}
             present = len([value for value in groups.values() if value])
-            required = int(confirmations.get("required_score") or 2)
-            return f"{prefix}Waiting: Level 3 confirmations {present}/{required}. Need confirmations from HTF bias, momentum, BOS/liquidity sweep, pullback/retest, or FVG/imbalance."
+            required = int(confirmations.get("required_score") or 1)
+            return f"{prefix}Waiting: needs ONE of Momentum OR BOS/liquidity sweep."
         if first_failure == "BALANCED_ENTRY_REQUIREMENT_MISSING":
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "balanced entry confluence"
@@ -3501,8 +3571,8 @@ class AutoValidationService:
                 missing.append("momentum")
             if not (states.get("BOS") or states.get("LIQUIDITY_SWEEP")):
                 missing.append("BOS or liquidity sweep")
-            return f"{prefix}Waiting: Level 3 needs {self._join_labels(missing) or 'momentum plus BOS or liquidity sweep'}."
-        return f"{prefix}Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}."
+            return f"{prefix}Waiting: Level 3 needs {self._join_labels(missing) or 'one core confirmation'}."
+        return f"{prefix}Waiting: tier confirmations are incomplete."
 
     def _active_round_label(self) -> str:
         return str(self.session.get("round_label") or f"ROUND_{self.session.get('round_number') or 3}" or "ROUND_3").upper()
@@ -3523,11 +3593,11 @@ class AutoValidationService:
         round3 = self._round3_signal_diagnostics(signal)
         canonical_scan = self._canonical_scan_for_symbol(symbol)
         if canonical_scan:
-            threshold = int(canonical_scan.get("required_confirmations") or 0)
-            score = int(canonical_scan.get("confirmations_passed") or 0)
+            threshold = int(canonical_scan.get("required_core_confirmations") or 1)
+            score = int(canonical_scan.get("core_passed") if canonical_scan.get("core_passed") is not None else 0)
         else:
-            threshold = int(self._adaptive_level_config(symbol=symbol).get("required_score") or round3.get("confirmation_required") or 5)
-            score = int(self._number(round3.get("confirmation_score"), 0))
+            threshold = 1
+            score = 0
         failed_rules = [str(item) for item in round3.get("failed_rules", []) if str(item or "").strip()]
         status = str(round3.get("final_decision") or "").upper()
         hard_gates_passed = bool(canonical_scan) and canonical_scan.get("order_allowed") is True
@@ -3556,7 +3626,6 @@ class AutoValidationService:
         symbol = str(signal.get("symbol") or "").upper()
         session_id = str(self.session.get("session_id") or "")
         canonical_scan = final_decision.get("canonical_scan") if isinstance(final_decision.get("canonical_scan"), dict) else self._canonical_scan_for_symbol(symbol)
-        threshold = int((canonical_scan or {}).get("required_confirmations") or final_decision.get("required_score") or 5)
         if not canonical_scan:
             blockers.append("CANONICAL_SCAN_MISSING")
         elif canonical_scan.get("order_allowed") is not True:
@@ -3569,8 +3638,6 @@ class AutoValidationService:
             blockers.append("FINAL_DECISION_SESSION_MISMATCH")
         if str(final_decision.get("symbol") or "").upper() != symbol:
             blockers.append("FINAL_DECISION_SYMBOL_MISMATCH")
-        if int(self._number(final_decision.get("score"), 0)) < threshold:
-            blockers.append("FINAL_DECISION_SCORE_BELOW_THRESHOLD")
         if final_decision.get("hard_gates_passed") is not True:
             blockers.append("FINAL_DECISION_HARD_GATES_FAILED")
         return sorted(set(blockers))
@@ -3616,10 +3683,9 @@ class AutoValidationService:
         confirmations = self._round3_confirmation_summary(signal or {}, (signal or {}).get("strategy_components") if isinstance((signal or {}).get("strategy_components"), dict) else {}) if isinstance(signal, dict) else {"score": 0, "missing_labels": []}
         if status == "ORDER_SENT":
             rr_text = f"{rr:.1f}" if rr is not None else "2.0"
-            level = self._current_adaptive_strategy_level(str((signal or {}).get("symbol") or ""))
             side = str((signal or {}).get("signal") or confirmations.get("direction") or "").upper()
             bias = str(confirmations.get("trend_bias") or "HTF bias").lower()
-            return f"{side or 'Trade'} executed using Balanced Round 3. Adaptive Level {level} accepted score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)} with {bias}, RR {rr_text}, spread clean, and risk approved."
+            return f"{side or 'Trade'} executed using Balanced Round 3. Base/Core/Bonus entry rule was READY with {bias}, RR {rr_text}, spread clean, and risk approved."
         if blocker in {"RR_BELOW_2_0", "RISK_REWARD_BELOW_MINIMUM", "RR_BELOW_MINIMUM"}:
             rr_text = f"{rr:.1f}" if rr is not None else "missing"
             return f"Rejected: RR {rr_text} below required 2.0."
@@ -3637,14 +3703,15 @@ class AutoValidationService:
         if status == "HALTED_RISK":
             diagnostics = self.session.get("risk_halt_diagnostics") if isinstance(self.session.get("risk_halt_diagnostics"), dict) else self._risk_halt_diagnostics()
             return str(diagnostics.get("message") or self._risk_halt_message(diagnostics))
-        if blocker in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"}:
+        if blocker in {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER", "LEVEL_3_CORE_CONFIRMATION_MISSING"}:
             symbol = str((signal or {}).get("symbol") or "The symbol").upper()
-            return f"{symbol} is close. It has trend bias, clean spread, and RR, but still needs one trigger such as momentum, BOS, liquidity sweep, or pullback."
-        if blocker in {"CONFIRMATION_SCORE_BELOW_2", "CONFIRMATION_SCORE_LOW", "NO_READY_APPROVED_SIGNAL", "ROUND_3_SCORE_BELOW_THRESHOLD", "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING", "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING", "BALANCED_ENTRY_REQUIREMENT_MISSING", "MOMENTUM_OR_PULLBACK_MISSING", "STRUCTURE_CONFIRMATION_MISSING", "SCORE_5_NEEDS_CLEAN_MOMENTUM", "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP"}:
+            return f"{symbol} is close. Base gates are protected, but it still needs ONE of Momentum OR BOS/liquidity sweep."
+        if blocker == "LEVEL_3_BONUS_CONFIRMATION_MISSING":
+            return "Waiting: needs ONE bonus confirmation from pullback/retest OR FVG/imbalance."
+        if blocker in {"CONFIRMATION_SCORE_BELOW_2", "CONFIRMATION_SCORE_LOW", "NO_READY_APPROVED_SIGNAL", "ROUND_3_SCORE_BELOW_THRESHOLD", "ADAPTIVE_LEVEL_1_REQUIREMENT_MISSING", "ADAPTIVE_LEVEL_0_REQUIREMENT_MISSING", "BALANCED_ENTRY_REQUIREMENT_MISSING", "MOMENTUM_OR_PULLBACK_MISSING", "STRUCTURE_CONFIRMATION_MISSING", "SCORE_5_NEEDS_CLEAN_MOMENTUM", "LEVEL_3_NEEDS_MOMENTUM_AND_BOS_OR_SWEEP", "LEVEL_3_CORE_CONFIRMATION_MISSING"}:
             missing = list(confirmations.get("missing_labels") or [])
             missing_text = self._join_labels(missing) or "one more confirmation"
-            level = self._current_adaptive_strategy_level(str((signal or {}).get("symbol") or ""))
-            return f"Adaptive Level {level} active. Waiting: Score {int(confirmations.get('score') or 0)}/{int(confirmations.get('required_score') or 5)}. Missing {missing_text}."
+            return f"Waiting: Base/Core/Bonus tier rule is not ready. Missing {missing_text}."
         if blocker:
             return f"Rejected: {blocker.replace('_', ' ').lower()}."
         return "Waiting: no qualified Round 3 signal yet."
@@ -5308,9 +5375,9 @@ class AutoValidationService:
             },
             3: {
                 "name": "Controlled Fast Entry",
-                "required_score": 2,
-                "preferred_score": 2,
-                "strong_required": 2,
+                "required_score": 1,
+                "preferred_score": 1,
+                "strong_required": 1,
                 "requires_balanced_entry": False,
                 "passed_rule": "LEVEL_3_CONFIRMATIONS_MET",
                 "failed_rule": "LEVEL_3_CONFIRMATIONS_MISSING",
@@ -5323,26 +5390,10 @@ class AutoValidationService:
         config = {**definitions[safe_level], "level": safe_level}
         if safe_level == 3 and symbol:
             required = self._level3_confirmation_required(str(symbol).upper())
-            config.update({"required_score": required, "strong_required": required, "fast_entry_enabled": required == 1})
+            config.update({"required_score": required, "strong_required": required, "fast_entry_enabled": False})
         return config
 
     def _level3_confirmation_required(self, symbol: str) -> int:
-        state = self._symbol_adaptive_state(symbol)
-        if state.get("fast_entry_enabled") is True:
-            return 1
-        if self.session.get("status") not in {"RUNNING", "VALIDATION_IN_PROGRESS"} or self._live_mt5_positions:
-            return 2
-        last_activity = self._adaptive_last_activity_at(symbol)
-        minutes = float(self.config.get("level3_fast_entry_inactivity_minutes") or 30)
-        if last_activity is None or datetime.now(timezone.utc) < last_activity + timedelta(minutes=minutes):
-            return 2
-        state["fast_entry_enabled"] = True
-        state["fast_entry_enabled_at"] = self._timestamp()
-        state["current_level_reason"] = f"Level 3 fast entry enabled after {int(minutes)} minutes without a new trade and no open positions."
-        all_state = self.session.get("symbol_adaptive_state") if isinstance(self.session.get("symbol_adaptive_state"), dict) else {}
-        all_state[symbol] = state
-        self.session["symbol_adaptive_state"] = all_state
-        self._log("ADAPTIVE_FAST_ENTRY_ENABLED", {"symbol": symbol, "confirmation_required": 1, "inactivity_minutes": minutes, "active_session_id": self.session.get("session_id")})
         return 1
 
     def _empty_adaptive_strategy_levels(self, activation_time: str | None = None) -> dict[str, dict[str, Any]]:

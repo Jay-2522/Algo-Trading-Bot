@@ -59,7 +59,7 @@ const SYSTEM_PROMPT = "You are AlgoPilot. Answer briefly using only provided dat
 const POSITION_FIELD_MISSING = "That field is not available in the live position data yet.";
 
 const STRATEGY_GLOSSARY: Record<string, string> = {
-  "any trigger": "Any trigger means the bot needs at least one live entry confirmation before opening a Level 3 trade: momentum, BOS, liquidity sweep, or pullback/retest. If none of those appear, the setup stays blocked even when HTF bias, RR, and spread are ready.",
+  "any trigger": "Any trigger is legacy wording. The active rule now uses Base/Core/Bonus tiers: Base gates must be 4/4, Core must be at least 1/3, and Bonus must be at least 1/2.",
   "htf bias": "HTF bias is the higher-timeframe direction read from H1/H4. Balanced Round 3 only allows buys with bullish higher-timeframe bias and sells with bearish higher-timeframe bias.",
   momentum: "Momentum means price is moving with enough displacement in the trade direction to support entry. It is one of the entry triggers and helps avoid slow, low-quality setups.",
   "pullback/retest": "Pullback/retest means price has returned into a valid entry area instead of chasing after an extended move. In Level 3 it can count as the one required trigger.",
@@ -68,13 +68,9 @@ const STRATEGY_GLOSSARY: Record<string, string> = {
   fvg: "FVG means fair value gap or imbalance zone. A retest of that zone can add structure confirmation for the balanced entry model.",
   rr: "RR is risk/reward. Round 3 requires RR >= 2.0, meaning the planned reward must be at least twice the planned risk before an order can be sent.",
   "spread clean": "Spread clean means the current broker spread is inside the bot's allowed limit. If spread is not clean, the setup is blocked to avoid poor fills.",
-  "adaptive level": "Adaptive level is the per-symbol relaxation level. Each symbol has its own level, and the bot can relax only that symbol after inactivity while keeping hard gates like HTF bias, RR, spread, SL/TP, and risk approval.",
-  "level 0": "Level 0 is the strict balanced Round 3 mode. It prefers score >= 6 with all hard gates intact.",
-  "level 1": "Level 1 is a slightly more active mode for a symbol after inactivity. It can use score >= 5 while keeping all hard safety gates.",
-  "level 2": "Level 2 keeps the score >= 5 floor and hard gates, but allows the symbol to remain more active after continued inactivity.",
-  "level 3": "Level 3 is the fastest controlled mode. It still requires HTF bias, RR >= 2, clean spread, valid SL/TP, risk approval, and at least one trigger: momentum, BOS, liquidity sweep, or pullback/retest.",
-  "scan score": "Scan score is the current checklist score for a symbol. It measures how many active entry conditions are currently passing for that symbol's adaptive level.",
-  "final decision": "Final decision is the current Round 3 approval object. Orders may only be sent when the final decision is ACCEPTED for the active round, active session, matching symbol, passing score, and hard gates.",
+  "adaptive level": "Adaptive level is now hidden from the active scan UI. Active entries are governed by the canonical Base/Core/Bonus decision object.",
+  "level 3": "Level 3 uses the active tier rule: Base gates 4/4, Core confirmations at least 1/3, and Bonus confirmations at least 1/2.",
+  "final decision": "Final decision is the canonical Base/Core/Bonus approval object. Orders may only be sent when that object is READY for the active round, active session, and matching symbol.",
   "legacy-path loss": "Legacy-path loss means a trade was opened by an older approval path rather than the current final-decision gate. Those losses are tracked separately in autopsy and analytics.",
   "breakeven trigger": "The breakeven trigger is the profit threshold where the bot can move SL to entry. Round 3 uses breakeven only after meaningful favorable movement, currently around +0.8R.",
   "trailing stop": "Trailing stop is protective SL movement after the trade has advanced far enough, currently after about +1.2R. It protects gains without closing on tiny noise.",
@@ -683,7 +679,7 @@ async function answerRoundArchiveQuestion(question: string): Promise<string | nu
 
 function answerStrategyRulesQuestion(question: string): string | null {
   if (!isStrategyRulesQuestion(question)) return null;
-  return "Round 3 uses edge-score validation: H4/M15 history ready, RR >= 2.0, risk approved, clean spread, valid SL/TP, and higher-timeframe direction bias are safety gates. London/NY is advisory only. Entry is allowed when the score meets the threshold with at least two strong confirmations from BOS, FVG, liquidity sweep, trend alignment, pullback/retest, momentum, volatility, spread, and RR.";
+  return "Round 3 Level 3 uses the canonical tier rule: Base Gates must be 4/4, Core Confirmations must be at least 1/3, and Bonus Confirmations must be at least 1/2. Base gates are RR >= 2, spread clean, risk approved, and valid SL/TP; Core is HTF bias, momentum, or BOS/liquidity sweep; Bonus is pullback/retest or FVG/imbalance.";
 }
 
 function readPositionField(record: Record<string, unknown>, keys: string[]): string {
@@ -924,12 +920,9 @@ function latestScanRecord(records: ReasonRecord[], symbol?: string | null): Reas
 }
 
 function scanRecordSummary(record: ReasonRecord): string {
-  const score = record.confirmation_score ?? 0;
-  const required = record.confirmation_required ?? 5;
-  const levelText = record.adaptive_level !== null && record.adaptive_level !== undefined ? ` Level ${record.adaptive_level}` : "";
   const missing = uniqueScanLabels([...(record.confirmation_missing ?? []), record.reason ?? "", record.rejection_reason ?? ""]).filter((label) => !/clean spread|RR/i.test(label));
-  const blocked = missing.length ? `blocked by missing ${joinList(missing)}` : cleanText(record.reason) || "blocked by current balanced gates";
-  return `${record.symbol}${levelText} latest scan: score ${score}/${required}, ${blocked}.`;
+  const blocked = missing.length ? `blocked by missing ${joinList(missing)}` : cleanText(record.reason) || "blocked by current tier requirements";
+  return `${record.symbol} latest scan: ${blocked}. Entry rule is Base 4/4 + Core 1/3 + Bonus 1/2.`;
 }
 
 function latestScanDiagnosticsFromStatus(status: Record<string, unknown> | null): Record<string, Record<string, unknown>> {
@@ -939,18 +932,22 @@ function latestScanDiagnosticsFromStatus(status: Record<string, unknown> | null)
 
 function scanDiagnosticSummary(symbol: string, diagnostic: Record<string, unknown>): string {
   const basePassed = numberValue(diagnostic.base_passed) ?? 0;
-  const baseTotal = numberValue(diagnostic.base_total) ?? 3;
-  const confirmationsPassed = numberValue(diagnostic.confirmations_passed) ?? 0;
-  const confirmationsTotal = numberValue(diagnostic.confirmations_total) ?? 5;
-  const required = numberValue(diagnostic.required_confirmations) ?? 1;
-  const level = numberValue(diagnostic.adaptive_level) ?? 0;
+  const baseTotal = numberValue(diagnostic.base_total) ?? 4;
+  const corePassed = numberValue(diagnostic.core_passed) ?? numberValue(diagnostic.confirmations_passed) ?? 0;
+  const coreTotal = numberValue(diagnostic.core_total) ?? 3;
+  const bonusPassed = numberValue(diagnostic.bonus_passed) ?? 0;
+  const bonusTotal = numberValue(diagnostic.bonus_total) ?? 2;
   const decision = cleanText(diagnostic.decision) || "PENDING";
   const missingBase = Array.isArray(diagnostic.missing_base_gates) ? diagnostic.missing_base_gates.map(cleanText).filter(Boolean) : [];
-  const missingConfirmations = Array.isArray(diagnostic.missing_confirmations) ? diagnostic.missing_confirmations.map(cleanText).filter(Boolean) : [];
-  const missing = [...missingBase, ...missingConfirmations];
+  const missingCore = Array.isArray(diagnostic.missing_core_confirmations)
+    ? diagnostic.missing_core_confirmations.map(cleanText).filter(Boolean)
+    : Array.isArray(diagnostic.missing_confirmations)
+      ? diagnostic.missing_confirmations.map(cleanText).filter(Boolean)
+      : [];
+  const missing = [...missingBase, ...missingCore];
   const reason = cleanText(diagnostic.order_block_reason);
   const timing = numberValue(diagnostic.total_scan_ms);
-  return `${symbol} latest scan: Level ${level}, base gates ${basePassed}/${baseTotal}, confirmations ${confirmationsPassed}/${confirmationsTotal}, requires ${required}, decision ${decision}. Missing: ${missing.length ? missing.join(", ") : "none"}. ${reason ? `Reason: ${reason}. ` : ""}${timing !== null ? `Scan time ${timing} ms.` : ""}`;
+  return `${symbol} latest scan: base gates ${basePassed}/${baseTotal}, core confirmations ${corePassed}/${coreTotal}, bonus confirmations ${bonusPassed}/${bonusTotal}. Entry rule is Base 4/4 + Core 1/3 + Bonus 1/2. Decision ${decision}. Missing: ${missing.length ? missing.join(", ") : "none"}. ${reason ? `Reason: ${reason}. ` : ""}${timing !== null ? `Scan time ${timing} ms.` : ""}`;
 }
 
 async function answerSymbolScanQuestion(question: string): Promise<string | null> {
@@ -964,8 +961,8 @@ async function answerSymbolScanQuestion(question: string): Promise<string | null
         const leftBase = (numberValue(left.diagnostic?.base_passed) ?? 0) - (numberValue(left.diagnostic?.base_total) ?? 3);
         const rightBase = (numberValue(right.diagnostic?.base_passed) ?? 0) - (numberValue(right.diagnostic?.base_total) ?? 3);
         if (rightBase !== leftBase) return rightBase - leftBase;
-        const leftConfirmations = (numberValue(left.diagnostic?.confirmations_passed) ?? 0) - (numberValue(left.diagnostic?.required_confirmations) ?? 1);
-        const rightConfirmations = (numberValue(right.diagnostic?.confirmations_passed) ?? 0) - (numberValue(right.diagnostic?.required_confirmations) ?? 1);
+        const leftConfirmations = (numberValue(left.diagnostic?.core_passed) ?? 0) + (numberValue(left.diagnostic?.bonus_passed) ?? 0);
+        const rightConfirmations = (numberValue(right.diagnostic?.core_passed) ?? 0) + (numberValue(right.diagnostic?.bonus_passed) ?? 0);
         return rightConfirmations - leftConfirmations;
       });
       return `${ranked[0].symbol} is closest based on canonical scan diagnostics. ${ranked.map((item) => scanDiagnosticSummary(item.symbol, item.diagnostic as Record<string, unknown>)).join(" ")}`;
@@ -1039,7 +1036,7 @@ async function answerHistoryReadinessQuestion(question: string): Promise<string 
   }
   if (normalized.includes("why") && normalized.includes("trade")) {
     if (pending) return `No trades are opening because MT5 history sync is still warming. ${historyDiagnosticSummary(pending)}.${historyErrorSummary(pending)}`;
-    return "MT5 history is ready. If no trades open, Balanced Round 3 is waiting for the active symbol gates: HTF bias, RR >= 2.0, clean spread, risk approval, valid SL/TP, and the required trigger/score for that symbol's adaptive level.";
+    return "MT5 history is ready. If no trades open, Round 3 is waiting for the canonical tier rule: Base 4/4 + Core 1/3 + Bonus 1/2.";
   }
   if (normalized.includes("history ready") || normalized.includes("history sync")) {
     if (pending) return `History is not ready. ${historyDiagnosticSummary(pending)}.${historyErrorSummary(pending)}`;
@@ -1053,16 +1050,13 @@ async function answerNoTradeOpenedQuestion(question: string): Promise<string | n
   const status = await readBackendRecord("/auto-validation/status");
   const trace = asRecord(status?.latest_decision_trace) ?? asRecord(asRecord(status?.session)?.latest_decision_trace);
   if (!trace) return "No decision trace has been recorded yet. Run one validation scan cycle to capture the exact blocker.";
-  const level = numberValue(trace.adaptive_level);
   const symbol = cleanText(trace.symbol) || "latest symbol";
   const decision = cleanText(trace.execution_decision) || "not sent";
-  const score = numberValue(trace.score);
   const failed = Array.isArray(trace.failed_hard_gates) ? trace.failed_hard_gates.map(cleanText).filter(Boolean) : [];
   const reason = cleanText(trace.why_order_not_sent);
-  const scoreText = score !== null ? ` Score ${score}.` : "";
   const failedText = failed.length ? ` Failed gate: ${failed[0].replaceAll("_", " ")}.` : "";
   const reasonText = reason ? ` Reason: ${reason}` : "";
-  return `${symbol} has not opened because the latest scan decision was ${decision} at Adaptive Level ${level ?? 0}.${scoreText}${failedText}${reasonText}`;
+  return `${symbol} has not opened because the latest scan decision was ${decision}. Entry rule is Base 4/4 + Core 1/3 + Bonus 1/2.${failedText}${reasonText}`;
 }
 
 function logOpenPositionsForChat(positions: Record<string, unknown>[]): void {

@@ -1,25 +1,33 @@
 {
   "EURUSD": {
-    "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "adaptive_level": 3,
-    "adaptive_level_reason": "30 minutes without an opened or closed trade.",
-    "analysis_ms": 699,
+    "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "adaptive_level": 2,
+    "adaptive_level_reason": "no qualifying trade for 45 minutes.",
+    "analysis_ms": 1353,
     "base_gate_states": {
-      "RR >= 2": false,
-      "Risk approved": false,
-      "Spread clean": true
+      "RR >= 2": true,
+      "Risk approved": true,
+      "Spread clean": true,
+      "Valid SL/TP": true
     },
-    "base_gates_passed": 1,
-    "base_gates_total": 3,
+    "base_gates_passed": 4,
+    "base_gates_total": 4,
+    "bonus_confirmation_groups": {
+      "FVG/imbalance": true,
+      "Pullback/retest": false
+    },
+    "bonus_confirmations_passed": 1,
+    "bonus_confirmations_required": 1,
+    "bonus_confirmations_total": 2,
     "bos": false,
     "canonical_scan": {
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "adaptive_level": 3,
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "adaptive_level": 2,
       "base_gates": [
         {
           "key": "rr",
           "label": "RR >= 2",
-          "passed": false,
+          "passed": true,
           "reason": "Risk/reward must be at least 2.0."
         },
         {
@@ -31,17 +39,39 @@
         {
           "key": "risk",
           "label": "Risk approved",
-          "passed": false,
+          "passed": true,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
         }
       ],
-      "base_passed": 1,
-      "base_total": 3,
+      "base_passed": 4,
+      "base_total": 4,
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "bonus_passed": 1,
+      "bonus_total": 2,
       "confirmations": [
         {
           "key": "htf_bias",
           "label": "HTF bias",
-          "passed": false,
+          "passed": true,
           "reason": "H1/H4 bias supports the candidate direction."
         },
         {
@@ -65,89 +95,129 @@
         {
           "key": "fvg_imbalance",
           "label": "FVG/imbalance",
-          "passed": false,
+          "passed": true,
           "reason": "An FVG or imbalance is present."
         }
       ],
-      "confirmations_passed": 0,
+      "confirmations_passed": 2,
       "confirmations_total": 5,
-      "decision": "BLOCKED",
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "core_passed": 1,
+      "core_total": 3,
+      "decision": "READY",
       "history_ready": true,
-      "missing_base_gates": [
-        "RR >= 2",
-        "Risk approved"
+      "missing_base_gates": [],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
-        "HTF bias",
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest",
-        "FVG/imbalance"
+        "BOS or liquidity sweep"
       ],
-      "order_allowed": false,
-      "order_block_reason": "RR >= 2 is required.",
-      "required_confirmations": 2,
-      "sl_tp_valid": false,
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "order_allowed": true,
+      "order_block_reason": "",
+      "required_bonus_confirmations": 1,
+      "required_confirmations": 1,
+      "required_core_confirmations": 1,
+      "sl_tp_valid": true,
       "stale": false,
       "symbol": "EURUSD",
-      "timestamp": "2026-06-23T03:34:03.286700+00:00",
-      "total_scan_ms": 699
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "timestamp": "2026-06-23T09:49:16.150172+00:00",
+      "total_scan_ms": 1353
     },
     "checklist_items": [
       {
-        "adaptive_level": 3,
+        "adaptive_level": 2,
+        "detail": "H1/H4 direction agrees with the candidate trade.",
+        "label": "HTF alignment",
+        "passed": true,
+        "rule": "HTF_ALIGNMENT"
+      },
+      {
+        "adaptive_level": 2,
+        "detail": "Momentum or a valid pullback/retest is present.",
+        "label": "Momentum / Pullback",
+        "passed": false,
+        "rule": "MOMENTUM___PULLBACK"
+      },
+      {
+        "adaptive_level": 2,
+        "detail": "BOS, liquidity sweep, or FVG retest is present.",
+        "label": "Structure confirmation",
+        "passed": true,
+        "rule": "STRUCTURE_CONFIRMATION"
+      },
+      {
+        "adaptive_level": 2,
         "detail": "Risk/reward meets the minimum.",
         "label": "RR >= 2",
-        "passed": false,
+        "passed": true,
         "rule": "RR_GE_2"
       },
       {
-        "adaptive_level": 3,
+        "adaptive_level": 2,
         "detail": "Spread is acceptable for execution.",
         "label": "Spread clean",
         "passed": true,
         "rule": "SPREAD_CLEAN"
-      },
-      {
-        "adaptive_level": 3,
-        "detail": "Risk validation approved the setup.",
-        "label": "Risk approved",
-        "passed": false,
-        "rule": "RISK_APPROVED"
-      },
-      {
-        "adaptive_level": 3,
-        "detail": "HTF bias, momentum, BOS/liquidity sweep, pullback/retest, and FVG/imbalance are evaluated.",
-        "label": "2 of 5 confirmations",
-        "passed": false,
-        "rule": "2_OF_5_CONFIRMATIONS"
       }
     ],
-    "checklist_passed": 1,
-    "checklist_total": 4,
+    "checklist_passed": 4,
+    "checklist_total": 5,
     "confirmation_groups": {
       "BOS/liquidity sweep": false,
-      "FVG/imbalance": false,
-      "HTF bias": false,
+      "FVG/imbalance": true,
+      "HTF bias": true,
       "Momentum": false,
       "Pullback/retest": false
     },
-    "confirmations_passed": 0,
-    "confirmations_required": 2,
+    "confirmations_passed": 2,
+    "confirmations_required": 1,
     "confirmations_total": 5,
-    "decision": "BLOCKED",
+    "core_confirmation_groups": {
+      "BOS/liquidity sweep": false,
+      "HTF bias": true,
+      "Momentum": false
+    },
+    "core_confirmations_passed": 1,
+    "core_confirmations_total": 3,
+    "decision": "QUALIFIED_READ_ONLY",
     "decision_ms": 1,
-    "engine_required_score": 2,
-    "engine_score": 0,
-    "estimated_readiness": "Missing RR >= 2, Risk approved, and 2 of 5 confirmations",
+    "engine_required_score": 5,
+    "engine_score": 4,
+    "estimated_readiness": "Only Momentum / Pullback missing",
     "failed_hard_gates": [
-      "LEVEL_3_CONFIRMATIONS_MISSING",
-      "RISK_REJECTED",
-      "ROUND_3_SCORE_BELOW_THRESHOLD",
-      "RR_BELOW_2_0",
-      "SL_TP_INVALID"
+      "BALANCED_ENTRY_REQUIREMENT_MISSING",
+      "MOMENTUM_OR_PULLBACK_MISSING",
+      "ROUND_3_TIER_REQUIREMENT_MISSING",
+      "STRUCTURE_CONFIRMATION_MISSING",
+      "TIER_MOMENTUM_RULE_WAITING"
     ],
-    "fvg": false,
+    "fvg": true,
     "history_load_ms": 1,
     "history_ready": true,
     "history_warmup": {
@@ -157,7 +227,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:20076|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:18052|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -166,7 +236,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 20076,
+          "process_id": 18052,
           "requested_symbol": "EURUSD",
           "resolved_symbol": "EURUSD",
           "source": "VANTAGE_DEMO",
@@ -207,7 +277,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:20076|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:18052|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -216,7 +286,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 20076,
+          "process_id": 18052,
           "requested_symbol": "EURUSD",
           "resolved_symbol": "EURUSD",
           "source": "VANTAGE_DEMO",
@@ -257,7 +327,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:20076|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:18052|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -266,7 +336,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 20076,
+          "process_id": 18052,
           "requested_symbol": "EURUSD",
           "resolved_symbol": "EURUSD",
           "source": "VANTAGE_DEMO",
@@ -316,46 +386,59 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-23T03:34:02.587165+00:00"
+      "timestamp": "2026-06-23T09:49:14.796224+00:00"
     },
-    "htf_alignment": false,
-    "last_scan_timestamp": "2026-06-23T03:34:02.587165+00:00",
+    "htf_alignment": true,
+    "last_scan_timestamp": "2026-06-23T09:49:14.796224+00:00",
     "liquidity_sweep": false,
     "missing_confirmations": [
-      "2 more Level 3 confirmations"
+      "momentum/pullback",
+      "BOS",
+      "liquidity sweep",
+      "FVG retest",
+      "momentum/displacement",
+      "pullback/retest"
     ],
-    "missing_count": 1,
+    "missing_count": 6,
     "momentum": false,
     "mt5_status": "MT5_CONNECTED",
     "pullback_retest": false,
-    "reject_reason": "Blocked because Level 3 confirmation count is below the current requirement.",
-    "required_score": 2,
-    "rr_ok": false,
-    "score": 0,
-    "session_bonus": false,
-    "sl_tp_valid": false,
+    "reject_reason": "QUALIFIED",
+    "required_score": 1,
+    "rr_ok": true,
+    "score": 1,
+    "session_bonus": true,
+    "sl_tp_valid": true,
     "source": "LIVE_READ_ONLY_SCAN",
     "spread_ok": true,
     "symbol": "EURUSD",
-    "timestamp": "2026-06-23T03:34:03.286700+00:00",
-    "total_scan_ms": 699
+    "timestamp": "2026-06-23T09:49:16.150172+00:00",
+    "total_scan_ms": 1353
   },
   "XAUUSD": {
-    "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-    "adaptive_level": 3,
-    "adaptive_level_reason": "45 minutes without an opened or closed trade for this symbol.",
-    "analysis_ms": 634,
+    "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+    "adaptive_level": 2,
+    "adaptive_level_reason": "no qualifying trade for 45 minutes.",
+    "analysis_ms": 1575,
     "base_gate_states": {
       "RR >= 2": true,
-      "Risk approved": false,
-      "Spread clean": true
+      "Risk approved": true,
+      "Spread clean": true,
+      "Valid SL/TP": true
     },
-    "base_gates_passed": 2,
-    "base_gates_total": 3,
+    "base_gates_passed": 4,
+    "base_gates_total": 4,
+    "bonus_confirmation_groups": {
+      "FVG/imbalance": true,
+      "Pullback/retest": false
+    },
+    "bonus_confirmations_passed": 1,
+    "bonus_confirmations_required": 1,
+    "bonus_confirmations_total": 2,
     "bos": false,
     "canonical_scan": {
-      "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "adaptive_level": 3,
+      "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "adaptive_level": 2,
       "base_gates": [
         {
           "key": "rr",
@@ -372,12 +455,34 @@
         {
           "key": "risk",
           "label": "Risk approved",
-          "passed": false,
+          "passed": true,
           "reason": "Risk validation must approve the trade."
+        },
+        {
+          "key": "sl_tp",
+          "label": "Valid SL/TP",
+          "passed": true,
+          "reason": "Stop-loss and take-profit must be valid."
         }
       ],
-      "base_passed": 2,
-      "base_total": 3,
+      "base_passed": 4,
+      "base_total": 4,
+      "bonus_confirmations": [
+        {
+          "key": "pullback_retest",
+          "label": "Pullback/retest",
+          "passed": false,
+          "reason": "A valid pullback or retest is present."
+        },
+        {
+          "key": "fvg_imbalance",
+          "label": "FVG/imbalance",
+          "passed": true,
+          "reason": "An FVG or imbalance is present."
+        }
+      ],
+      "bonus_passed": 1,
+      "bonus_total": 2,
       "confirmations": [
         {
           "key": "htf_bias",
@@ -412,57 +517,93 @@
       ],
       "confirmations_passed": 2,
       "confirmations_total": 5,
-      "decision": "BLOCKED",
+      "core_confirmations": [
+        {
+          "key": "htf_bias",
+          "label": "HTF bias",
+          "passed": true,
+          "reason": "H1/H4 bias supports the candidate direction."
+        },
+        {
+          "key": "momentum",
+          "label": "Momentum",
+          "passed": false,
+          "reason": "A momentum or displacement signal is present."
+        },
+        {
+          "key": "bos_or_liquidity",
+          "label": "BOS or liquidity sweep",
+          "passed": false,
+          "reason": "BOS or a liquidity sweep is present."
+        }
+      ],
+      "core_passed": 1,
+      "core_total": 3,
+      "decision": "READY",
       "history_ready": true,
-      "missing_base_gates": [
-        "Risk approved"
+      "missing_base_gates": [],
+      "missing_bonus_confirmations": [
+        "Pullback/retest"
       ],
       "missing_confirmations": [
         "Momentum",
-        "BOS or liquidity sweep",
-        "Pullback/retest"
+        "BOS or liquidity sweep"
       ],
-      "order_allowed": false,
-      "order_block_reason": "Risk approved is required.",
-      "required_confirmations": 2,
+      "missing_core_confirmations": [
+        "Momentum",
+        "BOS or liquidity sweep"
+      ],
+      "order_allowed": true,
+      "order_block_reason": "",
+      "required_bonus_confirmations": 1,
+      "required_confirmations": 1,
+      "required_core_confirmations": 1,
       "sl_tp_valid": true,
       "stale": false,
       "symbol": "XAUUSD",
-      "timestamp": "2026-06-23T03:34:03.944308+00:00",
-      "total_scan_ms": 634
+      "tier_model": "LEVEL_3_BALANCED_ACTIVE",
+      "timestamp": "2026-06-23T09:49:16.537087+00:00",
+      "total_scan_ms": 1575
     },
     "checklist_items": [
       {
-        "adaptive_level": 3,
+        "adaptive_level": 2,
+        "detail": "H1/H4 direction agrees with the candidate trade.",
+        "label": "HTF alignment",
+        "passed": true,
+        "rule": "HTF_ALIGNMENT"
+      },
+      {
+        "adaptive_level": 2,
+        "detail": "Momentum or a valid pullback/retest is present.",
+        "label": "Momentum / Pullback",
+        "passed": false,
+        "rule": "MOMENTUM___PULLBACK"
+      },
+      {
+        "adaptive_level": 2,
+        "detail": "BOS, liquidity sweep, or FVG retest is present.",
+        "label": "Structure confirmation",
+        "passed": true,
+        "rule": "STRUCTURE_CONFIRMATION"
+      },
+      {
+        "adaptive_level": 2,
         "detail": "Risk/reward meets the minimum.",
         "label": "RR >= 2",
         "passed": true,
         "rule": "RR_GE_2"
       },
       {
-        "adaptive_level": 3,
+        "adaptive_level": 2,
         "detail": "Spread is acceptable for execution.",
         "label": "Spread clean",
         "passed": true,
         "rule": "SPREAD_CLEAN"
-      },
-      {
-        "adaptive_level": 3,
-        "detail": "Risk validation approved the setup.",
-        "label": "Risk approved",
-        "passed": false,
-        "rule": "RISK_APPROVED"
-      },
-      {
-        "adaptive_level": 3,
-        "detail": "HTF bias, momentum, BOS/liquidity sweep, pullback/retest, and FVG/imbalance are evaluated.",
-        "label": "2 of 5 confirmations",
-        "passed": true,
-        "rule": "2_OF_5_CONFIRMATIONS"
       }
     ],
-    "checklist_passed": 3,
-    "checklist_total": 4,
+    "checklist_passed": 4,
+    "checklist_total": 5,
     "confirmation_groups": {
       "BOS/liquidity sweep": false,
       "FVG/imbalance": true,
@@ -471,15 +612,26 @@
       "Pullback/retest": false
     },
     "confirmations_passed": 2,
-    "confirmations_required": 2,
+    "confirmations_required": 1,
     "confirmations_total": 5,
-    "decision": "BLOCKED",
+    "core_confirmation_groups": {
+      "BOS/liquidity sweep": false,
+      "HTF bias": true,
+      "Momentum": false
+    },
+    "core_confirmations_passed": 1,
+    "core_confirmations_total": 3,
+    "decision": "QUALIFIED_READ_ONLY",
     "decision_ms": 1,
-    "engine_required_score": 2,
-    "engine_score": 2,
-    "estimated_readiness": "Only Risk approved missing",
+    "engine_required_score": 5,
+    "engine_score": 4,
+    "estimated_readiness": "Only Momentum / Pullback missing",
     "failed_hard_gates": [
-      "RISK_REJECTED"
+      "BALANCED_ENTRY_REQUIREMENT_MISSING",
+      "MOMENTUM_OR_PULLBACK_MISSING",
+      "ROUND_3_TIER_REQUIREMENT_MISSING",
+      "STRUCTURE_CONFIRMATION_MISSING",
+      "TIER_MOMENTUM_RULE_WAITING"
     ],
     "fvg": true,
     "history_load_ms": 1,
@@ -491,7 +643,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:20076|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:18052|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -500,7 +652,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 20076,
+          "process_id": 18052,
           "requested_symbol": "XAUUSD",
           "resolved_symbol": "XAUUSD",
           "source": "VANTAGE_DEMO",
@@ -541,7 +693,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:20076|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:18052|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -550,7 +702,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 20076,
+          "process_id": 18052,
           "requested_symbol": "XAUUSD",
           "resolved_symbol": "XAUUSD",
           "source": "VANTAGE_DEMO",
@@ -591,7 +743,7 @@
           "cache_reason": null,
           "candles_loaded": 300,
           "candles_required": 300,
-          "connection_id": "pid:20076|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
+          "connection_id": "pid:18052|login:25543844|server:VantageMarkets-Demo|terminal:C:\\Program Files\\MetaTrader 5",
           "data_source": "VANTAGE_DEMO",
           "history_ready": true,
           "message": "",
@@ -600,7 +752,7 @@
             "Success"
           ],
           "mt5_status": "OK",
-          "process_id": 20076,
+          "process_id": 18052,
           "requested_symbol": "XAUUSD",
           "resolved_symbol": "XAUUSD",
           "source": "VANTAGE_DEMO",
@@ -650,26 +802,33 @@
         "H1",
         "H4"
       ],
-      "timestamp": "2026-06-23T03:34:03.309234+00:00"
+      "timestamp": "2026-06-23T09:49:14.961625+00:00"
     },
     "htf_alignment": true,
-    "last_scan_timestamp": "2026-06-23T03:34:03.309234+00:00",
+    "last_scan_timestamp": "2026-06-23T09:49:14.961625+00:00",
     "liquidity_sweep": false,
-    "missing_confirmations": [],
-    "missing_count": 0,
+    "missing_confirmations": [
+      "momentum/pullback",
+      "BOS",
+      "liquidity sweep",
+      "FVG retest",
+      "momentum/displacement",
+      "pullback/retest"
+    ],
+    "missing_count": 6,
     "momentum": false,
     "mt5_status": "MT5_CONNECTED",
     "pullback_retest": false,
-    "reject_reason": "Blocked because risk validation failed.",
-    "required_score": 2,
+    "reject_reason": "QUALIFIED",
+    "required_score": 1,
     "rr_ok": true,
-    "score": 2,
-    "session_bonus": false,
+    "score": 1,
+    "session_bonus": true,
     "sl_tp_valid": true,
     "source": "LIVE_READ_ONLY_SCAN",
     "spread_ok": true,
     "symbol": "XAUUSD",
-    "timestamp": "2026-06-23T03:34:03.944308+00:00",
-    "total_scan_ms": 634
+    "timestamp": "2026-06-23T09:49:16.537087+00:00",
+    "total_scan_ms": 1575
   }
 }

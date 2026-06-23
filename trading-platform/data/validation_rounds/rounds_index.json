@@ -1,15 +1,15 @@
 {
-  "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
+  "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
   "rounds": [
     {
-      "closed_trades": 4,
-      "ended_at": "2026-06-19T13:03:21.410981+00:00",
-      "losses": 4,
-      "net_pnl": -2.65,
-      "round_label": "ROUND_3",
-      "round_number": 3,
-      "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-      "started_at": "2026-06-18T21:46:44.271865+00:00",
+      "closed_trades": 0,
+      "ended_at": null,
+      "losses": 0,
+      "net_pnl": 0.0,
+      "round_label": "ROUND_4",
+      "round_number": 4,
+      "session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
+      "started_at": "2026-06-23T07:00:02.345243+00:00",
       "status": "ACTIVE",
       "wins": 0
     }

@@ -76,7 +76,7 @@ const ForexSessionsMap = dynamic(() => import("./ForexSessionsMap").then((mod) =
   ssr: false,
 });
 const ROUND_2_NOTE = "Round 2: EURUSD-only validation. No manual intervention. Client dashboard shows Round 2 only.";
-const ROUND_3_NOTE = "Round 3: edge-score validation. Requires H4/M15 history, RR >= 2.0, risk approval, clean spread, higher-timeframe bias, and enough SMC confluence. London/NY is advisory only.";
+const ROUND_3_NOTE = "Round 3: Base/Core/Bonus validation. Base gates must be 4/4, core confirmations at least 1/3, and bonus confirmations at least 1/2. London/NY is advisory only.";
 const ROUND_3_START_PAYLOAD: ApiRecord = {
   session_started_by: "user_click",
   strategy_profile: "DEMO_COLLECTION",
@@ -3151,8 +3151,12 @@ function latestScanDiagnostics(data: DashboardData): ApiRecord[] {
 
 function scanMissingList(scan: ApiRecord): string[] {
   const base = Array.isArray(scan.missing_base_gates) ? scan.missing_base_gates : [];
-  const confirmations = Array.isArray(scan.missing_confirmations) ? scan.missing_confirmations : [];
-  return [...base, ...confirmations].map((item) => String(item)).filter(Boolean).slice(0, 5);
+  const core = Array.isArray(scan.missing_core_confirmations)
+    ? scan.missing_core_confirmations
+    : Array.isArray(scan.missing_confirmations)
+      ? scan.missing_confirmations
+      : [];
+  return [...base, ...core].map((item) => String(item)).filter(Boolean).slice(0, 5);
 }
 
 type ScanChecklistItem = { label: string; passed: boolean };
@@ -3178,11 +3182,35 @@ function scanBaseGates(scan: ApiRecord): ScanChecklistItem[] {
 }
 
 function scanConfirmations(scan: ApiRecord): ScanChecklistItem[] {
-  return scanItems(scan.confirmations);
+  return scanItems(scan.core_confirmations ?? scan.confirmations);
+}
+
+function scanBonusConfirmations(scan: ApiRecord): ScanChecklistItem[] {
+  return scanItems(scan.bonus_confirmations);
 }
 
 function scanNeeds(scan: ApiRecord): string[] {
   return scanMissingList(scan);
+}
+
+function scanNeedsText(scan: ApiRecord): string {
+  const base = Array.isArray(scan.missing_base_gates) ? scan.missing_base_gates.map(String).filter(Boolean) : [];
+  if (base.length) return base.join(" + ");
+  const corePassed = readNumber(scan, ["core_passed"], 0);
+  const coreRequired = readNumber(scan, ["required_core_confirmations"], 1);
+  if (corePassed < coreRequired) {
+    const missingCore = Array.isArray(scan.missing_core_confirmations) ? scan.missing_core_confirmations.map(String).filter(Boolean) : [];
+    const triggerOptions = missingCore.filter((item) => item === "Momentum" || item === "BOS or liquidity sweep");
+    const options = triggerOptions.length ? triggerOptions : missingCore;
+    return options.length ? `ONE of: ${options.join(" OR ")}` : "ONE core confirmation";
+  }
+  const bonusPassed = readNumber(scan, ["bonus_passed"], 0);
+  const bonusRequired = readNumber(scan, ["required_bonus_confirmations"], 1);
+  if (bonusPassed < bonusRequired) {
+    const missingBonus = Array.isArray(scan.missing_bonus_confirmations) ? scan.missing_bonus_confirmations.map(String).filter(Boolean) : [];
+    return missingBonus.length ? `ONE bonus: ${missingBonus.join(" OR ")}` : "ONE bonus confirmation";
+  }
+  return "ready";
 }
 
 function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
@@ -3191,8 +3219,10 @@ function closestScan(scanRows: ApiRecord[]): ApiRecord | null {
   return [...available].sort((left, right) => {
     const baseDelta = (readNumber(right, ["base_passed"], 0) - readNumber(right, ["base_total"], 3)) - (readNumber(left, ["base_passed"], 0) - readNumber(left, ["base_total"], 3));
     if (baseDelta !== 0) return baseDelta;
-    const confirmationDelta = (readNumber(right, ["confirmations_passed"], 0) - readNumber(right, ["required_confirmations"], 1)) - (readNumber(left, ["confirmations_passed"], 0) - readNumber(left, ["required_confirmations"], 1));
+    const confirmationDelta = (readNumber(right, ["core_passed", "confirmations_passed"], 0) - readNumber(right, ["required_core_confirmations", "required_confirmations"], 1)) - (readNumber(left, ["core_passed", "confirmations_passed"], 0) - readNumber(left, ["required_core_confirmations", "required_confirmations"], 1));
     if (confirmationDelta !== 0) return confirmationDelta;
+    const bonusDelta = readNumber(right, ["bonus_passed"], 0) - readNumber(left, ["bonus_passed"], 0);
+    if (bonusDelta !== 0) return bonusDelta;
     return readText(right, ["timestamp"], "").localeCompare(readText(left, ["timestamp"], ""));
   })[0];
 }
@@ -3210,14 +3240,14 @@ function scanIsStale(scan: ApiRecord): boolean {
 
 function scanTimeLabel(scan: ApiRecord): string {
   const timestamp = scanTimestamp(scan);
-  if (!timestamp) return "—";
+  if (!timestamp) return "-";
   const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) return "—";
+  if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function scanScoreLabel(scan: ApiRecord): string {
-  return `Base gates: ${readNumber(scan, ["base_passed"], 0)}/${readNumber(scan, ["base_total"], 3)} • Confirmations: ${readNumber(scan, ["confirmations_passed"], 0)}/${readNumber(scan, ["confirmations_total"], 5)}`;
+function scanTierLabel(scan: ApiRecord): string {
+  return `Base gates: ${readNumber(scan, ["base_passed"], 0)}/${readNumber(scan, ["base_total"], 4)} | Core confirmations: ${readNumber(scan, ["core_passed", "confirmations_passed"], 0)}/${readNumber(scan, ["core_total"], 3)} | Bonus confirmations: ${readNumber(scan, ["bonus_passed"], 0)}/${readNumber(scan, ["bonus_total"], 2)}`;
 }
 
 function LiveScanStatusCard({ data }: { data: DashboardData }) {
@@ -3230,7 +3260,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
   const runtimeScanStale = runtimeScanAge > 60;
   const mt5SyncLive = runtimeHealth.mt5_sync_loop_alive === true;
   const scanStale = allScansStale || runtimeScanStale;
-  const closestNeeds = closest ? scanNeeds(closest).slice(0, 2) : [];
+  const closestNeeds = closest ? scanNeedsText(closest) : "";
   return (
     <section className="premium-panel">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -3240,13 +3270,13 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
         </div>
         {scanStale ? (
           <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-amber-100">
-            {mt5SyncLive ? "Scan stale, MT5 sync live" : "Scan stale — waiting for fresh scan"}
+            {mt5SyncLive ? "Scan stale, MT5 sync live" : "Scan stale - waiting for fresh scan"}
           </div>
         ) : closest ? (
           <>
             <div className="rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-3 py-2 text-xs font-bold leading-5 text-blue-100">
-              <span className="whitespace-nowrap">Closest: {readText(closest, ["symbol"], "-")} — {scanScoreLabel(closest)}</span>
-              <span className="ml-2 text-slate-300">Needs: {closestNeeds.length ? closestNeeds.join(" + ") : "ready"}</span>
+              <span className="whitespace-nowrap">Entry rule: Base 4/4 + Core 1/3 + Bonus 1/2</span>
+              <span className="ml-2 text-slate-300">Closest: {readText(closest, ["symbol"], "-")} | Needs: {closestNeeds || "ready"}</span>
             </div>
           </>
         ) : null}
@@ -3259,16 +3289,22 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
           const stale = hasScan && scanIsStale(scan);
           const baseGates = scanBaseGates(scan);
           const confirmations = scanConfirmations(scan);
+          const bonusConfirmations = scanBonusConfirmations(scan);
+          const groupedChecks = [
+            { title: "Base gates", items: baseGates },
+            { title: "Core confirmations", items: confirmations },
+            { title: "Bonus confirmations", items: bonusConfirmations },
+          ].filter((group) => group.items.length);
           return (
             <div className="rounded-xl border border-slate-800/80 bg-[#08111F] p-4" key={symbol}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-white">{symbol}</p>
                   <p className="mt-1 text-xs font-bold text-slate-400">
-                    {hasScan ? `Level ${readNumber(scan, ["adaptive_level"], 0)} • ${readText(scan, ["decision"], "PENDING")}` : "No scan yet"}
+                    {hasScan ? `Decision: ${readText(scan, ["decision"], "PENDING")}` : "No scan yet"}
                   </p>
                 </div>
-                <p className={`max-w-[68%] text-right font-mono text-sm font-black leading-5 ${stale ? "text-amber-200" : "text-blue-100"}`}>{hasScan ? (stale ? "STALE DATA" : scanScoreLabel(scan)) : "—"}</p>
+                <p className={`max-w-[68%] text-right font-mono text-sm font-black leading-5 ${stale ? "text-amber-200" : "text-blue-100"}`}>{hasScan ? (stale ? "STALE DATA" : scanTierLabel(scan)) : "-"}</p>
               </div>
               {hasScan ? (
                 <>
@@ -3276,13 +3312,20 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
                     <span className="scan-status-pill">Last scan: {scanTimeLabel(scan)}</span>
                     <span className="scan-status-pill">Duration: {Math.max(1, readNumber(scan, ["total_scan_ms"], 1))}ms</span>
                     <span className={`scan-status-pill ${stale ? "warning" : "good"}`}>Status: {stale ? "Stale data" : "Fresh"}</span>
-                    <span className="scan-status-pill">Required confirmations: {readNumber(scan, ["required_confirmations"], 1)}</span>
+                    <span className="scan-status-pill">Entry rule: Base 4/4 + Core 1/3 + Bonus 1/2</span>
                   </div>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {[...baseGates, ...confirmations].map((item) => (
-                      <div className={`scan-check-row ${item.passed ? "passed" : "missing"}`} key={`${symbol}-${item.label}`}>
-                        <span>{item.passed ? "✓" : "✕"}</span>
-                        <strong>{item.label}</strong>
+                  <div className="mt-4 grid gap-3">
+                    {groupedChecks.map((group) => (
+                      <div key={`${symbol}-${group.title}`}>
+                        <p className="mb-2 text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-500">{group.title}</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {group.items.map((item) => (
+                            <div className={`scan-check-row ${item.passed ? "passed" : "missing"}`} key={`${symbol}-${group.title}-${item.label}`}>
+                              <span>{item.passed ? "✓" : "×"}</span>
+                              <strong>{item.label}</strong>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3296,7 +3339,7 @@ function LiveScanStatusCard({ data }: { data: DashboardData }) {
                   </div>
                   <div className="hidden">
                     <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-500">Missing</p>
-                    <p className="mt-1 text-sm font-bold text-slate-200">{missing.length ? missing.join(", ") : "—"}</p>
+                    <p className="mt-1 text-sm font-bold text-slate-200">{missing.length ? missing.join(", ") : "-"}</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">{readText(scan, ["order_block_reason"], "")}</p>
                   </div>
                 </>
@@ -3894,7 +3937,7 @@ function weakestSetupObservation(row?: FeatureImpactRow): string {
   if (row.feature === "BOS" && row.state === "Missing") return "Missing BOS confirmation is underperforming.";
   if (row.feature === "FVG" && row.state === "Missing") return "Missing FVG confirmation is underperforming.";
   if (row.feature === "Liquidity Sweep" && row.state === "Missing") return "Missing liquidity sweep is underperforming.";
-  if (row.feature === "Session Bonus" && row.state.includes("Inactive")) return "Weak-score off-session trades are underperforming.";
+  if (row.feature === "Session Bonus" && row.state.includes("Inactive")) return "Off-session trades are underperforming.";
   return `${row.feature} ${row.state} is underperforming.`;
 }
 
@@ -3904,7 +3947,7 @@ function lossContributorObservation(pattern?: IntelligencePattern): string {
   if (text.includes("bos")) return "Missing BOS confirmation drives most losses.";
   if (text.includes("liquidity") || text.includes("sweep")) return "Weak liquidity confirmation drives losses.";
   if (text.includes("fvg")) return "Missing FVG confirmation drives losses.";
-  if (text.includes("session")) return "Weak score without session bonus drives losses.";
+  if (text.includes("session")) return "Session quality is weighing on results.";
   if (text.includes("time") || text.includes("stale")) return "Stale exits are costing continuation.";
   return `${pattern.label} drives most losses.`;
 }
@@ -4381,9 +4424,13 @@ function confirmationLabels(record: ApiRecord, kind: "present" | "missing"): str
 
 function canonicalRound3DecisionReason(record: ApiRecord, status: ReasonStatus): string | null {
   const symbol = readText(record, ["symbol"], "EURUSD").toUpperCase();
-  const score = firstReasonNumber(record, ["confirmation_score", "confirmationScore"]);
-  const required = firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]) ?? 2;
-  const total = firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]) ?? 4;
+  const canonical = asRecord(record.canonical_scan) ?? record;
+  const basePassed = readNumber(canonical, ["base_passed"], 0);
+  const baseTotal = readNumber(canonical, ["base_total"], 4);
+  const corePassed = readNumber(canonical, ["core_passed"], 0);
+  const coreTotal = readNumber(canonical, ["core_total"], 3);
+  const bonusPassed = readNumber(canonical, ["bonus_passed"], 0);
+  const bonusTotal = readNumber(canonical, ["bonus_total"], 2);
   const rr = firstReasonNumber(record, ["RR", "risk_reward", "riskReward", "rr"]);
   const requiredRr = firstReasonNumber(record, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]) ?? 2;
   const ticket = readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "");
@@ -4396,16 +4443,16 @@ function canonicalRound3DecisionReason(record: ApiRecord, status: ReasonStatus):
   if (status === "Rejected" && rr !== null && rr < requiredRr) return `RR ${rr} below required ${requiredRr}`;
   if (status === "Rejected" && allBlockers.some((item) => /SPREAD/i.test(item))) return "Spread too high";
   const present = uniqueDecisionLabels([h4 === true ? "H4 history" : "", m15 === true ? "M15 history" : "", session === true ? "London/NY session bonus" : "", ...confirmationLabels(record, "present")].filter(Boolean));
-  const missing = score !== null && score >= required ? [] : uniqueDecisionLabels([h4 === false ? "H4 history" : "", m15 === false ? "M15 history" : "", ...confirmationLabels(record, "missing")].filter(Boolean));
+  const missing = uniqueDecisionLabels([h4 === false ? "H4 history" : "", m15 === false ? "M15 history" : "", ...(Array.isArray(canonical.missing_base_gates) ? canonical.missing_base_gates.map(String) : []), ...(Array.isArray(canonical.missing_core_confirmations) ? canonical.missing_core_confirmations.map(String) : []), ...(Array.isArray(canonical.missing_bonus_confirmations) ? canonical.missing_bonus_confirmations.map(String) : [])].filter(Boolean));
   if (status === "Accepted") {
-    const lines = [`${symbol} trade opened successfully.`, `Score ${score ?? present.length}/${total}`];
+    const lines = [`${symbol} trade opened successfully.`, `Base ${basePassed}/${baseTotal}`, `Core ${corePassed}/${coreTotal}`, `Bonus ${bonusPassed}/${bonusTotal}`];
     for (const item of present.filter((label) => !/history|session/i.test(label))) lines.push(`${item} ✓`);
     if (rr !== null) lines.push(`RR ${rr}`);
     if (ticket) lines.push(`Ticket ${ticket}`);
     return lines.join("\n");
   }
-  if (score !== null || present.length || missing.length) {
-    const lines = [`Score ${score ?? present.length}/${required}`];
+  if (present.length || missing.length || baseTotal || coreTotal || bonusTotal) {
+    const lines = [`Base ${basePassed}/${baseTotal}`, `Core ${corePassed}/${coreTotal}`, `Bonus ${bonusPassed}/${bonusTotal}`];
     if (present.length) {
       lines.push("Present:");
       present.forEach((item) => lines.push(`- ${item} ✓`));
@@ -4430,9 +4477,13 @@ function decisionReasonFromRecord(record: ApiRecord, status: ReasonStatus, fallb
   if (status !== "Accepted" && /^accepted:/i.test(finalReason)) {
     return `${readText(record, ["symbol"], "EURUSD").toUpperCase()} waiting: setup passed; waiting for MT5 order execution.`;
   }
-  const score = firstReasonNumber(record, ["confirmation_score", "confirmationScore"]);
-  const required = firstReasonNumber(record, ["confirmation_required", "confirmationRequired"]) ?? 2;
-  const total = firstReasonNumber(record, ["confirmation_total", "confirmationTotal"]) ?? 4;
+  const canonicalScan = asRecord(record.canonical_scan) ?? record;
+  const basePassed = readNumber(canonicalScan, ["base_passed"], 0);
+  const baseTotal = readNumber(canonicalScan, ["base_total"], 4);
+  const corePassed = readNumber(canonicalScan, ["core_passed"], 0);
+  const coreTotal = readNumber(canonicalScan, ["core_total"], 3);
+  const bonusPassed = readNumber(canonicalScan, ["bonus_passed"], 0);
+  const bonusTotal = readNumber(canonicalScan, ["bonus_total"], 2);
   const rr = firstReasonNumber(record, ["RR", "risk_reward", "riskReward", "rr"]);
   const requiredRr = firstReasonNumber(record, ["required_rr", "requiredRR", "minimum_rr", "minimumRR"]) ?? 2;
   const missing = Array.isArray(record.confirmation_missing) ? record.confirmation_missing.map(String).filter(Boolean) : [];
@@ -4440,13 +4491,13 @@ function decisionReasonFromRecord(record: ApiRecord, status: ReasonStatus, fallb
   const blockers = cleanBlockers(record.blocked_reasons ?? record.blockers ?? record.failed_rules ?? record.missing_requirements);
   const allBlockers = [...failedRules, ...blockers];
   if (status === "Accepted" && hasDecisionTicket(record)) {
-    return `${readText(record, ["symbol"], "EURUSD").toUpperCase()} trade opened successfully. Ticket: ${readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "")}. Score ${score ?? 0}/${total}. RR ${rr ?? requiredRr}. Risk approved.`;
+    return `${readText(record, ["symbol"], "EURUSD").toUpperCase()} trade opened successfully. Ticket: ${readText(record, ["ticket", "mt5_ticket", "mt5Ticket"], "")}. Base ${basePassed}/${baseTotal}, Core ${corePassed}/${coreTotal}, Bonus ${bonusPassed}/${bonusTotal}. RR ${rr ?? requiredRr}. Risk approved.`;
   }
   if (allBlockers.some((item) => /SPREAD/i.test(item))) return "Rejected: spread too high.";
   if (allBlockers.some((item) => /RR|RISK_REWARD/i.test(item)) && rr !== null) return `Rejected: RR ${rr} below required ${requiredRr}.`;
-  if (allBlockers.some((item) => /CONFIRMATION_SCORE/i.test(item)) || (score !== null && score < required)) {
+  if (allBlockers.some((item) => /CONFIRMATION_SCORE|LEVEL_3_CONFIRMATIONS|BALANCED_ENTRY/i.test(item))) {
     const missingText = missing.length ? ` Missing ${missing.join(", ")}.` : "";
-    return `${status === "Rejected" ? "Rejected" : "Waiting"}: Score ${score ?? 0}/${required}.${missingText}`;
+    return `${status === "Rejected" ? "Rejected" : "Waiting"}: Base ${basePassed}/${baseTotal}, Core ${corePassed}/${coreTotal}, Bonus ${bonusPassed}/${bonusTotal}.${missingText}`;
   }
   if (status === "Waiting" && /^accepted\b/i.test(rawReason)) return fallback;
   if (status === "Waiting" && /halted/i.test(rawReason) && /BOS|FVG|liquidity|trend|confirmation|confidence/i.test(rawReason)) {
@@ -4710,14 +4761,11 @@ function uniqueScanLabels(values: string[]): string[] {
 }
 
 function latestScanSummary(message: ReasonMessage): string {
-  const score = Number.isFinite(message.confirmation_score ?? Number.NaN) ? Number(message.confirmation_score) : null;
-  const required = Number.isFinite(message.confirmation_required ?? Number.NaN) ? Number(message.confirmation_required) : null;
   const missingLabels = uniqueScanLabels((message.confirmation_missing ?? []).map(scanBlockerLabel));
   const groupedMissing = uniqueScanLabels(missingLabels.map(scanBlockerLabel)).filter((label) => !/clean spread|rr/i.test(label));
   const reasonLabels = groupedMissing.length ? groupedMissing : uniqueScanLabels((message.reason.match(/missing ([^.]+)/i)?.[1] ?? "").split(/,| and /).map(scanBlockerLabel));
   const blockedBy = reasonLabels.length ? `blocked by missing ${joinHumanList(reasonLabels)}` : "waiting for balanced gate alignment";
-  const scoreText = score !== null && required !== null ? `score ${score}/${required}` : "score pending";
-  return `Scan update: ${scoreText}. ${blockedBy}.`;
+  return `Scan update: Base/Core/Bonus tiers active. ${blockedBy}.`;
 }
 
 function isTradeLifecycleMessage(message: ReasonMessage): boolean {
@@ -4747,8 +4795,6 @@ function cleanBotReasonText(value: string): string {
 
 function botDecisionText(message: ReasonMessage): string {
   const symbol = message.symbol || "Signal";
-  const score = Number.isFinite(message.confirmation_score ?? Number.NaN) ? Number(message.confirmation_score) : null;
-  const required = Number.isFinite(message.confirmation_required ?? Number.NaN) ? Number(message.confirmation_required) : 5;
   const raw = cleanBotReasonText(message.reason || "");
   if (message.groqGenerated && raw && !/^\s*(score|symbol|ticket|status)\b/i.test(raw)) return raw;
   if (message.status === "SCAN_RESULT") {
@@ -4761,7 +4807,7 @@ function botDecisionText(message: ReasonMessage): string {
     if (missing.length) {
       return `${symbol} is not ready yet. History and spread are fine, but ${joinHumanList(missing.map((item) => item.toLowerCase()))} ${missing.length === 1 ? "is" : "are"} still missing.`;
     }
-    return `${symbol} scan is close. Score ${score ?? 0}/${required}; waiting for the balanced entry gates to fully align.`;
+    return `${symbol} scan is close. Waiting for Base 4/4 + Core 1/3 + Bonus 1/2 to align.`;
   }
   if (message.status === "CLOSED_LOSS") {
     const legacy = /legacy/i.test(raw) ? " This trade is marked as a legacy-path loss." : "";

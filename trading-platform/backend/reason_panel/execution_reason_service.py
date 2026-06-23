@@ -265,15 +265,23 @@ class ExecutionReasonPanelService:
             "decision": self._text(scan.get("decision") or scan.get("execution_decision")),
             "order_opened": False,
             "adaptive_level": scan.get("adaptive_level"),
-            "confirmation_score": scan.get("confirmations_passed"),
-            "confirmation_required": scan.get("required_confirmations"),
+            "confirmation_score": scan.get("core_passed"),
+            "confirmation_required": scan.get("required_core_confirmations"),
             "canonical_scan": scan,
             "base_passed": scan.get("base_passed"),
             "base_total": scan.get("base_total"),
+            "core_passed": scan.get("core_passed"),
+            "core_total": scan.get("core_total"),
+            "bonus_passed": scan.get("bonus_passed"),
+            "bonus_total": scan.get("bonus_total"),
             "confirmations_passed": scan.get("confirmations_passed"),
             "confirmations_total": scan.get("confirmations_total"),
             "required_confirmations": scan.get("required_confirmations"),
+            "required_core_confirmations": scan.get("required_core_confirmations"),
+            "required_bonus_confirmations": scan.get("required_bonus_confirmations"),
             "missing_base_gates": scan.get("missing_base_gates") if isinstance(scan.get("missing_base_gates"), list) else [],
+            "missing_core_confirmations": scan.get("missing_core_confirmations") if isinstance(scan.get("missing_core_confirmations"), list) else [],
+            "missing_bonus_confirmations": scan.get("missing_bonus_confirmations") if isinstance(scan.get("missing_bonus_confirmations"), list) else [],
             "missing_confirmations": scan.get("missing_confirmations") if isinstance(scan.get("missing_confirmations"), list) else [],
             "order_allowed": scan.get("order_allowed"),
             "order_block_reason": scan.get("order_block_reason"),
@@ -464,10 +472,7 @@ class ExecutionReasonPanelService:
         entry = result.get("entry") or result.get("entry_estimate") or payload.get("entry_price") or signal.get("entry")
         sl = result.get("sl") or payload.get("stop_loss") or signal.get("stop_loss")
         tp = result.get("tp") or payload.get("take_profit") or signal.get("take_profit")
-        score = self._text(round3.get("confirmation_score") or decision.get("confirmation_score") or payload.get("confirmation_score")) or "0"
-        required = self._text(round3.get("confirmation_required") or decision.get("confirmation_required") or payload.get("confirmation_required")) or "5"
         direction = "bearish" if side == "SELL" else "bullish" if side == "BUY" else "directional"
-        level = self._text(round3.get("adaptive_level") or round3.get("current_strategy_level")) or "0"
         passed = {self._text(item).upper() for item in round3.get("confirmation_passed", [])} if isinstance(round3.get("confirmation_passed"), list) else set()
         drivers = []
         if "H4/H1 TREND ALIGNMENT" in passed or self._text(round3.get("trend_alignment_status")).upper() == "ALIGNED":
@@ -484,7 +489,7 @@ class ExecutionReasonPanelService:
             drivers.append("pullback/retest")
         if not drivers:
             drivers.append(f"{direction} setup conditions")
-        final_reason = f"{side or 'Trade'} executed because {self._join_text(drivers)} aligned. Adaptive Level {level} accepted score {score}."
+        final_reason = f"{side or 'Trade'} executed because {self._join_text(drivers)} aligned and the canonical Base/Core/Bonus entry rule was ready."
         data_source = self._text(payload.get("data_source") or signal.get("data_source") or strategy_metadata.get("data_source"))
         return {
             "id": self._id(ticket, signal_hash),
@@ -588,31 +593,37 @@ class ExecutionReasonPanelService:
         if isinstance(scan.get("base_gates"), list) and isinstance(scan.get("confirmations"), list):
             base_passed = int(self._number(scan.get("base_passed")))
             base_total = int(self._number(scan.get("base_total"))) or len(scan.get("base_gates") or [])
-            confirmations_passed = int(self._number(scan.get("confirmations_passed")))
-            confirmations_total = int(self._number(scan.get("confirmations_total"))) or len(scan.get("confirmations") or [])
-            required = int(self._number(scan.get("required_confirmations")))
-            level = self._text(scan.get("adaptive_level")) or "0"
+            core_passed = int(self._number(scan.get("core_passed") if scan.get("core_passed") is not None else scan.get("confirmations_passed")))
+            core_total = int(self._number(scan.get("core_total"))) or len(scan.get("core_confirmations") or []) or len(scan.get("confirmations") or [])
+            bonus_passed = int(self._number(scan.get("bonus_passed")))
+            bonus_total = int(self._number(scan.get("bonus_total"))) or len(scan.get("bonus_confirmations") or [])
+            required = int(self._number(scan.get("required_core_confirmations") or scan.get("required_confirmations")))
+            required_bonus = int(self._number(scan.get("required_bonus_confirmations"))) or 1
             missing_base = [self._text(item) for item in scan.get("missing_base_gates", []) if self._text(item)] if isinstance(scan.get("missing_base_gates"), list) else []
-            missing_confirmations = [self._text(item) for item in scan.get("missing_confirmations", []) if self._text(item)] if isinstance(scan.get("missing_confirmations"), list) else []
+            missing_core = [self._text(item) for item in scan.get("missing_core_confirmations", []) if self._text(item)] if isinstance(scan.get("missing_core_confirmations"), list) else []
+            if not missing_core:
+                missing_core = [self._text(item) for item in scan.get("missing_confirmations", []) if self._text(item)] if isinstance(scan.get("missing_confirmations"), list) else []
+            missing_bonus = [self._text(item) for item in scan.get("missing_bonus_confirmations", []) if self._text(item)] if isinstance(scan.get("missing_bonus_confirmations"), list) else []
             if scan.get("order_allowed") is True:
-                return f"{symbol} is ready. Base gates {base_passed}/{base_total} and confirmations {confirmations_passed}/{confirmations_total} meet Level {level} rules."
+                return f"{symbol} is READY: base gates are {base_passed}/{base_total}, core confirmations are {core_passed}/{core_total}, and bonus confirmations are {bonus_passed}/{bonus_total}."
             if missing_base:
-                return f"{symbol} is blocked because {missing_base[0].lower()} is not passing. Base gates {base_passed}/{base_total}, confirmations {confirmations_passed}/{confirmations_total}."
-            if confirmations_passed < required:
-                needs = self._join_text(missing_confirmations[:2]) if missing_confirmations else "one more confirmation"
-                return f"{symbol} is blocked with confirmations {confirmations_passed}/{confirmations_total}. Level {level} needs {required}; missing {needs}."
+                extra = f" Core confirmations are {core_passed}/{core_total} and bonus confirmations are {bonus_passed}/{bonus_total}."
+                return f"{symbol} is blocked because {missing_base[0].lower()} is not passing.{extra}"
+            if core_passed < required:
+                needs = self._join_text(missing_core[:2]) if missing_core else "one core confirmation"
+                return f"{symbol} is waiting with base gates {base_passed}/{base_total}. It needs one core confirmation from {needs}."
+            if bonus_passed < required_bonus:
+                needs = self._join_text(missing_bonus[:2]) if missing_bonus else "pullback/retest or FVG/imbalance"
+                return f"{symbol} is waiting with base gates {base_passed}/{base_total} and core {core_passed}/{core_total}. It needs one bonus confirmation from {needs}."
             reason = self._text(scan.get("order_block_reason")) or "the current safety checks have not approved the trade"
             return f"{symbol} is blocked because {reason[0].lower() + reason[1:] if reason else reason}"
 
         direction = self._text(scan.get("direction") or scan.get("direction_candidate")).upper()
         bias = "bearish" if direction == "SELL" else "bullish" if direction == "BUY" else "unclear"
-        score = self._text(scan.get("score") or 0)
-        required = self._text(scan.get("required_score") or 0)
         conditions = scan.get("conditions") if isinstance(scan.get("conditions"), dict) else {}
         failed = {self._text(item).upper() for item in scan.get("failed_hard_gates", [])} if isinstance(scan.get("failed_hard_gates"), list) else set()
-        level = self._text(scan.get("adaptive_level")) or "0"
-        if level == "3" and ({"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"} & failed):
-            return f"{symbol} is close. It has trend bias, clean spread, and RR, but still needs one trigger such as momentum, BOS, liquidity sweep, or pullback."
+        if {"LEVEL_3_FAST_TRIGGER_MISSING", "LEVEL_3_NEEDS_ONE_FAST_TRIGGER"} & failed:
+            return f"{symbol} is close. Base gates are protected, but it still needs one core or bonus confirmation from the tier model."
         missing = []
         if conditions.get("bos") is False:
             missing.append("BOS missing")
@@ -626,4 +637,4 @@ class ExecutionReasonPanelService:
             missing.append("no structure confirmation")
         decision = self._text(scan.get("decision") or scan.get("execution_decision")).replace("_", " ").lower() or "evaluated"
         suffix = f" {self._join_text(missing)}." if missing else " Confirmations aligned."
-        return f"{symbol} {bias} bias detected. Score {score}/{required}.{suffix} Trade {decision}."
+        return f"{symbol} {bias} bias detected.{suffix} Trade {decision}."

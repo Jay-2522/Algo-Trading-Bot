@@ -7482,8 +7482,8 @@
   "profit_factor": 0.0,
   "rejection_reasons": [],
   "round_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
-  "round_label": "ROUND_3",
-  "round_number": 3,
+  "round_label": "ARCHIVED_ATTEMPT",
+  "round_number": null,
   "session": {
     "active_round_diagnostics": {
       "active_session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
@@ -15560,8 +15560,8 @@
       "wins": 0
     },
     "risk_halt_original_reason": "MT5_DISCONNECT_TIMEOUT",
-    "round_label": "ROUND_3",
-    "round_number": 3,
+    "round_label": "ARCHIVED_ATTEMPT",
+    "round_number": null,
     "session_id": "auto-validation-f6678d41-2820-4620-bb5b-98b66d699501",
     "session_note": "Round 3: edge-score validation. Active session starts from zero and only counts trades matching this session_id.",
     "session_start_time": "2026-06-18T21:46:44.271865+00:00",

@@ -48,7 +48,7 @@
       "notes": "Reconciled AUTO validation open MT5 position.",
       "opened_at": "2026-06-23T07:53:14.821850+00:00",
       "passed_rules": [],
-      "profit_loss": 0.83,
+      "profit_loss": 1.05,
       "realized_pnl": null,
       "result": "OPEN",
       "risk_reward_ratio": null,
@@ -207,7 +207,7 @@
       "take_profit": 1.1353,
       "total_pnl": null,
       "trade_id": "mt5_demo_1476295022",
-      "updated_at": "2026-06-23T11:02:24.988029+00:00",
+      "updated_at": "2026-06-23T11:27:17.829232+00:00",
       "validation_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e"
     }
   ]

@@ -127,8 +127,11 @@ export async function fetchClientOperatingDashboard() {
   if (runtimeSnapshot && typeof runtimeSnapshot === "object") {
     const snapshot = runtimeSnapshot as ApiRecord;
     data.autoValidation = snapshot;
-    if (snapshot.mt5_last_sync && Array.isArray(snapshot.mt5_open_positions)) {
+    if (Array.isArray(snapshot.mt5_open_positions)) {
       data.openPositions = { positions: snapshot.mt5_open_positions };
+    }
+    if (Array.isArray(snapshot.trade_history)) {
+      data.recentTrades = snapshot.trade_history;
     }
   }
   return { data, errors };

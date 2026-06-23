@@ -478,7 +478,12 @@ function round3OpenPositions(data: DashboardData, positions: ApiRecord[]): ApiRe
   if (!sessionId || !isRound3ValidationSession(data)) return [];
   const scopedPositions = positions.filter((position) => readText(position, ["validation_session_id", "session_id"], "") === sessionId);
   if (scopedPositions.length > 0) return scopedPositions;
-  return validationOpenPositions(data.openPositions).filter((position) => readText(position, ["validation_session_id", "session_id"], "") === sessionId);
+  const autoStatus = asRecord(data.autoValidation);
+  const snapshotPositions = Array.isArray(autoStatus?.mt5_open_positions)
+    ? (autoStatus.mt5_open_positions.filter((position) => typeof position === "object" && position !== null) as ApiRecord[])
+    : [];
+  if (snapshotPositions.length > 0) return validationOpenPositions(snapshotPositions);
+  return validationOpenPositions(data.openPositions);
 }
 
 function round3DashboardData(data: DashboardData): DashboardData {
@@ -867,10 +872,13 @@ export function DashboardShell(_: {
       const result = await fetchAutoValidationRuntimeSnapshot();
       if (result.ok && result.snapshot) {
         setData((current) => {
-          const positions = result.snapshot?.mt5_last_sync && Array.isArray(result.snapshot?.mt5_open_positions)
+          const positions = Array.isArray(result.snapshot?.mt5_open_positions)
             ? (result.snapshot.mt5_open_positions.filter((item) => typeof item === "object" && item !== null) as ApiRecord[])
             : current.openPositions;
-          const next = { ...current, autoValidation: result.snapshot, openPositions: positions };
+          const recentTrades = Array.isArray(result.snapshot?.trade_history)
+            ? (result.snapshot.trade_history.filter((item) => typeof item === "object" && item !== null) as ApiRecord[])
+            : current.recentTrades;
+          const next = { ...current, autoValidation: result.snapshot, openPositions: positions, recentTrades };
           writeCachedDashboardData(next);
           return next;
         });

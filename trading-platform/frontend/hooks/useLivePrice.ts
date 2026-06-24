@@ -21,6 +21,7 @@ export type LivePriceState = {
 
 type LiveSymbol = "EURUSD" | "XAUUSD" | "NIFTY50";
 type TickRecord = Record<string, unknown>;
+type FeedSource = "stream" | "poll" | "external";
 type CachedLivePrice = {
   currentPrice: number | null;
   history: LivePricePoint[];
@@ -39,7 +40,8 @@ function cacheKey(symbol: LiveSymbol): string {
 }
 
 function buildTickUrl(symbol: LiveSymbol): string {
-  const url = new URL(`/mt5-demo/market-data/tick/${symbol}`, API_BASE_URL);
+  const path = symbol === "NIFTY50" ? `/mt5-demo/market-data/tick/${symbol}` : `/streaming/tick/${symbol}`;
+  const url = new URL(path, API_BASE_URL);
   url.searchParams.set("_ts", String(Date.now()));
   return url.toString();
 }
@@ -178,7 +180,7 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
   }, [symbol]);
 
   const ingestTick = useCallback(
-    (tick: TickRecord | null | undefined, fromPoll: boolean) => {
+    (tick: TickRecord | null | undefined, source: FeedSource) => {
       const price = extractPrice(tick);
       const hasFreshPrice = price !== null && !isSyntheticTick(tick);
       const nextMarketOpen = inferMarketOpen(symbol, tick, hasFreshPrice);
@@ -194,6 +196,9 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
         lastUpdatedRef.current = timestamp ?? null;
         setCurrentPrice(price);
         setLastUpdated(timestamp ?? null);
+        if (typeof window !== "undefined") {
+          console.debug("PRICE_CARD_UPDATED", { symbol, price, source, timestamp });
+        }
         setHistory((current) => {
           const nextHistory = appendPoint(current, price);
           historyRef.current = nextHistory;
@@ -206,7 +211,7 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
           });
           return nextHistory;
         });
-      } else if (fromPoll && previousPrice !== null) {
+      } else if (source === "poll" && previousPrice !== null) {
         writeCached(symbol, {
           currentPrice: previousPrice,
           history: previousHistory,
@@ -220,7 +225,7 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
   );
 
   useEffect(() => {
-    if (externalTick) ingestTick(externalTick, false);
+    if (externalTick) ingestTick(externalTick, "external");
   }, [externalTick, ingestTick]);
 
   useEffect(() => {
@@ -228,10 +233,16 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
 
     const poll = async () => {
       try {
+        if (streamConnectedRef.current && symbol !== "NIFTY50") {
+          return;
+        }
+        if (typeof window !== "undefined" && symbol !== "NIFTY50") {
+          console.debug("PRICE_FEED_FALLBACK_USED", { symbol, reason: "websocket_disconnected" });
+        }
         const response = await fetch(buildTickUrl(symbol), { cache: "no-store" });
         if (!response.ok) throw new Error(`MT5 tick endpoint returned ${response.status}`);
         const payload = (await response.json()) as TickRecord;
-        if (!cancelled) ingestTick(payload, true);
+        if (!cancelled) ingestTick(payload, "poll");
       } catch {
         if (!cancelled) {
           setMarketOpen(symbol === "NIFTY50" ? false : isForexMarketOpen());
@@ -239,7 +250,7 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
         }
       } finally {
         if (!cancelled) {
-          const interval = marketOpenRef.current || symbol === "NIFTY50" ? LIVE_POLL_INTERVAL_MS : CLOSED_POLL_INTERVAL_MS;
+          const interval = streamConnectedRef.current && symbol !== "NIFTY50" ? LIVE_POLL_INTERVAL_MS : marketOpenRef.current || symbol === "NIFTY50" ? LIVE_POLL_INTERVAL_MS : CLOSED_POLL_INTERVAL_MS;
           timerRef.current = window.setTimeout(poll, interval);
         }
       }
@@ -267,7 +278,7 @@ export function useLivePrice(symbol: LiveSymbol, externalTick: TickRecord | null
         };
         socket.onmessage = (event) => {
           try {
-            ingestTick(JSON.parse(String(event.data)) as TickRecord, false);
+            ingestTick(JSON.parse(String(event.data)) as TickRecord, "stream");
           } catch {
             // Ignore malformed stream payloads and let polling keep the last valid price alive.
           }

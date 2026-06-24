@@ -1,33 +1,33 @@
 import math
 from datetime import datetime, timezone
 
-from backend.broker_integrations.mt5.mt5_connection_manager import MT5ConnectionManager
-from backend.broker_integrations.mt5.mt5_tick_service import MT5TickService
+from backend.mt5_demo.mt5_market_data_service import MT5MarketDataService
 from backend.streaming.stream_models import TickMessage
 
 
 class TickStreamer:
     """Produce read-only MT5 ticks when connected and safe simulated ticks otherwise."""
 
-    def __init__(self, connection_manager: MT5ConnectionManager | None = None) -> None:
-        self.connection_manager = connection_manager or MT5ConnectionManager()
-        self.tick_service = MT5TickService(self.connection_manager)
+    def __init__(self, market_data_service: MT5MarketDataService | None = None) -> None:
+        self.market_data_service = market_data_service or MT5MarketDataService()
         self._sequences: dict[str, int] = {}
 
     def get_tick(self, symbol: str) -> TickMessage:
         normalized_symbol = self._normalize_symbol(symbol)
         try:
-            tick = self.tick_service.get_latest_tick(normalized_symbol)
-            if tick.bid is not None and tick.ask is not None:
-                bid = float(tick.bid)
-                ask = float(tick.ask)
+            tick = self.market_data_service.get_symbol_tick(normalized_symbol)
+            bid_value = tick.get("bid") if isinstance(tick, dict) else None
+            ask_value = tick.get("ask") if isinstance(tick, dict) else None
+            if bid_value is not None and ask_value is not None:
+                bid = float(bid_value)
+                ask = float(ask_value)
                 return TickMessage(
                     symbol=normalized_symbol,
                     bid=bid,
                     ask=ask,
                     spread=round(ask - bid, 8),
-                    timestamp=tick.time or datetime.now(timezone.utc).isoformat(),
-                    source="MT5_READ_ONLY",
+                    timestamp=str(tick.get("timestamp") or datetime.now(timezone.utc).isoformat()) if isinstance(tick, dict) else datetime.now(timezone.utc).isoformat(),
+                    source=str(tick.get("source") or "MT5_READ_ONLY") if isinstance(tick, dict) else "MT5_READ_ONLY",
                 )
         except Exception:
             pass

@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -871,6 +871,16 @@ export function DashboardShell(_: {
     try {
       const result = await fetchAutoValidationRuntimeSnapshot();
       if (result.ok && result.snapshot) {
+        if (process.env.NODE_ENV !== "production") {
+          const consistency = asRecord(result.snapshot.consistency_status);
+          const stats = asRecord(result.snapshot.active_round_stats);
+          if (readText(stats, ["source"], "") !== "runtime-snapshot" || readText(consistency, ["bot_decision_source"], "") !== "CANONICAL_RUNTIME_SNAPSHOT") {
+            console.error("RUNTIME_SNAPSHOT_SOURCE_MISMATCH", {
+              active_round_stats_source: readText(stats, ["source"], ""),
+              bot_decision_source: readText(consistency, ["bot_decision_source"], ""),
+            });
+          }
+        }
         setData((current) => {
           const positions = Array.isArray(result.snapshot?.mt5_open_positions)
             ? (result.snapshot.mt5_open_positions.filter((item) => typeof item === "object" && item !== null) as ApiRecord[])
@@ -1008,10 +1018,6 @@ export function DashboardShell(_: {
   const openFloatingPnl = floatingPnl(clientOpenPositions);
   const lastTrade = closedTrades[0] ?? null;
   const tradeStatus = tradeStatusMessages(selectedMarketOpen, openTradeExists, selectedSignal, formValid);
-  const eurusdLive = useLivePrice("EURUSD", data.eurusdTick);
-  const xauusdLive = useLivePrice("XAUUSD", data.xauusdTick);
-  const niftyLive = useLivePrice("NIFTY50", data.niftyTick ?? findNiftyMarketRecord(data));
-
   const orderPayload = (signal: ApiRecord | null = selectedSignal): ClientOrderPayload => ({
     symbol: readText(signal, ["symbol"], selectedSymbol) === "XAUUSD" ? "XAUUSD" : "EURUSD",
     action: readText(signal, ["signal"], signalAction).toUpperCase() as "BUY" | "SELL",
@@ -1317,9 +1323,6 @@ export function DashboardShell(_: {
               backendConnected={backendConnected}
               closedTrades={clientClosedTrades}
               data={data}
-              eurusdLive={eurusdLive}
-              niftyLive={niftyLive}
-              xauusdLive={xauusdLive}
               lastSuccessfulSync={lastSuccessfulSync}
               loading={loading}
               onAutoValidationAction={(action) => void handleAutoValidationAction(action)}
@@ -1507,31 +1510,25 @@ function ClientPortalOverview({
   calculatorResetToken,
   closedTrades,
   data,
-  eurusdLive,
   lastSuccessfulSync,
   loading,
-  niftyLive,
   onAutoValidationAction,
   openFloatingPnl,
   scopedOpenPositions,
   todayPnl,
   workingAction,
-  xauusdLive,
 }: {
   backendConnected: boolean;
   calculatorResetToken: number;
   closedTrades: ApiRecord[];
   data: DashboardData;
-  eurusdLive: LivePriceState;
   lastSuccessfulSync: string | null;
   loading: boolean;
-  niftyLive: LivePriceState;
   onAutoValidationAction: (action: AutoValidationAction) => void;
   openFloatingPnl: number;
   scopedOpenPositions: ApiRecord[];
   todayPnl: number;
   workingAction: string | null;
-  xauusdLive: LivePriceState;
 }) {
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
@@ -1547,22 +1544,22 @@ function ClientPortalOverview({
   const mt5Connected = mt5HealthStatus === "MT5_CONNECTED" || mt5HealthFailures < 3;
   const validationSymbol = Array.isArray(config?.allowed_symbols) ? String(config.allowed_symbols[0] ?? "EURUSD") : "EURUSD";
   const quickStartDisabled = workingAction !== null || ["RUNNING", "WAITING_FOR_MT5_RECONNECT"].includes(mode);
-  const primaryLive = validationSymbol === "XAUUSD" ? xauusdLive : eurusdLive;
+  const primaryMarketOpen = validationSymbol === "XAUUSD" ? isMarketOpen(data.xauusdTick) : isMarketOpen(data.eurusdTick);
   const accountBalance = numeric(data.account, ["balance"]);
 
   return (
     <div className="portal-dashboard">
       <section className="portal-stat-grid">
-        <PortalStatCard label="EURUSD" value={marketPriceText(eurusdLive.currentPrice)} delta={`${signed(eurusdLive.delta)} (${signed(eurusdLive.deltaPercent)}%)`} live={eurusdLive} />
-        <PortalStatCard label="XAUUSD" value={marketPriceText(xauusdLive.currentPrice, 2)} delta={`${signed(xauusdLive.delta, 2)} (${signed(xauusdLive.deltaPercent)}%)`} live={xauusdLive} />
-        <PortalStatCard delta={niftyLive.endpointConnected ? `${signed(niftyLive.delta, 2)} (${signed(niftyLive.deltaPercent, 2)}%)` : "Waiting for market feed"} label="NIFTY50" live={niftyLive} value={marketPriceText(niftyLive.currentPrice, 2)} />
+        <LivePortalStatCard externalTick={data.eurusdTick} label="EURUSD" symbol="EURUSD" />
+        <LivePortalStatCard externalTick={data.xauusdTick} label="XAUUSD" precision={2} symbol="XAUUSD" />
+        <LivePortalStatCard externalTick={data.niftyTick ?? findNiftyMarketRecord(data)} label="NIFTY50" precision={2} symbol="NIFTY50" />
         <PortalStatCard label="Floating P&L" value={money(openFloatingPnl)} delta="Open demo positions" />
         <PortalStatCard label="Today's P&L" value={money(todayPnl)} delta="Closed trade journal" />
       </section>
 
       <section className="portal-main-grid">
         <div className="portal-chart-card">
-          <AccountBalanceChart balance={accountBalance} marketOpen={primaryLive.marketOpen} />
+          <AccountBalanceChart balance={accountBalance} marketOpen={primaryMarketOpen} />
           {scopedOpenPositions.length ? <ClientOpenPositionsTable positions={scopedOpenPositions} managedPositions={[]} /> : <EmptyState text="No Active Positions" />}
         </div>
 
@@ -1632,6 +1629,28 @@ function PortalStatCard({
     </div>
   );
 }
+
+const LivePortalStatCard = memo(function LivePortalStatCard({
+  externalTick,
+  label,
+  precision = 5,
+  symbol,
+}: {
+  externalTick: ApiRecord | null;
+  label: string;
+  precision?: number;
+  symbol: "EURUSD" | "XAUUSD" | "NIFTY50";
+}) {
+  const live = useLivePrice(symbol, externalTick);
+  return (
+    <PortalStatCard
+      delta={live.endpointConnected ? `${signed(live.delta, precision)} (${signed(live.deltaPercent, 2)}%)` : "Waiting for market feed"}
+      label={label}
+      live={live}
+      value={marketPriceText(live.currentPrice, precision)}
+    />
+  );
+});
 
 function readStoredPoints(key: string): LivePricePoint[] {
   if (typeof window === "undefined") return [];
@@ -2572,6 +2591,7 @@ function RoundResultsCard({
   const [expanded, setExpanded] = useState(false);
   const autoStatus = asRecord(data.autoValidation);
   const session = asRecord(autoStatus?.session);
+  const activeRoundStats = asRecord(autoStatus?.active_round_stats);
   const config = asRecord(autoStatus?.config);
   const target = title.includes("Round 2") ? TARGET_TRADES : readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
   const resultTrades = closedTradesOnly(trades);
@@ -2748,17 +2768,21 @@ function ClientDashboardView({
   const session = asRecord(autoStatus?.session);
   const config = asRecord(autoStatus?.config);
   const mt5Health = asRecord(autoStatus?.mt5_health);
+  const activeRoundStats = asRecord(autoStatus?.active_round_stats);
   const riskHalt = asRecord(autoStatus?.risk_halt) ?? asRecord(session?.risk_halt_diagnostics);
   const exitManagement = asRecord(autoStatus?.exit_management);
-  const target = readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES));
-  const actualClosedTrades = actualClosedTradeCount(closedTrades);
+  const target = readNumber(activeRoundStats, ["target_closed_trades"], readNumber(session, ["target_closed_trades", "target_validation_trades"], readNumber(config, ["target_closed_trades", "target_validation_trades"], TARGET_TRADES)));
+  const actualClosedTrades = readNumber(activeRoundStats, ["closed_trades"], actualClosedTradeCount(closedTrades));
   const closed = actualClosedTrades;
-  const open = scopedOpenPositions.length;
-  const remaining = Math.max(0, target - actualClosedTrades);
-  const progress = target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0;
-  const wins = tradeWinCount(closedTrades);
-  const losses = tradeLossCount(closedTrades);
-  const winRate = actualClosedTrades ? (wins / actualClosedTrades) * 100 : 0;
+  const open = readNumber(activeRoundStats, ["open_trades"], scopedOpenPositions.length);
+  const remaining = readNumber(activeRoundStats, ["remaining_trades"], Math.max(0, target - actualClosedTrades));
+  const progress = Math.round(readNumber(activeRoundStats, ["progress"], target > 0 ? Math.min(100, Math.round((closed / target) * 100)) : 0));
+  const wins = readNumber(activeRoundStats, ["wins"], tradeWinCount(closedTrades));
+  const losses = readNumber(activeRoundStats, ["losses"], tradeLossCount(closedTrades));
+  const winRate = readNumber(activeRoundStats, ["win_rate"], actualClosedTrades ? (wins / actualClosedTrades) * 100 : 0);
+  const netPnl = readNumber(activeRoundStats, ["net_pnl"], readNumber(session, ["net_pnl"], 0));
+  const profitFactor = readNumber(activeRoundStats, ["profit_factor"], readNumber(session, ["profit_factor"], 0));
+  const maxDrawdown = readNumber(activeRoundStats, ["max_drawdown"], readNumber(session, ["max_drawdown"], 0));
   const mode = readText(session, ["status"], "");
   const sessionNote = readText(session, ["session_note"], "");
   const allowedSymbols = Array.isArray(config?.allowed_symbols) ? config.allowed_symbols.map(String).join(", ") : "EURUSD";
@@ -2870,9 +2894,9 @@ function ClientDashboardView({
             <ClientMetric label="Wins" value={String(wins)} valueClass="text-emerald-200" compact />
             <ClientMetric label="Losses" value={String(losses)} valueClass="text-rose-200" compact />
             <ClientMetric label="Win Rate" value={`${winRate.toFixed(2)}%`} compact />
-            <ClientMetric label="Net P&L" value={money(readNumber(session, ["net_pnl"], 0))} valueClass={pnlClass(readNumber(session, ["net_pnl"], 0))} compact />
-            <ClientMetric label="Profit Factor" value={readNumber(session, ["profit_factor"], 0).toFixed(2)} compact />
-            <ClientMetric label="Max Drawdown" value={money(readNumber(session, ["max_drawdown"], 0))} compact />
+            <ClientMetric label="Net P&L" value={money(netPnl)} valueClass={pnlClass(netPnl)} compact />
+            <ClientMetric label="Profit Factor" value={profitFactor.toFixed(2)} compact />
+            <ClientMetric label="Max Drawdown" value={money(maxDrawdown)} compact />
           </div>
         </div>
         <ValidationReasonPanel contexts={reasonContexts} refreshToken={reasonRefreshToken} />
@@ -3153,7 +3177,7 @@ function latestScanDiagnostics(data: DashboardData): ApiRecord[] {
   const autoStatus = asRecord(data.autoValidation);
   const live = asRecord(autoStatus?.live_scan_status);
   const liveSymbols = asRecord(live?.symbols);
-  const root = asRecord(autoStatus?.decision_states) ?? asRecord(autoStatus?.canonical_scans) ?? liveSymbols ?? asRecord(asRecord(autoStatus?.session)?.decision_states) ?? asRecord(asRecord(autoStatus?.session)?.canonical_scans) ?? {};
+  const root = asRecord(autoStatus?.canonical_scan_by_symbol) ?? asRecord(autoStatus?.decision_states) ?? liveSymbols ?? {};
   return ["EURUSD", "XAUUSD"].map((symbol) => ({ symbol, ...(asRecord(root[symbol]) ?? {}) }));
 }
 
@@ -4531,6 +4555,7 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
   const niftyConnected = Boolean(data.niftyTick && numeric(data.niftyTick, ["last", "price", "current_price", "ltp", "bid", "ask"], Number.NaN));
   const autoStatus = asRecord(data.autoValidation);
   const runtimeHealth = asRecord(autoStatus?.runtime_health) ?? {};
+  const hasCanonicalBotDecisions = Array.isArray(autoStatus?.bot_decisions_latest_3);
   const snapshotDecisions = Array.isArray(autoStatus?.bot_decisions_latest_3) ? autoStatus.bot_decisions_latest_3 : [];
   for (const value of snapshotDecisions) {
     const item = asRecord(value);
@@ -4556,7 +4581,7 @@ function buildReasonContexts(data: DashboardData): ReasonContext[] {
       reason: runtimeHealth.mt5_sync_loop_alive === true ? "Scan is stale; waiting for fresh diagnostics. MT5 sync is still live." : "Scan is stale; waiting for fresh diagnostics.",
     });
   }
-  if (messages.length) {
+  if (hasCanonicalBotDecisions) {
     return messages
       .filter((item) => !/outside london\/?new york|confidence threshold|threshold 75|watchlist|old round 3 rule failed|score\s+\d+\/2/i.test(readText(item, ["reason"], "")))
       .sort((left, right) => new Date(readText(right, ["timestamp"], "1970-01-01T00:00:00.000Z")).getTime() - new Date(readText(left, ["timestamp"], "1970-01-01T00:00:00.000Z")).getTime())

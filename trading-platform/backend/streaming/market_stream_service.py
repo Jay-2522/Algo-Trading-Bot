@@ -5,6 +5,10 @@ from backend.streaming.stream_logger import StreamLogger
 from backend.streaming.stream_models import ClientConnectionInfo, StreamControlResponse, StreamStatus, TickMessage
 from backend.streaming.stream_state import StreamState
 from backend.streaming.tick_streamer import TickStreamer
+from backend.utils.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class MarketStreamService:
@@ -21,6 +25,7 @@ class MarketStreamService:
         self.tick_streamer = tick_streamer or TickStreamer()
         self.connections = connections or WebSocketConnectionManager()
         self.stream_logger = stream_logger or StreamLogger()
+        self._last_price_log_at: dict[str, float] = {}
 
     def get_status(self) -> StreamStatus:
         return self.state.get_status(self.connections.get_client_count())
@@ -36,7 +41,28 @@ class MarketStreamService:
         return result
 
     def get_tick_once(self, symbol: str) -> TickMessage:
-        return self.tick_streamer.get_tick(symbol)
+        tick = self.tick_streamer.get_tick(symbol)
+        self._log_price_tick(tick)
+        return tick
+
+    def _log_price_tick(self, tick: TickMessage) -> None:
+        # Keep high-frequency quote logging lightweight; DB audit writes are too heavy for 500ms feeds.
+        from time import monotonic
+
+        now = monotonic()
+        last = self._last_price_log_at.get(tick.symbol, 0.0)
+        if now - last < 5.0:
+            return
+        self._last_price_log_at[tick.symbol] = now
+        logger.info(
+            "PRICE_TICK_RECEIVED %s bid=%s ask=%s spread=%s source=%s timestamp=%s",
+            tick.symbol,
+            tick.bid,
+            tick.ask,
+            tick.spread,
+            tick.source,
+            tick.timestamp,
+        )
 
     async def broadcast_tick(self, symbol: str) -> TickMessage:
         tick = self.get_tick_once(symbol)

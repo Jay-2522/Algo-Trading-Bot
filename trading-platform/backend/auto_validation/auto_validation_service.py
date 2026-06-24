@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 from threading import RLock
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import time
 from typing import Any
 from uuid import uuid4
@@ -93,6 +94,7 @@ class AutoValidationService:
         }
         self._runtime_state_lock = RLock()
         self._live_mt5_positions: list[dict[str, Any]] = []
+        self._snapshot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="runtime-snapshot-mt5")
         self._last_mt5_sync_at: str | None = None
         self._latest_bot_decisions: list[dict[str, Any]] = []
         self._closed_trade_records: list[dict[str, Any]] = []
@@ -438,17 +440,7 @@ class AutoValidationService:
         return {"status": "JOURNAL_LIFECYCLE_REFRESHED", "result": result, "timestamp": self._timestamp()}
 
     def bot_decision_loop_tick(self) -> dict[str, Any]:
-        session_id = str(self.session.get("session_id") or "")
         messages = self._latest_decision_state_messages(limit=3)
-        if len(messages) < 3:
-            existing_keys = {self._bot_decision_dedupe_key(item) for item in messages}
-            for item in self.reason_panel_service.latest_for_session(session_id, limit=3):
-                key = self._bot_decision_dedupe_key(item)
-                if key not in existing_keys:
-                    messages.append(item)
-                    existing_keys.add(key)
-                if len(messages) >= 3:
-                    break
         with self._runtime_state_lock:
             self._latest_bot_decisions = copy.deepcopy(messages)
         return {"status": "BOT_DECISIONS_REFRESHED", "latest_reason_count": len(messages), "timestamp": self._timestamp()}
@@ -562,27 +554,36 @@ class AutoValidationService:
             closed_records = copy.deepcopy(self._closed_trade_records)
             last_sync = self._last_mt5_sync_at
             runtime_error = self._runtime_last_error
-        try:
-            live_result = self._read_open_positions_result()
-            live_positions = live_result.get("positions", []) if isinstance(live_result, dict) else []
-            if isinstance(live_positions, list):
-                positions = copy.deepcopy(live_positions)
-                last_sync = self._timestamp()
+        diagnostics_open = self._open_position_sync_diagnostics if isinstance(self._open_position_sync_diagnostics, dict) else {}
+        expected_open_count = int(
+            self.session.get("current_open_trades")
+            or diagnostics_open.get("mt5_open_positions_detected")
+            or diagnostics_open.get("mt5_open_positions")
+            or len(diagnostics_open.get("open_position_tickets", []) if isinstance(diagnostics_open.get("open_position_tickets"), list) else [])
+            or 0
+        )
+        if not positions and expected_open_count > 0:
+            warm_positions, warm_sync, warm_error = self._snapshot_warm_open_positions(timeout_seconds=0.9)
+            if warm_positions is not None:
+                positions = warm_positions
+                last_sync = warm_sync or self._timestamp()
+                runtime_error = ""
                 with self._runtime_state_lock:
                     self._live_mt5_positions = copy.deepcopy(positions)
                     self._last_mt5_sync_at = last_sync
-                self._log(
-                    "RUNTIME_SNAPSHOT_OPEN_TICKETS",
-                    {
-                        "tickets": self._position_tickets(positions),
-                        "count": len(positions),
-                        "read_status": live_result.get("status") if isinstance(live_result, dict) else "",
-                        "active_session_id": self.session.get("session_id"),
-                    },
-                )
-                self._refresh_session_metrics(mt5_open_positions=positions)
-        except Exception as exc:
-            runtime_error = str(exc)
+                    self._runtime_last_error = ""
+            elif warm_error:
+                runtime_error = warm_error
+        self._log(
+            "RUNTIME_SNAPSHOT_OPEN_TICKETS",
+            {
+                "tickets": self._position_tickets(positions),
+                "count": len(positions),
+                "read_status": "CACHED_MT5_SYNC_LOOP",
+                "active_session_id": self.session.get("session_id"),
+            },
+        )
+        self._refresh_session_metrics(mt5_open_positions=positions)
         session = copy.deepcopy(self.session)
         scans = copy.deepcopy(self._latest_scan_diagnostics)
         canonical_scans = {symbol: self._canonical_scan_for_symbol(symbol) for symbol in ("EURUSD", "XAUUSD")}
@@ -594,6 +595,8 @@ class AutoValidationService:
         merged_decisions: list[dict[str, Any]] = []
         seen_decisions: set[str] = set()
         for item in [*monitor_messages, *decision_state_messages, *decisions]:
+            if not self._visible_runtime_bot_decision(item):
+                continue
             key = self._bot_decision_dedupe_key(item)
             if key and key not in seen_decisions:
                 merged_decisions.append(item)
@@ -638,6 +641,21 @@ class AutoValidationService:
             "losses": len([trade for trade in closed_records if str(trade.get("result") or "").upper() == "LOSS"]),
             "net_pnl": round(sum(self._trade_pnl(trade) for trade in closed_records), 2),
             "progress": float(session.get("progress_percentage") or 0),
+            "active_round_stats": {
+                "source": "runtime-snapshot",
+                "active_session_id": session.get("session_id"),
+                "target_closed_trades": session.get("target_closed_trades") or session.get("target_validation_trades") or self.config.get("target_closed_trades") or 30,
+                "closed_trades": len(closed_records),
+                "wins": len([trade for trade in closed_records if str(trade.get("result") or "").upper() == "WIN"]),
+                "losses": len([trade for trade in closed_records if str(trade.get("result") or "").upper() == "LOSS"]),
+                "open_trades": len(positions),
+                "remaining_trades": max(0, int(session.get("target_closed_trades") or session.get("target_validation_trades") or self.config.get("target_closed_trades") or 30) - len(closed_records)),
+                "win_rate": (len([trade for trade in closed_records if str(trade.get("result") or "").upper() == "WIN"]) / len(closed_records) * 100) if closed_records else 0.0,
+                "net_pnl": round(sum(self._trade_pnl(trade) for trade in closed_records), 2),
+                "profit_factor": session.get("profit_factor") or 0.0,
+                "max_drawdown": session.get("max_drawdown") or 0.0,
+                "progress": float(session.get("progress_percentage") or 0),
+            },
             "last_reset_reason": session.get("last_reset_reason", ""),
             "last_reset_timestamp": session.get("last_reset_timestamp", ""),
             "last_reset_by_user_action": bool(session.get("last_reset_by_user_action", False)),
@@ -656,6 +674,39 @@ class AutoValidationService:
             "last_error": runner.get("last_loop_error") or runtime_error,
             "timestamp": self._timestamp(),
         }
+
+    def _snapshot_warm_open_positions(self, timeout_seconds: float = 0.9) -> tuple[list[dict[str, Any]] | None, str | None, str]:
+        future = self._snapshot_executor.submit(self._read_open_positions_result)
+        try:
+            result = future.result(timeout=timeout_seconds)
+        except FuturesTimeoutError:
+            return None, None, f"runtime snapshot MT5 warm read exceeded {int(timeout_seconds * 1000)} ms"
+        except Exception as exc:
+            return None, None, str(exc)
+        if not isinstance(result, dict) or result.get("status") not in {"POSITIONS_FOUND", "NO_OPEN_POSITIONS"}:
+            return None, None, str(result.get("message") or result.get("status") or "MT5 warm read failed") if isinstance(result, dict) else "MT5 warm read failed"
+        positions = [dict(item) for item in result.get("positions", []) if isinstance(item, dict) and not item.get("closure_pending")]
+        return positions, str(result.get("timestamp") or self._timestamp()), ""
+
+    def _visible_runtime_bot_decision(self, item: dict[str, Any]) -> bool:
+        status = str(item.get("status") or item.get("decision") or "").upper()
+        reason = str(item.get("reason") or item.get("final_decision_reason") or "")
+        data_source = str(item.get("data_source") or item.get("source") or "").upper()
+        if data_source in {"CANONICAL_DECISION_STATE", "MT5_OPEN_POSITIONS"}:
+            return True
+        if status in {"OPEN_CONFIRMED", "ORDER_SENT", "CLOSED", "CLOSED_WIN", "CLOSED_LOSS", "POSITION_MONITOR"}:
+            return True
+        legacy_patterns = (
+            "OUTSIDE LONDON",
+            "CONFIDENCE THRESHOLD",
+            "THRESHOLD 75",
+            "WATCHLIST",
+            "OLD ROUND 3 RULE FAILED",
+            "SCORE 2/2",
+            "H4 HISTORY",
+            "M15 HISTORY",
+        )
+        return not any(pattern in reason.upper() for pattern in legacy_patterns)
 
     def _all_trade_history(self, positions: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         if self.journal_service is None:

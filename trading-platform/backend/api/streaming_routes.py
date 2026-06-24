@@ -4,11 +4,25 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.streaming.market_stream_service import MarketStreamService
 from backend.streaming.stream_models import StreamControlResponse, StreamStatus, TickMessage
+from backend.utils.logger import get_logger
 
 
 router = APIRouter(prefix="/streaming", tags=["Live Streaming"])
 websocket_router = APIRouter(tags=["Live Streaming"])
 market_stream_service = MarketStreamService()
+TICK_READ_TIMEOUT_SECONDS = 0.8
+logger = get_logger(__name__)
+
+
+async def _get_tick_with_timeout(symbol: str) -> TickMessage:
+    normalized_symbol = symbol.strip().upper() if symbol else ""
+    if not normalized_symbol:
+        raise ValueError("Symbol cannot be empty.")
+    try:
+        return market_stream_service.get_tick_once(normalized_symbol)
+    except Exception as exc:
+        logger.warning("PRICE_FEED_FALLBACK_USED %s reason=%s", normalized_symbol, exc)
+        return market_stream_service.tick_streamer.get_simulated_tick(normalized_symbol)
 
 
 @router.get("/status", response_model=StreamStatus)
@@ -35,7 +49,7 @@ async def stop_stream(symbol: str) -> StreamControlResponse:
 @router.get("/tick/{symbol}", response_model=TickMessage)
 async def get_tick(symbol: str) -> TickMessage:
     try:
-        return market_stream_service.get_tick_once(symbol)
+        return await _get_tick_with_timeout(symbol)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -58,7 +72,7 @@ async def stream_market_ticks(websocket: WebSocket, symbol: str) -> None:
         await market_stream_service.register_client(websocket, normalized_symbol)
         registered = True
         while market_stream_service.state.is_streaming(normalized_symbol):
-            tick = market_stream_service.get_tick_once(normalized_symbol)
+            tick = await _get_tick_with_timeout(normalized_symbol)
             await websocket.send_json(tick.model_dump(mode="json"))
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:

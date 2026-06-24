@@ -2,16 +2,16 @@
   "active_session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
   "rounds": [
     {
-      "closed_trades": 0,
+      "closed_trades": 1,
       "ended_at": null,
       "losses": 0,
-      "net_pnl": 0.0,
+      "net_pnl": 5.71,
       "round_label": "ROUND_4",
       "round_number": 4,
       "session_id": "auto-validation-2fa024f6-882b-44c6-9bfa-ebd5f22bf36e",
       "started_at": "2026-06-23T07:00:02.345243+00:00",
       "status": "ACTIVE",
-      "wins": 0
+      "wins": 1
     }
   ]
 }
